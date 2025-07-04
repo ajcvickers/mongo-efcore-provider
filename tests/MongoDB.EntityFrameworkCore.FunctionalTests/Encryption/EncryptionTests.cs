@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using Microsoft.EntityFrameworkCore;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Encryption;
@@ -50,7 +51,44 @@ public class EncryptionTests(TemporaryDatabaseFixture database)
         var collection = _database.CreateCollection<Patient>(values: [cryptProvider, encryptionMode]);
         SetupEncryptedTestData(cryptProvider, collection.CollectionNamespace.CollectionName, encryptionMode);
 
-        using var db = SingleEntityDbContext.Create(collection);
+        var uuid = new object();
+
+        using var db = SingleEntityDbContext.Create(collection,
+            b =>
+            {
+                b.Entity<Patient>(b =>
+                {
+                    // All defaults
+                    b.Property(e => e.SSN).IsEncrypted();
+
+                    // Set key
+                    b.Property(e => e.SSN).IsEncrypted().HasKey(uuid);
+
+                    // Set equality query with key and contention
+                    b.Property(e => e.SSN).IsEncrypted(b =>
+                    {
+                        b.HasKey(uuid);
+                        b.IsEqualityQuery();
+                        b.HasContention(0);
+                    });
+
+                    // Set range query with key, contention, min, max
+                    b.Property(e => e.SSN).IsEncrypted(b =>
+                    {
+                        b.HasKey(uuid);
+                        b.IsRangeQuery(0, 150);
+                        b.HasContention(8);
+                    });
+                });
+            });
+
+// This is their equivalent in Spring:
+// CollectionOptions collectionOptions = CollectionOptions.encryptedCollection(options -> options
+//     .encrypted(string("pin"), pinDK)
+//     .queryable(encrypted(string("ssn")).algorithm("Indexed").keyId(ssnDK.asUuid()), equality().contention(0))
+//     .queryable(encrypted(int32("age")).algorithm("Range").keyId(ageDK.asUuid()), range().contention(8).min(0).max(150))
+//     .queryable(encrypted(int64("address.sign")).algorithm("Range").keyId(signDK.asUuid()), range().contention(2).min(-10L).max(10L))
+// );
 
         Assert.Throws<FormatException>(() => db.Entities.First());
     }

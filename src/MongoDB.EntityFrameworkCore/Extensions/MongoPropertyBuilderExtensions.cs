@@ -122,7 +122,8 @@ public static class MongoPropertyBuilderExtensions
         BsonType? bsonType,
         bool? allowOverflow = null,
         bool? allowTruncation = null)
-        => (PropertyBuilder<TProperty>)HasBsonRepresentation((PropertyBuilder)propertyBuilder, bsonType, allowOverflow, allowTruncation);
+        => (PropertyBuilder<TProperty>)HasBsonRepresentation((PropertyBuilder)propertyBuilder, bsonType, allowOverflow,
+            allowTruncation);
 
     /// <summary>
     /// Configures the BSON representation that the property is stored as when targeting MongoDB.
@@ -190,4 +191,80 @@ public static class MongoPropertyBuilderExtensions
         propertyBuilder.Metadata.SetDateTimeKind(dateTimeKind);
         return propertyBuilder;
     }
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public static MongoPropertyEncryptionBuilder IsEncrypted(
+        this PropertyBuilder propertyBuilder)
+        => new(propertyBuilder);
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public static PropertyBuilder IsEncrypted(
+        this PropertyBuilder propertyBuilder,
+        Action<MongoPropertyEncryptionBuilder> buildAction)
+    {
+        buildAction(propertyBuilder.IsEncrypted());
+        return propertyBuilder;
+    }
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public static PropertyBuilder<TProperty> IsEncrypted<TProperty>(
+        this PropertyBuilder<TProperty> propertyBuilder,
+        Action<MongoPropertyEncryptionBuilder> buildAction)
+        => (PropertyBuilder<TProperty>)IsEncrypted((PropertyBuilder)propertyBuilder, buildAction);
+}
+
+/// <summary>
+/// TODO
+/// </summary>
+public class MongoPropertyEncryptionBuilder(PropertyBuilder propertyBuilder)
+{
+    /// <summary>
+    /// TODO
+    /// Quote: Required if bsonType is decimal or double. Optional but highly recommended if it is int, long, or date. Defaults to the bsonType min and max values.
+    /// https://www.mongodb.com/docs/manual/core/queryable-encryption/fundamentals/encrypt-and-query/
+    /// </summary>
+    public MongoPropertyEncryptionBuilder IsRangeQuery(object? min, object? max)
+        => this;
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public MongoPropertyEncryptionBuilder IsEqualityQuery()
+        => this;
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public MongoPropertyEncryptionBuilder HasKey(object? key) // Any. O-space or s-space?
+        => this;
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public MongoPropertyEncryptionBuilder HasContention(int? contention) // Range or equality
+        => this;
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public MongoPropertyEncryptionBuilder HasSparsity(int? contention) // Range only
+        => this;
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public MongoPropertyEncryptionBuilder HasPrecision(int? precision) // Range only
+        => this;
+
+    /// <summary>
+    /// TODO
+    /// </summary>
+    public MongoPropertyEncryptionBuilder HasTrimFactor(int? trimFactor) // Range only
+        => this;
 }
