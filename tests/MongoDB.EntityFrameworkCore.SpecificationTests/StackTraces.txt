@@ -455,3 +455,86 @@ MongoDB.Driver.Linq.ExpressionNotSupportedException: Expression not supported: v
    at MongoDB.EntityFrameworkCore.Query.QueryingEnumerable`2.Enumerator.MoveNextHelper() in /Users/arthur.vickers/code/mongo-efcore-provider/src/MongoDB.EntityFrameworkCore/Query/QueryingEnumerable.cs:line 161
    at MongoDB.EntityFrameworkCore.Query.QueryingEnumerable`2.Enumerator.MoveNext() in /Users/arthur.vickers/code/mongo-efcore-provider/src/MongoDB.EntityFrameworkCore/Query/QueryingEnumerable.cs:line 103
 
+AV015:
+
+MongoDB.Driver.MongoCommandException: Command aggregate failed: PlanExecutor error during aggregation :: caused by :: $dateTrunc requires 'date' to be...
+
+MongoDB.Driver.MongoCommandException
+Command aggregate failed: PlanExecutor error during aggregation :: caused by :: $dateTrunc requires 'date' to be a date, but got string.
+   at MongoDB.Driver.Core.WireProtocol.CommandUsingCommandMessageWireProtocol`1.ProcessResponse(ConnectionId connectionId, CommandMessage responseMessage)
+   at MongoDB.Driver.Core.WireProtocol.CommandUsingCommandMessageWireProtocol`1.SendMessageAndProcessResponse(CommandRequestMessage message, Int32 responseTo, IConnection connection, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.WireProtocol.CommandUsingCommandMessageWireProtocol`1.Execute(IConnection connection, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.WireProtocol.CommandWireProtocol`1.Execute(IConnection connection, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Servers.Server.ServerChannel.ExecuteProtocol[TResult](IWireProtocol`1 protocol, ICoreSession session, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Servers.Server.ServerChannel.Command[TResult](ICoreSession session, ReadPreference readPreference, DatabaseNamespace databaseNamespace, BsonDocument command, IEnumerable`1 commandPayloads, IElementNameValidator commandValidator, BsonDocument additionalOptions, Action`1 postWriteAction, CommandResponseHandling responseHandling, IBsonSerializer`1 resultSerializer, MessageEncoderSettings messageEncoderSettings, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.CommandOperationBase`1.ExecuteProtocol(IChannelHandle channel, ICoreSessionHandle session, ReadPreference readPreference, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.ReadCommandOperation`1.ExecuteAttempt(RetryableReadContext context, Int32 attempt, Nullable`1 transactionNumber, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.RetryableReadOperationExecutor.Execute[TResult](IRetryableReadOperation`1 operation, RetryableReadContext context, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.ReadCommandOperation`1.Execute(RetryableReadContext context, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.AggregateOperation`1.Execute(RetryableReadContext context, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.AggregateOperation`1.Execute(IReadBinding binding, CancellationToken cancellationToken)
+   at MongoDB.Driver.OperationExecutor.ExecuteReadOperation[TResult](IReadBinding binding, IReadOperation`1 operation, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.ExecuteReadOperation[TResult](IClientSessionHandle session, IReadOperation`1 operation, ReadPreference readPreference, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.ExecuteReadOperation[TResult](IClientSessionHandle session, IReadOperation`1 operation, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.Aggregate[TResult](IClientSessionHandle session, PipelineDefinition`2 pipeline, AggregateOptions options, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.<>c__DisplayClass23_0`1.<Aggregate>b__0(IClientSessionHandle session)
+   at MongoDB.Driver.MongoCollectionImpl`1.UsingImplicitSession[TResult](Func`2 func, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.Aggregate[TResult](PipelineDefinition`2 pipeline, AggregateOptions options, CancellationToken cancellationToken)
+   at MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToExecutableQueryTranslators.ExecutableQuery`3.Execute(IClientSessionHandle session, CancellationToken cancellationToken)
+   at MongoDB.Driver.Linq.Linq3Implementation.MongoQueryProvider`1.Execute[TResult](ExecutableQuery`2 executableQuery, CancellationToken cancellationToken)
+   at MongoDB.Driver.Linq.Linq3Implementation.MongoQuery`2.Execute()
+   at MongoDB.Driver.Linq.Linq3Implementation.MongoQuery`2.GetEnumerator()
+   at MongoDB.EntityFrameworkCore.Query.QueryingEnumerable`2.Enumerator.MoveNextHelper() in /Users/arthur.vickers/code/mongo-efcore-provider/src/MongoDB.EntityFrameworkCore/Query/QueryingEnumerable.cs:line 161
+   at MongoDB.EntityFrameworkCore.Query.QueryingEnumerable`2.Enumerator.MoveNext() in /Users/arthur.vickers/code/mongo-efcore-provider/src/MongoDB.EntityFrameworkCore/Query/QueryingEnumerable.cs:line 103
+   at System.Collections.Generic.List`1..ctor(IEnumerable`1 collection)
+   at System.Linq.Enumerable.ToList[TSource](IEnumerable`1 source)
+   at Microsoft.EntityFrameworkCore.TestUtilities.QueryAsserter.AssertQueryScalar[TResult](Func`2 actualQuery, Func`2 expectedQuery, Action`2 asserter, Boolean assertOrder, Boolean assertEmpty, Boolean async, String testMethodName, Boolean filteredQuery)
+   at Microsoft.EntityFrameworkCore.Query.QueryTestBase`1.TestOutputWrapper(Func`1 testAction)
+   at MongoDB.EntityFrameworkCore.SpecificationTests.Query.NorthwindWhereQueryMongoTest.Time_of_day_datetime(Boolean async) in /Users/arthur.vickers/code/mongo-efcore-provider/tests/MongoDB.EntityFrameworkCore.SpecificationTests/Query/NorthwindWhereQueryMongoTest.cs:line 2678
+   at Xunit.Sdk.TestInvoker`1.<>c__DisplayClass47_0.<<InvokeTestMethodAsync>b__1>d.MoveNext() in /_/src/xunit.execution/Sdk/Frameworks/Runners/TestInvoker.cs:line 259
+--- End of stack trace from previous location ---
+   at Xunit.Sdk.ExecutionTimer.AggregateAsync(Func`1 asyncAction) in /_/src/xunit.execution/Sdk/Frameworks/ExecutionTimer.cs:line 48
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code) in /_/src/xunit.core/Sdk/ExceptionAggregator.cs:line 90
+
+
+
+Generated query execution expression:
+'queryContext => MongoShapedQueryCompilingExpressionVisitor.TranslateAndExecuteUnshapedQuery<Order, TimeSpan>(
+    queryContext: queryContext,
+    entityType: EntityType: Order,
+    bsonSerializerFactory: BsonSerializerFactory,
+    queryExpression: [MongoDB.EntityFrameworkCore.Query.Expressions.MongoQueryExpression],
+    contextType: TestModels.Northwind.NorthwindContext,
+    threadSafetyChecksEnabled: True,
+    resultCardinality: Enumerable)'
+
+Executed MQL query
+Northwind.Orders.aggregate([{ "$project" : { "_v" : { "$dateDiff" : { "startDate" : { "$dateTrunc" : { "date" : "$OrderDate", "unit" : "day" } }, "endDate" : "$OrderDate", "unit" : "millisecond" } }, "_id" : 0 } }])
+
+An exception occurred while iterating over the results of a query for context type 'Microsoft.EntityFrameworkCore.TestModels.Northwind.NorthwindContext'.
+MongoDB.Driver.MongoCommandException: Command aggregate failed: PlanExecutor error during aggregation :: caused by :: $dateTrunc requires 'date' to be a date, but got string.
+   at MongoDB.Driver.Core.WireProtocol.CommandUsingCommandMessageWireProtocol`1.ProcessResponse(ConnectionId connectionId, CommandMessage responseMessage)
+   at MongoDB.Driver.Core.WireProtocol.CommandUsingCommandMessageWireProtocol`1.SendMessageAndProcessResponse(CommandRequestMessage message, Int32 responseTo, IConnection connection, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.WireProtocol.CommandUsingCommandMessageWireProtocol`1.Execute(IConnection connection, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.WireProtocol.CommandWireProtocol`1.Execute(IConnection connection, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Servers.Server.ServerChannel.ExecuteProtocol[TResult](IWireProtocol`1 protocol, ICoreSession session, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Servers.Server.ServerChannel.Command[TResult](ICoreSession session, ReadPreference readPreference, DatabaseNamespace databaseNamespace, BsonDocument command, IEnumerable`1 commandPayloads, IElementNameValidator commandValidator, BsonDocument additionalOptions, Action`1 postWriteAction, CommandResponseHandling responseHandling, IBsonSerializer`1 resultSerializer, MessageEncoderSettings messageEncoderSettings, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.CommandOperationBase`1.ExecuteProtocol(IChannelHandle channel, ICoreSessionHandle session, ReadPreference readPreference, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.ReadCommandOperation`1.ExecuteAttempt(RetryableReadContext context, Int32 attempt, Nullable`1 transactionNumber, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.RetryableReadOperationExecutor.Execute[TResult](IRetryableReadOperation`1 operation, RetryableReadContext context, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.ReadCommandOperation`1.Execute(RetryableReadContext context, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.AggregateOperation`1.Execute(RetryableReadContext context, CancellationToken cancellationToken)
+   at MongoDB.Driver.Core.Operations.AggregateOperation`1.Execute(IReadBinding binding, CancellationToken cancellationToken)
+   at MongoDB.Driver.OperationExecutor.ExecuteReadOperation[TResult](IReadBinding binding, IReadOperation`1 operation, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.ExecuteReadOperation[TResult](IClientSessionHandle session, IReadOperation`1 operation, ReadPreference readPreference, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.ExecuteReadOperation[TResult](IClientSessionHandle session, IReadOperation`1 operation, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.Aggregate[TResult](IClientSessionHandle session, PipelineDefinition`2 pipeline, AggregateOptions options, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.<>c__DisplayClass23_0`1.<Aggregate>b__0(IClientSessionHandle session)
+   at MongoDB.Driver.MongoCollectionImpl`1.UsingImplicitSession[TResult](Func`2 func, CancellationToken cancellationToken)
+   at MongoDB.Driver.MongoCollectionImpl`1.Aggregate[TResult](PipelineDefinition`2 pipeline, AggregateOptions options, CancellationToken cancellationToken)
+   at MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToExecutableQueryTranslators.ExecutableQuery`3.Execute(IClientSessionHandle session, CancellationToken cancellationToken)
+   at MongoDB.Driver.Linq.Linq3Implementation.MongoQueryProvider`1.Execute[TResult](ExecutableQuery`2 executableQuery, CancellationToken cancellationToken)
+   at MongoDB.Driver.Linq.Linq3Implementation.MongoQuery`2.Execute()
+   at MongoDB.Driver.Linq.Linq3Implementation.MongoQuery`2.GetEnumerator()
+   at MongoDB.EntityFrameworkCore.Query.QueryingEnumerable`2.Enumerator.MoveNextHelper() in /Users/arthur.vickers/code/mongo-efcore-provider/src/MongoDB.EntityFrameworkCore/Query/QueryingEnumerable.cs:line 161
+   at MongoDB.EntityFrameworkCore.Query.QueryingEnumerable`2.Enumerator.MoveNext() in /Users/arthur.vickers/code/mongo-efcore-provider/src/MongoDB.EntityFrameworkCore/Query/QueryingEnumerable.cs:line 103

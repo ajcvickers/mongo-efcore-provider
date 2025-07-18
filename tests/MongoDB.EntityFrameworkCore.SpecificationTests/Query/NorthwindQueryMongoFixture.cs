@@ -57,15 +57,9 @@ public class NorthwindQueryMongoFixture<TModelCustomizer> : NorthwindQueryFixtur
         modelBuilder.Entity<OrderDetail>().ToCollection("OrderDetails");
         modelBuilder.Entity<Product>().ToCollection("Products");
 
-        // TODO: File an issue to not throw for keyless entity types
-        modelBuilder.Ignore<OrderQuery>();
-        modelBuilder.Ignore<ProductQuery>();
-        modelBuilder.Ignore<ProductView>();
-        modelBuilder.Ignore<CustomerQueryWithQueryFilter>();
-        modelBuilder.Ignore<CustomerQuery>();
+        modelBuilder.Entity<CustomerQuery>().ToCollection("Customers");
+        modelBuilder.Entity<OrderQuery>().ToCollection("Orders");
+        modelBuilder.Entity<ProductQuery>().ToCollection("Products");
+        modelBuilder.Entity<ProductView>().ToCollection("Products");
     }
-
-    public override DbContextOptionsBuilder AddOptions(DbContextOptionsBuilder builder)
-        => base.AddOptions(builder).ConfigureWarnings(
-            c => c.Log(CoreEventId.MappedEntityTypeIgnoredWarning)); // Needed because we ignore keyless types above
 }
