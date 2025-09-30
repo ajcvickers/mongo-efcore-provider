@@ -49,11 +49,24 @@ internal abstract class ProjectionBindingRemovingExpressionVisitor : ExpressionV
                 {
                     var projection = GetProjection(projectionBindingExpression);
 
+                    ITypeBase declaredType = null;
+                    var name = projection.Alias;
+                    if (projection.Expression is MemberExpression memberExpression)
+                    {
+                        name = memberExpression.Member.Name;
+                        if (memberExpression.Expression is StructuralTypeShaperExpression typeExpression)
+                        {
+                            declaredType = typeExpression.StructuralType;
+                        }
+                    }
+
                     return CreateGetValueExpression(
                         DocParameter,
+                        name,
                         projection.Alias,
                         !projectionBindingExpression.Type.IsNullableType(),
-                        projectionBindingExpression.Type);
+                        projectionBindingExpression.Type,
+                        declaredType);
                 }
 
             case CollectionShaperExpression collectionShaperExpression:
@@ -202,7 +215,7 @@ internal abstract class ProjectionBindingRemovingExpressionVisitor : ExpressionV
                     }
 
                     var valueExpression =
-                        CreateGetValueExpression(innerAccessExpression, fieldName, fieldRequired, parameterExpression.Type);
+                        CreateGetValueExpression(innerAccessExpression, fieldName, fieldName, fieldRequired, parameterExpression.Type);
 
                     return Expression.MakeBinary(ExpressionType.Assign, binaryExpression.Left, valueExpression);
                 }
@@ -262,7 +275,7 @@ internal abstract class ProjectionBindingRemovingExpressionVisitor : ExpressionV
             {
                 var projection = GetProjection(projectionBindingExpression);
                 innerExpression =
-                    CreateGetValueExpression(DocParameter, projection.Alias, projection.Required, typeof(BsonDocument));
+                    CreateGetValueExpression(DocParameter, projection.Alias, projection.Alias, projection.Required, typeof(BsonDocument));
             }
             else
             {
@@ -352,7 +365,7 @@ internal abstract class ProjectionBindingRemovingExpressionVisitor : ExpressionV
         }
 
         return Expression.Convert(
-            CreateGetValueExpression(docExpression, property.Name, !type.IsNullableType(), type, property.DeclaringType, property.GetTypeMapping()),
+            CreateGetValueExpression(docExpression, property.Name, property.Name, !type.IsNullableType(), type, property.DeclaringType, property.GetTypeMapping()),
             type);
     }
 
@@ -368,6 +381,7 @@ internal abstract class ProjectionBindingRemovingExpressionVisitor : ExpressionV
     /// </summary>
     /// <param name="docExpression">The <see cref="Expression"/> used to access the <see cref="BsonDocument"/>.</param>
     /// <param name="propertyName">The name of the property.</param>
+    /// <param name="propertyAlias">The alias or name of the property if it has no alias.</param>
     /// <param name="required"><see langword="true"/> if the field is required, <see langword="false"/> if it is optional.</param>
     /// <param name="type">The <see cref="Type"/> of the value as it is within the document.</param>
     /// <param name="declaredType">The optional <see cref="ITypeBase"/> this element comes from.</param>
@@ -376,6 +390,7 @@ internal abstract class ProjectionBindingRemovingExpressionVisitor : ExpressionV
     protected abstract Expression CreateGetValueExpression(
         Expression docExpression,
         string propertyName,
+        string propertyAlias,
         bool required,
         Type type,
         ITypeBase declaredType = null,

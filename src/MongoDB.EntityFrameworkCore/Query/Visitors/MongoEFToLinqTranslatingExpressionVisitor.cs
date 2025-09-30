@@ -14,6 +14,8 @@
  */
 
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -229,6 +231,10 @@ internal sealed class MongoEFToLinqTranslatingExpressionVisitor :  System.Linq.E
                 when methodCallExpression.IsVectorSearch():
                 return ProcessVectorSearch(methodCallExpression);
 
+            case MethodCallExpression { Method.IsGenericMethod: true } methodCallExpression
+                    when methodCallExpression.Method.GetGenericMethodDefinition() == QueryableMethods.Select:
+                return ProcessSelect(methodCallExpression);
+
             case MethodCallExpression methodCallExpression:
                 return VisitMethodCall(methodCallExpression);
 
@@ -242,6 +248,73 @@ internal sealed class MongoEFToLinqTranslatingExpressionVisitor :  System.Linq.E
         }
 
         return base.Visit(expression);
+
+        Expression ProcessSelect(MethodCallExpression methodCallExpression)
+        {
+            var lambdaExpression = methodCallExpression.Arguments[1].UnwrapLambdaFromQuote();
+            switch (lambdaExpression.Body)
+            {
+                case NewExpression newExpression:
+                    {
+                        var sourceType = lambdaExpression.Parameters[0].Type;
+                        var projectionType = lambdaExpression.ReturnType;
+
+                        var pipelineStageDefinition = typeof(PipelineHelpers)
+                            .GetMethod(nameof(PipelineHelpers.BuildStage))!
+                            .MakeGenericMethod(sourceType, projectionType)
+                            .Invoke(null, [
+                                newExpression.Arguments
+                                    .Select(a => Expression.Lambda(
+                                        typeof(Func<,>).MakeGenericType(sourceType, typeof(object)),
+                                        Expression.Convert(Visit(a)!, typeof(object)),
+                                        lambdaExpression.Parameters[0]))
+                                    .ToList()
+                            ])!;
+
+                        var withStageExpression = Expression.Call(
+                            typeof(MongoQueryable).GetMethod(nameof(MongoQueryable.AppendStage))!
+                                .MakeGenericMethod(sourceType, projectionType),
+                            Visit(methodCallExpression.Arguments[0])!,
+                            Expression.Constant(pipelineStageDefinition),
+                            Expression.Constant(null, typeof(IBsonSerializer<>).MakeGenericType(projectionType)));
+
+                        return withStageExpression;
+                    }
+                case MethodCallExpression
+                {
+                    Method.Name: nameof(Tuple.Create),
+                    Method.IsGenericMethod: true,
+                    Arguments.Count: 3
+                } createTupleExpression:
+                    {
+                        var sourceType = lambdaExpression.Parameters[0].Type;
+                        var projectionType = lambdaExpression.ReturnType;
+
+                        var pipelineStageDefinition = typeof(PipelineHelpers)
+                            .GetMethod(nameof(PipelineHelpers.BuildStage))!
+                            .MakeGenericMethod(sourceType, projectionType)
+                            .Invoke(null, [
+                                createTupleExpression.Arguments
+                                    .Select(a => Expression.Lambda(
+                                        typeof(Func<,>).MakeGenericType(sourceType, typeof(object)),
+                                        Expression.Convert(Visit(a)!, typeof(object)),
+                                        lambdaExpression.Parameters[0]))
+                                    .ToList()
+                            ])!;
+
+                        var withStageExpression = Expression.Call(
+                            typeof(MongoQueryable).GetMethod(nameof(MongoQueryable.AppendStage))!
+                                .MakeGenericMethod(sourceType, projectionType),
+                            Visit(methodCallExpression.Arguments[0])!,
+                            Expression.Constant(pipelineStageDefinition),
+                            Expression.Constant(null, typeof(IBsonSerializer<>).MakeGenericType(projectionType)));
+
+                        return withStageExpression;
+                    }
+            }
+
+            return VisitMethodCall(methodCallExpression);
+        }
 
         Expression ProcessVectorSearch(MethodCallExpression methodCallExpression)
         {
@@ -382,3 +455,21 @@ internal sealed class MongoEFToLinqTranslatingExpressionVisitor :  System.Linq.E
         .GetMethods()
         .First(mi => mi is {Name: nameof(MongoQueryable.As), IsPublic: true, IsStatic: true} && mi.GetParameters().Length == 2);
 }
+
+public class PipelineHelpers
+{
+    public static PipelineStageDefinition<TSource, TResult> BuildStage<TSource, TResult>(List<LambdaExpression> lambdaExpressions)
+    {
+        var projectionDefinitionBuilder = new ProjectionDefinitionBuilder<TSource>();
+        var projectionDefinition =
+            projectionDefinitionBuilder.Include(new ExpressionFieldDefinition<TSource>(lambdaExpressions[0]));
+
+        foreach (var lambda in lambdaExpressions.Skip(1))
+        {
+            projectionDefinition = projectionDefinition.Include(new ExpressionFieldDefinition<TSource>(lambda));
+        }
+
+        return PipelineStageDefinitionBuilder.Project<TSource, TResult>(projectionDefinition);
+    }
+}
+

@@ -66,6 +66,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ProjectionBindi
     protected override Expression CreateGetValueExpression(
         Expression docExpression,
         string? propertyName,
+        string? aliasName,
         bool required,
         Type type,
         ITypeBase? declaredType = null,
@@ -87,9 +88,9 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ProjectionBindi
         {
             innerExpression = docExpression switch
             {
-                RootReferenceExpression => CreateGetValueExpression(DocParameter, null, required, typeof(BsonDocument)),
+                RootReferenceExpression => CreateGetValueExpression(DocParameter, null, null, required, typeof(BsonDocument)),
                 ObjectAccessExpression docAccessExpression => CreateGetValueExpression(docAccessExpression.AccessExpression,
-                    docAccessExpression.Name, required, typeof(BsonDocument)),
+                    docAccessExpression.Name, docAccessExpression.Name, required, typeof(BsonDocument)),
                 _ => innerExpression
             };
         }
