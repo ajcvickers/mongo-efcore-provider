@@ -51,6 +51,17 @@ internal sealed partial class MongoQueryExpression : Expression
     /// </summary>
     public Expression? CapturedExpression { get; set; }
 
+    /// <summary>
+    /// The finalized <see cref="Layout.DocumentLayout"/> describing where each shaped slot's value lives
+    /// in the returned document. Authored by the translator during projection binding and finalized once
+    /// (see <c>FinalizeLayout</c>); read verbatim by the shaper. <see langword="null"/> until authored.
+    /// </summary>
+    public Layout.DocumentLayout? ResultLayout { get; private set; }
+
+    /// <summary>Set the authored result layout. Called once by the projection-binding visitor.</summary>
+    public void SetResultLayout(Layout.DocumentLayout layout)
+        => ResultLayout = layout;
+
     /// <inheritdoc />
     public override Type Type
         => typeof(object);
