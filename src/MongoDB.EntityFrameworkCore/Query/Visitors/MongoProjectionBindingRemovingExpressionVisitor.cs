@@ -312,10 +312,9 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                                     (embeddedNavigation.DeclaringEntityType, innerAccessExpression);
                                 fieldRequired = innerObjectAccessExpression.Required;
                                 break;
-                            case RootReferenceExpression when _queryExpression.UsesDriverJoinFields:
-                                // For driver-native LeftJoin Includes, the root entity is under "_outer".
+                            case RootReferenceExpression when _queryExpression.ResultLayout?.GetAbsolutePath() is { Length: > 0 } rootPath:
                                 innerAccessExpression = DocParameter;
-                                fieldName = "_outer";
+                                fieldName = rootPath;
                                 break;
                             case RootReferenceExpression:
                                 innerAccessExpression = DocParameter;
@@ -709,9 +708,8 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         {
             innerExpression = docExpression switch
             {
-                // For driver-native LeftJoin Includes, the root entity is under "_outer" in the BsonDocument.
-                RootReferenceExpression when _queryExpression.UsesDriverJoinFields
-                    => CreateGetValueExpression(DocParameter, "_outer", required, typeof(BsonDocument)),
+                RootReferenceExpression when _queryExpression.ResultLayout?.GetAbsolutePath() is { Length: > 0 } rootPath
+                    => CreateGetValueExpression(DocParameter, rootPath, required, typeof(BsonDocument)),
                 RootReferenceExpression => CreateGetValueExpression(DocParameter, null, required, typeof(BsonDocument)),
                 // Cross-collection Include results are at the root of the BsonDocument. The (document, field)
                 // pair is resolved from the authored DocumentLayout.
