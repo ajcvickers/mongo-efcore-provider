@@ -62,4 +62,44 @@ public static class DocumentLayoutTests
         Assert.Equal("_outer", root.GetAbsolutePath());
         Assert.Equal("_inner", nav.GetAbsolutePath());
     }
+
+    [Fact]
+    public static void Driver_join_then_include_reference_composes_under_inner()
+    {
+        // The case the structural-resolution follow-up must preserve: a ThenInclude reference under the
+        // driver-join lone reference reads from "_inner._lookup_<ThenNav>", composing through the pinned parent.
+        var root = DocumentLayout.ForEntity(relativePath: "");
+        var inner = root.AddChild(DocumentLayout.ForNavigation(relativePath: "_lookup_Customer"));
+        var thenInclude = inner.AddChild(DocumentLayout.ForNavigation(relativePath: "_lookup_Region"));
+
+        DocumentLayout.FinalizeDriverJoinMode(root, loneReference: inner);
+
+        Assert.Equal("_inner._lookup_Region", thenInclude.GetAbsolutePath());
+    }
+
+    [Fact]
+    public static void ForEntity_sets_entity_kind()
+        => Assert.Equal(DocumentLayoutKind.Entity, DocumentLayout.ForEntity("").Kind);
+
+    [Fact]
+    public static void ForNavigation_sets_navigation_kind()
+        => Assert.Equal(DocumentLayoutKind.Navigation, DocumentLayout.ForNavigation("_lookup_X").Kind);
+
+    [Fact]
+    public static void ForCollection_sets_collection_kind()
+        => Assert.Equal(DocumentLayoutKind.Collection, DocumentLayout.ForCollection("_lookup_X").Kind);
+
+    [Fact]
+    public static void AddChild_links_parent_and_returns_child()
+    {
+        var root = DocumentLayout.ForEntity("");
+        var child = DocumentLayout.ForCollection("_lookup_Orders");
+
+        var returned = root.AddChild(child);
+
+        Assert.Same(child, returned);
+        Assert.Same(root, child.Parent);
+        Assert.Contains(child, root.Children);
+        Assert.Null(root.Parent);
+    }
 }

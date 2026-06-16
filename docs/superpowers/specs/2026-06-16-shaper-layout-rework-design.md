@@ -1,7 +1,7 @@
 # Shaper Layout Rework — Design
 
 **Date:** 2026-06-16
-**Status:** Design approved; pending spec review before planning
+**Status:** Phase 0 → most of Phase 1b implemented on branch `shaper-layout-rework` (verified-green checkpoint `40faee3`). Full heuristic elimination deferred to a follow-up — see `2026-06-16-shaper-layout-rework-STATUS.md` for what landed, what is heuristic-served, and the FK-join entry point.
 **Scope of this spec:** Phase 0 → Phase 1b, EF10 only. EF8/EF9 backport and Phase 2 (path normalization, shaper-path unification, new query-feature shapes) are explicit follow-on specs.
 
 ## Background
