@@ -72,16 +72,28 @@ specific EF configuration or it will not compile.
   stop any future repo-root build props from leaking in.
 - Target framework `net10.0` (must match the provider's EF10 TFM — a `net10.0` app cannot reference
   a `net8.0`-built assembly).
-- Reference the provider with a pinned configuration so it always builds the same way regardless of
-  the benchmark's own config:
-  ```xml
-  <ProjectReference Include="..\..\src\MongoDB.EntityFrameworkCore\MongoDB.EntityFrameworkCore.csproj"
-                    SetConfiguration="Configuration=Release EF10" />
-  ```
+- **Build the whole graph under the provider's own configuration.** A per-`ProjectReference`
+  `SetConfiguration`/`AdditionalProperties="Configuration=Release EF10"` does **not** work: NuGet
+  restore is configuration-agnostic and ignores it, so the provider restores under its default
+  (`net8.0`) and the `net10.0` build fails (`NETSDK1005: assets file ... doesn't have a target for
+  net10.0`). The working mechanism is to set the configuration **globally** for the whole build, so
+  it flows to restore *and* build consistently:
+  - The benchmark declares `<Configurations>Debug EF10;Release EF10</Configurations>`, a plain
+    `ProjectReference` to the provider (no `SetConfiguration`), and enables optimization under
+    `Release EF10` (`<Optimize>true</Optimize>`, since that non-standard config name doesn't get it
+    automatically — and BenchmarkDotNet requires an optimized assembly).
+  - All build/run commands use `-c "Release EF10"`. This global `Configuration` flows to the
+    provider during restore and build, resolving it to `net10.0`.
+- **Benchmarks run via the InProcess toolchain** (`InProcessEmitToolchain`), configured through a
+  `ManualConfig`. BenchmarkDotNet's *default* toolchain spawns a child build forced to plain
+  `-c Release`, which propagates to the provider — and under plain `Release` the provider has **no**
+  EF package reference (all three are config-conditional), so the child build fails with
+  `Microsoft.EntityFrameworkCore.* does not exist`. InProcess does no child build, sidestepping this
+  entirely. (Verified working end-to-end, including `MemoryDiagnoser`.)
 - EF package version from `Versions.props` (`$(EF10Version)` = 10.0.8), pulled in by explicitly
   importing `Versions.props` (no repo-root `Directory.Build.props` exists to import it
   automatically).
-- `BenchmarkDotNet` 0.15.8.
+- `BenchmarkDotNet` 0.15.8. A `benchmarks/.gitignore` excludes `BenchmarkDotNet.Artifacts/`.
 
 **EF version pinned to EF10 / net10.0:** it is the current major the repo leads with, the dev
 machine has the .NET 10 SDK, and net10.0 is the more representative runtime for an
@@ -102,10 +114,10 @@ multi-version.
 
 ## Benchmarks
 
-`[MemoryDiagnoser]`; each benchmark opens a fresh `DbContext` per invocation (so EF identity-map
-caching doesn't skew results). A capped job (3 warmup / 10 iterations) keeps a live-DB run
-reasonable; allocations are the clean, server-independent signal and mean time is directional.
-Shapes map directly onto the first native slice (B):
+`MemoryDiagnoser` + a capped job (3 warmup / 10 iterations) on the InProcess toolchain, all via the
+shared `ManualConfig`; each benchmark opens a fresh `DbContext` per invocation (so EF identity-map
+caching doesn't skew results). Allocations are the clean, server-independent signal and mean time is
+directional. Shapes map directly onto the first native slice (B):
 
 - `Where_ToList` — `Customers.Where(c => c.Active).ToList()`
 - `Projection_ToList` — `Customers.Select(c => new { c.Name, c.Count }).ToList()`
@@ -134,5 +146,9 @@ These arrive with the later slices that need them.
 - A live MongoDB is required to run the benchmarks; the baseline numbers are machine- and
   server-dependent. Allocations are the portable signal; absolute times are only comparable on the
   same machine/server.
-- `SetConfiguration` on the `ProjectReference` is the mechanism that pins the provider to
-  `Release EF10`; if a future EF-config rename happens, this string must track it.
+- The benchmark build depends on the provider's exact configuration name `Release EF10` (used both
+  as the benchmark's own `<Configurations>` entry and in every `-c "Release EF10"` command); if a
+  future EF-config rename happens, these must track it.
+- The InProcess toolchain is mandatory here (the default toolchain's child build is incompatible
+  with the provider's config-conditional csproj). InProcess is slightly less isolated than a
+  separate process, which is acceptable for relative baseline comparison.
