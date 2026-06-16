@@ -20,4 +20,4 @@ if (args.Contains("--verify"))
     return;
 }
 
-Console.WriteLine("Pass --verify to run the correctness check.");
+BenchmarkDotNet.Running.BenchmarkRunner.Run<MaterializationBenchmarks>();
