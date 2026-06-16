@@ -283,17 +283,24 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                         {
                             case ObjectAccessExpression crossCollectionAccess
                                 when IsCrossCollectionAccess(crossCollectionAccess):
-                                // Cross-collection Include result. In driver-native LeftJoin mode the single
-                                // joined reference is at root level under "_inner"; in flat $lookup + $unwind
-                                // mode each join is at root level under its own "_lookup_<Navigation>" field.
-                                // The field name is derived from the projection node itself (its navigation +
-                                // the computed UsesDriverJoinFields flag), never from mutable global state.
-                                // For a reference nested under a collection Include, the parent RootReference
-                                // is bound to the per-collection-element document; read the joined field from
-                                // that element rather than the absolute query root.
-                                innerAccessExpression = GetCrossCollectionRootDocument(crossCollectionAccess);
-                                fieldName = GetCrossCollectionFieldName(crossCollectionAccess);
-                                RecordLayoutDivergence(crossCollectionAccess, fieldName!);
+                                // Cross-collection Include result. Prefer the authored DocumentLayout, which
+                                // was finalized by the translator and already accounts for driver-native
+                                // LeftJoin mode (_outer/_inner) vs flat $lookup mode (_lookup_<Nav>). For a
+                                // reference nested under a collection Include the layout parent is a Collection
+                                // node; we redirect to the bound element document and read only the leaf field
+                                // name (mirrors GetCrossCollectionRootDocument). Fall back to the heuristic
+                                // for queries where no layout node was authored (e.g. projected navigation
+                                // accesses without Include).
+                                if (TryResolveCrossCollectionLayout(crossCollectionAccess) is { } resolvedLayout)
+                                {
+                                    innerAccessExpression = resolvedLayout.Document;
+                                    fieldName = resolvedLayout.Field;
+                                }
+                                else
+                                {
+                                    innerAccessExpression = GetCrossCollectionRootDocument(crossCollectionAccess);
+                                    fieldName = GetCrossCollectionFieldName(crossCollectionAccess);
+                                }
                                 fieldRequired = false;
                                 break;
                             // Embedded sub-document access: the navigation is always present here because
@@ -540,11 +547,64 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
     private Expression CreateCrossCollectionGetValueExpression(Expressions.ObjectAccessExpression crossCollectionAccess, bool required)
     {
+        if (TryResolveCrossCollectionLayout(crossCollectionAccess) is { } resolved)
+        {
+            return CreateGetValueExpression(resolved.Document, resolved.Field, false, typeof(BsonDocument));
+        }
+
+        // No layout node for this navigation (e.g. inline projected navigation without Include);
+        // fall back to the heuristic.
         var crossFieldName = GetCrossCollectionFieldName(crossCollectionAccess);
         RecordLayoutDivergence(crossCollectionAccess, crossFieldName);
         return CreateGetValueExpression(
             GetCrossCollectionRootDocument(crossCollectionAccess),
             crossFieldName, false, typeof(BsonDocument));
+    }
+
+    /// <summary>
+    /// Attempt to resolve, from the authored layout, the (document, field) a cross-collection access reads
+    /// from. Returns <see langword="null"/> when no layout node was authored for this navigation (e.g. for
+    /// inline projected navigations without an enclosing Include). Callers should fall back to the legacy
+    /// heuristic (<see cref="GetCrossCollectionFieldName"/> / <see cref="GetCrossCollectionRootDocument"/>)
+    /// in that case.
+    /// <para>
+    /// For a reference navigation nested under a collection Include (e.g.
+    /// <c>Include(o => o.OrderDetails).ThenInclude(od => od.Customer)</c>), the layout parent is a
+    /// <see cref="Layout.DocumentLayoutKind.Collection"/> node and the parent
+    /// <see cref="RootReferenceExpression"/> is already bound in <see cref="_projectionBindings"/> to the
+    /// per-element document; in that case we read only the leaf field from that element document, not the
+    /// full absolute path from the query root (mirrors <see cref="GetCrossCollectionRootDocument"/>).
+    /// </para>
+    /// </summary>
+    private (Expression Document, string Field)? TryResolveCrossCollectionLayout(
+        Expressions.ObjectAccessExpression crossCollectionAccess)
+    {
+        var layout = _queryExpression.ResultLayout;
+        if (layout == null)
+        {
+            return null;
+        }
+
+        var node = FindLayoutNode(layout, crossCollectionAccess.Navigation);
+        if (node == null)
+        {
+            return null;
+        }
+
+        var absolute = node.GetAbsolutePath();
+        var field = absolute.Contains('.') ? absolute[(absolute.LastIndexOf('.') + 1)..] : absolute;
+
+        // Nested under a collection element: read the joined field from the bound element document.
+        // The collection-prefix part of the absolute path is NOT used here because the element doc
+        // is already the correct base document (mirrors GetCrossCollectionRootDocument redirect).
+        if (node.Parent is { Kind: Layout.DocumentLayoutKind.Collection }
+            && crossCollectionAccess.AccessExpression is RootReferenceExpression
+            && _projectionBindings.TryGetValue(crossCollectionAccess.AccessExpression, out var elementDoc))
+        {
+            return (elementDoc, field);
+        }
+
+        return (DocParameter, field);
     }
 
     private static Layout.DocumentLayout? FindLayoutNode(Layout.DocumentLayout node, Microsoft.EntityFrameworkCore.Metadata.INavigation? navigation)
@@ -645,9 +705,8 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                 RootReferenceExpression when _queryExpression.UsesDriverJoinFields
                     => CreateGetValueExpression(DocParameter, "_outer", required, typeof(BsonDocument)),
                 RootReferenceExpression => CreateGetValueExpression(DocParameter, null, required, typeof(BsonDocument)),
-                // Cross-collection Include results are at the root of the BsonDocument. The field is
-                // derived from the projection node (navigation + computed UsesDriverJoinFields flag):
-                // "_inner" for the lone driver-native reference, "_lookup_<Navigation>" in flat mode.
+                // Cross-collection Include results are at the root of the BsonDocument. The (document, field)
+                // pair is resolved from the authored DocumentLayout.
                 ObjectAccessExpression crossCollectionAccess when IsCrossCollectionAccess(crossCollectionAccess)
                     => CreateCrossCollectionGetValueExpression(crossCollectionAccess, required),
                 ObjectAccessExpression docAccessExpression => CreateGetValueExpression(docAccessExpression.AccessExpression,
