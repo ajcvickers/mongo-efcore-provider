@@ -293,6 +293,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                                 // that element rather than the absolute query root.
                                 innerAccessExpression = GetCrossCollectionRootDocument(crossCollectionAccess);
                                 fieldName = GetCrossCollectionFieldName(crossCollectionAccess);
+                                RecordLayoutDivergence(crossCollectionAccess, fieldName!);
                                 fieldRequired = false;
                                 break;
                             // Embedded sub-document access: the navigation is always present here because
@@ -537,6 +538,75 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     protected ProjectionExpression GetProjection(ProjectionBindingExpression projectionBindingExpression)
         => _queryExpression.Projection[GetProjectionIndex(projectionBindingExpression)];
 
+    private Expression CreateCrossCollectionGetValueExpression(Expressions.ObjectAccessExpression crossCollectionAccess, bool required)
+    {
+        var crossFieldName = GetCrossCollectionFieldName(crossCollectionAccess);
+        RecordLayoutDivergence(crossCollectionAccess, crossFieldName);
+        return CreateGetValueExpression(
+            GetCrossCollectionRootDocument(crossCollectionAccess),
+            crossFieldName, false, typeof(BsonDocument));
+    }
+
+    private static Layout.DocumentLayout? FindLayoutNode(Layout.DocumentLayout node, Microsoft.EntityFrameworkCore.Metadata.INavigation? navigation)
+    {
+        if (navigation != null && ReferenceEquals(node.Navigation, navigation))
+        {
+            return node;
+        }
+
+        foreach (var child in node.Children)
+        {
+            var found = FindLayoutNode(child, navigation);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// DEBUG-only diagnostic: compares the authored <see cref="Layout.DocumentLayout"/> leaf field name against
+    /// the legacy heuristic returned by <see cref="GetCrossCollectionFieldName"/> and records any mismatch to
+    /// <see cref="Layout.LayoutHeuristicDivergence.Divergences"/> for post-run inspection.
+    ///
+    /// <para>Known/expected divergence (confirmed green suite): for a cross-collection reference nested under a
+    /// collection Include (e.g. <c>OrderDetails.ThenInclude(od =&gt; od.Customer)</c>), the heuristic's
+    /// <see cref="GetCrossCollectionFieldName"/> returns <c>_inner</c> because
+    /// <see cref="MongoQueryExpression.UsesDriverJoinFields"/> is <see langword="true"/> for that query shape.
+    /// That field name is effectively dead: <see cref="GetCrossCollectionRootDocument"/> redirects the read to
+    /// the per-element document, where the actual field is <c>_lookup_&lt;Nav&gt;</c> — which matches the
+    /// layout leaf. The divergence is therefore a comparison artifact, not a behavior bug.</para>
+    ///
+    /// <para>This diagnostic method (and <see cref="Layout.LayoutHeuristicDivergence"/>) are removed in
+    /// Phase 1b when the heuristic is deleted.</para>
+    /// </summary>
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void RecordLayoutDivergence(Expressions.ObjectAccessExpression crossCollectionAccess, string heuristicFieldName)
+    {
+#if DEBUG
+        var layout = _queryExpression.ResultLayout;
+        if (layout == null)
+        {
+            return;
+        }
+
+        var node = FindLayoutNode(layout, crossCollectionAccess.Navigation);
+        if (node == null)
+        {
+            return;
+        }
+
+        var abs = node.GetAbsolutePath();
+        var leaf = abs.Contains('.') ? abs[(abs.LastIndexOf('.') + 1)..] : abs;
+        if (!string.Equals(leaf, heuristicFieldName, System.StringComparison.Ordinal))
+        {
+            Layout.LayoutHeuristicDivergence.Record(crossCollectionAccess.Navigation?.Name ?? "<null>", abs, heuristicFieldName);
+        }
+#endif
+    }
+
     /// <summary>
     /// Create a new compilable <see cref="Expression"/> the shaper can use to obtain the value from the <see cref="BsonDocument"/>.
     /// </summary>
@@ -579,9 +649,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                 // derived from the projection node (navigation + computed UsesDriverJoinFields flag):
                 // "_inner" for the lone driver-native reference, "_lookup_<Navigation>" in flat mode.
                 ObjectAccessExpression crossCollectionAccess when IsCrossCollectionAccess(crossCollectionAccess)
-                    => CreateGetValueExpression(
-                        GetCrossCollectionRootDocument(crossCollectionAccess),
-                        GetCrossCollectionFieldName(crossCollectionAccess), false, typeof(BsonDocument)),
+                    => CreateCrossCollectionGetValueExpression(crossCollectionAccess, required),
                 ObjectAccessExpression docAccessExpression => CreateGetValueExpression(docAccessExpression.AccessExpression,
                     docAccessExpression.Name, required, typeof(BsonDocument)),
                 _ => innerExpression
