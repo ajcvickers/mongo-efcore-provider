@@ -43,6 +43,14 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
     private MongoQueryExpression _queryExpression;
 
+    // Layout authoring (shaper layout rework): the root layout node and a per-navigation lookup
+    // so nested navigations can be parented under the correct ancestor node. Built during Translate()
+    // and published to MongoQueryExpression once all lookups have been registered (UsesDriverJoinFields
+    // is only stable after the full Visit), then finalized once so FinalizeLayout() can apply
+    // the _outer/_inner pin when UsesDriverJoinFields is true.
+    private Layout.DocumentLayout _layoutRoot;
+    private readonly Dictionary<INavigation, Layout.DocumentLayout> _layoutByNavigation = new();
+
     /// <summary>
     /// Perform translation of the <paramref name="expression" /> that belongs to the
     /// supplied <paramref name="queryExpression"/>.
@@ -57,7 +65,19 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         _queryExpression = queryExpression;
         _projectionMembers.Push(new ProjectionMember());
 
+        // Initialize the root layout node. Cross-collection navigation nodes are added as children
+        // during Visit(); the layout is published and finalized after Visit() returns so that
+        // UsesDriverJoinFields (which depends on all lookups being registered) is stable.
+        _layoutRoot = Layout.DocumentLayout.ForEntity("");
+
         var result = Visit(expression);
+
+        // All includes/lookups are now registered; UsesDriverJoinFields is stable.
+        // Publish the layout and finalize it (applies _outer/_inner pinning in driver-join mode).
+        _queryExpression.SetResultLayout(_layoutRoot);
+        _queryExpression.FinalizeLayout();
+        _layoutRoot = null;
+        _layoutByNavigation.Clear();
 
         _queryExpression.ReplaceProjectionMapping(_projectionMapping);
         _projectionMapping.Clear();
@@ -178,6 +198,23 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
                     if (!includableNavigation.IsEmbedded() && includableNavigation.IsCollection)
                     {
+                        // Author a collection layout node. The raw alias (_lookup_<Nav>) is always used
+                        // here; FinalizeLayout() applies the _outer/_inner pin afterwards if needed.
+                        // Parent under the enclosing navigation's layout node (if any), otherwise the root.
+                        var rawCollectionAlias = LookupExpression.GetLookupAlias(includableNavigation);
+                        var collectionParentLayout = _includedNavigations.Count > 0
+                            && _layoutByNavigation.TryGetValue(_includedNavigations.Peek(), out var collParent)
+                            ? collParent
+                            : _layoutRoot;
+                        if (collectionParentLayout != null)
+                        {
+                            var collectionLayoutNode = Layout.DocumentLayout
+                                .ForCollection(rawCollectionAlias)
+                                .WithNavigation(includableNavigation);
+                            collectionParentLayout.AddChild(collectionLayoutNode);
+                            _layoutByNavigation[includableNavigation] = collectionLayoutNode;
+                        }
+
                         var lookup = new LookupExpression(includableNavigation);
 
                         // For multi-level Include where the declaring entity is a cross-collection
@@ -243,6 +280,26 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                         ExtractNestedIncludePipeline(includeExpression.NavigationExpression, lookup, includableNavigation.TargetEntityType);
                         _queryExpression.AddLookup(lookup);
                         return RewriteCollectionIncludeForLookup(includeExpression, includableNavigation);
+                    }
+
+                    // Author a navigation layout node for non-embedded reference Includes.
+                    // Embedded navigations live inside their parent document and are not cross-collection,
+                    // so they do not need a layout node here.
+                    if (!includableNavigation.IsEmbedded())
+                    {
+                        var rawRefAlias = LookupExpression.GetLookupAlias(includableNavigation);
+                        var refParentLayout = _includedNavigations.Count > 0
+                            && _layoutByNavigation.TryGetValue(_includedNavigations.Peek(), out var refParent)
+                            ? refParent
+                            : _layoutRoot;
+                        if (refParentLayout != null)
+                        {
+                            var refLayoutNode = Layout.DocumentLayout
+                                .ForNavigation(rawRefAlias)
+                                .WithNavigation(includableNavigation);
+                            refParentLayout.AddChild(refLayoutNode);
+                            _layoutByNavigation[includableNavigation] = refLayoutNode;
+                        }
                     }
 
                     _includedNavigations.Push(includableNavigation);

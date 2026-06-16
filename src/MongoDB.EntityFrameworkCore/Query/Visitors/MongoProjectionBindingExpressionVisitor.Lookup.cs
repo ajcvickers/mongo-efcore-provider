@@ -121,6 +121,18 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             return false;
         }
 
+        // Author a collection layout node for this projected collection navigation.
+        // Projected collections are always off the query root (no enclosing Include nesting).
+        var projCollectionAlias = LookupExpression.GetLookupAlias(navigation);
+        if (_layoutRoot != null)
+        {
+            var projCollectionLayoutNode = Layout.DocumentLayout
+                .ForCollection(projCollectionAlias)
+                .WithNavigation(navigation);
+            _layoutRoot.AddChild(projCollectionLayoutNode);
+            _layoutByNavigation[navigation] = projCollectionLayoutNode;
+        }
+
         // Register the $lookup for the projected collection, carrying any filtered-Include pipeline stages
         // and nested ThenInclude $lookups extracted from the selector.
         var lookup = new LookupExpression(navigation);
