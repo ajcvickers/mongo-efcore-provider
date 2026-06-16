@@ -8,11 +8,15 @@ if (args.Contains("--verify"))
     for (var i = 0; i < entities.Length; i++)
     {
         var dom = DomMaterializer.Materialize(bytes[i]);
+        var reader = ReaderMaterializer.Materialize(bytes[i]);
+
         if (!entities[i].ValueEquals(dom))
             throw new InvalidOperationException($"DOM path mismatch at index {i}.");
+        if (!entities[i].ValueEquals(reader))
+            throw new InvalidOperationException($"Reader path mismatch at index {i}.");
     }
 
-    Console.WriteLine("VERIFY OK: DOM path matches originals.");
+    Console.WriteLine("VERIFY OK: DOM and Reader paths both match originals.");
     return;
 }
 
