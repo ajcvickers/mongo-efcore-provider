@@ -202,10 +202,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                         // here; FinalizeLayout() applies the _outer/_inner pin afterwards if needed.
                         // Parent under the enclosing navigation's layout node (if any), otherwise the root.
                         var rawCollectionAlias = LookupExpression.GetLookupAlias(includableNavigation);
-                        var collectionParentLayout = _includedNavigations.Count > 0
-                            && _layoutByNavigation.TryGetValue(_includedNavigations.Peek(), out var collParent)
-                            ? collParent
-                            : _layoutRoot;
+                        var collectionParentLayout = FindLayoutParent(includableNavigation);
                         if (collectionParentLayout != null)
                         {
                             var collectionLayoutNode = Layout.DocumentLayout
@@ -288,10 +285,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                     if (!includableNavigation.IsEmbedded())
                     {
                         var rawRefAlias = LookupExpression.GetLookupAlias(includableNavigation);
-                        var refParentLayout = _includedNavigations.Count > 0
-                            && _layoutByNavigation.TryGetValue(_includedNavigations.Peek(), out var refParent)
-                            ? refParent
-                            : _layoutRoot;
+                        var refParentLayout = FindLayoutParent(includableNavigation);
                         if (refParentLayout != null)
                         {
                             var refLayoutNode = Layout.DocumentLayout
@@ -686,6 +680,25 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
     private void ExitProjectionMember()
         => _projectionMembers.Pop();
+
+    /// <summary>
+    /// Find the layout node that should parent the node for <paramref name="navigation"/>: the enclosing
+    /// navigation on the include stack whose target type is this navigation's declaring type (a genuine
+    /// ThenInclude). Sibling/top-level Includes have no such enclosing navigation and parent under the root.
+    /// </summary>
+    private Layout.DocumentLayout FindLayoutParent(INavigation navigation)
+    {
+        foreach (var enclosing in _includedNavigations)
+        {
+            if (enclosing.TargetEntityType == navigation.DeclaringEntityType
+                && _layoutByNavigation.TryGetValue(enclosing, out var parent))
+            {
+                return parent;
+            }
+        }
+
+        return _layoutRoot;
+    }
 
     /// <summary>
     /// Checks whether a method call expression represents a scalar property access that should
