@@ -80,6 +80,17 @@ internal sealed class DocumentLayout
         => _absolutePathOverride = absolutePath;
 
     /// <summary>
+    /// Apply the driver-native LeftJoin layout: the root entity moves under <c>_outer</c> and the lone
+    /// joined reference becomes its sibling under <c>_inner</c> (not nested under <c>_outer</c>). Called
+    /// exactly once during query-expression finalization when <c>UsesDriverJoinFields</c> is true.
+    /// </summary>
+    public static void FinalizeDriverJoinMode(DocumentLayout root, DocumentLayout loneReference)
+    {
+        root.SetAbsolutePathOverride("_outer");
+        loneReference.SetAbsolutePathOverride("_inner");
+    }
+
+    /// <summary>
     /// The absolute BSON path to this node, composed from ancestors' relative paths unless an override is set.
     /// </summary>
     public string GetAbsolutePath()

@@ -117,6 +117,29 @@ internal sealed partial class MongoQueryExpression
         => _innerCollections.Count > 0 && !_pendingLookups.Any(l => l.ForceUnwind);
 
     /// <summary>
+    /// Resolve the authored <c>ResultLayout</c>'s abstract paths into concrete BSON paths a single time,
+    /// using <see cref="UsesDriverJoinFields"/> as the one read of the driver-join decision. In driver-join
+    /// mode the root entity is pinned to <c>_outer</c> and the lone reference navigation to <c>_inner</c>;
+    /// otherwise the relative <c>_lookup_&lt;Nav&gt;</c> paths already authored stand as-is.
+    /// </summary>
+    public void FinalizeLayout()
+    {
+        if (ResultLayout == null || !UsesDriverJoinFields)
+        {
+            return;
+        }
+
+        // Driver-native LeftJoin emits exactly one joined reference (a single inner collection, no
+        // forced-unwind). Find that lone Navigation child and pin the _outer/_inner sibling layout.
+        var loneReference = ResultLayout.Children
+            .FirstOrDefault(c => c.Kind == Layout.DocumentLayoutKind.Navigation);
+        if (loneReference != null)
+        {
+            Layout.DocumentLayout.FinalizeDriverJoinMode(ResultLayout, loneReference);
+        }
+    }
+
+    /// <summary>
     /// Register an inner collection for a join operation.
     /// </summary>
     /// <param name="entityType">The <see cref="IEntityType"/> of the inner collection.</param>

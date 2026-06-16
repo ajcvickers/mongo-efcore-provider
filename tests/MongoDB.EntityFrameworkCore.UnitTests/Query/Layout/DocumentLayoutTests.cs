@@ -50,4 +50,16 @@ public static class DocumentLayoutTests
         Assert.Equal("_inner", nav.GetAbsolutePath());
         Assert.Equal("_inner._lookup_Region", thenNav.GetAbsolutePath());
     }
+
+    [Fact]
+    public static void Finalize_driver_join_mode_pins_root_to_outer_and_lone_reference_to_inner()
+    {
+        var root = DocumentLayout.ForEntity(relativePath: "");
+        var nav = root.AddChild(DocumentLayout.ForNavigation(relativePath: "_lookup_Customer"));
+
+        DocumentLayout.FinalizeDriverJoinMode(root, loneReference: nav);
+
+        Assert.Equal("_outer", root.GetAbsolutePath());
+        Assert.Equal("_inner", nav.GetAbsolutePath());
+    }
 }
