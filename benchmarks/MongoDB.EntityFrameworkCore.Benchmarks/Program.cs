@@ -45,4 +45,4 @@ if (args.Contains("--smoke"))
     return;
 }
 
-Console.WriteLine("Pass --smoke to validate, or run with no args to benchmark.");
+BenchmarkDotNet.Running.BenchmarkRunner.Run<QueryBenchmarks>();
