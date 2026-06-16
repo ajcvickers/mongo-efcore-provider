@@ -585,7 +585,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             return null;
         }
 
-        var node = FindLayoutNode(layout, crossCollectionAccess.Navigation);
+        var node = FindLayoutNode(layout, crossCollectionAccess.Navigation, crossCollectionAccess.EntityType);
         if (node == null)
         {
             return null;
@@ -607,16 +607,24 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         return (DocParameter, field);
     }
 
-    private static Layout.DocumentLayout? FindLayoutNode(Layout.DocumentLayout node, Microsoft.EntityFrameworkCore.Metadata.INavigation? navigation)
+    private static Layout.DocumentLayout? FindLayoutNode(
+        Layout.DocumentLayout node,
+        Microsoft.EntityFrameworkCore.Metadata.INavigation? navigation,
+        Microsoft.EntityFrameworkCore.Metadata.IEntityType? entityType = null)
     {
         if (navigation != null && ReferenceEquals(node.Navigation, navigation))
         {
             return node;
         }
 
+        if (navigation == null && entityType != null && node.EntityType == entityType)
+        {
+            return node;
+        }
+
         foreach (var child in node.Children)
         {
-            var found = FindLayoutNode(child, navigation);
+            var found = FindLayoutNode(child, navigation, entityType);
             if (found != null)
             {
                 return found;

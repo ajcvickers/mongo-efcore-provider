@@ -49,6 +49,8 @@ internal sealed class DocumentLayout
 
     public INavigation? Navigation { get; private set; }
 
+    public IEntityType? EntityType { get; private set; }
+
     public static DocumentLayout ForEntity(string relativePath)
         => new(DocumentLayoutKind.Entity, relativePath);
 
@@ -61,6 +63,12 @@ internal sealed class DocumentLayout
     public DocumentLayout WithNavigation(INavigation navigation)
     {
         Navigation = navigation;
+        return this;
+    }
+
+    public DocumentLayout WithEntityType(IEntityType entityType)
+    {
+        EntityType = entityType;
         return this;
     }
 

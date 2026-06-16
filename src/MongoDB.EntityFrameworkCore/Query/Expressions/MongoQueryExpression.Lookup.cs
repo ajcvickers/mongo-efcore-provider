@@ -129,13 +129,25 @@ internal sealed partial class MongoQueryExpression
             return;
         }
 
-        // Driver-native LeftJoin emits exactly one joined reference (a single inner collection, no
-        // forced-unwind). Find that lone Navigation child and pin the _outer/_inner sibling layout.
+        // Driver-native LeftJoin: root entity is under "_outer".
+        ResultLayout.SetAbsolutePathOverride("_outer");
+
+        // Case A: a navigation child exists (reference Include / FK-derived join) — pin it to "_inner".
         var loneReference = ResultLayout.Children
             .FirstOrDefault(c => c.Kind == Layout.DocumentLayoutKind.Navigation);
         if (loneReference != null)
         {
-            Layout.DocumentLayout.FinalizeDriverJoinMode(ResultLayout, loneReference);
+            loneReference.SetAbsolutePathOverride("_inner");
+            return;
+        }
+
+        // Case B: an explicit join with no navigation child — author an "_inner" entity node keyed by the
+        // joined inner entity type so the shaper (which has no INavigation for an explicit join) can find it.
+        foreach (var innerEntityType in _innerCollections.Keys)
+        {
+            var innerNode = Layout.DocumentLayout.ForEntity("_inner").WithEntityType(innerEntityType);
+            innerNode.SetAbsolutePathOverride("_inner");
+            ResultLayout.AddChild(innerNode);
         }
     }
 
