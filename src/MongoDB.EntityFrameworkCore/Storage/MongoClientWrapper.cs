@@ -15,12 +15,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
 using MongoDB.EntityFrameworkCore.Infrastructure;
@@ -89,6 +91,17 @@ public class MongoClientWrapper : IMongoClientWrapper
 
         if (executableQuery.Cardinality != ResultCardinality.Enumerable)
             return ExecuteScalar<T>(executableQuery);
+
+        if (executableQuery.NativePipeline is { } stages)
+        {
+            var collection = Database.GetCollection<BsonDocument>(executableQuery.CollectionNamespace.CollectionName);
+            PipelineDefinition<BsonDocument, BsonDocument> pipeline = stages.ToArray();
+            var cursor = executableQuery.Session is { } session
+                ? collection.Aggregate(session, pipeline)
+                : collection.Aggregate(pipeline);
+            log = () => _commandLogger.ExecutedMqlQuery(executableQuery);
+            return (IEnumerable<T>)cursor.ToEnumerable();
+        }
 
         var queryable = executableQuery.Provider.CreateQuery<T>(executableQuery.Query);
         log = () => _commandLogger.ExecutedMqlQuery(executableQuery);

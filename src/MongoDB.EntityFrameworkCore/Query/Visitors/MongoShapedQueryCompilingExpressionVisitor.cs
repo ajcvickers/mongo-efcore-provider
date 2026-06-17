@@ -27,6 +27,7 @@ using MongoDB.Driver;
 using MongoDB.Driver.Linq;
 using MongoDB.EntityFrameworkCore.Diagnostics;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
+using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using MongoDB.EntityFrameworkCore.Query.Visitors.Dependencies;
 using MongoDB.EntityFrameworkCore.Serializers;
 using MongoDB.EntityFrameworkCore.Storage;
@@ -89,7 +90,12 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     {
         VerifyNoClientConstant(shapedQueryExpression.ShaperExpression);
 
-        if (ProjectionAnalyzer.CanPushDown(shapedQueryExpression.ShaperExpression))
+        // The native MQL path returns full BsonDocuments and relies on a client-side shaper. The
+        // push-down path uses an identity shaper (the driver projects server-side) and would receive
+        // BsonDocuments it cannot cast to the projection type. When native translation is enabled,
+        // route projections through the mixed (client-side shaper) path so they remain compatible.
+        if (NativeQuery.Mode == NativeQueryMode.Off
+            && ProjectionAnalyzer.CanPushDown(shapedQueryExpression.ShaperExpression))
         {
             // Push-down path: scalar/anonymous projections handled entirely by LINQ V3
             return Expression.Call(null,
@@ -226,6 +232,33 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             {
                 innerSources[innerEntityType] = CreateInnerSource(
                     mongoQueryContext, bsonSerializerFactory, innerEntityType, innerCollectionExpression.CollectionName, transaction);
+            }
+        }
+
+        if (NativeQuery.Mode != NativeQueryMode.Off
+            && resultCardinality == ResultCardinality.Enumerable
+            && queryExpression.GetPendingLookups().Count == 0)
+        {
+            try
+            {
+                var nativePipeline = new MongoPipelineTranslator((IEntityType)entityType, queryContext)
+                    .Translate(queryExpression.CapturedExpression);
+
+                var nativeExecutable = new MongoExecutableQuery(
+                    Expression.Empty(),
+                    resultCardinality,
+                    (IMongoQueryProvider)source.Provider,
+                    collection.CollectionNamespace,
+                    new(new Dictionary<string, object>()))
+                {
+                    NativePipeline = nativePipeline,
+                    Session = transaction?.Session
+                };
+                return (mongoQueryContext, nativeExecutable);
+            }
+            catch (NativeTranslationNotSupportedException) when (NativeQuery.Mode != NativeQueryMode.Force)
+            {
+                // fall through to the driver-LINQ path
             }
         }
 
