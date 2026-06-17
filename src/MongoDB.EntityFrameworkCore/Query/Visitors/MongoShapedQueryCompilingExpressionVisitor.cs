@@ -90,12 +90,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     {
         VerifyNoClientConstant(shapedQueryExpression.ShaperExpression);
 
-        // The native MQL path returns full BsonDocuments and relies on a client-side shaper. The
-        // push-down path uses an identity shaper (the driver projects server-side) and would receive
-        // BsonDocuments it cannot cast to the projection type. When native translation is enabled,
-        // route projections through the mixed (client-side shaper) path so they remain compatible.
-        if (NativeQuery.Mode == NativeQueryMode.Off
-            && ProjectionAnalyzer.CanPushDown(shapedQueryExpression.ShaperExpression))
+        if (ProjectionAnalyzer.CanPushDown(shapedQueryExpression.ShaperExpression))
         {
             // Push-down path: scalar/anonymous projections handled entirely by LINQ V3
             return Expression.Call(null,
@@ -216,6 +211,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         BsonSerializerFactory bsonSerializerFactory,
         MongoQueryExpression queryExpression,
         ResultCardinality resultCardinality,
+        bool nativeEligible,
         Func<MongoEFToLinqTranslatingExpressionVisitor, Expression?, Expression> translate)
     {
         var mongoQueryContext = (MongoQueryContext)queryContext;
@@ -235,7 +231,13 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             }
         }
 
-        if (NativeQuery.Mode != NativeQueryMode.Off
+        // The native MQL path returns full BsonDocuments and relies on the client-side shaper used by the
+        // entity / mixed-projection path (ExecuteShapedQuery). The push-down path (ExecuteProjectedQuery)
+        // uses an identity shaper expecting the driver to have projected scalars/anonymous types server-side;
+        // handing it full BsonDocuments would fail to materialize. So native translation is only attempted on
+        // the client-side-shaper path. Pushed-down projections always use the driver-LINQ path.
+        if (nativeEligible
+            && NativeQuery.Mode != NativeQueryMode.Off
             && resultCardinality == ResultCardinality.Enumerable
             && queryExpression.GetPendingLookups().Count == 0)
         {
@@ -307,6 +309,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     {
         var (mongoQueryContext, executableQuery) = TranslateQuery<TSource>(
             queryContext, entityType, bsonSerializerFactory, queryExpression, resultCardinality,
+            nativeEligible: false,
             (translator, expression) => translator.TranslateProjected(expression));
 
         return new QueryingEnumerable<TResult, TResult>(
@@ -332,6 +335,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     {
         var (mongoQueryContext, executableQuery) = TranslateQuery<TSource>(
             queryContext, entityType, bsonSerializerFactory, queryExpression, resultCardinality,
+            nativeEligible: true,
             (translator, expression) => translator.Translate(expression, resultCardinality));
 
         return new QueryingEnumerable<BsonDocument, TResult>(

@@ -38,6 +38,14 @@ internal static class NativeExpressionHelpers
 
         if (property is null)
             return false;
+
+        // A component of a composite primary key is stored nested under "_id" (e.g. { _id: { Key1, Key2 } }),
+        // so its top-level element name does not address the stored field. The driver-LINQ path resolves the
+        // dotted "_id.<name>" path; the native translator does not, so refuse it here and let the query fall
+        // back rather than emit a $match against a non-existent top-level field (which silently returns nothing).
+        if (property.IsPrimaryKey() && property.FindContainingPrimaryKey()!.Properties.Count > 1)
+            return false;
+
         element = property.GetElementName();
         return true;
     }

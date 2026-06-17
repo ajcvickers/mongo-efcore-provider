@@ -94,12 +94,15 @@ public class MongoClientWrapper : IMongoClientWrapper
 
         if (executableQuery.NativePipeline is { } stages)
         {
+            // The native pipeline is already known here, so set the log action before issuing the aggregate.
+            // This mirrors the driver-LINQ path (whose stages are captured at build time) and ensures the MQL
+            // is logged even when execution against the server throws.
+            log = () => _commandLogger.ExecutedMqlQuery(executableQuery);
             var collection = Database.GetCollection<BsonDocument>(executableQuery.CollectionNamespace.CollectionName);
             PipelineDefinition<BsonDocument, BsonDocument> pipeline = stages.ToArray();
             var cursor = executableQuery.Session is { } session
                 ? collection.Aggregate(session, pipeline)
                 : collection.Aggregate(pipeline);
-            log = () => _commandLogger.ExecutedMqlQuery(executableQuery);
             return (IEnumerable<T>)cursor.ToEnumerable();
         }
 

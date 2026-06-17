@@ -37,7 +37,14 @@ internal static class MongoLoggerExtensions
     internal static void ExecutedMqlQuery(
         this IDiagnosticsLogger<DbLoggerCategory.Database.Command> diagnostics,
         MongoExecutableQuery mongoExecutableQuery)
-        => ExecutedMqlQuery(diagnostics, mongoExecutableQuery.CollectionNamespace, mongoExecutableQuery.Provider.LoggedStages);
+        => ExecutedMqlQuery(
+            diagnostics,
+            mongoExecutableQuery.CollectionNamespace,
+            // The native MQL path builds the pipeline itself and does not run through the driver-LINQ
+            // provider, so Provider.LoggedStages is empty; log the native pipeline stages instead.
+            mongoExecutableQuery.NativePipeline is { } nativeStages
+                ? nativeStages.ToArray()
+                : mongoExecutableQuery.Provider.LoggedStages);
 
     public static void ExecutedMqlQuery(
         this IDiagnosticsLogger<DbLoggerCategory.Database.Command> diagnostics,
