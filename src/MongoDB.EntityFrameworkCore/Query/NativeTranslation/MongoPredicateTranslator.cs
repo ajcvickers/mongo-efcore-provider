@@ -56,13 +56,13 @@ internal sealed class MongoPredicateTranslator
             case BinaryExpression be when IsComparison(be.NodeType):
                 return TranslateComparison(be);
 
-            case UnaryExpression { NodeType: ExpressionType.Not } not when TryResolveProperty(Unwrap(not.Operand), out var notProp, out var notElement):
+            case UnaryExpression { NodeType: ExpressionType.Not } not when NativeExpressionHelpers.TryResolveMemberProperty(Unwrap(not.Operand), _entityType, out var notProp, out var notElement):
                 // !boolProperty => { field: false }
                 return new BsonDocument(notElement, ToBsonValue(notProp!, false));
 
             default:
                 // bare boolean property: c.Active => { field: true }
-                if (TryResolveProperty(node, out var prop, out var element) && prop!.ClrType == typeof(bool))
+                if (NativeExpressionHelpers.TryResolveMemberProperty(node, _entityType, out var prop, out var element) && prop!.ClrType == typeof(bool))
                     return new BsonDocument(element, ToBsonValue(prop, true));
                 throw NotSupported(node);
         }
@@ -73,14 +73,14 @@ internal sealed class MongoPredicateTranslator
         IProperty? property;
         string? element;
         Expression valueNode;
-        if (TryResolveProperty(Unwrap(be.Left), out property, out element))
+        if (NativeExpressionHelpers.TryResolveMemberProperty(Unwrap(be.Left), _entityType, out property, out element))
             valueNode = Unwrap(be.Right);
-        else if (TryResolveProperty(Unwrap(be.Right), out property, out element))
+        else if (NativeExpressionHelpers.TryResolveMemberProperty(Unwrap(be.Right), _entityType, out property, out element))
             valueNode = Unwrap(be.Left);
         else
             throw NotSupported(be);
 
-        var value = ToBsonValue(property!, EvaluateValue(valueNode));
+        var value = ToBsonValue(property!, NativeExpressionHelpers.EvaluateValue(valueNode, _queryContext));
         var op = be.NodeType switch
         {
             ExpressionType.Equal => null,
@@ -99,42 +99,6 @@ internal sealed class MongoPredicateTranslator
     private static bool IsComparison(ExpressionType t)
         => t is ExpressionType.Equal or ExpressionType.NotEqual or ExpressionType.LessThan
             or ExpressionType.LessThanOrEqual or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual;
-
-    // Property access is a member access off the lambda parameter: c.PropName.
-    private bool TryResolveProperty(Expression node, out IProperty? property, out string? element)
-    {
-        property = null;
-        element = null;
-        if (node is MemberExpression { Expression: ParameterExpression } me)
-        {
-            property = _entityType.FindProperty(me.Member.Name);
-        }
-
-        if (property is null)
-            return false;
-        element = property.GetElementName();
-        return true;
-    }
-
-    // Value nodes are EF query parameters (QueryParameterExpression) or literal constants.
-    private object? EvaluateValue(Expression node)
-    {
-        switch (node)
-        {
-            case ConstantExpression c:
-                return c.Value;
-#if EF8 || EF9
-            // In EF8/EF9 query parameters are plain ParameterExpressions keyed in ParameterValues.
-            case ParameterExpression p when p.Name is not null && _queryContext.ParameterValues.TryGetValue(p.Name, out var pv):
-                return pv;
-#else
-            case QueryParameterExpression qp when _queryContext.Parameters.TryGetValue(qp.Name, out var pv):
-                return pv;
-#endif
-            default:
-                throw NotSupported(node);
-        }
-    }
 
     // Convert a CLR value to a BsonValue using the property's serializer (correct element representation).
     private static BsonValue ToBsonValue(IProperty property, object? value)
