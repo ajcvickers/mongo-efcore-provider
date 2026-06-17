@@ -61,13 +61,24 @@ internal sealed class MongoPredicateTranslator
 
             case UnaryExpression { NodeType: ExpressionType.Not } not when NativeExpressionHelpers.TryResolveMemberProperty(Unwrap(not.Operand), _entityType, out var notProp, out var notElement):
                 // !boolProperty => { field: { $ne: true } }. This matches the driver-LINQ rendering and is
-                // correct for missing/null fields (a plain { field: false } would not match those).
+                // correct for missing/null fields (a plain { field: false } would not match those). For a
+                // nullable bool the driver's rendering can still diverge, so fall back conservatively.
+                if (notProp!.IsNullable)
+                    throw new NativeTranslationNotSupportedException(
+                        $"Native predicate translation does not support a negated nullable boolean property '{notProp.Name}'.");
                 return new BsonDocument(notElement, new BsonDocument("$ne", ToBsonValue(notProp!, true)));
 
             default:
                 // bare boolean property: c.Active => { field: true }
                 if (NativeExpressionHelpers.TryResolveMemberProperty(node, _entityType, out var prop, out var element) && prop!.ClrType == typeof(bool))
+                {
+                    // A nullable bool ({ field: true } vs the driver's rendering for missing/null) can diverge;
+                    // fall back conservatively.
+                    if (prop.IsNullable)
+                        throw new NativeTranslationNotSupportedException(
+                            $"Native predicate translation does not support a nullable boolean property '{prop.Name}'.");
                     return new BsonDocument(element, ToBsonValue(prop, true));
+                }
                 throw NotSupported(node);
         }
     }
@@ -188,15 +199,18 @@ internal sealed class MongoPredicateTranslator
         string? element;
         Expression valueNode;
         Expression memberOperand;
+        bool memberOnLeft;
         if (NativeExpressionHelpers.TryResolveMemberProperty(Unwrap(be.Left), _entityType, out property, out element))
         {
             memberOperand = be.Left;
             valueNode = Unwrap(be.Right);
+            memberOnLeft = true;
         }
         else if (NativeExpressionHelpers.TryResolveMemberProperty(Unwrap(be.Right), _entityType, out property, out element))
         {
             memberOperand = be.Right;
             valueNode = Unwrap(be.Left);
+            memberOnLeft = false;
         }
         else
         {
@@ -209,8 +223,20 @@ internal sealed class MongoPredicateTranslator
         if (HasNumericConvert(memberOperand, property!.ClrType))
             throw new NativeTranslationNotSupportedException($"Native predicate translation does not support a cast on member '{property.Name}'.");
 
+        // A bare { field: value } (from ==) or { field: { $ne: value } } does not match documents where the
+        // field is absent/null in the way the driver-LINQ path renders for a nullable field. Rather than risk
+        // a divergent match, fall back to the driver path for equality/inequality on a nullable property.
+        if ((be.NodeType is ExpressionType.Equal or ExpressionType.NotEqual) && property.IsNullable)
+            throw new NativeTranslationNotSupportedException(
+                $"Native predicate translation does not support (in)equality on nullable property '{property.Name}'.");
+
+        // When the member is on the right operand (e.g. 3 < p.X) the relational operator must be mirrored so the
+        // emitted $-operator reflects the member's side of the comparison: 3 < X means X > 3, not X < 3.
+        // == and != are symmetric and unchanged.
+        var effectiveNodeType = memberOnLeft ? be.NodeType : Mirror(be.NodeType);
+
         var value = ToBsonValue(property!, NativeExpressionHelpers.EvaluateValue(valueNode, _queryContext));
-        var op = be.NodeType switch
+        var op = effectiveNodeType switch
         {
             ExpressionType.Equal => null,
             ExpressionType.NotEqual => "$ne",
@@ -224,6 +250,18 @@ internal sealed class MongoPredicateTranslator
             ? new BsonDocument(element!, value)
             : new BsonDocument(element!, new BsonDocument(op, value));
     }
+
+    // Mirror a relational operator for the case where the member is on the right-hand side of the comparison.
+    // <,<= swap with >,>= and vice versa; == and != are symmetric.
+    private static ExpressionType Mirror(ExpressionType nodeType)
+        => nodeType switch
+        {
+            ExpressionType.LessThan => ExpressionType.GreaterThan,
+            ExpressionType.LessThanOrEqual => ExpressionType.GreaterThanOrEqual,
+            ExpressionType.GreaterThan => ExpressionType.LessThan,
+            ExpressionType.GreaterThanOrEqual => ExpressionType.LessThanOrEqual,
+            _ => nodeType // Equal / NotEqual are symmetric
+        };
 
     // True when the operand wraps the member in a Convert/ConvertChecked to a different (non-nullable-widening)
     // type — i.e. a cast that changes the comparison semantics. A plain nullable<->underlying convert is benign.

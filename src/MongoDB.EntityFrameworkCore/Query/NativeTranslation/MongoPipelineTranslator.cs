@@ -106,10 +106,18 @@ internal sealed class MongoPipelineTranslator
                     break;
 
                 case "Select":
-                    // Sub-project B's native slice is filter/sort/paging over whole entities only. A trailing
-                    // Select may be a server-side projection (e.g. $project with $toString / $dateAdd) that the
-                    // driver-LINQ path renders and that the client-side shaper does not reproduce. Silently
-                    // dropping it returns the wrong document shape, so reject it and fall back to driver-LINQ.
+                    // EF Core appends a synthetic trailing Select to whole-entity queries to drive entity
+                    // materialization (its lambda body is an IncludeExpression over the entity — owned-type /
+                    // navigation loading, not a user transformation). The native path returns full BsonDocuments
+                    // and the client-side entity shaper performs that materialization itself, so this synthetic
+                    // Select is a no-op for pipeline construction and can be skipped — letting filter/sort/paging
+                    // over whole entities go native.
+                    //
+                    // Any *other* Select is a real server-side projection (e.g. $project with $toString /
+                    // $dateAdd) that the driver-LINQ path renders and the client-side shaper does not reproduce;
+                    // silently dropping it returns the wrong document shape, so reject it and fall back.
+                    if (IsEntityMaterializationSelect(call))
+                        break;
                     throw new NativeTranslationNotSupportedException(
                         "Native pipeline does not support a trailing projection (Select).");
 
@@ -125,6 +133,16 @@ internal sealed class MongoPipelineTranslator
         if (limit is { } l) pipeline.Add(new BsonDocument("$limit", l));
         return pipeline;
     }
+
+    // True when this Select is EF Core's synthetic entity-materialization projection rather than a user
+    // transformation: a two-argument Queryable.Select whose selector lambda body is an IncludeExpression
+    // (the node EF wraps the entity in to drive owned-type / navigation loading). The native path returns
+    // whole documents and lets the client-side entity shaper perform that materialization, so this Select
+    // does not affect the emitted $match/$sort/$skip/$limit pipeline.
+    private static bool IsEntityMaterializationSelect(MethodCallExpression call)
+        => call.Method.DeclaringType == typeof(System.Linq.Queryable)
+           && call.Arguments.Count == 2
+           && Unquote(call.Arguments[1]) is { Body: IncludeExpression };
 
     private void AddSort(ref BsonDocument? sort, MethodCallExpression call, bool ascending)
     {
