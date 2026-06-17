@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
@@ -39,4 +40,10 @@ public record MongoExecutableQuery(
 {
     internal const string VectorQueryProperty = nameof(VectorQueryProperty);
     internal const string VectorQueryIndexName = nameof(VectorQueryIndexName);
+
+    /// <summary>When set, the query is executed as this native aggregation pipeline instead of via the LINQ <see cref="Provider"/>.</summary>
+    public IReadOnlyList<MongoDB.Bson.BsonDocument>? NativePipeline { get; init; }
+
+    /// <summary>The session for native pipeline execution (the ambient transaction's session, if any).</summary>
+    public MongoDB.Driver.IClientSessionHandle? Session { get; init; }
 }
