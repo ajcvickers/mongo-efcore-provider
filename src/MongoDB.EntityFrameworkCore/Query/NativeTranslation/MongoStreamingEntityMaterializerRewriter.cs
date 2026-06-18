@@ -28,6 +28,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Serializers;
 
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -120,7 +121,37 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         public required Dictionary<IProperty, ParameterExpression> Locals { get; init; }
         public ParameterExpression? Present { get; init; }
         public required List<(INavigationBase Navigation, EntityPlan Child)> OwnedNavigations { get; init; }
+        public required List<CollectionPlan> OwnedCollections { get; init; }
     }
+
+    /// <summary>
+    /// A plan for an owned <em>collection</em> navigation: the element materialization plan, a 1-based loop
+    /// <see cref="Counter"/> local that supplies the synthesized ordinal key, and a <see cref="List"/>
+    /// accumulator local of the element CLR type. Element locals are declared once (in the element plan) and
+    /// reassigned on each array iteration.
+    /// </summary>
+    private sealed class CollectionPlan
+    {
+        public required INavigation Navigation { get; init; }
+        public required EntityPlan Element { get; init; }
+        public required ParameterExpression Counter { get; init; }
+        public required ParameterExpression List { get; init; }
+
+        // The rewritten per-element construction expression (element locals + counter -> CLR element), set by
+        // RewriteMaterializer from the CollectionShaperExpression's inner shaper, consumed by BuildFillLoop to
+        // emit `list.Add(<constructed element>)` inside the array loop.
+        public Expression? ElementConstructor { get; set; }
+    }
+
+    private static readonly MethodInfo ReadStartArrayMethod =
+        typeof(IBsonReader).GetMethod(nameof(IBsonReader.ReadStartArray))!;
+
+    private static readonly MethodInfo ReadEndArrayMethod =
+        typeof(IBsonReader).GetMethod(nameof(IBsonReader.ReadEndArray))!;
+
+    private static readonly MethodInfo IncludeCollectionMethodInfo =
+        typeof(MongoStreamingEntityMaterializerRewriter).GetTypeInfo()
+            .GetDeclaredMethod(nameof(IncludeCollection))!;
 
     private readonly ParameterExpression _reader = Expression.Variable(typeof(IBsonReader), "__reader");
     private readonly ParameterExpression _name = Expression.Variable(typeof(string), "__name");
@@ -199,17 +230,37 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         }
 
         var ownedNavigations = new List<(INavigationBase, EntityPlan)>();
+        var ownedCollections = new List<CollectionPlan>();
         foreach (var navigation in entityType.GetNavigations())
         {
-            if (navigation.IsCollection
-                || !navigation.TargetEntityType.IsOwned())
+            if (!navigation.TargetEntityType.IsOwned())
             {
                 throw new NativeTranslationNotSupportedException(
                     $"Streaming materialization of navigation '{entityType.DisplayName()}.{navigation.Name}' is not supported "
-                    + "(only single owned reference sub-documents are supported).");
+                    + "(only owned sub-documents are supported).");
             }
 
             var target = navigation.TargetEntityType;
+
+            if (navigation.IsCollection)
+            {
+                // Owned collection: the element plan's locals are reused across iterations (no present flag —
+                // presence is per-array-element, governed by the loop). A 1-based counter local supplies the
+                // synthesized ordinal key; a List<TElement> accumulator collects the materialized elements.
+                var element = BuildPlan(target, present: null);
+                var counter = Expression.Variable(typeof(int), "__counter_" + target.ShortName());
+                var listType = typeof(List<>).MakeGenericType(target.ClrType);
+                var list = Expression.Variable(listType, "__list_" + target.ShortName());
+                ownedCollections.Add(new CollectionPlan
+                {
+                    Navigation = navigation,
+                    Element = element,
+                    Counter = counter,
+                    List = list
+                });
+                continue;
+            }
+
             var childPresent = Expression.Variable(typeof(bool), "__present_" + target.ShortName());
             var child = BuildPlan(target, childPresent);
             ownedNavigations.Add((navigation, child));
@@ -220,7 +271,8 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             EntityType = entityType,
             Locals = locals,
             Present = present,
-            OwnedNavigations = ownedNavigations
+            OwnedNavigations = ownedNavigations,
+            OwnedCollections = ownedCollections
         };
     }
 
@@ -241,6 +293,17 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         foreach (var (_, child) in plan.OwnedNavigations)
         {
             CollectLocals(child, locals, initializers);
+        }
+
+        foreach (var collection in plan.OwnedCollections)
+        {
+            locals.Add(collection.Counter);
+            initializers.Add(Expression.Assign(collection.Counter, Expression.Constant(0)));
+            locals.Add(collection.List);
+            initializers.Add(Expression.Assign(collection.List, Expression.Default(collection.List.Type)));
+
+            // Element locals are shared across iterations; declare + default-init them once here.
+            CollectLocals(collection.Element, locals, initializers);
         }
     }
 
@@ -295,6 +358,18 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
                 ifChain);
         }
 
+        foreach (var collection in plan.OwnedCollections)
+        {
+            var elementName = collection.Navigation.TargetEntityType.GetContainingElementName()
+                              ?? throw new NativeTranslationNotSupportedException(
+                                  $"Owned collection '{collection.Navigation.DeclaringEntityType.DisplayName()}.{collection.Navigation.Name}' has no element name.");
+
+            ifChain = Expression.IfThenElse(
+                Expression.Call(StringEqualsMethod, _name, Expression.Constant(elementName, typeof(string))),
+                BuildCollectionLoop(collection),
+                ifChain);
+        }
+
         var breakTarget = Expression.Label("__fillDone_" + plan.EntityType.ShortName());
         return Expression.Loop(
             Expression.IfThenElse(
@@ -309,13 +384,61 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
     }
 
     /// <summary>
+    /// Build the array loop for an owned collection. The reader is positioned at the array value (after the
+    /// element name). If the value is BSON Null the collection is left empty (matching the DOM
+    /// <c>bsonArray == null ? null</c> semantics — IncludeCollection still creates an empty CLR collection).
+    /// Otherwise each array element is read into the element plan's locals (reassigned per iteration), the
+    /// 1-based <c>counter</c> supplies the synthesized ordinal key, and the constructed element is appended.
+    /// </summary>
+    private Expression BuildCollectionLoop(CollectionPlan collection)
+    {
+        var listType = collection.List.Type;
+        var addMethod = listType.GetMethod(nameof(List<object>.Add))!;
+        var elementConstructor = collection.ElementConstructor
+                                 ?? throw new NativeTranslationNotSupportedException(
+                                     $"Owned collection '{collection.Navigation.Name}' element construction was not prepared.");
+
+        var elementBreak = Expression.Label("__elemDone_" + collection.Element.EntityType.ShortName());
+
+        var arrayBody = Expression.Block(
+            Expression.Assign(collection.Counter, Expression.Constant(0)),
+            Expression.Assign(collection.List, Expression.New(listType)),
+            Expression.Call(_reader, ReadStartArrayMethod),
+            Expression.Loop(
+                Expression.IfThenElse(
+                    Expression.NotEqual(
+                        Expression.Call(_reader, ReadBsonTypeMethod),
+                        Expression.Constant(BsonType.EndOfDocument, typeof(BsonType))),
+                    Expression.Block(
+                        Expression.Call(_reader, ReadStartDocumentMethod),
+                        BuildFillLoop(collection.Element),
+                        Expression.Call(_reader, ReadEndDocumentMethod),
+                        // The element's synthesized ordinal key resolves to `counter + 1` (1-based, matching
+                        // the DOM path's `ordinal + 1`); construct, append, then advance the 0-based counter.
+                        Expression.Call(collection.List, addMethod, elementConstructor),
+                        Expression.AddAssign(collection.Counter, Expression.Constant(1))),
+                    Expression.Break(elementBreak)),
+                elementBreak),
+            Expression.Call(_reader, ReadEndArrayMethod));
+
+        // A BSON Null array value: consume the null and leave the list null (IncludeCollection's
+        // GetOrCreate still produces an empty CLR collection on the entity).
+        return Expression.IfThenElse(
+            Expression.Equal(
+                Expression.Call(_reader, GetCurrentBsonTypeMethod),
+                Expression.Constant(BsonType.Null, typeof(BsonType))),
+            Expression.Call(_reader, ReadNullMethod),
+            arrayBody);
+    }
+
+    /// <summary>
     /// Rewrite the materializer expression, preserving any <see cref="IncludeExpression"/> structure.
     /// For a plain entity block the value source is redirected to <paramref name="plan"/>'s locals; for an
     /// <see cref="IncludeExpression"/> the entity block is rewritten with the parent plan and each owned
     /// navigation block is rewritten with the matching child plan, its <c>bsonDocN == null</c> guard
     /// replaced by <c>!present</c>.
     /// </summary>
-    private Expression RewriteMaterializer(Expression body, EntityPlan plan)
+    private Expression RewriteMaterializer(Expression body, EntityPlan plan, CollectionPlan? collection = null)
     {
         if (body is IncludeExpression include)
         {
@@ -331,11 +454,18 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
 
             if (navigation.IsCollection)
             {
-                throw new NativeTranslationNotSupportedException(
-                    $"Streaming materialization of collection navigation '{navigation.DeclaringEntityType.DisplayName()}.{navigation.Name}' is not supported.");
+                var entityBlockForCollection = (BlockExpression)RewriteMaterializer(include.EntityExpression, plan, collection);
+                var collectionPlan = FindCollectionPlan(plan, navigation);
+
+                // Locate the CollectionShaperExpression carried by the navigation expression and build the
+                // per-element construction (stored on the plan for the array loop to emit). What remains is a
+                // collection-include fixup, spliced into the parent block, fed the materialized List<TElement>.
+                BuildCollectionElementConstructor(include.NavigationExpression, collectionPlan);
+
+                return SpliceCollectionInclude(entityBlockForCollection, navigation, collectionPlan.List, include.SetLoaded);
             }
 
-            var entityBlock = (BlockExpression)RewriteMaterializer(include.EntityExpression, plan);
+            var entityBlock = (BlockExpression)RewriteMaterializer(include.EntityExpression, plan, collection);
 
             var child = FindChildPlan(plan, navigation);
             var navExpression = RewriteOwnedNavigation(include.NavigationExpression, navigation, child);
@@ -345,9 +475,10 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
 
         // Plain entity block: { bsonDocN; bsonDocN = projection as BsonDocument; bsonDocN == null ? null : <block> }
         // The root row is always present, so drop the bsonDocN local + null guard and use the materializer
-        // block directly, redirecting its value source to this plan's locals.
+        // block directly, redirecting its value source to this plan's locals. When building a collection
+        // element, `collection` carries the loop counter so the synthesized ordinal key resolves to counter+1.
         var materializerBlock = ExtractMaterializerBlock(body, plan.EntityType);
-        return new ConstructionRewriter(_allLocals).Visit(materializerBlock);
+        return new ConstructionRewriter(_allLocals, collection).Visit(materializerBlock);
     }
 
     /// <summary>
@@ -399,6 +530,216 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
 
         return entityBlock.Update(entityBlock.Variables, expressions);
     }
+
+    /// <summary>
+    /// Splice an owned collection-navigation fixup into a rewritten entity materializer block, mirroring EF's
+    /// <c>IncludeCollection</c> path. <paramref name="collectionExpression"/> is the materialized
+    /// <c>List&lt;TElement&gt;</c> local filled by the array loop; <see cref="IncludeCollection"/> wires each
+    /// element onto the principal collection navigation (and, when tracking, marks it loaded).
+    /// </summary>
+    private BlockExpression SpliceCollectionInclude(
+        BlockExpression entityBlock,
+        INavigation navigation,
+        Expression collectionExpression,
+        bool setLoaded)
+    {
+        var includingClrType = navigation.DeclaringEntityType.ClrType;
+        var relatedEntityClrType = navigation.TargetEntityType.ClrType;
+
+        var instanceVariable = entityBlock.Variables.Single(v => v.Type == includingClrType);
+        var concreteEntityTypeVariable = entityBlock.Variables.Single(v => v.Type == typeof(IEntityType));
+#pragma warning disable EF1001 // Internal EF Core API usage.
+        var entryVariable = entityBlock.Variables.SingleOrDefault(v => v.Type == typeof(InternalEntityEntry));
+        Expression entityEntryExpression =
+            entryVariable ?? (Expression)Expression.Constant(null, typeof(InternalEntityEntry));
+#pragma warning restore EF1001 // Internal EF Core API usage.
+
+        var inverseNavigation = navigation.Inverse;
+        var fixup = GenerateCollectionFixup(includingClrType, relatedEntityClrType, navigation, inverseNavigation);
+
+        // IncludeCollection<TIncluding,TIncluded> expects IEnumerable<TIncluded>; List<TElement> qualifies.
+        var includeCall = Expression.IfThen(
+            Expression.Call(
+                Expression.Constant(navigation.DeclaringEntityType, typeof(IReadOnlyEntityType)),
+                IsAssignableFromMethodInfo,
+                Expression.Convert(concreteEntityTypeVariable, typeof(IReadOnlyEntityType))),
+            Expression.Call(
+                IncludeCollectionMethodInfo.MakeGenericMethod(includingClrType, relatedEntityClrType),
+                entityEntryExpression,
+                instanceVariable,
+                concreteEntityTypeVariable,
+                collectionExpression,
+                Expression.Constant(navigation),
+                Expression.Constant(inverseNavigation, typeof(INavigation)),
+                Expression.Constant(fixup),
+                Expression.Constant(setLoaded)));
+
+        var expressions = new List<Expression>(entityBlock.Expressions);
+        var trailing = expressions[^1];
+        expressions[^1] = includeCall;
+        expressions.Add(trailing);
+
+        return entityBlock.Update(entityBlock.Variables, expressions);
+    }
+
+    /// <summary>
+    /// Locate the <see cref="CollectionShaperExpression"/> inside an owned-collection navigation expression and
+    /// build the per-element construction expression (element locals + 1-based ordinal counter -> CLR element),
+    /// storing it on <paramref name="collectionPlan"/> for the array loop to emit as <c>list.Add(...)</c>.
+    /// </summary>
+    private void BuildCollectionElementConstructor(Expression navExpression, CollectionPlan collectionPlan)
+    {
+        var shaper = FindCollectionShaper(navExpression)
+                     ?? throw new NativeTranslationNotSupportedException(
+                         $"Unexpected owned-collection materializer shape for '{collectionPlan.Element.EntityType.DisplayName()}'.");
+
+        // The inner shaper is the per-element StructuralType materializer. It may itself be an
+        // IncludeExpression (the element owns further references/collections) — RewriteMaterializer handles
+        // that recursively, redirecting reads to the element plan's locals. The collection context is threaded
+        // through so the element's synthesized ordinal key resolves to `counter + 1`.
+        collectionPlan.ElementConstructor =
+            RewriteMaterializer(shaper.InnerShaper, collectionPlan.Element, collectionPlan);
+    }
+
+    private static CollectionShaperExpression? FindCollectionShaper(Expression expression)
+    {
+        switch (expression)
+        {
+            case CollectionShaperExpression shaper:
+                return shaper;
+            case ConditionalExpression { IfFalse: { } ifFalse } conditional:
+                return FindCollectionShaper(ifFalse) ?? FindCollectionShaper(conditional.IfTrue);
+            case BlockExpression block:
+                for (var i = block.Expressions.Count - 1; i >= 0; i--)
+                {
+                    if (FindCollectionShaper(block.Expressions[i]) is { } found)
+                    {
+                        return found;
+                    }
+                }
+
+                return null;
+            case UnaryExpression unary:
+                return FindCollectionShaper(unary.Operand);
+            default:
+                return null;
+        }
+    }
+
+    private static CollectionPlan FindCollectionPlan(EntityPlan parent, INavigationBase navigation)
+    {
+        foreach (var collection in parent.OwnedCollections)
+        {
+            if (collection.Navigation == navigation || collection.Navigation.Name == navigation.Name)
+            {
+                return collection;
+            }
+        }
+
+        throw new NativeTranslationNotSupportedException(
+            $"No streaming plan for owned collection '{navigation.DeclaringEntityType.DisplayName()}.{navigation.Name}'.");
+    }
+
+    /// <summary>
+    /// Collection-include fixup, mirroring EF's binding remover <c>IncludeCollection</c>: adds each
+    /// materialized related entity onto the principal's collection navigation (and sets the loaded flag).
+    /// </summary>
+    private static void IncludeCollection<TIncludingEntity, TIncludedEntity>(
+#pragma warning disable EF1001 // Internal EF Core API usage.
+        InternalEntityEntry? entry,
+#pragma warning restore EF1001 // Internal EF Core API usage.
+        object? entity,
+        IEntityType entityType,
+        IEnumerable<TIncludedEntity>? relatedEntities,
+        INavigation navigation,
+        INavigation? inverseNavigation,
+        Action<TIncludingEntity, TIncludedEntity> fixup,
+        bool setLoaded)
+    {
+        if (entity == null
+            || !navigation.DeclaringEntityType.IsAssignableFrom(entityType))
+        {
+            return;
+        }
+
+        if (entry == null)
+        {
+            var includingEntity = (TIncludingEntity)entity;
+            navigation.SetIsLoadedWhenNoTracking(includingEntity);
+
+            if (relatedEntities != null)
+            {
+                foreach (var relatedEntity in relatedEntities)
+                {
+                    fixup(includingEntity, relatedEntity);
+                    inverseNavigation?.SetIsLoadedWhenNoTracking(relatedEntity!);
+                }
+            }
+        }
+        else
+        {
+            if (setLoaded)
+            {
+#pragma warning disable EF1001 // Internal EF Core API usage.
+                entry.SetIsLoaded(navigation);
+#pragma warning restore EF1001 // Internal EF Core API usage.
+            }
+
+            if (relatedEntities != null)
+            {
+                using var enumerator = relatedEntities.GetEnumerator();
+                while (enumerator.MoveNext())
+                {
+                }
+            }
+        }
+
+        // Ensure empty collections still initialize a new CLR object for them.
+        if (relatedEntities != null && !navigation.IsShadowProperty())
+        {
+            navigation.GetCollectionAccessor()!.GetOrCreate(entity, forMaterialization: true);
+        }
+    }
+
+    private static Delegate GenerateCollectionFixup(
+        Type entityType,
+        Type relatedEntityType,
+        INavigation navigation,
+        INavigation? inverseNavigation)
+    {
+        var entityParameter = Expression.Parameter(entityType);
+        var relatedEntityParameter = Expression.Parameter(relatedEntityType);
+        var expressions = new List<Expression>
+        {
+            AssignCollectionNavigation(entityParameter, relatedEntityParameter, navigation)
+        };
+
+        if (inverseNavigation != null)
+        {
+            expressions.Add(
+                inverseNavigation.IsCollection
+                    ? AssignCollectionNavigation(relatedEntityParameter, entityParameter, inverseNavigation)
+                    : AssignReferenceNavigation(relatedEntityParameter, entityParameter, inverseNavigation));
+        }
+
+        return Expression.Lambda(
+                Expression.Block(typeof(void), expressions), entityParameter, relatedEntityParameter)
+            .Compile();
+    }
+
+    private static Expression AssignCollectionNavigation(
+        ParameterExpression entity,
+        ParameterExpression relatedEntity,
+        INavigation navigation)
+        => Expression.Call(
+            Expression.Constant(navigation.GetCollectionAccessor()),
+            CollectionAccessorAddMethodInfo,
+            entity,
+            relatedEntity,
+            Expression.Constant(true));
+
+    private static readonly MethodInfo CollectionAccessorAddMethodInfo =
+        typeof(IClrCollectionAccessor).GetTypeInfo().GetDeclaredMethod(nameof(IClrCollectionAccessor.Add))!;
 
     /// <summary>
     /// Rewrite an owned reference navigation's expression. The owned-entity block has the shape
@@ -506,6 +847,14 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         if (last is BlockExpression directBlock)
         {
             return directBlock;
+        }
+
+        // Collection-element materializer block: always present (no DOM `bsonDocN == null ? null` guard), so
+        // EF's injected block is itself the materializer block — it declares a MaterializationContext and ends
+        // with the instance variable rather than a conditional. Use it directly.
+        if (injectedBlock.Variables.Any(v => v.Type == typeof(MaterializationContext)))
+        {
+            return injectedBlock;
         }
 
         throw new NativeTranslationNotSupportedException(
@@ -634,9 +983,13 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
     private sealed class ConstructionRewriter : System.Linq.Expressions.ExpressionVisitor
     {
         private readonly Dictionary<IProperty, ParameterExpression> _locals;
+        private readonly CollectionPlan? _collection;
 
-        public ConstructionRewriter(Dictionary<IProperty, ParameterExpression> locals)
-            => _locals = locals;
+        public ConstructionRewriter(Dictionary<IProperty, ParameterExpression> locals, CollectionPlan? collection = null)
+        {
+            _locals = locals;
+            _collection = collection;
+        }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
@@ -645,6 +998,17 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
                 && method.GetGenericMethodDefinition() == ExpressionExtensions.ValueBufferTryReadValueMethod)
             {
                 var property = node.Arguments[2].GetConstantValue<IProperty>();
+
+                // The synthesized owned-collection ordinal key is not stored in BSON; it is the 1-based array
+                // index supplied by the loop counter (`counter + 1`, matching the DOM path's `ordinal + 1`).
+                if (_collection != null
+                    && property.DeclaringType == _collection.Element.EntityType
+                    && property.IsOwnedTypeOrdinalKey())
+                {
+                    Expression ordinal = Expression.Add(_collection.Counter, Expression.Constant(1));
+                    return node.Type == ordinal.Type ? ordinal : Expression.Convert(ordinal, node.Type);
+                }
+
                 var local = ResolveLocal(property);
                 if (local != null)
                 {

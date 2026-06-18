@@ -15,6 +15,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -44,9 +45,18 @@ internal static class StreamingEligibility
             return false;
         }
 
-        // Simple single-property primary key.
+        // Primary key. A document-root entity needs a simple single-property primary key. An owned
+        // collection element type legitimately carries a composite key (the owner FK + a synthesized
+        // ordinal); those extra properties are owned-type keys, resolved against the owner / loop counter
+        // by the rewriter, so allow a composite key whose non-leaf properties are all owned-type keys.
         var pk = entityType.FindPrimaryKey();
-        if (pk == null || pk.Properties.Count != 1)
+        if (pk == null)
+        {
+            return false;
+        }
+
+        var nonOwnedKeyProps = pk.Properties.Count(p => !p.IsOwnedTypeKey());
+        if (nonOwnedKeyProps > 1)
         {
             return false;
         }
