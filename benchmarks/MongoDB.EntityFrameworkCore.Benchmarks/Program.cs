@@ -24,6 +24,24 @@ if (args.Contains("--smoke"))
                     Rate = i * 0.5
                 });
             }
+            for (var i = 0; i < 100; i++)
+            {
+                var basket = new Basket
+                {
+                    Owner = "owner-" + i,
+                    Code = i
+                };
+                for (var j = 0; j < 3; j++)
+                {
+                    basket.Items.Add(new BasketItem
+                    {
+                        Sku = $"sku-{i}-{j}",
+                        Qty = j + 1,
+                        Price = 1.5m * (j + 1)
+                    });
+                }
+                ctx.Baskets.Add(basket);
+            }
             ctx.SaveChanges();
         }
 
@@ -62,6 +80,15 @@ if (args.Contains("--smoke"))
             var f3 = flat.Single(f => f.Count == 3);
             if (f3.Name != "flat-3" || f3.Big != 1_000_000_003L || f3.Active != false || f3.Rate != 1.5)
                 throw new InvalidOperationException($"FlatItem[3] scalars wrong: Name={f3.Name}, Big={f3.Big}, Active={f3.Active}, Rate={f3.Rate}.");
+        }
+
+        using (var ctx = new BenchmarkDbContext(options))
+        {
+            var baskets = ctx.Baskets.ToList();
+            var totalItems = baskets.Sum(b => b.Items.Count);
+            Console.WriteLine($"BASKET OK: baskets={baskets.Count}, items={totalItems}");
+            if (baskets.Count != 100) throw new InvalidOperationException($"expected 100 baskets, got {baskets.Count}");
+            if (totalItems != 300) throw new InvalidOperationException($"expected 300 items, got {totalItems}");
         }
     }
     finally

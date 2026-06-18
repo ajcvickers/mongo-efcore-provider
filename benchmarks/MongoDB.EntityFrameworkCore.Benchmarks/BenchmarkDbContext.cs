@@ -12,9 +12,12 @@ public class BenchmarkDbContext : DbContext
 
     public DbSet<FlatItem> FlatItems => Set<FlatItem>();
 
+    public DbSet<Basket> Baskets => Set<Basket>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Customer>().OwnsOne(c => c.Address);
         modelBuilder.Entity<FlatItem>();
+        modelBuilder.Entity<Basket>().OwnsMany(b => b.Items);
     }
 }
