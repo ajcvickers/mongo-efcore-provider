@@ -18,6 +18,26 @@ public class QueryBenchmarks
         using var ctx = new BenchmarkDbContext(_options);
         ctx.Database.EnsureCreated();
         ctx.Customers.AddRange(CustomerSeeder.Generate(10_000));
+
+        for (var i = 0; i < 10_000; i++)
+        {
+            var basket = new Basket
+            {
+                Owner = "owner-" + i,
+                Code = i
+            };
+            for (var j = 0; j < 3; j++)
+            {
+                basket.Items.Add(new BasketItem
+                {
+                    Sku = $"sku-{i}-{j}",
+                    Qty = j + 1,
+                    Price = 1.5m * (j + 1)
+                });
+            }
+            ctx.Baskets.Add(basket);
+        }
+
         ctx.SaveChanges();
     }
 
@@ -62,4 +82,7 @@ public class QueryBenchmarks
         using var ctx = new BenchmarkDbContext(_options);
         return ctx.Customers.AsNoTracking().ToList().Count;
     }
+
+    [Benchmark] public int Basket_NoTracking_ToList() { using var ctx = new BenchmarkDbContext(_options); return ctx.Baskets.AsNoTracking().ToList().Count; }
+    [Benchmark] public int Basket_Tracked_ToList() { using var ctx = new BenchmarkDbContext(_options); return ctx.Baskets.ToList().Count; }
 }
