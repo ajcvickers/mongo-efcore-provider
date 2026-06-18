@@ -56,8 +56,9 @@ internal static class StreamingEligibility
         // see MongoStreamingEntityMaterializerRewriter.RewriteOwnedNavigation.)
         foreach (var navigation in entityType.GetNavigations())
         {
-            if (navigation.IsCollection
-                || !navigation.TargetEntityType.IsOwned()
+            // Both single (reference) and collection owned navigations are allowed, provided the
+            // target owned type is itself recursively eligible.
+            if (!navigation.TargetEntityType.IsOwned()
                 || !IsEligible(navigation.TargetEntityType, visiting))
             {
                 return false;
