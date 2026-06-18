@@ -42,7 +42,34 @@ if (args.Contains("--smoke"))
                 }
                 ctx.Baskets.Add(basket);
             }
+
+            var products = new List<Product>();
+            for (var i = 0; i < 20; i++)
+            {
+                var product = new Product { Title = "product-" + i };
+                products.Add(product);
+                ctx.Products.Add(product);
+            }
             ctx.SaveChanges();
+
+            for (var i = 0; i < 100; i++)
+            {
+                ctx.Reviews.Add(new Review
+                {
+                    Stars = (i % 5) + 1,
+                    ProductId = products[i % 20].Id
+                });
+            }
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = new BenchmarkDbContext(options))
+        {
+            var reviews = ctx.Reviews.Include(r => r.Product).ToList();
+            var withProduct = reviews.Count(r => r.Product != null);
+            Console.WriteLine($"REVIEW OK: reviews={reviews.Count}, withProduct={withProduct}");
+            if (reviews.Count != 100) throw new InvalidOperationException($"expected 100 reviews, got {reviews.Count}");
+            if (withProduct != 100) throw new InvalidOperationException($"expected 100 with Product, got {withProduct}");
         }
 
         using (var ctx = new BenchmarkDbContext(options))
