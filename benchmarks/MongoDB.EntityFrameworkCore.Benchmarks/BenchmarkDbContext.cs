@@ -10,8 +10,11 @@ public class BenchmarkDbContext : DbContext
 
     public DbSet<Customer> Customers => Set<Customer>();
 
+    public DbSet<FlatItem> FlatItems => Set<FlatItem>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Customer>().OwnsOne(c => c.Address);
+        modelBuilder.Entity<FlatItem>();
     }
 }
