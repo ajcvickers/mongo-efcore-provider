@@ -1,5 +1,17 @@
 # Streaming owned collections (sub-project D) — results
 
+> **Final review: SOLID-FOR-SPIKE.** Ordinal correctness (construct-then-increment, `counter+1`, scoped by
+> `DeclaringType`), array-bracket integrity, and null/empty-collection semantics all verified to match the DOM
+> path; all unhandled shapes fail safe via throw→fallback. Caveat & follow-ups:
+> - **Scope reality: "full recursion" = one owned-collection level + nested owned references.**
+>   Collection-of-owned-collection is over-admitted by `StreamingEligibility` but always falls back (a
+>   grandchild owner-FK referencing the parent element's ordinal has no resolving local → throws → DOM path).
+>   Safe (no wrong results). Follow-up: either tighten eligibility to reject a collection element that itself
+>   owns a collection (state intent), or thread parent-ordinal resolution to actually stream it. Add a
+>   collection-of-collection test pinning the fallback.
+> - Nits: comment that per-element BSON `Null` mirrors the DOM throw; drop/assert the `Name`-match fallback in
+>   `FindCollectionPlan`/`FindChildPlan`; note the in-loop counter/list reset is authoritative.
+
 **Run on:** 2026-06-18 / Apple M4 Max, 1 CPU, 14 logical and 14 physical cores / macOS Tahoe 26.5.1 (25F80) [Darwin 25.5.0] / .NET SDK 10.0.301, .NET 10.0.9 Arm64 RyuJIT (BenchmarkDotNet v0.15.8)
 **Change:** streaming materializer extended to owned collections (array loop, per-element construct, ordinal=counter+1, PopulateCollection). Eligibility relaxed for owned-collection composite keys.
 
