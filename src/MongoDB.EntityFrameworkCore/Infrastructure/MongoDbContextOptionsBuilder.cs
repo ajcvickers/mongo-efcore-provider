@@ -14,6 +14,7 @@
 */
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace MongoDB.EntityFrameworkCore.Infrastructure;
 
@@ -38,4 +39,20 @@ public class MongoDbContextOptionsBuilder : IMongoDbContextOptionsBuilderInfrast
     protected virtual DbContextOptionsBuilder OptionsBuilder { get; }
 
     DbContextOptionsBuilder IMongoDbContextOptionsBuilderInfrastructure.OptionsBuilder => OptionsBuilder;
+
+    /// <summary>
+    /// Configures whether the provider translates queries to native MQL with a streaming materializer
+    /// (the default) or uses the MongoDB driver's LINQ provider with BsonDocument materialization.
+    /// </summary>
+    /// <param name="useNativeQuery"><see langword="true"/> (default) to use native MQL + streaming materialization; <see langword="false"/> to use the driver's LINQ provider.</param>
+    /// <returns>The same builder instance so that multiple calls can be chained.</returns>
+    public virtual MongoDbContextOptionsBuilder UseNativeQuery(bool useNativeQuery = true)
+    {
+        var extension = (OptionsBuilder.Options.FindExtension<MongoOptionsExtension>()
+                         ?? new MongoOptionsExtension())
+            .WithUseNativeQuery(useNativeQuery);
+
+        ((IDbContextOptionsBuilderInfrastructure)OptionsBuilder).AddOrUpdateExtension(extension);
+        return this;
+    }
 }
