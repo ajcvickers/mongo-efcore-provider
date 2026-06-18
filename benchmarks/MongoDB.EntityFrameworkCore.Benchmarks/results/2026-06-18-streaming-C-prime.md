@@ -1,5 +1,20 @@
 # Streaming materializer (sub-project C') — results
 
+> **Final review verdict: SOLID-FOR-SPIKE** (query-reviewer probed owned present/absent, nullable, enum,
+> Guid, value-converter, nested owned-owning-owned, tracking, and fallback under forced streaming — all
+> correct). Non-blocking follow-ups for productionization:
+> 1. **Broaden the rewriter's fallback catch.** `CompileShapedQuery`/`TranslateQuery` catch only
+>    `NativeTranslationNotSupportedException`; an unexpected EF-version tree-shape change could throw another
+>    type and hard-crash with no DOM fallback. For production, catch any exception in `auto` mode → fall back
+>    (force still surfaces it). Deliberately NOT done for the spike: the narrow catch surfaces real rewriter
+>    bugs during development.
+> 2. **Deterministic RawBsonDocument disposal on abandoned/early-broken enumeration.** Rows are disposed
+>    after shaping; on early `foreach` break / mid-stream exception, undelivered fetched rows rely on
+>    finalization. GC-pressure/native-buffer risk, not correctness. Dispose undelivered rows in
+>    `Enumerator.Dispose`/`DisposeAsync`.
+> 3. Nits: document `BsonRowReader.Open`'s row-lifetime contract; comment the intentional nullable pre-empt
+>    in `BuildTypedRead`; prefer reference-equality over name-match in `FindChildPlan`.
+
 **Run on:** 2026-06-18, BenchmarkDotNet v0.15.8, Apple M4 Max (1 CPU, 14 logical / 14 physical cores) / macOS Tahoe 26.5.1 (25F80) [Darwin 25.5.0] / .NET SDK 10.0.301 / .NET 10.0.9 (10.0.926.27113), Arm64 RyuJIT armv8.0-a (InProcessEmitToolchain, IterationCount=10, WarmupCount=3). MongoDB: replica set at `mongodb://localhost:27017`.
 **Change:** native-path eligible entities materialized by a forward-only `IBsonReader` streaming rewriter (typed locals, no `BsonDocument` DOM, no per-field `BsonValue` boxing); EF construction/tracking reused verbatim.
 
