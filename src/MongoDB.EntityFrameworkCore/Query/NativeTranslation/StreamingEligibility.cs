@@ -73,6 +73,16 @@ internal static class StreamingEligibility
             {
                 return false;
             }
+
+            // The rewriter cannot yet stream a collection whose element type itself owns a collection
+            // (collection-of-collection). A collection navigation whose target has any collection
+            // navigation of its own is therefore ineligible. Single owned references nested in a
+            // collection element, and nested single references, remain allowed.
+            if (navigation.IsCollection
+                && navigation.TargetEntityType.GetNavigations().Any(n => n.IsCollection))
+            {
+                return false;
+            }
         }
 
         // Skip-navigations make it ineligible.
