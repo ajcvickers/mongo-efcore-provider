@@ -32,14 +32,19 @@ internal enum NativeQueryMode
 
 internal static class NativeQuery
 {
-    /// <summary>The active mode, read once from the <c>MONGODB_EF_NATIVE_QUERY</c> environment variable.</summary>
-    public static readonly NativeQueryMode Mode = Parse(Environment.GetEnvironmentVariable("MONGODB_EF_NATIVE_QUERY"));
+    // Test-only override (null when MONGODB_EF_NATIVE_QUERY is unset/unrecognized).
+    private static readonly NativeQueryMode? EnvOverride = ParseEnv(Environment.GetEnvironmentVariable("MONGODB_EF_NATIVE_QUERY"));
 
-    private static NativeQueryMode Parse(string? value)
+    private static NativeQueryMode? ParseEnv(string? value)
         => value?.Trim().ToLowerInvariant() switch
         {
             "force" => NativeQueryMode.Force,
             "off" => NativeQueryMode.Off,
-            _ => NativeQueryMode.Auto
+            "auto" => NativeQueryMode.Auto,
+            _ => null
         };
+
+    /// <summary>Effective mode for a query: the per-context <c>UseNativeQuery</c> option, overridden by the test-only env var.</summary>
+    public static NativeQueryMode EffectiveMode(bool optionEnabled)
+        => !optionEnabled ? NativeQueryMode.Off : (EnvOverride ?? NativeQueryMode.Auto);
 }

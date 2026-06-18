@@ -20,13 +20,19 @@ using Microsoft.EntityFrameworkCore.Query;
 namespace MongoDB.EntityFrameworkCore.Query;
 
 /// <inheritdoc />
-public class MongoQueryCompilationContext(QueryCompilationContextDependencies dependencies, bool async)
+public class MongoQueryCompilationContext(QueryCompilationContextDependencies dependencies, bool async, bool useNativeQuery = true)
     : QueryCompilationContext(dependencies, async)
 {
     /// <summary>
     /// The original expression that was passed to the query translator.
     /// </summary>
     public Expression? OriginalExpression { get; internal set; }
+
+    /// <summary>
+    /// Whether the native MQL query path is enabled for queries compiled in this context, as configured by
+    /// the per-context <c>UseNativeQuery</c> option.
+    /// </summary>
+    public bool UseNativeQuery { get; } = useNativeQuery;
 
     /// <inheritdoc/>
     public override Func<QueryContext, TResult> CreateQueryExecutor<TResult>(Expression query)

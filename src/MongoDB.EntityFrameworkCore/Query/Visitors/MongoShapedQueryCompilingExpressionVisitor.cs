@@ -162,6 +162,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     {
         var bsonDocParameter = Expression.Parameter(typeof(BsonDocument), "bsonDoc");
         var trackingBehavior = QueryCompilationContext.QueryTrackingBehavior;
+        var nativeMode = NativeQuery.EffectiveMode(((MongoQueryCompilationContext)QueryCompilationContext).UseNativeQuery);
 
         var shaperBody = shapedQueryExpression.ShaperExpression;
         var bsonInjector = new BsonDocumentInjectingExpressionVisitor();
@@ -189,7 +190,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // correct we compile BOTH shapers when streaming is selected and let ExecuteStreamingShapedQuery
         // dispatch at run time on executableQuery.Streaming: the streaming shaper for the native streaming
         // pipeline, the DOM shaper for the driver-LINQ fallback.
-        var streaming = NativeQuery.Mode != NativeQueryMode.Off
+        var streaming = nativeMode != NativeQueryMode.Off
             && shapedQueryExpression.ResultCardinality == ResultCardinality.Enumerable
             && mongoQueryExpression.GetPendingLookups().Count == 0
             && StreamingEligibility.IsEligible(rootEntityType);
@@ -210,7 +211,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                         rawRowParameter)
                     .Compile();
             }
-            catch (NativeTranslationNotSupportedException) when (NativeQuery.Mode != NativeQueryMode.Force)
+            catch (NativeTranslationNotSupportedException) when (nativeMode != NativeQueryMode.Force)
             {
                 // The entity shape itself isn't streamable; fall back to the DOM path entirely.
                 streaming = false;
@@ -256,7 +257,8 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                 Expression.Constant(_contextType),
                 Expression.Constant(standAloneStateManager),
                 Expression.Constant(_threadSafetyChecksEnabled),
-                Expression.Constant(shapedQueryExpression.ResultCardinality));
+                Expression.Constant(shapedQueryExpression.ResultCardinality),
+                Expression.Constant(nativeMode));
         }
 
         var compiledShaper = compiledDomShaper;
@@ -271,7 +273,8 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             Expression.Constant(_contextType),
             Expression.Constant(standAloneStateManager),
             Expression.Constant(_threadSafetyChecksEnabled),
-            Expression.Constant(shapedQueryExpression.ResultCardinality));
+            Expression.Constant(shapedQueryExpression.ResultCardinality),
+            Expression.Constant(nativeMode));
     }
 
     private static (MongoQueryContext, MongoExecutableQuery) TranslateQuery<TSource>(
@@ -282,6 +285,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         ResultCardinality resultCardinality,
         bool nativeEligible,
         bool streaming,
+        NativeQueryMode nativeMode,
         Func<MongoEFToLinqTranslatingExpressionVisitor, Expression?, Expression> translate)
     {
         var mongoQueryContext = (MongoQueryContext)queryContext;
@@ -307,7 +311,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // handing it full BsonDocuments would fail to materialize. So native translation is only attempted on
         // the client-side-shaper path. Pushed-down projections always use the driver-LINQ path.
         if (nativeEligible
-            && NativeQuery.Mode != NativeQueryMode.Off
+            && nativeMode != NativeQueryMode.Off
             && resultCardinality == ResultCardinality.Enumerable
             && queryExpression.GetPendingLookups().Count == 0)
         {
@@ -329,7 +333,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                 };
                 return (mongoQueryContext, nativeExecutable);
             }
-            catch (NativeTranslationNotSupportedException) when (NativeQuery.Mode != NativeQueryMode.Force)
+            catch (NativeTranslationNotSupportedException) when (nativeMode != NativeQueryMode.Force)
             {
                 // fall through to the driver-LINQ path
             }
@@ -382,6 +386,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             queryContext, entityType, bsonSerializerFactory, queryExpression, resultCardinality,
             nativeEligible: false,
             streaming: false,
+            nativeMode: NativeQueryMode.Off,
             (translator, expression) => translator.TranslateProjected(expression));
 
         return new QueryingEnumerable<TResult, TResult>(
@@ -403,12 +408,14 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         Type contextType,
         bool standAloneStateManager,
         bool threadSafetyChecksEnabled,
-        ResultCardinality resultCardinality)
+        ResultCardinality resultCardinality,
+        NativeQueryMode nativeMode)
     {
         var (mongoQueryContext, executableQuery) = TranslateQuery<TSource>(
             queryContext, entityType, bsonSerializerFactory, queryExpression, resultCardinality,
             nativeEligible: true,
             streaming: false,
+            nativeMode,
             (translator, expression) => translator.Translate(expression, resultCardinality));
 
         return new QueryingEnumerable<BsonDocument, TResult>(
@@ -434,12 +441,14 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         Type contextType,
         bool standAloneStateManager,
         bool threadSafetyChecksEnabled,
-        ResultCardinality resultCardinality)
+        ResultCardinality resultCardinality,
+        NativeQueryMode nativeMode)
     {
         var (mongoQueryContext, executableQuery) = TranslateQuery<TSource>(
             queryContext, entityType, bsonSerializerFactory, queryExpression, resultCardinality,
             nativeEligible: true,
             streaming: true,
+            nativeMode,
             (translator, expression) => translator.Translate(expression, resultCardinality));
 
         // If native translation was actually used the rows are RawBsonDocuments materialized by the
