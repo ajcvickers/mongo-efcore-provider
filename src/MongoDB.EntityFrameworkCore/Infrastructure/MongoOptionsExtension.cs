@@ -53,6 +53,7 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
         CryptProviderPath = copyFrom.CryptProviderPath;
         KeyVaultNamespace = copyFrom.KeyVaultNamespace;
         KmsProviders = copyFrom.KmsProviders;
+        UseNativeQuery = copyFrom.UseNativeQuery;
         _loggableConnectionString = SanitizeConnectionStringForLogging(ConnectionString);
     }
 
@@ -226,6 +227,20 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
     }
 
     /// <summary>
+    /// Whether the provider translates queries to native MQL with a streaming materializer (default <see langword="true"/>).
+    /// When <see langword="false"/>, the MongoDB driver's LINQ provider and BsonDocument materialization are used.
+    /// </summary>
+    public bool UseNativeQuery { get; private set; } = true;
+
+    /// <summary>Returns a copy of this extension with <see cref="UseNativeQuery"/> set to <paramref name="useNativeQuery"/>.</summary>
+    public virtual MongoOptionsExtension WithUseNativeQuery(bool useNativeQuery)
+    {
+        var clone = Clone();
+        clone.UseNativeQuery = useNativeQuery;
+        return clone;
+    }
+
+    /// <summary>
     /// Clones the current <see cref="MongoOptionsExtension"/>.
     /// </summary>
     /// <returns>A new clone.</returns>
@@ -283,7 +298,7 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
         /// <inheritdoc/>
         public override int GetServiceProviderHashCode()
         {
-            _serviceProviderHash ??= HashCode.Combine(Extension.ConnectionString, Extension.DatabaseName);
+            _serviceProviderHash ??= HashCode.Combine(Extension.ConnectionString, Extension.DatabaseName, Extension.UseNativeQuery);
             return _serviceProviderHash.Value;
         }
 
@@ -294,7 +309,8 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
                && Extension.MongoClient == otherInfo.Extension.MongoClient
                && (Extension.ClientSettings == otherInfo.Extension.ClientSettings ||
                    Extension.ClientSettings != null && Extension.ClientSettings.Equals(otherInfo.Extension.ClientSettings))
-               && Extension.DatabaseName == otherInfo.Extension.DatabaseName;
+               && Extension.DatabaseName == otherInfo.Extension.DatabaseName
+               && Extension.UseNativeQuery == otherInfo.Extension.UseNativeQuery;
 
         /// <inheritdoc/>
         public override void PopulateDebugInfo(IDictionary<string, string> debugInfo)
@@ -303,6 +319,7 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
             AddDebugInfo(debugInfo, nameof(MongoClient), Extension.MongoClient);
             AddDebugInfo(debugInfo, nameof(ClientSettings), Extension.ClientSettings);
             AddDebugInfo(debugInfo, nameof(DatabaseName), Extension.DatabaseName);
+            debugInfo["Mongo:" + nameof(UseNativeQuery)] = Extension.UseNativeQuery.ToString();
         }
 
         /// <inheritdoc/>
@@ -335,6 +352,12 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
             }
 
             builder.Append("DatabaseName=").Append(Extension.DatabaseName).Append(' ');
+
+            if (!Extension.UseNativeQuery)
+            {
+                builder.Append("UseNativeQuery=").Append(Extension.UseNativeQuery).Append(' ');
+            }
+
             return builder.ToString();
         }
     }
