@@ -46,4 +46,7 @@ public record MongoExecutableQuery(
 
     /// <summary>The session for native pipeline execution (the ambient transaction's session, if any).</summary>
     public MongoDB.Driver.IClientSessionHandle? Session { get; init; }
+
+    /// <summary>When true, native rows are RawBsonDocument and materialized by the forward-only streaming reader.</summary>
+    public bool Streaming { get; init; }
 }

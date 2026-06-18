@@ -187,7 +187,15 @@ internal sealed class QueryingEnumerable<TSource, TTarget> : IAsyncEnumerable<TT
                 // single null by the scalar path) must not be passed to the entity shaper, which would
                 // dereference a null BsonDocument. Yield default(TTarget); a projected identity shaper
                 // would produce the same null, so scalar/aggregate results are unaffected.
-                Current = _enumerator.Current is null ? default! : _shaper(_queryContext, _enumerator.Current);
+                var row = _enumerator.Current;
+                Current = row is null ? default! : _shaper(_queryContext, row);
+
+                // Streaming rows are IDisposable RawBsonDocuments backed by a byte buffer; the shaper has
+                // consumed them, so release immediately. No-op for the plain-BsonDocument paths.
+                if (row is System.IDisposable disposableRow)
+                {
+                    disposableRow.Dispose();
+                }
 
                 if (!_gotResults)
                 {

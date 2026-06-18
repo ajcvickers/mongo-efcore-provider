@@ -98,6 +98,16 @@ public class MongoClientWrapper : IMongoClientWrapper
             // This mirrors the driver-LINQ path (whose stages are captured at build time) and ensures the MQL
             // is logged even when execution against the server throws.
             log = () => _commandLogger.ExecutedMqlQuery(executableQuery);
+            if (executableQuery.Streaming)
+            {
+                var rawCollection = Database.GetCollection<RawBsonDocument>(executableQuery.CollectionNamespace.CollectionName);
+                PipelineDefinition<RawBsonDocument, RawBsonDocument> rawPipeline = stages.ToArray();
+                var rawCursor = executableQuery.Session is { } rawSession
+                    ? rawCollection.Aggregate(rawSession, rawPipeline)
+                    : rawCollection.Aggregate(rawPipeline);
+                return (IEnumerable<T>)rawCursor.ToEnumerable();
+            }
+
             var collection = Database.GetCollection<BsonDocument>(executableQuery.CollectionNamespace.CollectionName);
             PipelineDefinition<BsonDocument, BsonDocument> pipeline = stages.ToArray();
             var cursor = executableQuery.Session is { } session
