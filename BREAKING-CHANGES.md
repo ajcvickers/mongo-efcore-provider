@@ -6,6 +6,22 @@ In order to evolve the provider as we introduce new features, we will be using t
 
 ## Breaking changes in 8.5.0 / 9.2.0 / 10.1.0
 
+### Queries are translated to native MQL with a streaming materializer by default
+
+#### Old behavior
+
+Every LINQ query was translated by the MongoDB C# driver's LINQ provider, and result documents were materialized through a `BsonDocument` DOM.
+
+#### New behavior
+
+For supported query shapes (single-collection filter/sort/paging over entities composed of scalars, primitive arrays, and owned reference/collection sub-documents), the provider now generates the MongoDB aggregation pipeline itself and materializes results with a forward-only streaming reader (no `BsonDocument` DOM), substantially reducing allocations. Query shapes that are not yet supported fall back transparently to the driver-LINQ + `BsonDocument` path, so results are unchanged — but the emitted MQL (and therefore command-log output) differs for the natively-translated shapes.
+
+To restore the previous behavior for a context, opt out:
+
+```csharp
+optionsBuilder.UseMongoDB(connectionString, databaseName, o => o.UseNativeQuery(false));
+```
+
 ### Entity types with their own `DbSet` are no longer embedded when reached by a navigation
 
 #### Old behavior

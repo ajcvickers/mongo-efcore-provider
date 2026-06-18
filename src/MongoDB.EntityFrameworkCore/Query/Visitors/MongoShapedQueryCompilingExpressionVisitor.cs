@@ -211,7 +211,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                         rawRowParameter)
                     .Compile();
             }
-            catch (System.Exception) when (nativeMode != NativeQueryMode.Force)
+            catch (System.Exception ex) when (nativeMode != NativeQueryMode.Force && ex is not System.OperationCanceledException)
             {
                 // The entity shape itself isn't streamable; fall back to the DOM path entirely.
                 streaming = false;
@@ -333,7 +333,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                 };
                 return (mongoQueryContext, nativeExecutable);
             }
-            catch (System.Exception) when (nativeMode != NativeQueryMode.Force)
+            catch (System.Exception ex) when (nativeMode != NativeQueryMode.Force && ex is not System.OperationCanceledException)
             {
                 // fall through to the driver-LINQ path
             }
