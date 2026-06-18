@@ -98,11 +98,8 @@ public class MongoClientWrapper : IMongoClientWrapper
             // This mirrors the driver-LINQ path (whose stages are captured at build time) and ensures the MQL
             // is logged even when execution against the server throws.
             log = () => _commandLogger.ExecutedMqlQuery(executableQuery);
-            // Return lazy, byte-backed RawBsonDocument rows instead of a fully-parsed BsonDocument DOM.
-            // RawBsonDocument : BsonDocument, and the shaper does pure by-name access, so rows flow into
-            // the existing Func<QueryContext, BsonDocument, T> shaper unchanged (T is BsonDocument here).
-            var collection = Database.GetCollection<RawBsonDocument>(executableQuery.CollectionNamespace.CollectionName);
-            PipelineDefinition<RawBsonDocument, RawBsonDocument> pipeline = stages.ToArray();
+            var collection = Database.GetCollection<BsonDocument>(executableQuery.CollectionNamespace.CollectionName);
+            PipelineDefinition<BsonDocument, BsonDocument> pipeline = stages.ToArray();
             var cursor = executableQuery.Session is { } session
                 ? collection.Aggregate(session, pipeline)
                 : collection.Aggregate(pipeline);
