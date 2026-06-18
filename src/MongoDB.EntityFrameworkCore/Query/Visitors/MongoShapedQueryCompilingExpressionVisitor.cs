@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -175,54 +176,70 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // post-injection materializer to read each native-path RawBsonDocument row via a single
         // forward IBsonReader pass into typed locals instead of building a BsonDocument DOM. On any
         // unsupported shape the rewriter throws; in non-Force mode we fall back to the DOM path.
-        var streaming = NativeQuery.Mode != NativeQueryMode.Off && StreamingEligibility.IsEligible(rootEntityType);
-        Expression reboundShaperBody;
-        ParameterExpression rowParameter;
+        //
+        // Streaming requires the native pipeline to actually be built at run time, and that gate is narrower
+        // than entity eligibility: it needs an enumerable result cardinality and no pending lookups. A
+        // cardinality reducer (First/Single/...) or a query with pending lookups falls through to the
+        // driver-LINQ path, which never produces streaming rows. Those are excluded up front.
+        //
+        // Even within that gate, native-pipeline translation can still fail at run time for a reason we
+        // cannot see here (e.g. a Where predicate the native translator rejects — dictionary key access,
+        // list Contains, Mql.IsMissing). In that case TranslateQuery falls back to the driver-LINQ path,
+        // which yields BsonDocuments rather than the RawBsonDocuments the streaming shaper expects. To stay
+        // correct we compile BOTH shapers when streaming is selected and let ExecuteStreamingShapedQuery
+        // dispatch at run time on executableQuery.Streaming: the streaming shaper for the native streaming
+        // pipeline, the DOM shaper for the driver-LINQ fallback.
+        var streaming = NativeQuery.Mode != NativeQueryMode.Off
+            && shapedQueryExpression.ResultCardinality == ResultCardinality.Enumerable
+            && mongoQueryExpression.GetPendingLookups().Count == 0
+            && StreamingEligibility.IsEligible(rootEntityType);
+
+        Delegate? compiledStreamingShaper = null;
 
         if (streaming)
         {
             var rawRowParameter = Expression.Parameter(typeof(RawBsonDocument), "rawRow");
             try
             {
-                reboundShaperBody = new MongoStreamingEntityMaterializerRewriter(
+                var streamingBody = new MongoStreamingEntityMaterializerRewriter(
                         rootEntityType, _bsonSerializerFactory, rawRowParameter)
                     .Rewrite(injectedBody);
-                rowParameter = rawRowParameter;
+                compiledStreamingShaper = Expression.Lambda(
+                        streamingBody,
+                        QueryCompilationContext.QueryContextParameter,
+                        rawRowParameter)
+                    .Compile();
             }
             catch (NativeTranslationNotSupportedException) when (NativeQuery.Mode != NativeQueryMode.Force)
             {
+                // The entity shape itself isn't streamable; fall back to the DOM path entirely.
                 streaming = false;
-                reboundShaperBody = createBindingRemover(bsonDocParameter, trackingBehavior).Visit(injectedBody);
-                rowParameter = bsonDocParameter;
             }
         }
-        else
-        {
-            reboundShaperBody = createBindingRemover(bsonDocParameter, trackingBehavior).Visit(injectedBody);
-            rowParameter = bsonDocParameter;
-        }
 
-        shaperBody = reboundShaperBody;
+        // The DOM (BsonDocument) shaper is always compiled: it is the sole shaper for the non-streaming
+        // path, and the run-time fallback shaper for the streaming path when native translation can't build
+        // a pipeline.
+        var domShaperBody = createBindingRemover(bsonDocParameter, trackingBehavior).Visit(injectedBody);
 
-        // Lift all BsonDocument/BsonArray variables to the lambda level so they are
-        // accessible across entity boundaries in join projections. The streaming path materializes
-        // entirely from typed locals declared by the rewriter, so the injected BsonDocument/BsonArray
-        // variables are unused there.
-        if (!streaming && bsonInjector.AllVariables.Count > 0)
+        // Lift all BsonDocument/BsonArray variables to the lambda level so they are accessible across entity
+        // boundaries in join projections. (The streaming shaper materializes entirely from typed locals
+        // declared by the rewriter and does not use these variables.)
+        if (bsonInjector.AllVariables.Count > 0)
         {
-            shaperBody = Expression.Block(
-                shaperBody.Type,
+            domShaperBody = Expression.Block(
+                domShaperBody.Type,
                 bsonInjector.AllVariables,
-                shaperBody);
+                domShaperBody);
         }
 
-        var shaperLambda = Expression.Lambda(
-            shaperBody,
+        var domShaperLambda = Expression.Lambda(
+            domShaperBody,
             QueryCompilationContext.QueryContextParameter,
-            rowParameter);
-        var compiledShaper = shaperLambda.Compile();
+            bsonDocParameter);
+        var compiledDomShaper = domShaperLambda.Compile();
 
-        var projectedType = shaperLambda.ReturnType;
+        var projectedType = domShaperLambda.ReturnType;
         var standAloneStateManager = QueryCompilationContext.QueryTrackingBehavior ==
                                      QueryTrackingBehavior.NoTrackingWithIdentityResolution;
 
@@ -234,12 +251,15 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                 Expression.Constant(rootEntityType),
                 Expression.Constant(_bsonSerializerFactory),
                 Expression.Constant(mongoQueryExpression),
-                Expression.Constant(compiledShaper),
+                Expression.Constant(compiledStreamingShaper!),
+                Expression.Constant(compiledDomShaper),
                 Expression.Constant(_contextType),
                 Expression.Constant(standAloneStateManager),
                 Expression.Constant(_threadSafetyChecksEnabled),
                 Expression.Constant(shapedQueryExpression.ResultCardinality));
         }
+
+        var compiledShaper = compiledDomShaper;
 
         return Expression.Call(null,
             ExecuteShapedQueryMethodInfo.MakeGenericMethod(rootEntityType.ClrType, projectedType),
@@ -401,12 +421,16 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             GetOnZeroResultsAction(queryExpression));
     }
 
-    private static QueryingEnumerable<RawBsonDocument, TResult> ExecuteStreamingShapedQuery<TSource, TResult>(
+    // Returns a type implementing both IEnumerable<TResult> and IAsyncEnumerable<TResult>: EF's query
+    // executor builds a sync lambda returning IEnumerable<TResult> or an async lambda returning
+    // IAsyncEnumerable<TResult> from the same compiled method, so its static return type must satisfy both.
+    private static DispatchingQueryingEnumerable<TResult> ExecuteStreamingShapedQuery<TSource, TResult>(
         QueryContext queryContext,
         IReadOnlyEntityType entityType,
         BsonSerializerFactory bsonSerializerFactory,
         MongoQueryExpression queryExpression,
-        Func<QueryContext, RawBsonDocument, TResult> shaper,
+        Func<QueryContext, RawBsonDocument, TResult> streamingShaper,
+        Func<QueryContext, BsonDocument, TResult> domShaper,
         Type contextType,
         bool standAloneStateManager,
         bool threadSafetyChecksEnabled,
@@ -418,25 +442,52 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             streaming: true,
             (translator, expression) => translator.Translate(expression, resultCardinality));
 
-        // If native translation was not actually used (e.g. a pending lookup or unsupported pipeline
-        // shape), the executable query falls back to the driver-LINQ path, which yields BsonDocuments
-        // rather than RawBsonDocuments — incompatible with the streaming shaper. The query-build-time
-        // streaming decision only fires for native-eligible enumerable queries, but guard here so a
-        // silent fallback doesn't feed the wrong row type to the shaper.
-        if (!executableQuery.Streaming)
+        // If native translation was actually used the rows are RawBsonDocuments materialized by the
+        // streaming shaper. Otherwise (e.g. a Where predicate the native pipeline can't translate) the
+        // executable query fell back to the driver-LINQ path, which yields plain BsonDocuments — so use the
+        // DOM shaper. Both shapers were compiled at query-build time precisely so this run-time fallback is
+        // type-correct rather than throwing.
+        if (executableQuery.Streaming)
         {
-            throw new InvalidOperationException(
-                "Streaming materialization was selected but the query did not translate to a native streaming pipeline.");
+            return new DispatchingQueryingEnumerable<TResult>(
+                new QueryingEnumerable<RawBsonDocument, TResult>(
+                    mongoQueryContext,
+                    executableQuery,
+                    streamingShaper,
+                    contextType,
+                    standAloneStateManager,
+                    threadSafetyChecksEnabled,
+                    GetOnZeroResultsAction(queryExpression)));
         }
 
-        return new QueryingEnumerable<RawBsonDocument, TResult>(
-            mongoQueryContext,
-            executableQuery,
-            shaper,
-            contextType,
-            standAloneStateManager,
-            threadSafetyChecksEnabled,
-            GetOnZeroResultsAction(queryExpression));
+        return new DispatchingQueryingEnumerable<TResult>(
+            new QueryingEnumerable<BsonDocument, TResult>(
+                mongoQueryContext,
+                executableQuery,
+                domShaper,
+                contextType,
+                standAloneStateManager,
+                threadSafetyChecksEnabled,
+                GetOnZeroResultsAction(queryExpression)));
+    }
+
+    /// <summary>
+    /// Wraps the chosen <see cref="QueryingEnumerable{TSource,TTarget}"/> (RawBsonDocument streaming or
+    /// BsonDocument DOM fallback) behind a single type implementing both <see cref="IEnumerable{T}"/> and
+    /// <see cref="IAsyncEnumerable{T}"/>, so the streaming-path compiled query has a stable static return
+    /// type usable by both EF's sync and async query executors.
+    /// </summary>
+    private sealed class DispatchingQueryingEnumerable<TResult>(
+        object inner) : IEnumerable<TResult>, IAsyncEnumerable<TResult>
+    {
+        public IEnumerator<TResult> GetEnumerator()
+            => ((IEnumerable<TResult>)inner).GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator()
+            => GetEnumerator();
+
+        public IAsyncEnumerator<TResult> GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default)
+            => ((IAsyncEnumerable<TResult>)inner).GetAsyncEnumerator(cancellationToken);
     }
 
     private static readonly MethodInfo ExecuteShapedQueryMethodInfo =

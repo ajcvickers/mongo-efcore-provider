@@ -338,7 +338,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             var entityBlock = (BlockExpression)RewriteMaterializer(include.EntityExpression, plan);
 
             var child = FindChildPlan(plan, navigation);
-            var navExpression = RewriteOwnedNavigation(include.NavigationExpression, child);
+            var navExpression = RewriteOwnedNavigation(include.NavigationExpression, navigation, child);
 
             return SpliceReferenceInclude(entityBlock, navigation, navExpression, include.SetLoaded);
         }
@@ -408,7 +408,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
     /// any nested owned-reference fixup is spliced in, and the <c>bsonDocN == null</c> presence test is
     /// replaced with <c>!present</c> so an absent owned sub-document yields the null navigation.
     /// </summary>
-    private Expression RewriteOwnedNavigation(Expression navExpression, EntityPlan child)
+    private Expression RewriteOwnedNavigation(Expression navExpression, INavigation navigation, EntityPlan child)
     {
         // Locate the owned-entity block carrying the `bsonDocN == null ? null : <block>` guard. When the
         // owned type has its own owned references the navigation is an IncludeExpression whose EntityExpression
@@ -438,19 +438,38 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             }
 
             var nestedChild = FindChildPlan(child, nestedNavigation);
-            var nestedNavExpression = RewriteOwnedNavigation(include.NavigationExpression, nestedChild);
+            var nestedNavExpression = RewriteOwnedNavigation(include.NavigationExpression, nestedNavigation, nestedChild);
             rewrittenBlock = SpliceReferenceInclude(rewrittenBlock, nestedNavigation, nestedNavExpression, include.SetLoaded);
         }
 
         // Replace the whole `{ bsonDocN; bsonDocN = ... as BsonDocument; bsonDocN == null ? null : <block> }`
-        // with `!present ? null : <rewrittenBlock>`. The outer block's bsonDocN local + assignment are
+        // with `!present ? <absent> : <rewrittenBlock>`. The outer block's bsonDocN local + assignment are
         // dropped entirely: their RHS is an unreduced EntityProjectionExpression (bsonDoc["Address"]) that has
         // no streaming equivalent — presence is tracked by the `present` flag instead.
+        //
+        // For a REQUIRED owned reference an absent sub-document is an error, exactly as the DOM path's
+        // required-field guard throws (BsonBinding.GetBsonDocument): reproduce that throw rather than
+        // yielding null, so required-navigation semantics match the DOM path.
+        var absent = navigation.ForeignKey.IsRequiredDependent
+            ? (Expression)Expression.Block(
+                conditional.Type,
+                Expression.Throw(
+                    Expression.New(
+                        InvalidOperationExceptionCtor,
+                        Expression.Constant(
+                            $"Field '{navigation.TargetEntityType.GetContainingElementName()}' required but not present "
+                            + $"in BsonDocument for a '{navigation.DeclaringEntityType.DisplayName()}'."))),
+                Expression.Default(conditional.Type))
+            : Expression.Constant(null, conditional.Type);
+
         return Expression.Condition(
             Expression.Not(child.Present!),
-            Expression.Constant(null, conditional.Type),
+            absent,
             Expression.Convert(rewrittenBlock, conditional.Type));
     }
+
+    private static readonly ConstructorInfo InvalidOperationExceptionCtor =
+        typeof(InvalidOperationException).GetConstructor([typeof(string)])!;
 
     private static EntityPlan FindChildPlan(EntityPlan parent, INavigationBase navigation)
     {

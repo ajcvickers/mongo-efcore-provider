@@ -51,7 +51,9 @@ internal static class StreamingEligibility
             return false;
         }
 
-        // Only single (reference) owned navigations, to eligible owned types.
+        // Only single (reference) owned navigations, to eligible owned types. (A required owned reference is
+        // still eligible — the rewriter reproduces EF's "required but missing" throw via the present flag;
+        // see MongoStreamingEntityMaterializerRewriter.RewriteOwnedNavigation.)
         foreach (var navigation in entityType.GetNavigations())
         {
             if (navigation.IsCollection
