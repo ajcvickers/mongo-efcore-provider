@@ -312,13 +312,20 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // the client-side-shaper path. Pushed-down projections always use the driver-LINQ path.
         if (nativeEligible
             && nativeMode != NativeQueryMode.Off
-            && resultCardinality == ResultCardinality.Enumerable
-            && queryExpression.GetPendingLookups().Count == 0)
+            && resultCardinality == ResultCardinality.Enumerable)
         {
             try
             {
-                var nativePipeline = new MongoPipelineTranslator((IEntityType)entityType, queryContext)
-                    .Translate(queryExpression.CapturedExpression);
+                var pipelineList = new List<BsonDocument>(
+                    new MongoPipelineTranslator((IEntityType)entityType, queryContext)
+                        .Translate(queryExpression.CapturedExpression));
+
+                // Append $lookup/$unwind stages for cross-collection reference Includes. Unsupported
+                // lookups (filtered/collection/nested) throw NativeTranslationNotSupportedException, which is
+                // caught below to fall back to the driver-LINQ path (unchanged control flow).
+                NativeLookupStages.AppendReferenceLookupStages(pipelineList, queryExpression);
+
+                var nativePipeline = pipelineList;
 
                 var nativeExecutable = new MongoExecutableQuery(
                     Expression.Empty(),
