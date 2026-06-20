@@ -192,7 +192,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // pipeline, the DOM shaper for the driver-LINQ fallback.
         var streaming = nativeMode != NativeQueryMode.Off
             && shapedQueryExpression.ResultCardinality == ResultCardinality.Enumerable
-            && mongoQueryExpression.GetPendingLookups().Count == 0
+            && AllPendingLookupsAreStreamableReferences(mongoQueryExpression)
             && StreamingEligibility.IsEligible(rootEntityType);
 
         Delegate? compiledStreamingShaper = null;
@@ -277,6 +277,33 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             Expression.Constant(nativeMode));
     }
 
+    /// <summary>
+    /// Whether every cross-collection join on <paramref name="mongoQueryExpression"/> is a single-level
+    /// reference lookup the native pipeline can emit and the streaming materializer can read back from a
+    /// root-level <c>_lookup_&lt;Nav&gt;</c> field — the same set <see cref="NativeTranslation.NativeLookupStages"/>
+    /// emits. A query with no joins is trivially streamable; a query whose joins cannot ALL be expressed as
+    /// such reference lookups (a collection include, a filtered include with pipeline stages, a
+    /// transitive/nested lookup keyed off another lookup's output, or any join shape not mappable to a direct
+    /// root reference navigation) stays on the DOM / driver-LINQ path.
+    /// </summary>
+    private static bool AllPendingLookupsAreStreamableReferences(MongoQueryExpression mongoQueryExpression)
+    {
+        var referenceLookups = mongoQueryExpression.GetStreamingReferenceLookups();
+
+        // Every join must be covered by a streamable reference lookup; otherwise a join would be silently
+        // dropped on the native path.
+        if (mongoQueryExpression.IsJoinQuery
+            && referenceLookups.Count < mongoQueryExpression.InnerCollections.Count)
+        {
+            return false;
+        }
+
+        return referenceLookups.All(lookup =>
+            lookup.IsReference
+            && lookup.PipelineStages.Count == 0
+            && !lookup.LocalField.StartsWith("_lookup_", StringComparison.Ordinal));
+    }
+
     private static (MongoQueryContext, MongoExecutableQuery) TranslateQuery<TSource>(
         QueryContext queryContext,
         IReadOnlyEntityType entityType,
@@ -316,8 +343,23 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             try
             {
+                // A cross-collection join is realized natively as a flat $lookup + $unwind ("_lookup_<Nav>")
+                // pipeline that ONLY the forward-only streaming shaper can read — it has no _outer/_inner
+                // notion. The non-streaming DOM/mixed shaper expects the driver-native LeftJoin shape
+                // (_outer/_inner), so emitting the flat native pipeline for it would mismatch and throw at
+                // materialization. When the join is not being streamed, fall back to the driver-LINQ path,
+                // which produces the _outer/_inner shape the DOM shaper binds against.
+                if (queryExpression.IsJoinQuery && !streaming)
+                {
+                    throw new NativeTranslationNotSupportedException(
+                        "Native pipeline emits a flat $lookup join only for the streaming shaper; "
+                        + "a non-streamed join uses the driver-LINQ path.");
+                }
+
                 var pipelineList = new List<BsonDocument>(
-                    new MongoPipelineTranslator((IEntityType)entityType, queryContext)
+                    new MongoPipelineTranslator(
+                            (IEntityType)entityType, queryContext,
+                            hasReferenceLookups: queryExpression.GetStreamingReferenceLookups().Count > 0)
                         .Translate(queryExpression.CapturedExpression));
 
                 // Append $lookup/$unwind stages for cross-collection reference Includes. Unsupported

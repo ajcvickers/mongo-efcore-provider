@@ -38,7 +38,20 @@ internal static class NativeLookupStages
     /// <param name="queryExpression">The query expression carrying the pending lookups.</param>
     internal static void AppendReferenceLookupStages(List<BsonDocument> pipeline, MongoQueryExpression queryExpression)
     {
-        foreach (var lookup in queryExpression.GetPendingLookups())
+        var referenceLookups = queryExpression.GetStreamingReferenceLookups();
+
+        // A join query whose joins are not all expressible as single-level reference lookups (e.g. a
+        // transitive join, or a join shape GetStreamingReferenceLookups could not map to a direct root
+        // reference navigation) yields fewer reference lookups than inner collections. The native pipeline
+        // cannot reproduce those joins, so emitting a partial pipeline would silently drop the join and
+        // return wrong results — fall back to the driver-LINQ path instead.
+        if (queryExpression.IsJoinQuery && referenceLookups.Count < queryExpression.InnerCollections.Count)
+        {
+            throw new NativeTranslationNotSupportedException(
+                "Native pipeline does not support this join shape (only single-level reference includes).");
+        }
+
+        foreach (var lookup in referenceLookups)
         {
             // Only single-level REFERENCE lookups are supported natively in this slice.
             if (!lookup.IsReference

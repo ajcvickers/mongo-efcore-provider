@@ -33,12 +33,14 @@ internal sealed class MongoPipelineTranslator
     private readonly IEntityType _entityType;
     private readonly QueryContext _queryContext;
     private readonly MongoPredicateTranslator _predicates;
+    private readonly bool _hasReferenceLookups;
 
-    public MongoPipelineTranslator(IEntityType entityType, QueryContext queryContext)
+    public MongoPipelineTranslator(IEntityType entityType, QueryContext queryContext, bool hasReferenceLookups = false)
     {
         _entityType = entityType;
         _queryContext = queryContext;
         _predicates = new MongoPredicateTranslator(entityType, queryContext);
+        _hasReferenceLookups = hasReferenceLookups;
     }
 
     public IReadOnlyList<BsonDocument> Translate(Expression? capturedExpression)
@@ -47,6 +49,19 @@ internal sealed class MongoPipelineTranslator
         var node = capturedExpression;
         while (node is MethodCallExpression call)
         {
+            // A cross-collection reference Include is expanded by EF into a Join chain (e.g.
+            // `root.Join(target, fk, pk, (o,i) => TransparentIdentifier).Select(IncludeExpression)`). The
+            // join itself is realized natively by the $lookup/$unwind stages NativeLookupStages appends, so
+            // the pipeline translator must NOT treat the Join (or the transparent-identifier Select that
+            // immediately consumes it) as a user operator — it skips them and continues from the join's outer
+            // source (the root collection / its filter+sort+page chain). This mirrors the driver-LINQ path's
+            // StripJoinForLookup.
+            if (_hasReferenceLookups && IsJoinRelatedMethod(call))
+            {
+                node = call.Arguments[0];
+                continue;
+            }
+
             calls.Add(call);
             node = call.Arguments.Count > 0 ? call.Arguments[0] : null;
         }
@@ -143,6 +158,14 @@ internal sealed class MongoPipelineTranslator
         => call.Method.DeclaringType == typeof(System.Linq.Queryable)
            && call.Arguments.Count == 2
            && Unquote(call.Arguments[1]) is { Body: IncludeExpression };
+
+    // Join-flavored operators EF emits to expand a cross-collection reference Include. When reference lookups
+    // are present these are realized by the appended $lookup/$unwind stages, so the pipeline translator skips
+    // them (continuing from the operator's outer source) rather than rejecting them. Deliberately excludes
+    // Select and Where: the trailing entity-materialization Select is no-op'd by IsEntityMaterializationSelect,
+    // and Where stages over the root still translate to $match.
+    private static bool IsJoinRelatedMethod(MethodCallExpression call)
+        => call.Method.Name is "Join" or "GroupJoin" or "LeftJoin" or "SelectMany";
 
     private void AddSort(ref BsonDocument? sort, MethodCallExpression call, bool ascending)
     {
