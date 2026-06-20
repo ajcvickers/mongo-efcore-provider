@@ -66,18 +66,23 @@ internal static class StreamingEligibility
         // see MongoStreamingEntityMaterializerRewriter.RewriteOwnedNavigation.)
         foreach (var navigation in entityType.GetNavigations())
         {
-            // Both single (reference) and collection owned navigations are allowed, provided the
-            // target owned type is itself recursively eligible.
-            if (!navigation.TargetEntityType.IsOwned()
-                || !IsEligible(navigation.TargetEntityType, visiting))
+            // The navigation's target type must itself be streaming-eligible (recursively; the
+            // `visiting` cycle-guard prevents infinite recursion on bidirectional relationships).
+            if (!IsEligible(navigation.TargetEntityType, visiting))
+            {
+                return false;
+            }
+
+            // Non-owned navigations are only supported as single references (materialized via
+            // $lookup + $unwind). A non-owned collection navigation is not yet streamable.
+            if (!navigation.TargetEntityType.IsOwned() && navigation.IsCollection)
             {
                 return false;
             }
 
             // The rewriter cannot yet stream a collection whose element type itself owns a collection
-            // (collection-of-collection). A collection navigation whose target has any collection
-            // navigation of its own is therefore ineligible. Single owned references nested in a
-            // collection element, and nested single references, remain allowed.
+            // (collection-of-collection). Single owned references nested in a collection element, and
+            // nested single references, remain allowed.
             if (navigation.IsCollection
                 && navigation.TargetEntityType.GetNavigations().Any(n => n.IsCollection))
             {
