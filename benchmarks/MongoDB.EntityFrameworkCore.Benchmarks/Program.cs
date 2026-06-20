@@ -126,4 +126,10 @@ if (args.Contains("--smoke"))
     return;
 }
 
-BenchmarkDotNet.Running.BenchmarkRunner.Run<QueryBenchmarks>();
+if (args.Contains("--query"))
+{
+    BenchmarkDotNet.Running.BenchmarkRunner.Run<QueryBenchmarks>();
+    return;
+}
+
+BenchmarkDotNet.Running.BenchmarkRunner.Run<HeadlineBenchmarks>();
