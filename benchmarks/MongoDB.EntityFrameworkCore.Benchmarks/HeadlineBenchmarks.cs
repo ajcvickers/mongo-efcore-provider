@@ -31,10 +31,17 @@ public class HeadlineBenchmarks
         var conn = Environment.GetEnvironmentVariable("MONGODB_URI") ?? "mongodb://localhost:27017";
         var dbName = "ef_bench_headline_" + Guid.NewGuid().ToString("N");
 
+        // Single shared MongoClient for ALL three configs. The driver-only config reuses one client
+        // across invocations, so the EF configs must too (via the IMongoClient UseMongoDB overload) —
+        // otherwise each `new BenchmarkDbContext` would spin up a fresh MongoClient (connection pool +
+        // SDAM topology monitoring), charging client-startup to the EF numbers per invocation and making
+        // the comparison unfair. MongoClient is thread-safe and designed to be shared.
+        var client = new MongoClient(conn);
+
         _domOptions = new DbContextOptionsBuilder<BenchmarkDbContext>()
-            .UseMongoDB(conn, dbName, o => o.UseNativeQuery(false)).Options;
+            .UseMongoDB(client, dbName, o => o.UseNativeQuery(false)).Options;
         _nativeOptions = new DbContextOptionsBuilder<BenchmarkDbContext>()
-            .UseMongoDB(conn, dbName, o => o.UseNativeQuery(true)).Options;
+            .UseMongoDB(client, dbName, o => o.UseNativeQuery(true)).Options;
 
         // Seed once (config-agnostic: documents are identical).
         using (var ctx = new BenchmarkDbContext(_nativeOptions))
@@ -74,8 +81,7 @@ public class HeadlineBenchmarks
             ctx.SaveChanges();
         }
 
-        // Raw driver collections against the same db / EF collection names.
-        var client = new MongoClient(conn);
+        // Raw driver collections against the same db / EF collection names — same shared client as the EF configs.
         var db = client.GetDatabase(dbName);
         // EF names collections after the DbSet (pluralized): FlatItems / Reviews / Products.
         _flatColl = db.GetCollection<FlatItem>("FlatItems");

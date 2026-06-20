@@ -4,6 +4,14 @@ Date: 2026-06-20
 Branch: `spike/low-level-provider`
 Source: `benchmarks/MongoDB.EntityFrameworkCore.Benchmarks/HeadlineBenchmarks.cs`
 
+> **Methodology fix (shared MongoClient):** all three configs now share a single `MongoClient` instance
+> (the EF configs use the `UseMongoDB(IMongoClient, db, ...)` overload), so client startup is never charged
+> per-invocation to EF the way it was amortized once for DriverOnly. Re-running with the shared client left
+> every number unchanged within run-to-run noise — because the C# driver already deduplicates the underlying
+> cluster (connection pool + SDAM topology) by connection settings via its internal cluster registry, so a
+> per-context `new MongoClient(sameConnString)` only re-created a thin handle, not the heavy machinery. The
+> comparison was already fair on this axis; the fix removes the ambiguity. Numbers below are the shared-client run.
+
 Three configurations, all reading the **same seeded documents** (N = 10,000):
 
 1. **DriverOnly** — raw MongoDB C# driver LINQ / aggregation, no EF Core at all
