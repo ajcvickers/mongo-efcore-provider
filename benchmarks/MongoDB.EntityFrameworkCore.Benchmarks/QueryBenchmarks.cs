@@ -39,6 +39,25 @@ public class QueryBenchmarks
         }
 
         ctx.SaveChanges();
+
+        var products = new List<Product>();
+        for (var i = 0; i < 100; i++)
+        {
+            var product = new Product { Title = "product-" + i };
+            products.Add(product);
+            ctx.Products.Add(product);
+        }
+        ctx.SaveChanges();
+
+        for (var i = 0; i < 10_000; i++)
+        {
+            ctx.Reviews.Add(new Review
+            {
+                Stars = (i % 5) + 1,
+                ProductId = products[i % products.Count].Id
+            });
+        }
+        ctx.SaveChanges();
     }
 
     [GlobalCleanup]
@@ -85,4 +104,7 @@ public class QueryBenchmarks
 
     [Benchmark] public int Basket_NoTracking_ToList() { using var ctx = new BenchmarkDbContext(_options); return ctx.Baskets.AsNoTracking().ToList().Count; }
     [Benchmark] public int Basket_Tracked_ToList() { using var ctx = new BenchmarkDbContext(_options); return ctx.Baskets.ToList().Count; }
+
+    [Benchmark] public int Review_Include_NoTracking() { using var ctx = new BenchmarkDbContext(_options); return ctx.Reviews.AsNoTracking().Include(r => r.Product).ToList().Count; }
+    [Benchmark] public int Review_Include_Tracked() { using var ctx = new BenchmarkDbContext(_options); return ctx.Reviews.Include(r => r.Product).ToList().Count; }
 }
