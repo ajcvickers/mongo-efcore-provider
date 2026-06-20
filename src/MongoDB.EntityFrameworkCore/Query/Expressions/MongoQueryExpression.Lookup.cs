@@ -115,18 +115,24 @@ internal sealed partial class MongoQueryExpression
         var synthesized = new List<LookupExpression>();
         foreach (var innerEntityType in _innerCollections.Keys)
         {
-            var navigation = rootEntityType.GetNavigations()
-                .FirstOrDefault(n => !n.IsCollection
-                                     && !n.TargetEntityType.IsOwned()
-                                     && n.TargetEntityType == innerEntityType);
-            if (navigation == null)
+            var matches = rootEntityType.GetNavigations()
+                .Where(n => !n.IsCollection
+                            && !n.TargetEntityType.IsOwned()
+                            && n.TargetEntityType == innerEntityType)
+                .ToList();
+
+            // Synthesis matches by target type. If more than one single-reference navigation off the root
+            // targets the same inner collection (e.g. Doc.Author and Doc.Editor both -> Person), we cannot
+            // tell which one this lookup is for by type alone — bail to the driver/DOM fallback rather than
+            // risk resolving to the wrong navigation's element alias.
+            if (matches.Count != 1)
             {
-                // Not a direct single-reference navigation off the root (e.g. transitive / collection):
-                // not streamable here. Return empty so the caller treats it as unsupported and falls back.
+                // Zero: not a direct single-reference navigation off the root (e.g. transitive / collection).
+                // More than one: ambiguous by target type. Either way, not streamable here -> fall back.
                 return Array.Empty<LookupExpression>();
             }
 
-            synthesized.Add(new LookupExpression(navigation));
+            synthesized.Add(new LookupExpression(matches[0]));
         }
 
         return synthesized;
