@@ -1,5 +1,20 @@
 # Native reference Include — results
 
+> **Final review: SOLID-FOR-SPIKE.** Synthesis (FK-on-dependent + principal-side), null/optional FK, shared-principal
+> identity, and the native/DOM join-shape gate all verified correct. Important scope reality + follow-ups:
+> - **Coverage is narrower than "Northwind reference Includes stream natively" implies.** Eligibility requires the
+>   reference *target* to be fully streaming-eligible (no collection navs of its own), so a principal with an inverse
+>   collection (e.g. `Customer` has `Orders`) makes `Order.Customer` **fall back**. The native reference-Include path
+>   engages only for a principal with no inverse collection (the `Review→Product` shape) — that's what the benchmark
+>   /smoke cover; the Northwind CrossCollectionIncludeTests exercise the *fallback*. Productionization: add a
+>   functional test on the Review/Product shape so the native path has standing regression coverage.
+> - **Fixed (commit bf64a65):** synthesis matched the lookup by target type only; two reference navs to the same
+>   target (`Doc.Author`+`Doc.Editor`→`Person`) would have resolved by declaration order. Now bails to fallback when
+>   >1 non-collection nav targets the same inner collection (no wrong result was possible before — that shape already
+>   threw on the DOM path — but it was a latent landmine).
+> - Nit: the "all joins are streamable reference lookups" decision is duplicated in `NativeLookupStages` and the
+>   streaming gate; centralize on `MongoQueryExpression` before ship so they can't diverge.
+
 **Run on:** 2026-06-20 — Apple M4 Max (14 logical / 14 physical cores), macOS Tahoe 26.5.1 (Darwin 25.5.0), .NET SDK 10.0.301 / Runtime 10.0.9 Arm64 RyuJIT, BenchmarkDotNet v0.15.8 (InProcessEmitToolchain, 3 warmup / 10 iterations). MongoDB replica set at mongodb://localhost:27017.
 **Change:** single-level reference Include → native $lookup+$unwind, streaming materialization of the joined non-owned entity.
 
