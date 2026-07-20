@@ -2123,7 +2123,7 @@ Customers.{ "$match" : { "_id" : "ANATR" } }, { "$project" : { "_v" : "$_id", "_
 
         AssertMql(
             """
-            Employees.{ "$sort" : { "_id" : 1 } }, { "$limit" : 3 }, { "$match" : { "_id" : { "$mod" : [2, 0] } } }
+            Employees.{ "$sort" : { "_id" : 1 } }, { "$limit" : 3 }, { "$match" : { "$expr" : { "$eq" : [{ "$mod" : ["$_id", 2] }, 0] } } }
             """);
     }
 
@@ -2133,7 +2133,7 @@ Customers.{ "$match" : { "_id" : "ANATR" } }, { "$project" : { "_v" : "$_id", "_
 
         AssertMql(
             """
-            Employees.{ "$sort" : { "_id" : 1 } }, { "$skip" : 3 }, { "$match" : { "_id" : { "$mod" : [2, 0] } } }
+            Employees.{ "$sort" : { "_id" : 1 } }, { "$skip" : 3 }, { "$match" : { "$expr" : { "$eq" : [{ "$mod" : ["$_id", 2] }, 0] } } }
             """);
     }
 
