@@ -15,6 +15,7 @@
 
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.TestUtilities;
+using MongoDB.Bson;
 using MongoDB.Driver.Linq;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using Xunit.Abstractions;
@@ -1897,15 +1898,22 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupBy_with_group_key_access_thru_nested_navigation(bool async)
     {
+#if EF8 || EF9
+        // On EF8/EF9 this shape still fails to translate at all (an EF InvalidOperationException before any
+        // pipeline runs), so the previous translation-failure expectation still holds there.
         // Fails: GroupBy issue EF-149
         await AssertTranslationFailed(() => base.GroupBy_with_group_key_access_thru_nested_navigation(async));
 
-#if EF8 || EF9
         AssertMql();
 #else
+        // Driver 3.10 translates this correctly on EF10 (it did not at 3.9), so the query now returns correct
+        // data and the previous translation-failure expectation is false there. The baseline below is the
+        // driver-LINQ fallback's real pipeline, captured from the run.
+        await base.GroupBy_with_group_key_access_thru_nested_navigation(async);
+
         AssertMql(
             """
-            OrderDetails.
+            OrderDetails.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id.OrderID", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customers", "localField" : "_outer.Inner.CustomerID", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$group" : { "_id" : "$Inner.Country", "__agg0" : { "$sum" : "$Outer.Outer._id.OrderID" } } }, { "$project" : { "Key" : "$_id", "Aggregate" : "$__agg0", "_id" : 0 } }
             """);
 #endif
     }
@@ -1923,7 +1931,12 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupBy_with_group_key_being_nested_navigation(bool async)
     {
-        // Fails: GroupBy issue EF-149
+        // Fails: GroupBy issue EF-149. Still fails, but now only after a real pipeline executes: the
+        // driver-LINQ fallback's $group key is the whole nested Customer entity, and the driver deserializes
+        // that key with BsonClassMapSerializer<Customer> rather than the registered entity serializer, so the
+        // shaped result doesn't round-trip and throws FormatException. The recorded MQL below drifted with
+        // driver 3.10 (its lookup/unwind shape changed); the underlying driver behaviour above is recommended
+        // follow-up (ii) in docs/superpowers/specs/2026-07-31-groupby-join-uncorrelated-inner-decline-design.md.
         await AssertTranslationFailed(() => base.GroupBy_with_group_key_being_nested_navigation(async));
 
 #if EF8 || EF9
@@ -1931,7 +1944,7 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 #else
         AssertMql(
             """
-            OrderDetails.
+            OrderDetails.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id.OrderID", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customers", "localField" : "_outer.Inner.CustomerID", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$group" : { "_id" : "$Inner", "__agg0" : { "$sum" : "$Outer.Outer._id.OrderID" } } }, { "$project" : { "Key" : "$_id", "Aggregate" : "$__agg0", "_id" : 0 } }
             """);
 #endif
     }
@@ -2324,8 +2337,17 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
     //AssertMql(" ");
     public override async Task Complex_query_with_group_by_in_subquery5(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.Complex_query_with_group_by_in_subquery5(async));
+        // Fails: GroupBy issue EF-149. Driver 3.10 changed the failure TYPE for this unsupported shape:
+        // ConstantExpressionToAggregationExpressionTranslator now tries to BSON-serialize the un-inlined
+        // MongoQuery<Customer,Customer> subquery constant and dies in BsonClassMap.Freeze() with a duplicate
+        // element name, where 3.9 threw ExpressionNotSupportedException. Per AGENTS.md an exception-type change
+        // on an UNSUPPORTED operation is not a breaking change, so the accepted-type list is widened here — at
+        // this call site only, so the file-wide shadow stays strict for every other case. The driver-side
+        // ugliness (a translation error surfacing as a serialization error) is recommended follow-up (i) in
+        // docs/superpowers/specs/2026-07-31-groupby-join-uncorrelated-inner-decline-design.md §5.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.Complex_query_with_group_by_in_subquery5(async),
+            typeof(ArgumentException), typeof(FormatException), typeof(BsonSerializationException));
 
 #if EF8 || EF9
         AssertMql();
