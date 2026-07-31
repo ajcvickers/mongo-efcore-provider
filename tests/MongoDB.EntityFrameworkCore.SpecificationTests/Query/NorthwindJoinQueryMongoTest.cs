@@ -156,20 +156,41 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
 """);
     }
 
-    [ConditionalTheory(Skip = "CSHARP-6017: driver 3.10 folds an uncorrelated Take/subquery join inner into the correlated $lookup sub-pipeline, returning wrong results")]
+    [ConditionalTheory]
     [MemberData(nameof(IsAsyncData))]
     public override async Task Join_customers_orders_with_subquery_with_take(bool async)
-        => await base.Join_customers_orders_with_subquery_with_take(async);
+    {
+        // Declines: the join's inner is `(Orders.OrderBy(OrderID).Select(o2)).Take(5)` — a self-paging inner,
+        // which driver 3.10 mistranslates (CSHARP-6017) by folding $sort/$limit into the correlated $lookup
+        // sub-pipeline. The provider hard-declines rather than return the driver's wrong rows, so this is now a
+        // translation failure rather than a skip. Its non-Take sibling
+        // (Join_customers_orders_with_subquery) is unaffected and still asserts real data.
+        // TODO(CSHARP-6017): on driver fix, revert to `await base.…` with a real MQL baseline.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.Join_customers_orders_with_subquery_with_take(async));
+
+        AssertMql();
+    }
 
     [ConditionalTheory(Skip = "EF-352: shadow property read via EF.Property in a client-side join projection materialises as null")]
     [MemberData(nameof(IsAsyncData))]
     public override async Task Join_customers_orders_with_subquery_anonymous_property_method(bool async)
         => await base.Join_customers_orders_with_subquery_anonymous_property_method(async);
 
-    [ConditionalTheory(Skip = "CSHARP-6017: driver 3.10 folds an uncorrelated Take/subquery join inner into the correlated $lookup sub-pipeline, returning wrong results")]
+    [ConditionalTheory]
     [MemberData(nameof(IsAsyncData))]
     public override async Task Join_customers_orders_with_subquery_anonymous_property_method_with_take(bool async)
-        => await base.Join_customers_orders_with_subquery_anonymous_property_method_with_take(async);
+    {
+        // Declines: the join's inner is `(Orders.OrderBy.Select(new{o2})).Take(5)` — a self-paging inner, which
+        // driver 3.10 mistranslates (CSHARP-6017) by folding $sort/$limit into the correlated $lookup
+        // sub-pipeline. The provider hard-declines rather than return the driver's wrong rows, so this is now a
+        // translation failure rather than a skip.
+        // TODO(CSHARP-6017): on driver fix, revert to `await base.…` with a real MQL baseline.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.Join_customers_orders_with_subquery_anonymous_property_method_with_take(async));
+
+        AssertMql();
+    }
 
     public override async Task Join_customers_orders_with_subquery_predicate(bool async)
     {
@@ -181,10 +202,20 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
 """);
     }
 
-    [ConditionalTheory(Skip = "CSHARP-6017: driver 3.10 folds an uncorrelated Take/subquery join inner into the correlated $lookup sub-pipeline, returning wrong results")]
+    [ConditionalTheory]
     [MemberData(nameof(IsAsyncData))]
     public override async Task Join_customers_orders_with_subquery_predicate_with_take(bool async)
-        => await base.Join_customers_orders_with_subquery_predicate_with_take(async);
+    {
+        // Declines: the join's inner is `(Orders.Where(id>0).OrderBy.Select(o2)).Take(5)` — a self-paging
+        // inner, which driver 3.10 mistranslates (CSHARP-6017) by folding $sort/$limit into the correlated
+        // $lookup sub-pipeline. The provider hard-declines rather than return the driver's wrong rows, so this
+        // is now a translation failure rather than a skip.
+        // TODO(CSHARP-6017): on driver fix, revert to `await base.…` with a real MQL baseline.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.Join_customers_orders_with_subquery_predicate_with_take(async));
+
+        AssertMql();
+    }
 
     public override async Task Join_composite_key(bool async)
     {
@@ -272,10 +303,20 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "o
 """);
     }
 
-    [ConditionalTheory(Skip = "CSHARP-6017: driver 3.10 folds an uncorrelated Take/subquery join inner into the correlated $lookup sub-pipeline, returning wrong results")]
+    [ConditionalTheory]
     [MemberData(nameof(IsAsyncData))]
     public override async Task GroupJoin_simple_subquery(bool async)
-        => await base.GroupJoin_simple_subquery(async);
+    {
+        // Declines: the GroupJoin's inner is `Orders.OrderBy(OrderID).Take(4)` — a self-paging inner, which
+        // driver 3.10 mistranslates (CSHARP-6017) by folding $sort/$limit into the correlated $lookup
+        // sub-pipeline. The provider hard-declines rather than return the driver's wrong rows, so this is now a
+        // translation failure rather than a skip.
+        // TODO(CSHARP-6017): on driver fix, revert to `await base.…` with a real MQL baseline.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.GroupJoin_simple_subquery(async));
+
+        AssertMql();
+    }
 
     public override async Task GroupJoin_as_final_operator(bool async)
     {
@@ -486,44 +527,46 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "o
         );
     }
 
-    [ConditionalTheory(Skip = "CSHARP-6017: driver 3.10 folds an uncorrelated Take/subquery join inner into the correlated $lookup sub-pipeline, returning wrong results")]
+    [ConditionalTheory]
     [MemberData(nameof(IsAsyncData))]
     public override async Task GroupJoin_Subquery_with_Take_Then_SelectMany_Where(bool async)
-        => await base.GroupJoin_Subquery_with_Take_Then_SelectMany_Where(async);
+    {
+        // Declines: the GroupJoin's inner is `Orders.OrderBy(OrderID).Take(100)` — a self-paging inner, which
+        // driver 3.10 mistranslates (CSHARP-6017) by folding $sort/$limit into the correlated $lookup
+        // sub-pipeline. The provider hard-declines rather than return the driver's wrong rows, so this is now a
+        // translation failure rather than a skip.
+        // TODO(CSHARP-6017): on driver fix, revert to `await base.…` with a real MQL baseline.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.GroupJoin_Subquery_with_Take_Then_SelectMany_Where(async));
+
+        AssertMql();
+    }
 
     public override async Task Inner_join_with_tautology_predicate_converts_to_cross_join(bool async)
     {
-        // Fails: Multiple query roots issue EF-220
-        Assert.Contains(
-            "Expression not supported",
-            (await Assert.ThrowsAsync<MongoDB.Driver.Linq.ExpressionNotSupportedException>(() =>
-                base.Inner_join_with_tautology_predicate_converts_to_cross_join(async))).Message);
+        // Fails: Multiple query roots issue EF-220. Its inner is `Orders.OrderBy(OrderID).Take(10)` — a
+        // self-paging inner, so it now also declines under CSHARP-6017 (driver 3.10 folds the uncorrelated
+        // Take into the correlated $lookup sub-pipeline). The provider's paged-inner guard fires before the
+        // multiple-query-roots issue would otherwise be hit, so the exception type is now
+        // NativeTranslationNotSupportedException rather than the driver's ExpressionNotSupportedException.
+        // TODO(CSHARP-6017): on driver fix, re-verify which of the two unsupported shapes surfaces first.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.Inner_join_with_tautology_predicate_converts_to_cross_join(async));
 
-        AssertMql(
-            """
-Customers.
-""");
+        AssertMql();
     }
 
     public override async Task Left_join_with_tautology_predicate_doesnt_convert_to_cross_join(bool async)
     {
-#if EF8 || EF9
-        // Fails: Multiple query roots issue EF-220
-        await AssertTranslationFailed(() => base.Left_join_with_tautology_predicate_doesnt_convert_to_cross_join(async));
+        // Fails: Multiple query roots issue EF-220. Its inner is `Orders.OrderBy(OrderID).Take(10)` — a
+        // self-paging inner, so it now also declines under CSHARP-6017 (driver 3.10 folds the uncorrelated
+        // Take into the correlated $lookup sub-pipeline). The provider's paged-inner guard fires before the
+        // multiple-query-roots issue would otherwise be hit.
+        // TODO(CSHARP-6017): on driver fix, re-verify which of the two unsupported shapes surfaces first.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.Left_join_with_tautology_predicate_doesnt_convert_to_cross_join(async));
 
-        AssertMql(
-        );
-#else
-        Assert.Contains(
-            "Expression not supported",
-            (await Assert.ThrowsAsync<MongoDB.Driver.Linq.ExpressionNotSupportedException>(() =>
-                base.Left_join_with_tautology_predicate_doesnt_convert_to_cross_join(async))).Message);
-
-        AssertMql(
-            """
-Customers.
-""");
-#endif
+        AssertMql();
     }
 
     public override async Task SelectMany_with_client_eval(bool async)
@@ -698,10 +741,20 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
 """);
     }
 
-    [ConditionalTheory(Skip = "CSHARP-6017: driver 3.10 folds an uncorrelated Take/subquery join inner into the correlated $lookup sub-pipeline, returning wrong results")]
+    [ConditionalTheory]
     [MemberData(nameof(IsAsyncData))]
     public override async Task GroupJoin_customers_employees_subquery_shadow_take(bool async)
-        => await base.GroupJoin_customers_employees_subquery_shadow_take(async);
+    {
+        // Declines: the GroupJoin's inner is `Employees.OrderBy(City).Take(5)` — a self-paging inner, which
+        // driver 3.10 mistranslates (CSHARP-6017) by folding $sort/$limit into the correlated $lookup
+        // sub-pipeline. The provider hard-declines rather than return the driver's wrong rows, so this is now a
+        // translation failure rather than a skip.
+        // TODO(CSHARP-6017): on driver fix, revert to `await base.…` with a real MQL baseline.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.GroupJoin_customers_employees_subquery_shadow_take(async));
+
+        AssertMql();
+    }
 
     public override async Task GroupJoin_projection(bool async)
     {
