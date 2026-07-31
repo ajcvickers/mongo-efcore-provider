@@ -59,7 +59,7 @@ internal enum NativeDisposition
     /// <summary>Not natively representable: fall back to driver-LINQ; throw only under <see cref="MongoQueryMode.NativeOnly"/>.</summary>
     Fallback,
 
-    /// <summary>Must throw under <see cref="MongoQueryMode.Native"/> AND <see cref="MongoQueryMode.NativeOnly"/>: the driver-LINQ fallback is wrong-data (GroupBy+Join).</summary>
+    /// <summary>Must throw under <see cref="MongoQueryMode.Native"/> AND <see cref="MongoQueryMode.NativeOnly"/>: the driver-LINQ fallback returns wrong rows (GroupBy+Join, or a self-paging join inner).</summary>
     HardDecline
 }
 
@@ -161,17 +161,24 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         }
 
         // The is-native disposition is centralized in ClassifyNativeDisposition (EF-334). Here we act only on
-        // HardDecline: a GroupBy+Join whose driver-LINQ fallback returns silently wrong data must throw under
-        // Native/NativeOnly rather than route to that fallback (explicit DriverLinq stays the user's opt-in).
-        // (The classification also evaluates ContainsVectorSearch, which the HardDecline outcome never depends
-        // on — a deliberate, negligible compile-time extra walk kept so the disposition has one source of truth.)
+        // HardDecline: a GroupBy+Join or paged-join-inner whose driver-LINQ fallback returns silently wrong
+        // data must throw under Native/NativeOnly rather than route to that fallback (explicit DriverLinq stays
+        // the user's opt-in). (The classification also evaluates ContainsVectorSearch, which the HardDecline
+        // outcome never depends on — a deliberate, negligible compile-time extra walk kept so the disposition
+        // has one source of truth.)
         var mode = ((MongoQueryCompilationContext)QueryCompilationContext).QueryMode;
         if (ClassifyNativeDisposition(mongoQueryExpression, mode) == NativeDisposition.HardDecline)
         {
+            // TODO(CSHARP-6017): drop the paged-inner arm when the driver stops folding an uncorrelated join
+            // inner's $sort/$skip/$limit into the correlated $lookup sub-pipeline.
+            var cause = mongoQueryExpression.Select.IsPagedJoinInnerFallbackUnsafe
+                ? "Query joins against an inner sequence that applies Skip/Take to itself, which the native "
+                  + "translator does not support and which the MongoDB driver's LINQ provider mistranslates "
+                  + "(CSHARP-6017), returning incorrect results"
+                : "Query combines GroupBy with a Join, which the native translator does not support and whose "
+                  + "driver-LINQ fallback returns incorrect results";
             throw new NativeTranslationNotSupportedException(
-                "Query combines GroupBy with a Join, which the native translator does not support and whose "
-                + "driver-LINQ fallback returns incorrect results; use MongoQueryMode.DriverLinq to opt in to "
-                + "the driver-LINQ execution of this query.");
+                cause + "; use MongoQueryMode.DriverLinq to opt in to the driver-LINQ execution of this query.");
         }
 
         var rootEntityType = mongoQueryExpression.CollectionExpression.EntityType;
@@ -749,19 +756,21 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     /// consult it rather than re-deriving. Pure over its inputs so it is unit-testable in isolation.
     /// </summary>
     /// <param name="route">The slot/projection representability route (<see cref="MongoSelectDefinition.Route"/>).</param>
-    /// <param name="isGroupByFallbackUnsafe">Whether this is a GroupBy+Join whose driver-LINQ fallback is wrong-data (<see cref="MongoSelectDefinition.IsGroupByFallbackUnsafe"/>).</param>
+    /// <param name="isFallbackWrongData">Whether this query's driver-LINQ fallback returns silently wrong rows —
+    /// a GroupBy combined with a join, or a join whose inner sequence pages itself (CSHARP-6017). See
+    /// <see cref="MongoSelectDefinition.IsFallbackWrongData"/>.</param>
     /// <param name="containsVectorSearch">Whether the captured chain contains a lifted-out <c>VectorSearch</c> (<see cref="ContainsVectorSearch"/>).</param>
     /// <param name="mode">The active <see cref="MongoQueryMode"/>.</param>
     internal static NativeDisposition ClassifyNativeDisposition(
         NativeRoute route,
-        bool isGroupByFallbackUnsafe,
+        bool isFallbackWrongData,
         bool containsVectorSearch,
         MongoQueryMode mode)
     {
-        // GroupBy+Join is unsafe to fall back (driver-LINQ returns silently wrong data), so it hard-declines
-        // under Native/NativeOnly. Explicit DriverLinq is the user's opt-in and runs it (not a hard decline).
-        // Checked first so it takes precedence over the graceful-fallback signals.
-        if (mode != MongoQueryMode.DriverLinq && isGroupByFallbackUnsafe)
+        // A query whose driver-LINQ fallback returns wrong rows must hard-decline under Native/NativeOnly.
+        // Explicit DriverLinq is the user's opt-in and runs it (not a hard decline). Checked first so it takes
+        // precedence over the graceful-fallback signals.
+        if (mode != MongoQueryMode.DriverLinq && isFallbackWrongData)
         {
             return NativeDisposition.HardDecline;
         }
@@ -785,7 +794,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     private static NativeDisposition ClassifyNativeDisposition(MongoQueryExpression q, MongoQueryMode mode)
         => ClassifyNativeDisposition(
             q.Select.Route,
-            q.Select.IsGroupByFallbackUnsafe,
+            q.Select.IsFallbackWrongData,
             ContainsVectorSearch(q.CapturedExpression),
             mode);
 
