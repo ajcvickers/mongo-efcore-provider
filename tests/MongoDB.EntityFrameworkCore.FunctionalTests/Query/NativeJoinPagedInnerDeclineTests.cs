@@ -246,6 +246,37 @@ public class NativeJoinPagedInnerDeclineTests(TemporaryDatabaseFixture database)
                 o => o.Country, r => r.Country, (o, r) => new { o.Country, r.Continent }).ToArray());
     }
 
+    [Fact]
+    public void Join_whose_inner_subquery_is_grouped_and_joined_declines_under_native()
+    {
+        // Mirrors the spec's Join_GroupBy_Aggregate_in_subquery (the actual EF Core base test projects
+        // { o, i.c, i.c.CustomerID } at the outer level -- the entity plus one of its own properties, and
+        // deliberately NEVER re-projects the grouped aggregate scalar itself, i.e. i.LastOrderID, at the
+        // outermost level; only the MIDDLE select, { c, a.LastOrderID }, touches it). This test follows that
+        // same shape -- projecting i.r and i.r.Country rather than i.Max -- because re-projecting the
+        // aggregate scalar itself through TWO levels of join rebinding hits an unrelated, pre-existing
+        // translation-time crash in this provider (confirmed identical under both Native and DriverLinq, so
+        // independent of this ticket's gate/mode machinery entirely): "The LINQ expression
+        // 'ProjectionBindingExpression: 1' could not be translated" from MongoProjectionBindingExpressionVisitor.
+        // The wrong-data shape under test here (a join over a GROUPED source) is in a SUBQUERY used as the
+        // outer join's inner, so MarkGroupByFallbackUnsafe lands on the intermediate MongoQueryExpression, not
+        // on the one the gate reads. There is NO paging anywhere here, so the CSHARP-6017 guard cannot fire:
+        // only PropagateFallbackWrongDataFrom makes this decline. Deleting that call makes this test fail (the
+        // query executes and returns wrong rows) while every other test in this file still passes.
+        using var db = CreateContext(MongoQueryMode.Native,
+            nameof(Join_whose_inner_subquery_is_grouped_and_joined_declines_under_native));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            (from o in db.Orders
+             join i in (from r in db.Regions
+                        join a in db.Orders.GroupBy(x => x.Country)
+                                .Select(g => new { Country = g.Key, Max = g.Max(x => x.Amount) })
+                            on r.Country equals a.Country
+                        select new { r, a.Max })
+                 on o.Country equals i.r.Country
+             select new { o.Year, i.r, i.r.Country }).ToArray());
+    }
+
     private PagedJoinDbContext CreateContext(MongoQueryMode mode, string name)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
