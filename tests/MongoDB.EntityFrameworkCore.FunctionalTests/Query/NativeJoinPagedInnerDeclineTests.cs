@@ -120,10 +120,14 @@ public class NativeJoinPagedInnerDeclineTests(TemporaryDatabaseFixture database)
         // docs/superpowers/specs/2026-07-31-groupby-join-uncorrelated-inner-decline-design.md §2.6:
         // delete this file, the HasPagingAnywhere block in TranslateJoinCore, MongoSelectDefinition's
         // MarkPagedJoinInnerFallbackUnsafe/IsPagedJoinInnerFallbackUnsafe/HasPagingAnywhere, collapse
-        // IsFallbackWrongData back to IsGroupByFallbackUnsafe, revert the spec-suite retargets (including
-        // Reverse_in_join_inner_with_skip), and revert the Query/AGENTS.md decline note to its single
-        // "falls back correctly and is unaffected" sentence. Do NOT delete PropagateFallbackWrongDataFrom —
-        // it fixes an unrelated EF-344 nesting hole.
+        // IsFallbackWrongData back to IsGroupByFallbackUnsafe, revert the spec-suite retargets whose baseline
+        // is CSHARP-6017-only (Join_customers_orders_with_subquery_with_take and its five siblings, plus
+        // Reverse_in_join_inner_with_skip — NOT Join_GroupBy_Aggregate_in_subquery, whose decline is permanent,
+        // see below), and revert ONLY the paged-inner sentences of the Query/AGENTS.md decline note, restoring
+        // its single "falls back correctly and is unaffected" sentence for join-then-group. Do NOT delete
+        // PropagateFallbackWrongDataFrom or the group-first GroupBy+Join paragraph in that same AGENTS.md
+        // note — both are permanent and unrelated to CSHARP-6017 (PropagateFallbackWrongDataFrom fixes an
+        // unrelated EF-344 nesting hole).
         using var db = CreateContext(MongoQueryMode.DriverLinq,
             nameof(Driver_still_folds_a_paged_join_inner_into_the_lookup_subpipeline_CSHARP_6017));
 

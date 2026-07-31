@@ -1434,8 +1434,12 @@ Customers.
         AssertMql();
 #else
         // The join's inner is Orders.OrderByDescending(OrderID).Skip(2).Reverse() — a self-paging inner, which
-        // driver 3.10 mistranslates (CSHARP-6017) by folding $sort/$skip into the correlated $lookup
-        // sub-pipeline. The provider now hard-declines rather than return the driver's wrong rows.
+        // makes the CSHARP-6017 paged-join-inner guard hard-decline before the query ever reaches the driver.
+        // Unlike the wrong-data shapes this guard exists for, THIS query never returned wrong rows: before the
+        // guard existed it already threw driver ExpressionNotSupportedException, because the driver's LINQ
+        // provider separately rejects Reverse inside a join (CSHARP-5836, the same reason the EF8/EF9 arm
+        // above throws). Only the exception source/type changes here — driver-side Reverse rejection becomes
+        // a provider-side translation decline — not a throw-where-it-used-to-succeed change.
         // TODO(CSHARP-6017): on driver fix, revert to the ExpressionNotSupportedException assertion with a
         // real MQL baseline.
         await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(

@@ -422,9 +422,20 @@ Then, in one commit: delete `MongoSelectDefinition.MarkPagedJoinInnerFallbackUns
 must **not** be removed with it), collapse `IsFallbackWrongData` back to `IsGroupByFallbackUnsafe`, delete
 `NativeJoinPagedInnerDeclineTests`, revert the six `NorthwindJoinQueryMongoTest` retargets to
 `await base.…` with real MQL baselines, revert `Join_complex_GroupBy_Aggregate` /
-`GroupJoin_complex_GroupBy_Aggregate` / `Join_GroupBy_Aggregate_in_subquery` to `await base.…`, re-baseline the
-3 exception-type assertions, and update the `Query/AGENTS.md` note. Every one of those sites carries a
-`TODO(CSHARP-6017)` marker so `grep -rn "CSHARP-6017" src tests docs` is the removal checklist.
+`GroupJoin_complex_GroupBy_Aggregate` to `await base.…`, re-baseline the 3 exception-type assertions (including
+`Reverse_in_join_inner_with_skip`), and revert *only* the paged-inner sentences of the `Query/AGENTS.md` note
+(keep the group-first `GroupBy`+`Join` paragraph and the `PropagateFallbackWrongDataFrom` sentence). Every one
+of those sites carries a `TODO(CSHARP-6017)` marker so `grep -rn "CSHARP-6017" src tests docs` is the removal
+checklist.
+
+**Do NOT touch `Join_GroupBy_Aggregate_in_subquery`.** Unlike the other two `…GroupBy_Aggregate` spec cases
+above, its inner has no paging at all — it declines because a wrong-data verdict on its inner subquery is
+propagated to the outer query via `PropagateFallbackWrongDataFrom` (§2.1's independent, permanent mechanism),
+not via the CSHARP-6017 paged-inner guard. Its `AssertTranslationFailed` baseline (see the comment at
+`NorthwindGroupByQueryMongoTest.Join_GroupBy_Aggregate_in_subquery`, which already says "this is NOT the
+CSHARP-6017 guard and it stays after the driver is fixed") is permanent and must **not** be reverted when
+CSHARP-6017 is fixed — reverting it would leave the suite red (the query would go back to executing and
+returning 0 rows instead of 133) and is exactly the mistake this note exists to prevent.
 
 ### 2.7 Q7 — `BREAKING-CHANGES.md`
 
