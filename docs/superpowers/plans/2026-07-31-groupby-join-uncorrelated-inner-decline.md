@@ -35,7 +35,11 @@ FluentAssertions — follow the local convention in `NativeGroupByTests.cs`). Mu
   `#if` is permitted only in tests where a *baseline* already differs by version.
 - **`<Nullable>enable</Nullable>`** on `src/` — annotate new members accordingly. All new members are
   `internal`, so this is not a public-API change.
-- **Preserve file BOMs.** Every file touched here has one; use edits, never a full rewrite that drops it.
+- **Preserve each file's existing BOM state.** Use targeted edits, never a full rewrite. Note the repo is
+  *mixed* (~47 of 60 sampled `src/*.cs` have a BOM) and the blanket claim that every file here has one is
+  **false**: `MongoSelectDefinition.cs` and `MongoSelectDefinitionTests.cs` have **no** BOM (verified at
+  `a0774bf`). Do not add one to a file that lacks it — check with
+  `head -c3 <file> | xxd -p` before assuming either way.
 - **Tests run serially.** Leave `MONGODB_URI` and `ATLAS_URI` **unset** so TestContainers boots an isolated
   `mongodb/mongodb-atlas-local` per test process.
 - **Build:** `dotnet build MongoDB.EFCoreProvider.sln -c "Debug EF10"` (likewise `EF8` / `EF9`).
