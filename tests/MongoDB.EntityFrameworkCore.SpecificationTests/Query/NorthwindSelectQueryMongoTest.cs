@@ -1433,15 +1433,15 @@ Customers.
 
         AssertMql();
 #else
-        Assert.Contains(
-            "Expression not supported",
-            (await Assert.ThrowsAsync<MongoDB.Driver.Linq.ExpressionNotSupportedException>(() =>
-                base.Reverse_in_join_inner_with_skip(async))).Message);
+        // The join's inner is Orders.OrderByDescending(OrderID).Skip(2).Reverse() — a self-paging inner, which
+        // driver 3.10 mistranslates (CSHARP-6017) by folding $sort/$skip into the correlated $lookup
+        // sub-pipeline. The provider now hard-declines rather than return the driver's wrong rows.
+        // TODO(CSHARP-6017): on driver fix, revert to the ExpressionNotSupportedException assertion with a
+        // real MQL baseline.
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.Reverse_in_join_inner_with_skip(async));
 
-        AssertMql(
-            """
-Customers.
-""");
+        AssertMql();
 #endif
     }
 
