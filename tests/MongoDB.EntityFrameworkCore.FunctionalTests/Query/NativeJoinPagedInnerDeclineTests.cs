@@ -29,9 +29,10 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 /// <summary>
 /// A Join/GroupJoin/LeftJoin whose INNER sequence pages itself (Skip/Take) is declined by the provider, because
 /// the MongoDB driver's LINQ provider mistranslates it — CSHARP-6017 — by folding the uncorrelated inner's
-/// $sort/$skip/$limit into the CORRELATED $lookup sub-pipeline, where they run per-outer-row over a key-matched
-/// subset of at most one document. The fallback therefore returns silently WRONG rows, so the shape must
-/// hard-decline rather than fall back.
+/// $sort/$skip/$limit into the CORRELATED $lookup sub-pipeline, where they run per-outer-row over the
+/// key-matched subset for that one outer row (at most one document when the join key is unique in the inner
+/// collection, as in this file's fixture) instead of once over the whole inner sequence. The fallback therefore
+/// returns silently WRONG rows, so the shape must hard-decline rather than fall back.
 /// TODO(CSHARP-6017): delete this whole file when the driver is fixed — see the removal checklist in
 /// docs/superpowers/specs/2026-07-31-groupby-join-uncorrelated-inner-decline-design.md §2.6. The tripwire test
 /// at the bottom is what announces the fix.
@@ -172,18 +173,77 @@ public class NativeJoinPagedInnerDeclineTests(TemporaryDatabaseFixture database)
         }
     }
 
+#if !EF8 && !EF9
     [Fact]
     public void GroupJoin_with_paged_inner_declines_under_native()
     {
-        // The GroupJoin / flattened-left-join spelling routes through the same TranslateJoinCore on every EF
-        // version (on EF8/EF9 a LeftJoin is written this way), so it must decline identically.
+        // Empirically confirmed (temporary instrumentation in TranslateJoin/TranslateGroupJoin/TranslateLeftJoin,
+        // removed before commit): "join ... into rs / from r in rs select ..." WITHOUT DefaultIfEmpty collapses
+        // to an ordinary inner Join and reaches TranslateJoin — a near-duplicate of
+        // Join_with_paged_inner_declines_under_native, giving TranslateGroupJoin/TranslateLeftJoin no coverage
+        // of their own. Adding ".DefaultIfEmpty()" here instead reaches TranslateLeftJoin (confirmed via the
+        // same instrumentation) — but ONLY on EF10: on EF8/EF9 the identical query-syntax spelling normalizes
+        // to GroupJoin(...).SelectMany(rs.DefaultIfEmpty(), resultSelector), which this provider cannot
+        // translate at all (a pre-existing, unrelated SelectMany-over-a-GroupJoin-grouping gap, nothing to do
+        // with paging or CSHARP-6017) — it throws InvalidOperationException before ever reaching
+        // TranslateJoinCore. So this test is EF10-only; EF8/EF9 have no reachable ordinary-LINQ spelling that
+        // exercises TranslateGroupJoin/TranslateLeftJoin for a paged inner, and are left uncovered here rather
+        // than covered by a misleading duplicate.
         using var db = CreateContext(MongoQueryMode.Native, nameof(GroupJoin_with_paged_inner_declines_under_native));
 
         Assert.Throws<NativeTranslationNotSupportedException>(() =>
             (from o in db.Orders
              join r in db.Regions.OrderBy(x => x.Country).Take(2) on o.Country equals r.Country into rs
-             from r in rs
-             select new { o.Country, r.Continent }).ToArray());
+             from r in rs.DefaultIfEmpty()
+             select new { o.Country, Continent = r != null ? r.Continent : null }).ToArray());
+    }
+#endif
+
+    [Fact]
+    public void Join_with_grouped_outer_and_paged_inner_reports_both_causes()
+    {
+        // Regression pin for the dual-cause finding carried forward from Task 2's review: a query that is BOTH
+        // GroupBy+Join (outer) AND paged-join-inner sets BOTH MongoSelectDefinition.IsGroupByFallbackUnsafe and
+        // IsPagedJoinInnerFallbackUnsafe on the SAME outer select — confirmed empirically (a temporary debug
+        // print at MongoShapedQueryCompilingExpressionVisitor.VisitShapedQuery showed both flags true for
+        // exactly this shape). MongoShapedQueryCompilingExpressionVisitor.VisitShapedQuery must report BOTH
+        // causes in the thrown message, not silently drop one to the other (the pre-Task-4 ternary did exactly
+        // that, always naming the paged-inner cause and never the GroupBy+Join one).
+        // TODO(CSHARP-6017): once the paged-inner cause is removed from the gate, this test's message assertion
+        // degenerates to the single GroupBy+Join fragment; update it together with the rest of the removal
+        // checklist (see the TODO at MongoShapedQueryCompilingExpressionVisitor.cs and
+        // MongoQueryableMethodTranslatingExpressionVisitor.TranslateJoinCore).
+        using var db = CreateContext(MongoQueryMode.Native,
+            nameof(Join_with_grouped_outer_and_paged_inner_reports_both_causes));
+
+        var ex = Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            db.Orders.GroupBy(o => o.Country).Select(g => new { g.Key, Max = g.Max(o => o.Amount) })
+                .Join(db.Regions.OrderBy(r => r.Country).Take(2), a => a.Key, r => r.Country, (a, r) => new { r.Continent })
+                .ToArray());
+
+        Assert.Contains("Query combines GroupBy with a Join", ex.Message);
+        Assert.Contains("CSHARP-6017", ex.Message);
+    }
+
+    [Fact]
+    public void Join_with_inner_paged_after_a_set_operation_declines_under_native()
+    {
+        // Regression pin for MongoSelectDefinition.HasPagingAnywhere vs. the narrower HasPaging (Minor 5). All
+        // four other paged-inner facts in this file page via an ordinary MongoSkipOp/MongoLimitOp landing in
+        // PipelineOps, which even HasPaging (PipelineOps-only) would already see — so none of them can tell
+        // HasPagingAnywhere apart from HasPaging. The entire reason HasPagingAnywhere exists instead of reusing
+        // HasPaging is a Take/Skip composed AFTER a set operation (Union/Concat/Intersect/Except): EF-347 slice B
+        // records that into TrailingOps, not PipelineOps, so HasPaging (which deliberately scans PipelineOps
+        // only — its own consumer gates a PRE-terminal GroupBy that is unreachable after a set op) would MISS
+        // it, while HasPagingAnywhere's extra _trailingOps.Exists check sees it. This inner pages via a
+        // Union-then-Take, so its $limit lands in TrailingOps; the join must still decline.
+        using var db = CreateContext(MongoQueryMode.Native,
+            nameof(Join_with_inner_paged_after_a_set_operation_declines_under_native));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            db.Orders.Join(
+                db.Regions.Union(db.Regions).OrderBy(r => r.Country).Take(2),
+                o => o.Country, r => r.Country, (o, r) => new { o.Country, r.Continent }).ToArray());
     }
 
     private PagedJoinDbContext CreateContext(MongoQueryMode mode, string name)

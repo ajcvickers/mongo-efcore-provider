@@ -1293,16 +1293,21 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         }
 
         // CSHARP-6017 (driver 3.10). The driver's LINQ provider folds an UNCORRELATED join inner's
-        // $sort/$skip/$limit into the CORRELATED $lookup sub-pipeline, where they run per-outer-row over a
-        // key-matched subset of at most one document instead of once over the whole inner sequence. Measured:
-        // Orders.Join(Customers.OrderBy(City).Skip(10).Take(50), …) returns 0 rows where 453 is correct;
-        // …Select(new{…}).Take(20) returns 830 where 181 is correct — silently wrong data, with or without a
-        // GroupBy anywhere in the query. So decline rather than route to that fallback.
-        // The predicate is exactly "the inner sequence pages ITSELF": the fold is benign for a $sort alone
-        // (order within a single-document key match is a no-op) and for no fold at all, both measured correct —
-        // and Skip/Take is also precisely what separates the six CSHARP-6017-skipped NorthwindJoinQueryMongoTest
-        // cases from their currently-green non-Take siblings. Nothing about the OUTER side is examined: the
-        // outer's own paging is emitted at pipeline top level and is correct.
+        // $sort/$skip/$limit into the CORRELATED $lookup sub-pipeline, where they run per-outer-row over the
+        // key-matched subset for that one outer row instead of once over the whole inner sequence — at most one
+        // document when the join key is unique in the inner collection (true of the fixture and both measured
+        // cases below; for a non-unique inner key, the subset is however many inner documents share that key
+        // value, and the fold still misapplies $sort/$skip/$limit to that per-key subset rather than the whole
+        // inner sequence). Measured: Orders.Join(Customers.OrderBy(City).Skip(10).Take(50), …) returns 0 rows
+        // where 453 is correct; …Select(new{…}).Take(20) returns 830 where 181 is correct — silently wrong data,
+        // with or without a GroupBy anywhere in the query. So decline rather than route to that fallback.
+        // The predicate is exactly "the inner sequence pages ITSELF": for a $sort alone, or no fold at all, the
+        // ROW CONTENT the fold produces is measured correct (Join_with_reshaped_unpaged_inner_still_runs_and_is_correct
+        // re-sorts its result client-side afterward, so that test cannot itself detect a row-ORDER divergence
+        // from a folded $sort — only that the fold doesn't drop or duplicate rows). Skip/Take is also precisely
+        // what separates the six CSHARP-6017-skipped NorthwindJoinQueryMongoTest cases from their currently-green
+        // non-Take siblings. Nothing about the OUTER side is examined: the outer's own paging is emitted at
+        // pipeline top level and is correct.
         // No correlation test is needed. A Queryable.Join/GroupJoin/LeftJoin inner is uncorrelated BY
         // CONSTRUCTION (it is an argument, not a lambda over the outer element); a correlated paged inner can
         // only be written as SelectMany, which TranslateSelectMany declines (=> null) so EF fails translation

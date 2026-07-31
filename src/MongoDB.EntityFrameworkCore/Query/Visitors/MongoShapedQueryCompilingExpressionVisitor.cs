@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -171,13 +172,16 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             // TODO(CSHARP-6017): drop the paged-inner cause (and its list entry below) when the driver stops
             // folding an uncorrelated join inner's $sort/$skip/$limit into the correlated $lookup sub-pipeline.
+            // At that point NativeJoinPagedInnerDeclineTests.Join_with_grouped_outer_and_paged_inner_reports_both_causes
+            // degenerates to a single-cause message and should be updated (or removed) together with the rest
+            // of the CSHARP-6017 removal checklist.
             // The two causes are independent provenances that can BOTH be set on the SAME query — e.g.
             // db.Orders.GroupBy(o => o.Country).Select(g => new { g.Key, Max = g.Max(o => o.Amount) })
             //     .Join(db.Regions.OrderBy(r => r.Country).Take(2), a => a.Key, r => r.Country, (a, r) => new { r })
             // sets IsGroupByFallbackUnsafe (outer is grouped) AND IsPagedJoinInnerFallbackUnsafe (inner pages
-            // itself) on the SAME outer MongoSelectDefinition — measured, not hypothetical. List every cause
-            // that applies rather than picking one, so a query with both never silently loses one from the
-            // message.
+            // itself) on the SAME outer MongoSelectDefinition — measured, not hypothetical, and pinned by the
+            // test above. List every cause that applies rather than picking one, so a query with both never
+            // silently loses one from the message.
             var causes = new List<string>();
             if (mongoQueryExpression.Select.IsGroupByFallbackUnsafe)
             {
@@ -192,6 +196,12 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                     + "translator does not support and which the MongoDB driver's LINQ provider mistranslates "
                     + "(CSHARP-6017), returning incorrect results");
             }
+            // Unreachable today: HardDecline is classified exactly when IsFallbackWrongData is true, which is
+            // exactly the disjunction of the two flags checked above, so at least one cause always fired. The
+            // old ternary was total by construction (always produced a message); this list is not, structurally
+            // — guard against a silently empty ("; use MongoQueryMode.DriverLinq...") message if a future cause
+            // is added to IsFallbackWrongData without a matching arm here.
+            Debug.Assert(causes.Count > 0, "HardDecline implies at least one wrong-data cause is set.");
             throw new NativeTranslationNotSupportedException(
                 string.Join(". ", causes) + "; use MongoQueryMode.DriverLinq to opt in to the driver-LINQ execution of this query.");
         }
