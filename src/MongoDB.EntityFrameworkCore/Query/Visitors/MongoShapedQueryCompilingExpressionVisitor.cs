@@ -169,16 +169,31 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         var mode = ((MongoQueryCompilationContext)QueryCompilationContext).QueryMode;
         if (ClassifyNativeDisposition(mongoQueryExpression, mode) == NativeDisposition.HardDecline)
         {
-            // TODO(CSHARP-6017): drop the paged-inner arm when the driver stops folding an uncorrelated join
-            // inner's $sort/$skip/$limit into the correlated $lookup sub-pipeline.
-            var cause = mongoQueryExpression.Select.IsPagedJoinInnerFallbackUnsafe
-                ? "Query joins against an inner sequence that applies Skip/Take to itself, which the native "
-                  + "translator does not support and which the MongoDB driver's LINQ provider mistranslates "
-                  + "(CSHARP-6017), returning incorrect results"
-                : "Query combines GroupBy with a Join, which the native translator does not support and whose "
-                  + "driver-LINQ fallback returns incorrect results";
+            // TODO(CSHARP-6017): drop the paged-inner cause (and its list entry below) when the driver stops
+            // folding an uncorrelated join inner's $sort/$skip/$limit into the correlated $lookup sub-pipeline.
+            // The two causes are independent provenances that can BOTH be set on the SAME query — e.g.
+            // db.Orders.GroupBy(o => o.Country).Select(g => new { g.Key, Max = g.Max(o => o.Amount) })
+            //     .Join(db.Regions.OrderBy(r => r.Country).Take(2), a => a.Key, r => r.Country, (a, r) => new { r })
+            // sets IsGroupByFallbackUnsafe (outer is grouped) AND IsPagedJoinInnerFallbackUnsafe (inner pages
+            // itself) on the SAME outer MongoSelectDefinition — measured, not hypothetical. List every cause
+            // that applies rather than picking one, so a query with both never silently loses one from the
+            // message.
+            var causes = new List<string>();
+            if (mongoQueryExpression.Select.IsGroupByFallbackUnsafe)
+            {
+                causes.Add(
+                    "Query combines GroupBy with a Join, which the native translator does not support and whose "
+                    + "driver-LINQ fallback returns incorrect results");
+            }
+            if (mongoQueryExpression.Select.IsPagedJoinInnerFallbackUnsafe)
+            {
+                causes.Add(
+                    "Query joins against an inner sequence that applies Skip/Take to itself, which the native "
+                    + "translator does not support and which the MongoDB driver's LINQ provider mistranslates "
+                    + "(CSHARP-6017), returning incorrect results");
+            }
             throw new NativeTranslationNotSupportedException(
-                cause + "; use MongoQueryMode.DriverLinq to opt in to the driver-LINQ execution of this query.");
+                string.Join(". ", causes) + "; use MongoQueryMode.DriverLinq to opt in to the driver-LINQ execution of this query.");
         }
 
         var rootEntityType = mongoQueryExpression.CollectionExpression.EntityType;

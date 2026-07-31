@@ -130,6 +130,62 @@ public class NativeJoinPagedInnerDeclineTests(TemporaryDatabaseFixture database)
         Assert.NotEqual(CorrectRows, rows);
     }
 
+    [Fact]
+    public void Join_with_paged_inner_declines_under_native()
+    {
+        using var db = CreateContext(MongoQueryMode.Native, nameof(Join_with_paged_inner_declines_under_native));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() => PagedInnerJoin(db));
+    }
+
+    [Fact]
+    public void Join_with_paged_inner_declines_under_native_only()
+    {
+        using var db = CreateContext(MongoQueryMode.NativeOnly,
+            nameof(Join_with_paged_inner_declines_under_native_only));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() => PagedInnerJoin(db));
+    }
+
+    [Fact]
+    public void Join_with_paged_inner_never_returns_the_wrong_rows_under_native()
+    {
+        // MUTATION PIN for the data, deliberately NOT phrased as "it throws" — that is the job of
+        // Join_with_paged_inner_declines_under_native, and a wrong-rows assertion placed AFTER a decline
+        // assertion in the same method is unreachable exactly when the guard is deleted. Here the data
+        // comparison is the branch that RUNS under mutation: delete the guard and the query executes, returns
+        // the folded 5 rows, and Assert.Equal fails. Only two outcomes are acceptable — a clean decline, or the
+        // correct rows (which is also what makes this test survive the eventual driver fix).
+        using var db = CreateContext(MongoQueryMode.Native,
+            nameof(Join_with_paged_inner_never_returns_the_wrong_rows_under_native));
+
+        string[]? rows = null;
+        var ex = Record.Exception(() => rows = PagedInnerJoin(db));
+
+        if (ex is null)
+        {
+            Assert.Equal(CorrectRows, rows);
+        }
+        else
+        {
+            Assert.IsType<NativeTranslationNotSupportedException>(ex);
+        }
+    }
+
+    [Fact]
+    public void GroupJoin_with_paged_inner_declines_under_native()
+    {
+        // The GroupJoin / flattened-left-join spelling routes through the same TranslateJoinCore on every EF
+        // version (on EF8/EF9 a LeftJoin is written this way), so it must decline identically.
+        using var db = CreateContext(MongoQueryMode.Native, nameof(GroupJoin_with_paged_inner_declines_under_native));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            (from o in db.Orders
+             join r in db.Regions.OrderBy(x => x.Country).Take(2) on o.Country equals r.Country into rs
+             from r in rs
+             select new { o.Country, r.Continent }).ToArray());
+    }
+
     private PagedJoinDbContext CreateContext(MongoQueryMode mode, string name)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];

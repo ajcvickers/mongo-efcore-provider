@@ -1292,6 +1292,39 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             outerQueryExpression.Select.MarkNotNativelyRepresentable();
         }
 
+        // CSHARP-6017 (driver 3.10). The driver's LINQ provider folds an UNCORRELATED join inner's
+        // $sort/$skip/$limit into the CORRELATED $lookup sub-pipeline, where they run per-outer-row over a
+        // key-matched subset of at most one document instead of once over the whole inner sequence. Measured:
+        // Orders.Join(Customers.OrderBy(City).Skip(10).Take(50), …) returns 0 rows where 453 is correct;
+        // …Select(new{…}).Take(20) returns 830 where 181 is correct — silently wrong data, with or without a
+        // GroupBy anywhere in the query. So decline rather than route to that fallback.
+        // The predicate is exactly "the inner sequence pages ITSELF": the fold is benign for a $sort alone
+        // (order within a single-document key match is a no-op) and for no fold at all, both measured correct —
+        // and Skip/Take is also precisely what separates the six CSHARP-6017-skipped NorthwindJoinQueryMongoTest
+        // cases from their currently-green non-Take siblings. Nothing about the OUTER side is examined: the
+        // outer's own paging is emitted at pipeline top level and is correct.
+        // No correlation test is needed. A Queryable.Join/GroupJoin/LeftJoin inner is uncorrelated BY
+        // CONSTRUCTION (it is an argument, not a lambda over the outer element); a correlated paged inner can
+        // only be written as SelectMany, which TranslateSelectMany declines (=> null) so EF fails translation
+        // outright — measured. A filtered Include's paging lives on a NAVIGATION and never reaches here, which
+        // is why it keeps working (its per-outer-row sub-pipeline is exactly what Include means).
+        // TODO(CSHARP-6017): delete this block, MongoSelectDefinition.MarkPagedJoinInnerFallbackUnsafe /
+        // IsPagedJoinInnerFallbackUnsafe / HasPagingAnywhere, and NativeJoinPagedInnerDeclineTests when the
+        // driver stops folding. The tripwire test in that file announces the fix. Do NOT delete the
+        // PropagateFallbackWrongDataFrom call below — it closes an independent EF-344 nesting hole.
+        if (innerQueryExpression.Select.HasPagingAnywhere)
+        {
+            outerQueryExpression.Select.MarkPagedJoinInnerFallbackUnsafe();
+        }
+
+        // A wrong-data verdict reached on the INNER select must reach the gate, which only ever reads the
+        // OUTERMOST MongoQueryExpression. When the offending shape lives in a SUBQUERY used as this join's
+        // inner, MarkGroupByFallbackUnsafe/MarkPagedJoinInnerFallbackUnsafe wrote to that intermediate select
+        // and the verdict would otherwise be lost — measured: the spec's Join_GroupBy_Aggregate_in_subquery
+        // inner declines correctly when promoted to top level but executes and returns 0 rows (expected 133)
+        // when nested. Independent of CSHARP-6017; keep on driver fix.
+        outerQueryExpression.Select.PropagateFallbackWrongDataFrom(innerQueryExpression.Select);
+
         outerQueryExpression.AddInnerCollection(innerQueryExpression.CollectionExpression.EntityType);
 
         // Rebind the inner entity's projection to the outer MongoQueryExpression.
