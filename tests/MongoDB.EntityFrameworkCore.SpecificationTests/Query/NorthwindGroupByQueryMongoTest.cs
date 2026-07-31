@@ -960,13 +960,13 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task Join_complex_GroupBy_Aggregate(bool async)
     {
-        // Fails: GroupBy issue EF-149
+        // Declines: the join's inner is `Customers.Where(…).OrderBy(City).Skip(10).Take(50)` — a self-paging
+        // inner, which driver 3.10 mistranslates (CSHARP-6017) into a $lookup sub-pipeline that returns 0 rows
+        // instead of 29. The provider hard-declines the shape rather than route to that fallback, so no MQL is
+        // emitted. TODO(CSHARP-6017): on driver fix this goes back to `await base.…` with a real MQL baseline.
         await AssertTranslationFailed(() => base.Join_complex_GroupBy_Aggregate(async));
 
-        AssertMql(
-            """
-            Orders.
-            """);
+        AssertMql();
     }
 
     public override async Task GroupJoin_GroupBy_Aggregate(bool async)
@@ -1025,13 +1025,13 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupJoin_complex_GroupBy_Aggregate(bool async)
     {
-        // Fails: GroupBy issue EF-149
+        // Declines: the join's inner is `Orders.Where(< 10400).OrderBy(OrderDate).Take(100)` — a self-paging
+        // inner, which driver 3.10 mistranslates (CSHARP-6017) into a $lookup sub-pipeline that returns 27 rows
+        // instead of 20. The provider hard-declines the shape rather than route to that fallback, so no MQL is
+        // emitted. TODO(CSHARP-6017): on driver fix this goes back to `await base.…` with a real MQL baseline.
         await AssertTranslationFailed(() => base.GroupJoin_complex_GroupBy_Aggregate(async));
 
-        AssertMql(
-            """
-            Customers.
-            """);
+        AssertMql();
     }
 
     public override async Task Self_join_GroupBy_Aggregate(bool async)
@@ -1317,13 +1317,14 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task Join_GroupBy_Aggregate_in_subquery(bool async)
     {
-        // Fails: GroupBy issue EF-149
+        // Declines: the join's inner is a SUBQUERY that itself joins a grouped source, so the wrong-data verdict
+        // is reached on the intermediate query expression and propagated to the outer one
+        // (MongoSelectDefinition.PropagateFallbackWrongDataFrom). Without that propagation the driver-LINQ
+        // fallback executed and returned 0 rows instead of 133. No paging is involved, so this is NOT the
+        // CSHARP-6017 guard and it stays after the driver is fixed.
         await AssertTranslationFailed(() => base.Join_GroupBy_Aggregate_in_subquery(async));
 
-        AssertMql(
-            """
-            Orders.
-            """);
+        AssertMql();
     }
 
     public override async Task Join_GroupBy_Aggregate_on_key(bool async)
