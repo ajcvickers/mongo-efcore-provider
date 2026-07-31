@@ -33,9 +33,23 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 /// key-matched subset for that one outer row (at most one document when the join key is unique in the inner
 /// collection, as in this file's fixture) instead of once over the whole inner sequence. The fallback therefore
 /// returns silently WRONG rows, so the shape must hard-decline rather than fall back.
-/// TODO(CSHARP-6017): delete this whole file when the driver is fixed — see the removal checklist in
-/// docs/superpowers/specs/2026-07-31-groupby-join-uncorrelated-inner-decline-design.md §2.6. The tripwire test
-/// at the bottom is what announces the fix.
+/// TODO(CSHARP-6017): delete MOST of this file when the driver is fixed — NOT all of it. See the removal
+/// checklist in docs/superpowers/specs/2026-07-31-groupby-join-uncorrelated-inner-decline-design.md §2.6, which
+/// enumerates the split; the tripwire test below is what announces the fix. The split, restated here so it is
+/// visible at the point of deletion:
+///   DELETE (they exist only because the driver folds): Join_with_paged_inner_declines_under_native,
+///   Join_with_paged_inner_declines_under_native_only, Join_with_paged_inner_never_returns_the_wrong_rows_under_native,
+///   Join_with_paged_inner_still_runs_under_driver_linq, GroupJoin_with_paged_inner_declines_under_native,
+///   Join_with_inner_paged_after_a_set_operation_declines_under_native,
+///   Join_with_a_projected_Distinct_then_paged_inner_declines_under_native, and the tripwire itself.
+///   KEEP (general join-correctness controls and this branch's own over-decline nets — they must still pass
+///   after the guard is gone, and re-verifying them is how you prove the removal did not break anything):
+///   Join_with_paged_outer_still_runs_and_is_correct, Join_with_reshaped_unpaged_inner_still_runs_and_is_correct.
+///   KEEP, and do not confuse with the above: Join_whose_inner_subquery_is_grouped_and_joined_declines_under_native
+///   pins PropagateFallbackWrongDataFrom, the PERMANENT, independent EF-344 fix, and has no paging at all.
+///   Join_with_grouped_outer_and_paged_inner_reports_both_causes stays but its message assertion degenerates to
+///   the single GroupBy+Join fragment (see its own TODO).
+/// If every KEEP test is removed along with the guard, the file's deletion silently drops general join coverage.
 /// </summary>
 [XUnitCollection("QueryTests")]
 public class NativeJoinPagedInnerDeclineTests(TemporaryDatabaseFixture database)
@@ -118,8 +132,10 @@ public class NativeJoinPagedInnerDeclineTests(TemporaryDatabaseFixture database)
         //
         // WHEN THIS TEST FAILS, THE DRIVER HAS BEEN FIXED. Follow the removal checklist in
         // docs/superpowers/specs/2026-07-31-groupby-join-uncorrelated-inner-decline-design.md §2.6:
-        // delete this file, the HasPagingAnywhere block in TranslateJoinCore, MongoSelectDefinition's
-        // MarkPagedJoinInnerFallbackUnsafe/IsPagedJoinInnerFallbackUnsafe/HasPagingAnywhere, collapse
+        // delete the guard-only tests in this file (NOT the whole file — see the DELETE/KEEP split in the
+        // class-level comment above), the HasPagingAnywhere block in TranslateJoinCore, MongoSelectDefinition's
+        // MarkPagedJoinInnerFallbackUnsafe/IsPagedJoinInnerFallbackUnsafe/HasPagingAnywhere/MarkSawUnrecordedPaging
+        // and the three NativeSlotPopulator MarkSawUnrecordedPaging call sites, collapse
         // IsFallbackWrongData back to IsGroupByFallbackUnsafe, revert the spec-suite retargets whose baseline
         // is CSHARP-6017-only (Join_customers_orders_with_subquery_with_take and its five siblings, plus
         // Reverse_in_join_inner_with_skip — NOT Join_GroupBy_Aggregate_in_subquery, whose decline is permanent,
@@ -148,10 +164,60 @@ public class NativeJoinPagedInnerDeclineTests(TemporaryDatabaseFixture database)
     [Fact]
     public void Join_with_paged_inner_declines_under_native_only()
     {
+        // NOT a mutation pin for the paging guard — GUARD-INDEPENDENT, and the design spec's §2.8 row says so
+        // too. QueryableMethods.Join is absent from NativeSlotPopulator.IsNativeRepresentableSlotOperator, and
+        // PopulateNativeSlots still runs for Join after the switch, so its catch-all sets Route = Fallback for
+        // EVERY join query — NativeOnly therefore throws with or without the HasPagingAnywhere block. This test
+        // documents the NativeOnly disposition (it must be the same clean decline, not a different failure);
+        // Join_with_paged_inner_declines_under_native and Join_with_paged_inner_never_returns_the_wrong_rows_under_native
+        // are the tests that actually pin the guard.
         using var db = CreateContext(MongoQueryMode.NativeOnly,
             nameof(Join_with_paged_inner_declines_under_native_only));
 
         Assert.Throws<NativeTranslationNotSupportedException>(() => PagedInnerJoin(db));
+    }
+
+    [Fact]
+    public void Join_with_a_projected_Distinct_then_paged_inner_declines_under_native()
+    {
+        // REGRESSION PIN for MongoSelectDefinition.MarkSawUnrecordedPaging (EF-366 final fix wave). Every other
+        // paged-inner fact in this file pages via a Skip/Take that NativeSlotPopulator RECORDS as a MongoSkipOp /
+        // MongoLimitOp, so HasPagingAnywhere finds it by scanning the op lists. This one cannot be found that
+        // way: Select(r => new {r.Country}).Distinct() binds natively (TryBindDistinctFromProjection sets
+        // IsDistinct), which makes HasTerminalOperator true, so the following Take(1) hits PopulateNativeSlots'
+        // post-terminal early return and is SWALLOWED — no paging op is appended to either list.
+        //
+        // MEASURED before the fix: HasPagingAnywhere was false, TranslateJoinCore took the graceful
+        // `else if (IsDistinct)` arm instead of the hard decline, and the query executed on driver-LINQ with the
+        // Take(1) still in the captured chain — returning ALL FIVE orders where at most two is correct, silently,
+        // under DEFAULT Native as well as explicit DriverLinq. The captured MQL showed the inner's
+        // $project/$group/$replaceRoot/$limit:1 folded bodily into the correlated $lookup's own sub-pipeline.
+        //
+        // The correct answer is the orders of whichever ONE country Take(1) keeps. Regions are FR, UK, US and the
+        // degenerate $group reorders, so which one is unspecified: FR -> 1 row, UK -> 2 rows, US -> 2 rows. The
+        // fold instead keeps every order's single key match and returns 5. So "at most 2, never 5" is the
+        // wrong-data pin, and it is asserted in the `ex is null` branch — the branch that RUNS under mutation.
+        using var db = CreateContext(MongoQueryMode.Native,
+            nameof(Join_with_a_projected_Distinct_then_paged_inner_declines_under_native));
+
+        string[]? rows = null;
+        var ex = Record.Exception(() => rows = db.Orders
+            .Join(db.Regions.Select(r => new {r.Country}).Distinct().Take(1),
+                o => o.Country, r => r.Country, (o, r) => new {o.Country, o.Amount})
+            .AsEnumerable()
+            .Select(x => x.Country + ":" + x.Amount)
+            .OrderBy(s => s)
+            .ToArray());
+
+        if (ex is null)
+        {
+            Assert.InRange(rows!.Length, 1, 2);
+            Assert.Single(rows.Select(r => r.Split(':')[0]).Distinct());
+        }
+        else
+        {
+            Assert.IsType<NativeTranslationNotSupportedException>(ex);
+        }
     }
 
     [Fact]

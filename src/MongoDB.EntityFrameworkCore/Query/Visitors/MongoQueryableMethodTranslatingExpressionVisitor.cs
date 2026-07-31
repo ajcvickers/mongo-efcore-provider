@@ -1301,7 +1301,14 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // inner sequence). Measured: Orders.Join(Customers.OrderBy(City).Skip(10).Take(50), …) returns 0 rows
         // where 453 is correct; …Select(new{…}).Take(20) returns 830 where 181 is correct — silently wrong data,
         // with or without a GroupBy anywhere in the query. So decline rather than route to that fallback.
-        // The predicate is exactly "the inner sequence pages ITSELF": for a $sort alone, or no fold at all, the
+        // The predicate is, precisely, "a Skip/Take was RECORDED on the inner select" — HasPagingAnywhere. The
+        // property it is standing in for is "the inner sequence pages ITSELF", and the two agree only where a code
+        // path records the paging it saw. That is why HasPagingAnywhere reads three channels, not one: PipelineOps,
+        // TrailingOps, and the declined-but-seen flag NativeSlotPopulator sets when it swallows a Skip/Take instead
+        // of lowering it (EF-366 finding I1 — before that third channel existed, an inner of the form
+        // Select(new {...}).Distinct().Take(1) recorded nothing, fell back gracefully, and returned SILENTLY WRONG
+        // rows under default Native; see MongoSelectDefinition.MarkSawUnrecordedPaging and design spec §2.2/§2.9).
+        // For a $sort alone, or no fold at all, the
         // ROW CONTENT the fold produces is measured correct (Join_with_reshaped_unpaged_inner_still_runs_and_is_correct
         // re-sorts its result client-side afterward, so that test cannot itself detect a row-ORDER divergence
         // from a folded $sort — only that the fold doesn't drop or duplicate rows). Skip/Take is also precisely
@@ -1314,8 +1321,12 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // outright — measured. A filtered Include's paging lives on a NAVIGATION and never reaches here, which
         // is why it keeps working (its per-outer-row sub-pipeline is exactly what Include means).
         // TODO(CSHARP-6017): delete this block, MongoSelectDefinition.MarkPagedJoinInnerFallbackUnsafe /
-        // IsPagedJoinInnerFallbackUnsafe / HasPagingAnywhere, and NativeJoinPagedInnerDeclineTests when the
-        // driver stops folding. The tripwire test in that file announces the fix. Do NOT delete the
+        // IsPagedJoinInnerFallbackUnsafe / HasPagingAnywhere / MarkSawUnrecordedPaging, the three
+        // MarkSawUnrecordedPaging call sites in NativeSlotPopulator, and the GUARD-ONLY tests in
+        // NativeJoinPagedInnerDeclineTests when the driver stops folding — NOT that whole file: two of its facts
+        // are general join-correctness controls that must survive, and one pins the permanent
+        // PropagateFallbackWrongDataFrom. The full DELETE/KEEP split is in design spec §2.6 and restated in that
+        // file's own class comment. The tripwire test in it announces the fix. Do NOT delete the
         // PropagateFallbackWrongDataFrom call below — it closes an independent EF-344 nesting hole.
         if (innerQueryExpression.Select.HasPagingAnywhere)
         {

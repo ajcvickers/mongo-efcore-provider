@@ -322,6 +322,41 @@ recorded a `MongoSkipOp` or `MongoLimitOp` in either op list, or has itself alre
 verdict.** Nothing about the outer side is examined (PM is correct and must stay so). No correlation test
 (§1.2 finding 3). No test for "is a reshaping subquery" (P3 was rejected; PC is correct).
 
+**AS BUILT — the predicate is "paging was RECORDED anywhere", and "recorded" needed a third channel beyond the
+two op lists. Amended in the final fix wave (EF-366 finding I1) after a measured silent-wrong-data hole.**
+`NativeSlotPopulator.PopulateNativeSlots` returns BEFORE its `AppendSkip`/`AppendLimit` arms when
+`HasTerminalOperator && !IsSetOpTerminalOnly`, so a `Skip`/`Take` composed after a NON-set-op native terminal is
+swallowed and appears in *neither* op list. Measured on that shape —
+
+```csharp
+db.Orders.Join(
+    db.Regions.Select(r => new { r.Country }).Distinct().Take(1),
+    o => o.Country, r => r.Country, (o, r) => new { o.Country, o.Amount })
+```
+
+— `TryBindDistinctFromProjection` sets `IsDistinct`, the `Take(1)` was swallowed, `HasPagingAnywhere` was
+`false`, `TranslateJoinCore` took the graceful `else if (IsDistinct)` arm instead of the hard decline, and the
+query **executed and returned all five orders where at most two is correct** — silently, under **default
+`Native`** as well as explicit `DriverLinq`. The captured MQL showed the inner's
+`$project`/`$group`/`$replaceRoot`/`$limit: 1` folded bodily into the correlated `$lookup`'s own sub-pipeline,
+i.e. exactly CSHARP-6017 reached through a second doorway.
+
+The fix is a third recording channel, **not** the captured-tree scan the contingency below proposes:
+`MongoSelectDefinition.MarkSawUnrecordedPaging()` sets a flag that `HasPagingAnywhere` ORs in, called from the
+three `NativeSlotPopulator` sites that DECLINE a `Skip`/`Take` instead of lowering it (the post-terminal early
+return, and the two `TranslateCountExpression`-returned-`null` arms). It is exact and cannot over-decline: it
+says only "a `Skip`/`Take` was seen on this sequence and not lowered", which is precisely the condition under
+which the paging survives into the captured chain the fallback executes and the driver folds it. A captured-tree
+scan was explicitly rejected as the fix — it is the shape most likely to over-decline.
+
+Of the three call sites, only the post-terminal early return has been shown reachable from ordinary LINQ; the two
+count-translation arms are defence-in-depth (EF parameterizes a captured or computed count, so
+`TranslateCountExpression` essentially always succeeds). See §2.9.
+
+Whole-entity `Distinct().Take(n)` was and is safe by a different route: no `Projection` to bind, so `IsDistinct`
+is never set, so the `Take` *is* recorded as a `MongoLimitOp` — verified as a control in the same probe. A
+`GroupBy`-terminal inner is safe by accident, because the `GroupBy` arm hard-declines first.
+
 **Can `TranslateJoinCore` see it?** Yes — see §1.4. Skip/Take never reach `TranslateSkip`/`TranslateTake` (both
 `=> null` and both unreachable, because `VisitMethodCall`'s switch does not list them so they never go to
 `base.VisitMethodCall`); they are recorded by `NativeSlotPopulator.PopulateNativeSlots` onto the inner's own
@@ -416,17 +451,58 @@ fails, which is the announcement.
 2. `Driver_still_folds_a_paged_join_inner_into_the_lookup_subpipeline_CSHARP_6017` fails (the tripwire has
    tripped) — this is the operative signal, not the ticket status.
 
-Then, in one commit: delete `MongoSelectDefinition.MarkPagedJoinInnerFallbackUnsafe` /
-`IsPagedJoinInnerFallbackUnsafe` / `HasPagingAnywhere`, delete the `HasPagingAnywhere` block in
-`TranslateJoinCore` (keeping `PropagateFallbackWrongDataFrom`, which fixes an unrelated EF-344 nesting hole and
-must **not** be removed with it), collapse `IsFallbackWrongData` back to `IsGroupByFallbackUnsafe`, delete
-`NativeJoinPagedInnerDeclineTests`, revert the six `NorthwindJoinQueryMongoTest` retargets to
-`await base.…` with real MQL baselines, revert `Join_complex_GroupBy_Aggregate` /
-`GroupJoin_complex_GroupBy_Aggregate` to `await base.…`, re-baseline the 3 exception-type assertions (including
-`Reverse_in_join_inner_with_skip`), and revert *only* the paged-inner sentences of the `Query/AGENTS.md` note
-(keep the group-first `GroupBy`+`Join` paragraph and the `PropagateFallbackWrongDataFrom` sentence). Every one
-of those sites carries a `TODO(CSHARP-6017)` marker so `grep -rn "CSHARP-6017" src tests docs` is the removal
-checklist.
+Then, in one commit:
+
+1. Delete `MongoSelectDefinition.MarkPagedJoinInnerFallbackUnsafe` / `IsPagedJoinInnerFallbackUnsafe` /
+   `HasPagingAnywhere` / `MarkSawUnrecordedPaging`, and the three `MarkSawUnrecordedPaging` call sites in
+   `NativeSlotPopulator` (see §2.2 "AS BUILT").
+2. Delete the `HasPagingAnywhere` block in `TranslateJoinCore` — **keeping `PropagateFallbackWrongDataFrom`**,
+   which fixes an unrelated EF-344 nesting hole and must **not** be removed with it.
+3. Collapse `IsFallbackWrongData` back to `IsGroupByFallbackUnsafe`. That is a **rename**, not a deletion, in
+   `tests/…/UnitTests/Query/NativeTranslation/NativeDispositionTests.cs`: rename the `Classify` helper's
+   `isFallbackWrongData` parameter back to `isGroupByFallbackUnsafe` and rename the four tests that pass it. Their
+   BEHAVIOUR is permanent — the `GroupBy`+`Join` half of the union survives the driver fix.
+4. **Delete only the guard-only tests in `NativeJoinPagedInnerDeclineTests`, NOT the whole file.** The file
+   carries survivors. DELETE: `Join_with_paged_inner_declines_under_native`,
+   `Join_with_paged_inner_declines_under_native_only`,
+   `Join_with_paged_inner_never_returns_the_wrong_rows_under_native`,
+   `Join_with_paged_inner_still_runs_under_driver_linq`, `GroupJoin_with_paged_inner_declines_under_native`,
+   `Join_with_inner_paged_after_a_set_operation_declines_under_native`,
+   `Join_with_a_projected_Distinct_then_paged_inner_declines_under_native`, and the tripwire
+   `Driver_still_folds_a_paged_join_inner_into_the_lookup_subpipeline_CSHARP_6017`. KEEP:
+   `Join_with_paged_outer_still_runs_and_is_correct` and
+   `Join_with_reshaped_unpaged_inner_still_runs_and_is_correct` — general join-correctness controls and this
+   branch's own over-decline nets, which must still pass once the guard is gone (re-running them is how the
+   removal is proved safe); and `Join_whose_inner_subquery_is_grouped_and_joined_declines_under_native`, which
+   pins the PERMANENT `PropagateFallbackWrongDataFrom` and has no paging at all. KEEP but amend:
+   `Join_with_grouped_outer_and_paged_inner_reports_both_causes` (its message assertion degenerates to the single
+   `GroupBy`+`Join` fragment). If the whole file is deleted, the two controls go with it and general join coverage
+   is silently lost.
+5. **Same DELETE/KEEP split for the six new `MongoSelectDefinitionTests` cases.** DELETE:
+   `HasPagingAnywhere_is_false_with_no_paging`, `HasPagingAnywhere_sees_pipeline_ops`,
+   `HasPagingAnywhere_sees_trailing_ops_after_a_set_op`, `HasPagingAnywhere_sees_declined_unrecorded_paging`,
+   `MarkPagedJoinInnerFallbackUnsafe_sets_the_flag_and_forces_fallback_route`. KEEP:
+   `Fallback_wrong_data_is_false_by_default`, `PropagateFallbackWrongDataFrom_copies_both_provenances_independently`
+   (narrowing it to the `GroupBy` provenance only), and `PropagateFallbackWrongDataFrom_a_clean_inner_is_a_no_op`
+   — all three pin the permanent EF-344 mechanism.
+6. Revert the six `NorthwindJoinQueryMongoTest` retargets to `await base.…` with real MQL baselines, revert
+   `Join_complex_GroupBy_Aggregate` / `GroupJoin_complex_GroupBy_Aggregate` to `await base.…`, and re-baseline the
+   3 exception-type assertions (including `Reverse_in_join_inner_with_skip`).
+7. Revert *only* the paged-inner sentences of the `Query/AGENTS.md` note (keep the group-first `GroupBy`+`Join`
+   paragraph and the `PropagateFallbackWrongDataFrom` sentence).
+8. **Decide `BREAKING-CHANGES.md` by release order, and it is decidable at removal time by looking at
+   `gh release list`: if 8.5.0 / 9.2.0 / 10.1.0 (whichever line is in flight) has ALREADY SHIPPED with the
+   guard, the entry is permanent history and must STAY — a released version did behave that way, and readers
+   whose code started throwing need to find out why; if the driver fix lands FIRST, so the guard never appears in
+   any released package, DELETE the entry, because it would document a change that never shipped.** (Per the
+   `AGENTS.md` rubric: something added and removed within one unreleased development cycle is not a break.) The
+   two tautology re-baselines in §2.5 are unaffected either way.
+
+Every one of those sites carries a `TODO(CSHARP-6017)` marker, so
+`grep -rn "CSHARP-6017" src tests docs BREAKING-CHANGES.md` is the removal checklist. **`BREAKING-CHANGES.md`
+must be in the grep root** — it is outside `src tests docs`, and step 8 above is the reason it matters. (The plan
+document's own final-verification step already greps with `BREAKING-CHANGES.md` appended; this spec is the
+authoritative version and now matches it.)
 
 **Do NOT touch `Join_GroupBy_Aggregate_in_subquery`.** Unlike the other two `…GroupBy_Aggregate` spec cases
 above, its inner has no paging at all — it declines because a wrong-data verdict on its inner subquery is
@@ -486,7 +562,7 @@ exists for exactly this purpose).
 | Behaviour | Test | Deleting what makes it fail |
 |---|---|---|
 | Paged inner declines under `Native` | `Join_with_paged_inner_declines_under_native` | the `HasPagingAnywhere` block |
-| …and under `NativeOnly` | `Join_with_paged_inner_declines_under_native_only` | same |
+| …and under `NativeOnly` | `Join_with_paged_inner_declines_under_native_only` | **nothing — GUARD-INDEPENDENT, corrected in place.** This row used to say "same", i.e. that deleting the `HasPagingAnywhere` block makes it fail. It does not: `QueryableMethods.Join` is absent from `NativeSlotPopulator.IsNativeRepresentableSlotOperator`, and `PopulateNativeSlots` still runs for `Join` after the switch, so the catch-all sets `Route = Fallback` for **every** join query and `NativeOnly` throws with or without the guard. The test documents the `NativeOnly` disposition (it must be the same clean decline, not a different failure), and its own in-file comment now says so, so a future reader does not mistake it for a pin |
 | **Wrong DATA does not come back** (own `[Fact]`) | `Join_with_paged_inner_never_returns_the_wrong_rows_under_native` | the `HasPagingAnywhere` block — the query then executes and returns 5 rows where 3 are correct |
 | `GroupJoin` / left-join form declines too | `GroupJoin_with_paged_inner_declines_under_native` | same |
 | Paging on the **outer** only still runs, correctly | `Join_with_paged_outer_still_runs_and_is_correct` | over-broad predicate (P4) |
@@ -496,7 +572,8 @@ exists for exactly this purpose).
 | Nested wrong-data verdict propagates | `Join_whose_inner_subquery_is_grouped_and_joined_declines_under_native` | `PropagateFallbackWrongDataFrom` |
 | **Expiry tripwire** | `Driver_still_folds_a_paged_join_inner_into_the_lookup_subpipeline_CSHARP_6017` | nothing in the provider — it fails when the *driver* is fixed |
 | Gate classification (unit) | `NativeDispositionTests` cases for `isFallbackWrongData: true` | the `mode != DriverLinq && isFallbackWrongData` branch |
-| `HasPagingAnywhere` (unit) | `MongoSelectDefinitionTests.HasPagingAnywhere_*` | the `_trailingOps` half of `HasPagingAnywhere` |
+| `HasPagingAnywhere` (unit) | `MongoSelectDefinitionTests.HasPagingAnywhere_*` | the `_trailingOps` half of `HasPagingAnywhere` (`…_sees_trailing_ops_after_a_set_op`) / the `_sawUnrecordedPaging` half (`…_sees_declined_unrecorded_paging`) |
+| Paging swallowed by a NON-set-op terminal still declines (§2.2 "AS BUILT") | `Join_with_a_projected_Distinct_then_paged_inner_declines_under_native` | the `MarkSawUnrecordedPaging` call in `NativeSlotPopulator`'s post-terminal early return — the query then executes and returns 5 rows where at most 2 are correct |
 | Spec-level (paging-guard-pinned — reverts when the driver is fixed) | `Join_complex_GroupBy_Aggregate`, `GroupJoin_complex_GroupBy_Aggregate`, the 6 retargeted Join tests, `Reverse_in_join_inner_with_skip` | the guard (`HasPagingAnywhere` / `MarkPagedJoinInnerFallbackUnsafe`) — most go back to executing and returning wrong data, which `AssertNativeTranslationFailedAsync` rejects; `Reverse_in_join_inner_with_skip` instead falls back to the driver's own pre-existing CSHARP-5836 Reverse-in-a-join rejection, so its assertion doesn't actually distinguish "guard present" from "guard absent" (see task-9-report.md §5/§7) — it is listed here for the guard's *sake*, not as an independent mutation pin |
 | Spec-level (propagation-pinned — **PERMANENT**, does NOT revert with the driver fix) | `Join_GroupBy_Aggregate_in_subquery` | `PropagateFallbackWrongDataFrom` — NOT the CSHARP-6017 guard; this case has no paging at all, and declines because a wrong-data verdict on its inner subquery is propagated to the outer query (the independent, permanent EF-344 fix). Reverting it alongside the paging-guard row above would leave the suite red — see §2.6's explicit "Do NOT touch" note |
 
@@ -522,6 +599,32 @@ Regions: US/NA, UK/EU, FR/EU): `Orders.Join(Regions.OrderBy(r => r.Country).Take
 r => r.Country, …)` — correct answer is the 3 rows whose country is FR or UK; the CSHARP-6017 fold keeps every
 order's single match and returns **5**. A 3-vs-5 gap that is not an empty-vs-nonempty gap is deliberate: an
 "is it empty" assertion would also pass for an unrelated failure.
+
+### 2.9 Known limitations of the recording predicate (final fix wave, EF-366)
+
+Recorded because the guard's subject is really the captured method chain the driver-LINQ fallback executes, while
+its *implementation* is a set of flags on `MongoSelectDefinition`. Those two agree only where a code path records
+what it saw. §2.2 "AS BUILT" closes the one channel where they measurably disagreed; this section enumerates what
+is left.
+
+1. **Reachable, closed.** A `Skip`/`Take` composed after a NON-set-op native terminal (a projected `Distinct`) was
+   swallowed by `NativeSlotPopulator`'s post-terminal early return, so `HasPagingAnywhere` was false and the join
+   fell back with the paging still in the chain — **measured returning five rows where at most two is correct,
+   silently, under default `Native`.** Closed by `MarkSawUnrecordedPaging` at that early return; pinned by
+   `NativeJoinPagedInnerDeclineTests.Join_with_a_projected_Distinct_then_paged_inner_declines_under_native` and
+   `MongoSelectDefinitionTests.HasPagingAnywhere_sees_declined_unrecorded_paging`.
+2. **Not shown reachable, closed anyway (defence-in-depth).** A `Skip`/`Take` whose count expression is neither a
+   `ConstantExpression` nor a query parameter makes `NativeSlotPopulator.TranslateCountExpression` return `null`,
+   which declines the operator without recording it — the same class of hole. `MarkSawUnrecordedPaging` is called
+   there too, but no ordinary-LINQ spelling has been found that reaches it (EF parameterizes a captured or
+   computed count, so the translation essentially always succeeds), so those two call sites are unpinned by any
+   test. Do not delete them as dead code; do not claim them as measured either.
+3. **Open, and out of scope for this slice — §5 follow-up 7, restated here because this is where a reader will
+   look for it.** The guard closes the hazard *at the join*, not at each doorway that can put an
+   otherwise-declined operator into the captured chain. Every other EF-level gate this branch relaxed
+   (`Distinct`, `Union`/`Concat`, `Intersect`/`Except`, `SelectMany`, `OfType`) is a potential second doorway onto
+   the same driver defect via a route that is not a `Skip`/`Take` at all. Item 1 above is a worked example of that
+   audit finding something real, which raises rather than lowers the value of performing it.
 
 ---
 

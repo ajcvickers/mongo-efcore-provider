@@ -22,6 +22,13 @@ namespace MongoDB.EntityFrameworkCore.UnitTests.Query.NativeTranslation;
 
 public class NativeDispositionTests
 {
+    // TODO(CSHARP-6017): part of the removal checklist in
+    // docs/superpowers/specs/2026-07-31-groupby-join-uncorrelated-inner-decline-design.md §2.6. Collapsing
+    // MongoSelectDefinition.IsFallbackWrongData back to IsGroupByFallbackUnsafe when the paging guard is deleted
+    // means renaming this helper's `isFallbackWrongData` parameter back to `isGroupByFallbackUnsafe` and renaming
+    // the four tests below that use it (Fallback_wrong_data_* / the DriverLinq and vector-search cases). The
+    // BEHAVIOUR of those four is permanent — the GroupBy+Join half of the union survives the driver fix — so this
+    // is a rename, NOT a deletion.
     private static NativeDisposition Classify(
         NativeRoute route,
         bool isFallbackWrongData = false,

@@ -1186,5 +1186,8 @@ EOF
 - [ ] Confirm the artifacts are retained: `ls -la "$SWEEP"` shows both `.trx` and both `.log`. Reference the
       path in the PR description.
 - [ ] `git status` clean apart from the intended commits; `grep -rn "CSHARP-6017" src tests docs BREAKING-CHANGES.md`
-      lists exactly the removal checklist sites (design spec §2.6) and nothing stale.
+      lists exactly the removal checklist sites (design spec §2.6) and nothing stale. (**Reconciled in the final
+      fix wave:** design spec §2.6 previously greped only `src tests docs`, which left `BREAKING-CHANGES.md`
+      outside the root even though its entry is one of the sites that has to be decided at removal time — §2.6 now
+      greps the same four roots this line does, and states the ship-order rule for that entry.)
 - [ ] Commit any re-baselines this task turned up: `EF-366: re-baseline spec assertions surfaced by the sweep`.

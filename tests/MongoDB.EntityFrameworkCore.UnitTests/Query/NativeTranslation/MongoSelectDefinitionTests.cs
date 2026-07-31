@@ -147,6 +147,26 @@ public class MongoSelectDefinitionTests
     }
 
     [Fact]
+    public void HasPagingAnywhere_sees_declined_unrecorded_paging()
+    {
+        // TODO(CSHARP-6017): delete with the rest of the paging guard (this test AND the two HasPagingAnywhere_*
+        // tests above; keep the Fallback_wrong_data_* / PropagateFallbackWrongDataFrom_* tests below, which pin
+        // the permanent EF-344 mechanism).
+        // A Skip/Take composed after a NON-set-op terminal (e.g. a natively-bound projected Distinct) is DECLINED
+        // by NativeSlotPopulator's post-terminal early return rather than recorded, so it lands in NEITHER op
+        // list — yet it is still in the captured method chain the driver-LINQ fallback executes, where the driver
+        // folds it into the correlated $lookup sub-pipeline. HasPagingAnywhere must therefore see it too; without
+        // this, EF-366's join guard missed the shape and it returned silently wrong rows under default Native.
+        var s = new MongoSelectDefinition();
+        s.MarkSawUnrecordedPaging();
+
+        Assert.Empty(s.PipelineOps);
+        Assert.Empty(s.TrailingOps);
+        Assert.False(s.HasPaging);
+        Assert.True(s.HasPagingAnywhere);
+    }
+
+    [Fact]
     public void Fallback_wrong_data_is_false_by_default()
     {
         var s = new MongoSelectDefinition();
