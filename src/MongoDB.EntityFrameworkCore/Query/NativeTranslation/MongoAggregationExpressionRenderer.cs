@@ -76,8 +76,18 @@ internal static class MongoAggregationExpressionRenderer
     /// <b>This method and <see cref="Render"/> must be changed together.</b> It is the aggregation-dialect
     /// counterpart of <c>MongoQueryLanguageRenderer.IsQueryDialectRenderable</c>, and exists for the same
     /// reason: a caller that builds a node the renderer cannot express turns a clean translate-time decline
-    /// into a render-time throw. That matters for a filtered count in particular
-    /// (<c>Select(b =&gt; new { N = b.Posts.Count(pred) })</c>), which has no working driver-LINQ fallback.
+    /// into a render-time throw.
+    /// <para>
+    /// <b>Scope (EF-365).</b> The sole caller is
+    /// <c>NativeSlotPopulator.TryTranslateComputedSortKey</c>, where the gate is load-bearing because a
+    /// computed sort key's <c>$set</c> body has no fallback disposition of its own. It is NOT a general
+    /// "decline anything unrenderable" rule: the filtered-count branch of
+    /// <see cref="MongoExpressionTranslator"/> deliberately does <em>not</em> consult it, because for that
+    /// shape a render-time throw is caught by <c>TryBuildPipeline</c> and lands on a working driver-LINQ
+    /// fallback, while a translate-time decline lands on a hard <c>InvalidOperationException</c> in every
+    /// query mode. Before adding a call to this method, check which of those two dispositions the caller
+    /// actually has.
+    /// </para>
     /// <para>
     /// <b>Known missing arms:</b> <c>MongoInExpression</c> and <c>MongoUnaryExpression</c> have no
     /// aggregation-dialect rendering and fall to the <c>_ =&gt; false</c> catch-all below — fail-closed and
@@ -116,6 +126,7 @@ internal static class MongoAggregationExpressionRenderer
             or MongoBinaryOperator.Subtract
             or MongoBinaryOperator.Multiply
             or MongoBinaryOperator.Divide
+            or MongoBinaryOperator.IntegerDivide
             or MongoBinaryOperator.Modulo;
 
     // Inside a $filter's cond the enclosing document is no longer addressable as "$path" — the element is bound to
@@ -156,6 +167,21 @@ internal static class MongoAggregationExpressionRenderer
 
     private static BsonValue RenderBinary(MongoBinaryExpression binary, PlaceholderTable placeholders, string? elementVariable)
     {
+        // C# integer division truncates toward zero; MQL's $divide always yields a double. $trunc over the
+        // $divide is what reconciles them — and it is not merely cosmetic: without it an integral projection
+        // member fails to DESERIALIZE (FormatException, "Truncation resulted in data loss"), and an integral
+        // comparison answers off-by-one for any non-exact quotient. See MongoBinaryOperator.IntegerDivide for
+        // why the integral-ness decision is made at translate time rather than from the operands here.
+        if (binary.Operator == MongoBinaryOperator.IntegerDivide)
+        {
+            return new BsonDocument("$trunc",
+                new BsonDocument("$divide", new BsonArray
+                {
+                    Render(binary.Left, placeholders, elementVariable),
+                    Render(binary.Right, placeholders, elementVariable)
+                }));
+        }
+
         var op = binary.Operator switch
         {
             MongoBinaryOperator.Equal => "$eq",

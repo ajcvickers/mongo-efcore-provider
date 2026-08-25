@@ -263,6 +263,8 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                     return Expression.Call(
                         PopulateCollectionMethodInfo.MakeGenericMethod(navigation.TargetEntityType.ClrType, navigation.ClrType),
                         Expression.Constant(navigation.GetCollectionAccessor()),
+                        Expression.Constant(navigation.DeclaringEntityType.DisplayName()),
+                        Expression.Constant(navigation.Name),
                         entities);
                 }
 
@@ -1123,12 +1125,20 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
     private static TCollection PopulateCollection<TEntity, TCollection>(
         IClrCollectionAccessor accessor,
+        string declaringEntityTypeDisplayName,
+        string navigationName,
         IEnumerable<TEntity> entities)
     {
-        // TODO: throw a diagnosable exception for a non-ICollection<T> collection navigation. As it
-        // stands, such a model surfaces as a bare InvalidCastException from the cast below, naming driver/EF
-        // internal types rather than the navigation the user got wrong.
-        var collection = (ICollection<TEntity>)accessor.Create();
+        var created = accessor.Create();
+        if (created is not ICollection<TEntity> collection)
+        {
+            throw new InvalidOperationException(
+                $"The collection navigation '{declaringEntityTypeDisplayName}.{navigationName}' is typed as "
+                + $"'{created.GetType().ShortDisplayName()}', which does not implement "
+                + $"'{typeof(ICollection<TEntity>).ShortDisplayName()}'. Collection navigations must be backed "
+                + "by a type that implements ICollection<T> so the provider can populate it during materialization.");
+        }
+
         foreach (var entity in entities)
         {
             collection.Add(entity);

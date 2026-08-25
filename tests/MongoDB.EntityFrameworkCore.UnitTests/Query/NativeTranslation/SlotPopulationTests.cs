@@ -266,12 +266,19 @@ public class SlotPopulationTests
     }
 
     [Fact]
-    public void Integer_division_leaf_does_not_populate_projection()
+    public void Integer_division_leaf_populates_projection_as_IntegerDivide()
     {
+        // Was Integer_division_leaf_does_not_populate_projection. EF-434 replaced TryTranslateValue's blanket
+        // integer-division decline with a truncating translation, so this leaf is native now; the operator, not
+        // just the route, is asserted, because a plain Divide here would silently reintroduce the double result
+        // that failed to deserialize into an int member.
         var mongoQuery = TranslateToMongoQuery<Customer>(q => q.Select(c => new { X = c.Age / c.Age }));
 
-        Assert.Equal(NativeRoute.Fallback, mongoQuery.Select.Route);
-        Assert.Empty(mongoQuery.Select.Projection);
+        Assert.Equal(NativeRoute.Projection, mongoQuery.Select.Route);
+        var projection = Assert.Single(mongoQuery.Select.Projection);
+        Assert.Equal("X", projection.Alias);
+        var div = Assert.IsType<MongoBinaryExpression>(projection.Expression);
+        Assert.Equal(MongoBinaryOperator.IntegerDivide, div.Operator);
     }
 
     [Fact]

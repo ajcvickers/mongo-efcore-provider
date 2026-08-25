@@ -879,12 +879,15 @@ public class MongoExpressionTranslatorTests
         Assert.Equal(MongoBinaryOperator.Multiply, mul.Operator);
     }
 
-    // Empirically, the driver's own LINQ translator emits raw $divide / $mod for int operands with no
-    // truncation emulation (confirmed via MongoQueryMode.DriverLinq — see task-7-report.md), so the
-    // renderer's existing $expr rendering already matches driver output exactly: no special-casing needed.
+    // Modulo still maps straight through: the driver's own LINQ translator emits a raw $mod for int operands
+    // with no dividend-sign emulation, and so does this translator. DIVISION no longer matches driver-LINQ —
+    // EF-434 gave it C#'s truncating semantics (MongoBinaryOperator.IntegerDivide → $trunc of $divide) on the
+    // grounds that agreeing with C# beats agreeing with a driver-LINQ shape that is simply wrong for an
+    // integral result; the emitted MQL of a supported query is not contract (see the top-level AGENTS.md
+    // versioning rubric).
 
     [Fact]
-    public void Translates_divide_operand()
+    public void Translates_integral_divide_operand_as_IntegerDivide()
     {
         var translator = NewTranslator(GetEntityType<Customer>());
         Expression<Func<Customer, bool>> predicate = c => c.Age / c.Score > 1;
@@ -892,6 +895,22 @@ public class MongoExpressionTranslatorTests
         Assert.True(translator.TryTranslate(predicate.Body, out var result));
         var cmp = Assert.IsType<MongoBinaryExpression>(result);
         var div = Assert.IsType<MongoBinaryExpression>(cmp.Left);
+        Assert.Equal(MongoBinaryOperator.IntegerDivide, div.Operator);
+    }
+
+    [Fact]
+    public void Translates_non_integral_divide_operand_as_plain_Divide()
+    {
+        // THE DISCRIMINATOR for where the integral-ness decision is made. Both operands are still int-typed
+        // MongoFieldExpressions after TranslateOperand unwraps the widening Convert, so a renderer-side
+        // "are the operands integral?" rule would wrongly truncate this. Only the BinaryExpression's own
+        // result type (double) tells the two apart, which is why MapArithmeticOperator takes the node.
+        var translator = NewTranslator(GetEntityType<Customer>());
+        Expression<Func<Customer, bool>> predicate = c => (double)c.Age / c.Score > 1;
+
+        Assert.True(translator.TryTranslateValue(
+            ((BinaryExpression)predicate.Body).Left, out var value));
+        var div = Assert.IsType<MongoBinaryExpression>(value);
         Assert.Equal(MongoBinaryOperator.Divide, div.Operator);
     }
 
@@ -1541,10 +1560,11 @@ public class MongoExpressionTranslatorTests
     }
 
     [Fact]
-    public void TryTranslateValue_integer_division_is_rejected() // guard A
+    public void TryTranslateValue_integer_division_translates_to_integer_divide() // EF-434: guard A removed
     {
         var (translator, body) = BuildValueBody<Order>(o => o.Price / o.Qty); // int / int
-        Assert.False(translator.TryTranslateValue(body, out _));
+        Assert.True(translator.TryTranslateValue(body, out var expr));
+        Assert.Equal(MongoBinaryOperator.IntegerDivide, Assert.IsType<MongoBinaryExpression>(expr).Operator);
     }
 
     [Fact]
@@ -2182,19 +2202,23 @@ public class MongoExpressionTranslatorTests
     }
 
     [Fact]
-    public void Element_predicate_outside_the_renderable_set_declines_at_translate_time()
+    public void Element_predicate_outside_the_renderable_set_is_now_admitted_at_translate_time()
     {
-        // THE non-vacuous pin for MongoAggregationExpressionRenderer.CanRender's decline in TranslateOperand's
-        // filtered-count branch (EF-359 fix round 1). A regex predicate has no aggregation-dialect rendering, so
-        // CanRender declines it — and at THIS layer (the bare translator, with no query-mode gate and no
-        // MongoShapedQueryCompilingExpressionVisitor catch-and-fallback wrapped around it) that is the only thing
-        // standing between a clean null and a MongoBinaryExpression whose Left is a MongoFilteredSizeExpression
-        // wrapping an unrenderable MongoRegexExpression. Mutation-verified: deleting the CanRender check turns
-        // this test red (TryTranslateBlogPredicate returns non-null); it does NOT turn the sibling functional test
-        // (NativeOwnedCollectionFilteredCountTests.Element_predicate_outside_the_renderable_set_declines) red,
-        // because that test only checks NativeOnly's exception TYPE, which stays the same NativeTranslationNotSupportedException
-        // either way (translate-time decline vs. Render's own catch-all) — see the remarks on the CanRender call site.
-        Assert.Null(TryTranslateBlogPredicate(b => b.Posts.Count(p => p.Heading.StartsWith("h")) > 0));
+        // EF-365 REBASELINE. This test used to pin MongoAggregationExpressionRenderer.CanRender's decline in
+        // TranslateOperand's filtered-count branch (EF-359 fix round 1): a regex predicate has no
+        // aggregation-dialect rendering, so CanRender declined it here, at the bare translator layer, before the
+        // leaf was ever admitted. EF-365 deleted that translate-time CanRender call site so a non-renderable
+        // element predicate gets a graceful driver-LINQ fallback instead of a crash (see
+        // NativeOwnedCollectionFilteredCountTests' EF-365 tests for the end-to-end behavior). At THIS layer the
+        // leaf is therefore now ADMITTED — a MongoBinaryExpression whose Left is a MongoFilteredSizeExpression
+        // wrapping the unrenderable MongoRegexExpression — and the decline moves downstream, to
+        // MongoAggregationExpressionRenderer.Render's own catch-all (still gated by CanRender internally) at
+        // pipeline-build time.
+        var comparison = Assert.IsType<MongoBinaryExpression>(
+            TryTranslateBlogPredicate(b => b.Posts.Count(p => p.Heading.StartsWith("h")) > 0));
+
+        var filtered = Assert.IsType<MongoFilteredSizeExpression>(comparison.Left);
+        Assert.IsType<MongoRegexExpression>(filtered.ElementPredicate);
     }
 
     [Fact]

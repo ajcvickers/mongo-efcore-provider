@@ -119,9 +119,10 @@ internal sealed partial class MongoExpressionTranslator
     /// Attempts to translate a numeric VALUE expression (a projection/computed leaf) — a member field-ref,
     /// constant/parameter, or arithmetic (<c>+ - * / %</c>) over numeric operands — reusing the same
     /// operand-resolution shapes a comparison uses. Unlike <see cref="TryTranslate"/>, this accepts a bare
-    /// value. Declines for a non-numeric shape, an integer-result division (MongoDB's <c>$divide</c> is
-    /// non-truncating, unlike C#), or an operand whose property is not default-serialized (a converted/
-    /// non-default-represented stored form would diverge from CLR arithmetic).
+    /// value. Declines for a non-numeric shape, or an operand whose property is not default-serialized (a
+    /// converted/non-default-represented stored form would diverge from CLR arithmetic). An integer-result
+    /// division is accepted and rendered with C#'s truncating semantics — see
+    /// <see cref="MongoBinaryOperator.IntegerDivide"/>.
     /// </summary>
     public bool TryTranslateValue(Expression valueBody, [NotNullWhen(true)] out MongoExpression? result)
     {
@@ -131,10 +132,10 @@ internal sealed partial class MongoExpressionTranslator
         // silently drop a top-level narrowing/value-changing cast (e.g. (int)o.Weight) and return the raw
         // wider value. Pass the RAW body so TranslateOperand's narrowing-aware Convert branch (below, under
         // allowNumericWidening) sees the top-level cast and rejects it.
-        // Reject any integer-result division in the subtree (MongoDB's $divide doesn't truncate).
-        if (ContainsIntegerDivision(valueBody))
-            return false;
-
+        //
+        // An integer-result division used to be rejected outright here, because MongoDB's $divide does not
+        // truncate. EF-434 replaced that decline with a translation: MapArithmeticOperator maps it to
+        // MongoBinaryOperator.IntegerDivide, which renders as $trunc-of-$divide and so matches C#.
         var translated = TranslateOperand(valueBody, allowNumericWidening: true);
         if (translated is null)
             return false;
@@ -209,16 +210,6 @@ internal sealed partial class MongoExpressionTranslator
 
     private static bool IsWideningNumericConvert(Type from, Type to)
         => WideningNumericConversions.Contains((from, to));
-
-    private static bool ContainsIntegerDivision(Expression node)
-        => node switch
-        {
-            BinaryExpression { NodeType: ExpressionType.Divide } d
-                => IsIntegerType(d.Type) || ContainsIntegerDivision(d.Left) || ContainsIntegerDivision(d.Right),
-            BinaryExpression b => ContainsIntegerDivision(b.Left) || ContainsIntegerDivision(b.Right),
-            UnaryExpression u => ContainsIntegerDivision(u.Operand),
-            _ => false
-        };
 
     private static bool IsIntegerType(Type type)
     {
@@ -716,13 +707,28 @@ internal sealed partial class MongoExpressionTranslator
             _ => null
         };
 
-    private static MongoBinaryOperator? MapArithmeticOperator(ExpressionType nodeType)
-        => nodeType switch
+    /// <summary>
+    /// Maps an arithmetic <see cref="BinaryExpression"/> to its dialect-neutral operator.
+    /// </summary>
+    /// <remarks>
+    /// Takes the whole node, not just its <see cref="ExpressionType"/>, for one reason: division splits on the
+    /// node's RESULT type (EF-434). C# integer division truncates and MQL's <c>$divide</c> does not, so an
+    /// integral-result division maps to <see cref="MongoBinaryOperator.IntegerDivide"/> (rendered
+    /// <c>$trunc</c>-of-<c>$divide</c>) while a floating/decimal one stays a plain
+    /// <see cref="MongoBinaryOperator.Divide"/>. The decision cannot be deferred to the renderer: a widening
+    /// <c>Convert</c> on an operand (<c>(double)a / b</c>) is unwrapped by <see cref="TranslateOperand"/>, so
+    /// the rendered operands look integral even when C# computed in <c>double</c>. Only <c>node.Type</c>
+    /// distinguishes those two cases.
+    /// </remarks>
+    private static MongoBinaryOperator? MapArithmeticOperator(BinaryExpression node)
+        => node.NodeType switch
         {
             ExpressionType.Add => MongoBinaryOperator.Add,
             ExpressionType.Subtract => MongoBinaryOperator.Subtract,
             ExpressionType.Multiply => MongoBinaryOperator.Multiply,
-            ExpressionType.Divide => MongoBinaryOperator.Divide,
+            ExpressionType.Divide => IsIntegerType(node.Type)
+                ? MongoBinaryOperator.IntegerDivide
+                : MongoBinaryOperator.Divide,
             ExpressionType.Modulo => MongoBinaryOperator.Modulo,
             _ => null
         };
@@ -819,25 +825,38 @@ internal sealed partial class MongoExpressionTranslator
             if (!countElementTranslator.TryTranslate(countPredicate.Body, out var elementPredicate))
                 return null;
 
-            // Decline at translate time for anything the aggregation renderer cannot express. This duplicates
-            // a check the renderer and the compiling visitor's fallback handling already make for the
-            // predicate spelling this method builds (both end up at a graceful driver-LINQ fallback either
-            // way), but it materially matters for the PROJECTION spelling reached via NativeProjectionBinder's
-            // TryTranslateValue call, where admitting a non-renderable predicate would either hard-fail somewhere
-            // less graceful or (if further loosened) risk the kind of alias/silent-wrong-data trap the owned
-            // array-valued projection slice hit twice before (see Query/AGENTS.md's alias-agreement invariant).
-            // Kept deliberately narrow in scope rather than widened — known gap: only StartsWith-style predicates
-            // are verified through this path; other predicate shapes and mixed projections are unverified.
-            if (!MongoAggregationExpressionRenderer.CanRender(elementPredicate))
-                return null;
-
+            // NO aggregation-renderability gate here (EF-365 removed one). Admitting a predicate the
+            // aggregation renderer cannot express is DELIBERATE and is the better disposition on both
+            // spellings this branch serves:
+            //
+            //   * PREDICATE spelling (Where(b => b.Posts.Count(pred) > n)): unchanged either way — the throw
+            //     just moves from translate time to MongoPipelineFactory.Create, and
+            //     MongoShapedQueryCompilingExpressionVisitor.TryBuildPipeline's typed
+            //     `catch (NativeTranslationNotSupportedException) when (mode != NativeOnly)` lands on the same
+            //     graceful driver-LINQ fallback. NativeOnly still throws the same exception type.
+            //
+            //   * PROJECTION spelling (Select(b => new { N = b.Posts.Count(pred) })): materially BETTER.
+            //     Declining here left Route == Fallback, which skips the projection-member registration and
+            //     drops the query into MongoProjectionBindingExpressionVisitor's generic fall-through — an
+            //     InvalidOperationException ("could not be translated") in ALL THREE modes, including
+            //     DriverLinq. Admitting the leaf keeps Route == Projection, so the render-time throw is caught
+            //     and the driver-LINQ fallback — which renders this count perfectly well — runs instead.
+            //
+            // The alias/silent-wrong-data hazard the removed gate cited (Query/AGENTS.md's alias-agreement
+            // invariant) does NOT reach this shape: a computed count leaf registers no alias override, so
+            // ShouldStripBareProjectionOnFallback is false and the driver's own $project (whose member names
+            // ARE the shaper's aliases) stays in place; and an ARRAY leaf sibling, the one case that would
+            // strip, is already failed closed by NativeProjectionBinder.IsWholeDocumentReadableLeaf, which
+            // rejects any computed sibling and declines the whole projection before mutating anything. Both
+            // arms — plus Contains/$in, unary Not and a three-leaf mixed projection — are measured in
+            // NativeOwnedCollectionFilteredCountTests' *_EF365 tests.
             return new MongoFilteredSizeExpression(arrayPath, elementPredicate, node.Type);
         }
 
         // Restrict to numeric operand types: ExpressionType.Add on strings is compiler-generated
         // concatenation (string.Concat), not arithmetic — it has no $add equivalent (confirmed empirically:
         // the driver server rejects "$add" on strings with "$add only supports numeric or date types").
-        if (node is BinaryExpression arith && MapArithmeticOperator(arith.NodeType) is { } arithOp && IsNumericType(arith.Type))
+        if (node is BinaryExpression arith && MapArithmeticOperator(arith) is { } arithOp && IsNumericType(arith.Type))
         {
             var left = TranslateOperand(arith.Left, allowNumericWidening);
             if (left is null)

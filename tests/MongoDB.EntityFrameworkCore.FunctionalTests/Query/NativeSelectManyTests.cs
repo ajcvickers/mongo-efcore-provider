@@ -999,6 +999,12 @@ public class NativeSelectManyTests(TemporaryDatabaseFixture database) : IClassFi
 
         // See RefOwner.Threshold.
         public int Score { get; set; }
+
+        // Nullable, and deliberately null on most seeded rows, so `r.Note != null` is a DISCRIMINATING inner
+        // filter (EF-355: a `!= null` user filter must never be absorbed into the FK correlation's null-guard
+        // handling and silently dropped — a dropped filter returns every child instead of only these).
+        public string? Note { get; set; }
+
         public ObjectId? OwnerId { get; set; }
         public RefOwner? Owner { get; set; }
     }
@@ -1087,9 +1093,9 @@ public class NativeSelectManyTests(TemporaryDatabaseFixture database) : IClassFi
 
         var items = new[]
         {
-            new RefItem { Id = ObjectId.GenerateNewId(), Tag = "Widget", Name = "WidgetName", OwnerId = alice.Id, Score = 5 },
+            new RefItem { Id = ObjectId.GenerateNewId(), Tag = "Widget", Name = "WidgetName", OwnerId = alice.Id, Score = 5, Note = "alice-note" },
             new RefItem { Id = ObjectId.GenerateNewId(), Tag = "Gadget", Name = "GadgetName", OwnerId = alice.Id, Score = 20 },
-            new RefItem { Id = ObjectId.GenerateNewId(), Tag = "Thing", Name = "ThingName", OwnerId = carol.Id, Score = 8 },
+            new RefItem { Id = ObjectId.GenerateNewId(), Tag = "Thing", Name = "ThingName", OwnerId = carol.Id, Score = 8, Note = "carol-note" },
             new RefItem { Id = ObjectId.GenerateNewId(), Tag = "Dave", Name = "DaveItem1", OwnerId = dave.Id, Score = 50 },
             new RefItem { Id = ObjectId.GenerateNewId(), Tag = "DaveItem2Tag", Name = "Dave", OwnerId = dave.Id, Score = 150 },
         };
@@ -1999,6 +2005,33 @@ public class NativeSelectManyTests(TemporaryDatabaseFixture database) : IClassFi
     }
 
     [Fact]
+    public void Reference_form_filtered_inner_not_null_predicate_goes_native_and_excludes_null_rows()
+    {
+        // EF-355. A `!= null` inner filter is the one user-predicate shape that is structurally identical to
+        // the FK correlation's own null-guard, and so the one most at risk of being silently absorbed into the
+        // correlation match (leaving Filter == null → EVERY child row returned). Only 2 of the 5 seeded
+        // children have a non-null Note, so a dropped filter shows up as extra rows, not just as different MQL.
+        using var db = CreateRefContext(MongoQueryMode.NativeOnly,
+            nameof(Reference_form_filtered_inner_not_null_predicate_goes_native_and_excludes_null_rows),
+            out var owners, out var items);
+
+        var result = db.Owners
+            .SelectMany(o => o.Refs.Where(r => r.Note != null), (o, r) => new { o.Name, r.Tag })
+            .AsEnumerable()
+            .OrderBy(x => x.Name).ThenBy(x => x.Tag)
+            .ToList();
+
+        var expected = owners
+            .SelectMany(o => items.Where(r => r.OwnerId == o.Id && r.Note != null), (o, r) => new { o.Name, r.Tag })
+            .OrderBy(x => x.Name).ThenBy(x => x.Tag)
+            .ToList();
+
+        // Succeeding under NativeOnly is itself the "went native" signal.
+        Assert.Equal(expected, result);
+        Assert.Equal(2, result.Count); // the three null-Note children are excluded
+    }
+
+    [Fact]
     public void Reference_form_filtered_inner_stacked_where_ands_together_goes_native()
     {
         using var db = CreateRefContext(MongoQueryMode.NativeOnly,
@@ -2443,17 +2476,26 @@ public class NativeSelectManyTests(TemporaryDatabaseFixture database) : IClassFi
         }
     }
 
+    // EF-434 RE-BASELINE. Was Integer_division_computed_leaf_declines_and_hard_fails_in_every_mode, which
+    // pinned TryTranslateValue's blanket integer-division decline (then "Guard A"). That guard is gone: an
+    // integral division now translates to MongoBinaryOperator.IntegerDivide and renders as $trunc-of-$divide,
+    // so this leaf goes native like any other arithmetic one.
+    //
+    // Scores are 5, 20, 8, 50, 150 → C# halves 2, 10, 4, 25, 75. Widget's 5/2 is the discriminator: raw
+    // $divide would give 2.5 (and fail to deserialize into the int member at all). DriverLinq is excluded,
+    // as elsewhere in this file, because reference-collection SelectMany has no driver-LINQ oracle.
     [Fact]
-    public void Integer_division_computed_leaf_declines_and_hard_fails_in_every_mode()
+    public void Integer_division_computed_leaf_goes_native_and_truncates_EF434()
     {
-        // r.Score / 2 is an integer-result division → Guard A in TryTranslateValue declines → projection declines.
-        // Reference form has no oracle → hard-fail in every mode.
-        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq, MongoQueryMode.NativeOnly })
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.NativeOnly })
         {
             using var db = CreateRefContext(mode,
-                nameof(Integer_division_computed_leaf_declines_and_hard_fails_in_every_mode) + mode, out _, out _);
-            Assert.ThrowsAny<Exception>(() =>
-                db.Owners.SelectMany(o => o.Refs, (o, r) => new { Half = r.Score / 2 }).ToList());
+                nameof(Integer_division_computed_leaf_goes_native_and_truncates_EF434) + mode, out _, out _);
+
+            var halves = db.Owners.SelectMany(o => o.Refs, (o, r) => new { Half = r.Score / 2 })
+                .AsEnumerable().Select(x => x.Half).OrderBy(x => x).ToList();
+
+            Assert.Equal([2, 4, 10, 25, 75], halves);
         }
     }
 
@@ -3110,17 +3152,14 @@ public class NativeSelectManyTests(TemporaryDatabaseFixture database) : IClassFi
         // shaper for a bare OUTER entity (re-rooting via $replaceRoot only ever points at the INNER/owned
         // element), so this shape remains genuinely unsupported, not just untested.
         //
-        // NOTE (EF-347 Task 3 finding, out of scope, not exercised here): the EXPLICIT method-call spelling
-        // `SelectMany(o => o.Items, (o, i) => o)` does NOT reach this guard at all — empirically, EF's
-        // nav-expansion optimizes away the intermediate TransparentIdentifier wrap/unwrap when the result
-        // selector is a trivial pass-through of the OUTER parameter alone (unlike `(o, i) => i`, which still
-        // needs the flatten machinery since TResult differs from TOuter), so BuildBareNavWrappedShaper's
-        // resultSelector.Body is literally `o` and the shaper ends up as the OUTER (Owner) entity's own shaper
-        // with UnwindSource still set — a pre-existing gap in TranslateSelectMany/BuildBareNavWrappedShaper
-        // (unaffected by this Task's TranslateSelect-only changes) that currently surfaces as a confusing
-        // runtime InvalidOperationException rather than a clean decline. TRACKED AS EF-422 (EF-347 SelectMany
-        // leftovers) — the "future ticket" this comment used to leave unnamed. NOT fixed here, since it is
-        // orthogonal to the whole-INNER owned-element recognition this Task adds.
+        // NOTE (EF-347 Task 3 claim, RETRACTED by EF-354): this comment used to say the EXPLICIT
+        // method-call spelling `SelectMany(o => o.Items, (o, i) => o)` did NOT reach this guard at all —
+        // supposedly because EF's nav-expansion optimizes away the intermediate TransparentIdentifier
+        // wrap/unwrap for a trivial pass-through of the OUTER parameter — and therefore crashed with a
+        // confusing runtime InvalidOperationException. EF-354 MEASURED that on EF8, EF9 and EF10 (both
+        // tracking modes, all three query modes) and it is not so: the wrap is emitted for that spelling
+        // too, it reaches this same guard, and it declines cleanly. That spelling is now pinned by
+        // Whole_outer_entity_explicit_method_call_form_declines_cleanly_in_every_mode below.
         foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq, MongoQueryMode.NativeOnly })
         {
             var seed = SeedOwners();
@@ -3129,6 +3168,42 @@ public class NativeSelectManyTests(TemporaryDatabaseFixture database) : IClassFi
                 nameof(Whole_outer_entity_form_still_declines_cleanly_in_every_mode) + mode + "QuerySyntax");
             Assert.Throws<NotSupportedException>(() =>
                 (from o in querySyntaxDb.Entities.AsNoTracking() from i in o.Items select o).ToList());
+        }
+    }
+
+    [Fact]
+    public void Whole_outer_entity_explicit_method_call_form_declines_cleanly_in_every_mode()
+    {
+        // EF-354 regression pin. The EF-347 Task-3 note on the sibling test above claimed the EXPLICIT
+        // method-call spelling `SelectMany(o => o.Items, (o, i) => o)` bypassed the whole-outer guard
+        // entirely — the theory being that EF's nav-expansion optimizes away the intermediate
+        // TransparentIdentifier wrap/unwrap for a trivial pass-through of the OUTER parameter, leaving
+        // BuildBareNavWrappedShaper's resultSelector.Body as the bare parameter `o` and the shaper as the
+        // OUTER (owner) entity's own shaper with UnwindSource still set, which then crashed at
+        // materialization with a confusing InvalidOperationException ("Document element is missing for
+        // required non-nullable property 'Id'").
+        //
+        // MEASURED (EF-354, all three of EF8/EF9/EF10, tracking and no-tracking, all three query modes):
+        // that does NOT happen. EF's nav-expansion DOES emit the TransparentIdentifier wrap plus the
+        // trailing `ti => ti.Outer` Select for this spelling too, so it reaches exactly the same
+        // TryGetWholeEntityMemberAccess whole-outer guard in TranslateSelect as the query-syntax spelling
+        // and already declines with the same clean NotSupportedException. (The REFERENCE-navigation
+        // counterpart of this spelling was likewise already covered and green — see
+        // Reference_form_whole_outer_result_still_declines_cleanly_in_every_mode.) No provider change was
+        // needed; this test exists so the clean decline stays pinned for this spelling too.
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq, MongoQueryMode.NativeOnly })
+        {
+            var seed = SeedOwners();
+
+            using var db = CreateContext(seed, mode,
+                nameof(Whole_outer_entity_explicit_method_call_form_declines_cleanly_in_every_mode) + mode);
+
+            var ex = Assert.Throws<NotSupportedException>(() =>
+                db.Entities.AsNoTracking().SelectMany(o => o.Items, (o, i) => o).ToList());
+            Assert.Contains("Projecting a whole entity other than an owned or reference collection element", ex.Message);
+
+            // Tracking too — the guard fires at translation time, before tracking behavior is consulted.
+            Assert.Throws<NotSupportedException>(() => db.Entities.SelectMany(o => o.Items, (o, i) => o).ToList());
         }
     }
 

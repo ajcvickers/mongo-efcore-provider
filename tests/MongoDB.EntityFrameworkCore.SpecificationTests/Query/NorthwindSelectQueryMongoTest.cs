@@ -139,15 +139,14 @@ public class NorthwindSelectQueryMongoTest : NorthwindSelectQueryTestBase<Northw
 
     public override async Task Projection_when_arithmetic_expression_precedence(bool async)
     {
-        // Fails: Truncation resulted in data loss EF-X004
-        Assert.Contains(
-            "An error occurred while deserializing the B property",
-            (await Assert.ThrowsAsync<FormatException>(() =>
-                base.Projection_when_arithmetic_expression_precedence(async))).Message);
+        // EF-434: integer division ($divide) used to yield a double that failed to deserialize back into
+        // the int property B ("Truncation resulted in data loss", tracked as the temporary key EF-X004).
+        // Fixed by wrapping $divide in $trunc for integral operands, matching C#'s truncating semantics.
+        await base.Projection_when_arithmetic_expression_precedence(async);
 
         AssertMql(
             """
-            Orders.{ "$project" : { "A" : { "$divide" : ["$_id", { "$divide" : ["$_id", 2] }] }, "B" : { "$divide" : [{ "$divide" : ["$_id", "$_id"] }, 2] }, "_id" : 0 } }
+            Orders.{ "$project" : { "A" : { "$trunc" : { "$divide" : ["$_id", { "$trunc" : { "$divide" : ["$_id", 2] } }] } }, "B" : { "$trunc" : { "$divide" : [{ "$trunc" : { "$divide" : ["$_id", "$_id"] } }, 2] } }, "_id" : 0 } }
             """);
     }
 

@@ -1625,7 +1625,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         var newResultSelector = ReplacingExpressionVisitor.Replace(
             resultSelector.Parameters[0], outer.ShaperExpression,
             ReplacingExpressionVisitor.Replace(
-                resultSelector.Parameters[1], reboundInnerShaper,
+                resultSelector.Parameters[1], reboundInnerShaper!,
                 resultSelector.Body));
 
         return outer.UpdateShaperExpression(newResultSelector);
@@ -2249,7 +2249,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (IsPlainWholeEntitySelect(mongo1) && IsPlainWholeEntitySelect(mongo2)
             && mongo1.CollectionExpression.EntityType == mongo2.CollectionExpression.EntityType)
         {
-            mongo1.Select.SetOperation = new MongoSetOperation(kind, mongo2.Select, mongo2.CollectionExpression.CollectionName);
+            mongo1.Select.SetOperation = new MongoSetOperation(
+                kind, mongo2.Select, mongo2.CollectionExpression.CollectionName, mongo2.CollectionExpression.EntityType);
             mongo1.Select.IsSetOp = true;
             return source1;
         }
@@ -2264,7 +2265,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             && ProjectionShapesMatch(mongo1.Select.Projection, mongo2.Select.Projection))
         {
             mongo1.Select.SetOperation = new MongoSetOperation(
-                kind, mongo2.Select, mongo2.CollectionExpression.CollectionName, operandsProjected: true);
+                kind, mongo2.Select, mongo2.CollectionExpression.CollectionName, mongo2.CollectionExpression.EntityType,
+                operandsProjected: true);
             mongo1.Select.IsSetOp = true;
             return source1;
         }

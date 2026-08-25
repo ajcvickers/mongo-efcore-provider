@@ -778,7 +778,135 @@ public class NativeSelectManyBinderTests
         var collectionSelector = ReferenceCollectionSelector(tagNav.TargetEntityType, outerParam, predicate);
 
         Assert.True(NativeSelectManyBinder.TryBindReferenceNavUnwind(mongoQ, collectionSelector));
-        Assert.NotNull(mongoQ.Select.UnwindSource!.Filter);
+        // The folded user conjunct must be CAPTURED, not swallowed by the correlation match: the filter is the
+        // user predicate, scope-prefixed.
+        var filter = Assert.IsType<MongoBinaryExpression>(mongoQ.Select.UnwindSource!.Filter);
+        Assert.Equal(MongoBinaryOperator.NotEqual, filter.Operator);
+        Assert.Equal("_lookup_Tags.Label", Assert.IsType<MongoFieldExpression>(filter.Left).ElementName);
+    }
+
+    [Fact]
+    public void TryBindReferenceNavUnwind_folded_inner_not_null_user_filter_is_not_silently_dropped()
+    {
+        // EF-355. Where(root, fkPred && (t.Label != null)) is structurally identical to a legitimately
+        // null-guarded FK correlation EXCEPT for which key the null-check is on. Handing the whole predicate to
+        // NativeCorrelationMatcher would let its null-guard handling treat the USER conjunct as the FK's own
+        // guard and match on the equality alone — binding with Filter == null and silently returning ALL
+        // children. The user filter must survive (or the bind must decline), never be dropped silently.
+        var mongoQ = TestQuery();
+        var tagNav = TagsNavigation(mongoQ);
+        var outerParam = Expression.Parameter(typeof(Owner), "o");
+        var tParam = Expression.Parameter(typeof(Tag), "t");
+        var correlation = Expression.Equal(
+            Expression.Property(outerParam, nameof(Owner.Id)), Expression.Property(tParam, nameof(Tag.OwnerId)));
+        var userNotNull = Expression.NotEqual(
+            Expression.Property(tParam, nameof(Tag.Label)), Expression.Constant(null, typeof(string)));
+        var predicate = Expression.Lambda(Expression.AndAlso(correlation, userNotNull), tParam);
+        var collectionSelector = ReferenceCollectionSelector(tagNav.TargetEntityType, outerParam, predicate);
+
+        Assert.True(NativeSelectManyBinder.TryBindReferenceNavUnwind(mongoQ, collectionSelector));
+
+        var filter = Assert.IsType<MongoBinaryExpression>(mongoQ.Select.UnwindSource!.Filter);
+        Assert.Equal(MongoBinaryOperator.NotEqual, filter.Operator);
+        Assert.Equal("_lookup_Tags.Label", Assert.IsType<MongoFieldExpression>(filter.Left).ElementName);
+    }
+
+    [Fact]
+    public void TryBindReferenceNavUnwind_folded_inner_not_null_user_filter_is_not_dropped_when_written_first()
+    {
+        // Same as above with the conjunct order reversed ((t.Label != null) && fkPred) — conjunct order must
+        // not decide whether the user filter survives.
+        var mongoQ = TestQuery();
+        var tagNav = TagsNavigation(mongoQ);
+        var outerParam = Expression.Parameter(typeof(Owner), "o");
+        var tParam = Expression.Parameter(typeof(Tag), "t");
+        var correlation = Expression.Equal(
+            Expression.Property(outerParam, nameof(Owner.Id)), Expression.Property(tParam, nameof(Tag.OwnerId)));
+        var userNotNull = Expression.NotEqual(
+            Expression.Property(tParam, nameof(Tag.Label)), Expression.Constant(null, typeof(string)));
+        var predicate = Expression.Lambda(Expression.AndAlso(userNotNull, correlation), tParam);
+        var collectionSelector = ReferenceCollectionSelector(tagNav.TargetEntityType, outerParam, predicate);
+
+        Assert.True(NativeSelectManyBinder.TryBindReferenceNavUnwind(mongoQ, collectionSelector));
+
+        var filter = Assert.IsType<MongoBinaryExpression>(mongoQ.Select.UnwindSource!.Filter);
+        Assert.Equal(MongoBinaryOperator.NotEqual, filter.Operator);
+        Assert.Equal("_lookup_Tags.Label", Assert.IsType<MongoFieldExpression>(filter.Left).ElementName);
+    }
+
+    [Fact]
+    public void TryBindReferenceNavUnwind_null_guarded_fk_correlation_still_binds_unfiltered()
+    {
+        // EF-355 no-regression: EF emits `(int?)o.Id != null && (int?)o.Id == t.OwnerId` when the outer key's
+        // CLR type is nullable. The guard is on the SAME key as the FK equality, so it is the correlation's own
+        // null-guard — the bind must still go native with NO element filter.
+        var mongoQ = TestQuery();
+        var tagNav = TagsNavigation(mongoQ);
+        var outerParam = Expression.Parameter(typeof(Owner), "o");
+        var tParam = Expression.Parameter(typeof(Tag), "t");
+        var outerKey = Expression.Convert(Expression.Property(outerParam, nameof(Owner.Id)), typeof(int?));
+        var guard = Expression.NotEqual(outerKey, Expression.Constant(null, typeof(int?)));
+        var correlation = Expression.Equal(
+            outerKey, Expression.Convert(Expression.Property(tParam, nameof(Tag.OwnerId)), typeof(int?)));
+        var predicate = Expression.Lambda(Expression.AndAlso(guard, correlation), tParam);
+        var collectionSelector = ReferenceCollectionSelector(tagNav.TargetEntityType, outerParam, predicate);
+
+        Assert.True(NativeSelectManyBinder.TryBindReferenceNavUnwind(mongoQ, collectionSelector));
+
+        var unwind = mongoQ.Select.UnwindSource!;
+        Assert.Equal(MongoUnwindSourceKind.Reference, unwind.Kind);
+        Assert.Same(tagNav.TargetEntityType, unwind.InnerEntityType);
+        Assert.Null(unwind.Filter); // the FK's own null-guard is not a user filter
+    }
+
+    [Fact]
+    public void TryBindReferenceNavUnwind_null_guarded_fk_correlation_with_user_filter_keeps_only_user_filter()
+    {
+        // The two cases combined: the FK's own null-guard is dropped, the user's `!= null` on a DIFFERENT
+        // member is kept.
+        var mongoQ = TestQuery();
+        var tagNav = TagsNavigation(mongoQ);
+        var outerParam = Expression.Parameter(typeof(Owner), "o");
+        var tParam = Expression.Parameter(typeof(Tag), "t");
+        var outerKey = Expression.Convert(Expression.Property(outerParam, nameof(Owner.Id)), typeof(int?));
+        var guard = Expression.NotEqual(outerKey, Expression.Constant(null, typeof(int?)));
+        var correlation = Expression.Equal(
+            outerKey, Expression.Convert(Expression.Property(tParam, nameof(Tag.OwnerId)), typeof(int?)));
+        var userNotNull = Expression.NotEqual(
+            Expression.Property(tParam, nameof(Tag.Label)), Expression.Constant(null, typeof(string)));
+        var predicate = Expression.Lambda(
+            Expression.AndAlso(Expression.AndAlso(guard, correlation), userNotNull), tParam);
+        var collectionSelector = ReferenceCollectionSelector(tagNav.TargetEntityType, outerParam, predicate);
+
+        Assert.True(NativeSelectManyBinder.TryBindReferenceNavUnwind(mongoQ, collectionSelector));
+
+        var filter = Assert.IsType<MongoBinaryExpression>(mongoQ.Select.UnwindSource!.Filter);
+        Assert.Equal(MongoBinaryOperator.NotEqual, filter.Operator);
+        Assert.Equal("_lookup_Tags.Label", Assert.IsType<MongoFieldExpression>(filter.Left).ElementName);
+    }
+
+    [Fact]
+    public void TryBindReferenceNavUnwind_folded_untranslatable_user_filter_declines_without_mutation()
+    {
+        // A folded user conjunct the translator rejects (t.Label.ToUpper() != null) must decline the whole bind
+        // — never bind while dropping the conjunct.
+        var mongoQ = TestQuery();
+        var tagNav = TagsNavigation(mongoQ);
+        var outerParam = Expression.Parameter(typeof(Owner), "o");
+        var tParam = Expression.Parameter(typeof(Tag), "t");
+        var correlation = Expression.Equal(
+            Expression.Property(outerParam, nameof(Owner.Id)), Expression.Property(tParam, nameof(Tag.OwnerId)));
+        var userNotNull = Expression.NotEqual(
+            Expression.Call(
+                Expression.Property(tParam, nameof(Tag.Label)),
+                typeof(string).GetMethod(nameof(string.ToUpper), System.Type.EmptyTypes)!),
+            Expression.Constant(null, typeof(string)));
+        var predicate = Expression.Lambda(Expression.AndAlso(correlation, userNotNull), tParam);
+        var collectionSelector = ReferenceCollectionSelector(tagNav.TargetEntityType, outerParam, predicate);
+
+        Assert.False(NativeSelectManyBinder.TryBindReferenceNavUnwind(mongoQ, collectionSelector));
+        Assert.Null(mongoQ.Select.UnwindSource);
+        Assert.Empty(mongoQ.Lookups); // no partial mutation
     }
 
     [Fact]

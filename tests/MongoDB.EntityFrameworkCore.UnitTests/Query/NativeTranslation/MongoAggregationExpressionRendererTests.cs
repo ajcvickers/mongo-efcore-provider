@@ -150,6 +150,48 @@ public class MongoAggregationExpressionRendererTests
     }
 
     // ------------------------------------------------------------------
+    // EF-434: integer division
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void IntegerDivide_renders_as_trunc_over_divide()
+    {
+        var age = GetProperty<Customer>("Age");
+        var score = GetProperty<Customer>("Score");
+
+        var rendered = MongoAggregationExpressionRenderer.Render(
+            new MongoBinaryExpression(
+                MongoBinaryOperator.IntegerDivide,
+                new MongoFieldExpression(age, "Age"),
+                new MongoFieldExpression(score, "Score")),
+            new PlaceholderTable());
+
+        Assert.Equal(
+            BsonDocument.Parse("""{ "$trunc": { "$divide": ["$Age", "$Score"] } }"""),
+            rendered);
+    }
+
+    [Fact]
+    public void Plain_Divide_still_renders_unwrapped()
+    {
+        // The negative half of the pair: a non-integral division must NOT be truncated. Asserted separately
+        // from the row above so that collapsing the two operators into one arm goes red rather than green.
+        var age = GetProperty<Customer>("Age");
+        var score = GetProperty<Customer>("Score");
+
+        var rendered = MongoAggregationExpressionRenderer.Render(
+            new MongoBinaryExpression(
+                MongoBinaryOperator.Divide,
+                new MongoFieldExpression(age, "Age"),
+                new MongoFieldExpression(score, "Score")),
+            new PlaceholderTable());
+
+        Assert.Equal(
+            BsonDocument.Parse("""{ "$divide": ["$Age", "$Score"] }"""),
+            rendered);
+    }
+
+    // ------------------------------------------------------------------
     // CanRender
     // ------------------------------------------------------------------
 
@@ -234,6 +276,7 @@ public class MongoAggregationExpressionRendererTests
                      MongoBinaryOperator.Subtract,
                      MongoBinaryOperator.Multiply,
                      MongoBinaryOperator.Divide,
+                     MongoBinaryOperator.IntegerDivide,
                      MongoBinaryOperator.Modulo
                  })
         {

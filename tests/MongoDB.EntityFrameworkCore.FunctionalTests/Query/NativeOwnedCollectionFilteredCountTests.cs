@@ -116,6 +116,15 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
         public string? Heading { get; set; }
         public int? Other { get; set; }
 
+        // EF-365 breadth fixture. Pinned is NON-nullable on purpose: `!p.Pinned` is the only spelling that
+        // reaches MongoUnaryExpression (a nullable bool's Not is declined earlier, at TranslateNode). Flagged is
+        // nullable on purpose: `p.Flagged!.Value` is the bare-nullable-bool spelling, which is declined at
+        // TranslateNode (not at the renderer gate) — see EF-365's tests for why the two dispose differently.
+        // Both are always written by PostDoc/PostWithComments, so Pinned never materializes from a missing
+        // element.
+        public bool Pinned { get; set; }
+        public bool? Flagged { get; set; }
+
         // DELIBERATELY COLLIDES with Blog.Title so the correlated-element-predicate guard is exercised on an
         // input that would otherwise be ACCEPTED — the element-scoped translator resolves members by NAME.
         public string Title { get; set; } = "";
@@ -161,12 +170,16 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
         return Row(title, posts);
     }
 
-    private static BsonDocument PostDoc(int? rank, string? heading)
+    // pinned defaults to "this element matches the canonical Rank > 0 predicate", so `!p.Pinned` counts exactly
+    // the elements `p.Rank > 0` does NOT — a second, independently-computable expected vector.
+    private static BsonDocument PostDoc(int? rank, string? heading, bool? pinned = null, bool? flagged = null)
         => new()
         {
             { "Rank", rank.HasValue ? rank.Value : BsonNull.Value },
             { "Heading", heading is null ? BsonNull.Value : heading },
-            { "Other", 0 }, { "Title", "p" }, { "Comments", new BsonArray() }
+            { "Other", 0 }, { "Title", "p" }, { "Comments", new BsonArray() },
+            { "Pinned", pinned ?? rank > 0 },
+            { "Flagged", flagged.HasValue ? flagged.Value : BsonNull.Value }
         };
 
     private static BsonDocument PostWithComments(string heading, int commentCount)
@@ -176,7 +189,8 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
             comments.Add(new BsonDocument { { "Age", i } });
         return new BsonDocument
         {
-            { "Rank", 0 }, { "Heading", heading }, { "Other", 0 }, { "Title", "p" }, { "Comments", comments }
+            { "Rank", 0 }, { "Heading", heading }, { "Other", 0 }, { "Title", "p" }, { "Comments", comments },
+            { "Pinned", false }, { "Flagged", BsonNull.Value }
         };
     }
 
@@ -622,30 +636,211 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
             q => q.Select(b => new { b.Title, N = b.Posts.Where(p => p.Rank > 0).Count() }).Cast<object>());
     }
 
-    // Kept as a SEPARATE Fact from the three declines above, deliberately: this row's disposition is tied to
-    // CanRender, which the repo owner has RULED to keep for now on scope grounds (EF-359 fix round 2) even
-    // though removing it would turn this hard crash into a graceful decline/working fallback (the design doc's
-    // stated justification for keeping it was measured false — see the CanRender call site in
-    // MongoExpressionTranslator.cs and the matching Query/AGENTS.md note). The improvement is filed as EF-365
-    // ("A non-renderable element predicate in a filtered Count(pred) projection hard-fails where a graceful
-    // fallback is available") — EF-365 is what re-baselines THIS test alone when it ships (Native/DriverLinq
-    // will start returning correct values, NativeOnly will start declining CLEANLY instead of crashing), while
-    // the other three declines above are unaffected by it — keeping this row in its own test means only this
-    // one needs re-baselining, not the whole group.
-    [Fact]
-    public void Non_renderable_element_predicate_filtered_projection_still_hard_fails_in_every_mode()
+    // EF-365 RE-BASELINE. This was Non_renderable_element_predicate_filtered_projection_still_hard_fails_in_
+    // every_mode, kept as a SEPARATE Fact from the three declines above precisely so EF-365 could flip THIS row
+    // alone. EF-365 deleted the translate-time MongoAggregationExpressionRenderer.CanRender gate in
+    // MongoExpressionTranslator's filtered-count branch: the leaf is now ADMITTED (Route == Projection, so the
+    // alias-addressed DOM shaper is built and the crashing generic fall-through in
+    // MongoProjectionBindingExpressionVisitor is never reached), the renderer's own throw arrives later, at
+    // pipeline-build time, and TryBuildPipeline's typed
+    // `catch (NativeTranslationNotSupportedException) when (mode != NativeOnly)` turns it into a graceful
+    // driver-LINQ fallback that renders the count correctly. NativeOnly still throws — but now the NATIVE
+    // decline (NativeTranslationNotSupportedException), not an InvalidOperationException crash.
+    //
+    // The three declines above are UNAFFECTED and stay hard failures: they decline at TranslateNode /
+    // TryResolveOwnedCollectionPath, upstream of the gate this ticket removed, so the leaf is never admitted at
+    // all and Route stays Fallback.
+    private void AssertNonRenderableElementPredicateFallsBackGracefully(
+        IMongoCollection<Blog> collection, Func<IQueryable<Blog>, List<string>> run, string[] expected)
     {
-        var collection = Seed(
-            nameof(Non_renderable_element_predicate_filtered_projection_still_hard_fails_in_every_mode),
-            Row("x", new BsonArray { PostDoc(rank: 1, heading: "hello") }));
+        // Native AND explicit DriverLinq must both return the CORRECT values — the point of the ticket is that
+        // the driver renders this count itself, so the late fallback is a working query, not merely a
+        // non-crashing one. Native is listed first because it is the one that changed.
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            using var db = CreateContext(collection, mode, BlogModel);
+            Assert.Equal(expected, run(db.Entities.AsNoTracking()));
+        }
+
+        using var nativeOnly = CreateContext(collection, MongoQueryMode.NativeOnly, BlogModel);
+        Assert.Throws<NativeTranslationNotSupportedException>(() => run(nativeOnly.Entities.AsNoTracking()));
+    }
+
+    // The three rows below are seeded WITHOUT the ragged (empty/missing/null Posts) rows MatchRows() carries.
+    // That is deliberate and is not a coverage gap: on the late-fallback route the pipeline is the DRIVER's, so
+    // ragged-array behaviour there is the driver's own pre-existing disposition and has nothing to do with
+    // EF-365. The native $ifNull-over-$filter guarantee is covered by the ragged-seeded tests elsewhere in this
+    // file, which stay native.
+    private static BsonDocument[] MatchRowsNoRagged() =>
+        [MatchRow("none", 0, 3), MatchRow("one", 1, 2), MatchRow("three", 3, 0)];
+
+    private static List<string> ProjectTitleAndCount<T>(IQueryable<T> rows, Func<T, (string Title, int N)> read)
+        => rows.ToList().Select(read).OrderBy(r => r.Title).Select(r => $"{r.Title}={r.N}").ToList();
+
+    [Fact]
+    public void Regex_element_predicate_filtered_projection_falls_back_gracefully_EF365()
+    {
+        // The row previously measured by the ticket author — a StartsWith regex, which has no aggregation
+        // dialect at all.
+        var collection = Seed(nameof(Regex_element_predicate_filtered_projection_falls_back_gracefully_EF365),
+            MatchRowsNoRagged());
+
+        AssertNonRenderableElementPredicateFallsBackGracefully(
+            collection,
+            q => ProjectTitleAndCount(
+                q.Select(b => new { b.Title, N = b.Posts.Count(p => p.Heading!.StartsWith("m")) }),
+                r => (r.Title, r.N)),
+            ["none=0", "one=1", "three=3"]);
+    }
+
+    [Fact]
+    public void Contains_element_predicate_filtered_projection_falls_back_gracefully_EF365()
+    {
+        // Contains over a captured collection translates to MongoInExpression, which HAS a query dialect but no
+        // aggregation-dialect arm — a different decline mechanism from the regex above.
+        var collection = Seed(nameof(Contains_element_predicate_filtered_projection_falls_back_gracefully_EF365),
+            MatchRowsNoRagged());
+        var wanted = new[] { "m0", "m1" };
+
+        AssertNonRenderableElementPredicateFallsBackGracefully(
+            collection,
+            q => ProjectTitleAndCount(
+                q.Select(b => new { b.Title, N = b.Posts.Count(p => wanted.Contains(p.Heading)) }),
+                r => (r.Title, r.N)),
+            ["none=0", "one=1", "three=2"]);
+    }
+
+    [Fact]
+    public void Unary_not_element_predicate_filtered_projection_falls_back_gracefully_EF365()
+    {
+        // A unary Not over a NON-nullable bool is the only spelling that actually builds a MongoUnaryExpression
+        // (a nullable bool's Not is declined earlier — see the bare-nullable-bool test below). PostDoc sets
+        // Pinned = (Rank > 0), so `!p.Pinned` counts exactly the complement of the canonical predicate:
+        // none(0 matching, 3 non) => 3, one(1, 2) => 2, three(3, 0) => 0.
+        var collection = Seed(nameof(Unary_not_element_predicate_filtered_projection_falls_back_gracefully_EF365),
+            MatchRowsNoRagged());
+
+        AssertNonRenderableElementPredicateFallsBackGracefully(
+            collection,
+            q => ProjectTitleAndCount(
+                q.Select(b => new { b.Title, N = b.Posts.Count(p => !p.Pinned) }),
+                r => (r.Title, r.N)),
+            ["none=3", "one=2", "three=0"]);
+    }
+
+    [Fact]
+    public void Mixed_projection_with_a_non_renderable_filtered_count_falls_back_gracefully_EF365()
+    {
+        // THE RISK CASE (see Query/AGENTS.md, "alias-agreement and sibling-readability for mixed projections").
+        // The shaper is built alias-addressed BEFORE native-vs-fallback is decided, so a late fallback must
+        // still be read correctly. It is: this projection registers NO alias override (every alias is the
+        // projection MEMBER name), so ShouldStripBareProjectionOnFallback is false, the driver's own $project
+        // stays in place, and the driver names those members identically. THREE leaves — two plain scalars
+        // either side of the computed count — so a member/alias mis-pairing (not just a missing read) would
+        // show up as swapped VALUES, which a single-leaf test cannot detect.
+        var collection = Seed(nameof(Mixed_projection_with_a_non_renderable_filtered_count_falls_back_gracefully_EF365),
+            MatchRowsNoRagged());
+
+        AssertNonRenderableElementPredicateFallsBackGracefully(
+            collection,
+            q => q.Select(b => new
+                {
+                    b.Title,
+                    N = b.Posts.Count(p => p.Heading!.StartsWith("m")),
+                    Echo = b.Title
+                })
+                .ToList()
+                .OrderBy(r => r.Title)
+                .Select(r => $"{r.Title}={r.N}/{r.Echo}")
+                .ToList(),
+            ["none=0/none", "one=1/one", "three=3/three"]);
+    }
+
+    [Fact]
+    public void Bare_nullable_bool_element_predicate_filtered_projection_still_hard_fails_EF365()
+    {
+        // MEASURED, and the one row of the ticket's required breadth that EF-365 does NOT fix. A bare nullable
+        // bool (`p.Flagged!.Value`, after TryResolveMember peels Nullable<T>.Value) is declined by
+        // TranslateNode's bare-boolean-member arm — "accept only non-nullable bools" — which runs BEFORE the
+        // gate this ticket removed. The leaf therefore never translates, Route stays Fallback, and the shape
+        // reaches the same generic fall-through crash as the correlated/primitive/Where-Count rows above.
+        // Widening that arm is a separate, correctness-bearing decision (native-vs-driver divergence on a
+        // missing/null stored element), not a fallback-plumbing one.
+        var collection = Seed(nameof(Bare_nullable_bool_element_predicate_filtered_projection_still_hard_fails_EF365),
+            Row("x", new BsonArray { PostDoc(rank: 1, heading: "hello", flagged: true) }));
 
         foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq, MongoQueryMode.NativeOnly })
         {
             using var db = CreateContext(collection, mode, BlogModel);
             var ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.AsNoTracking()
-                    .Select(b => new { b.Title, N = b.Posts.Count(p => p.Heading!.StartsWith("h")) }).ToList());
+                    .Select(b => new { b.Title, N = b.Posts.Count(p => p.Flagged!.Value) }).ToList());
             Assert.Contains("could not be translated", ex.Message);
+        }
+    }
+
+    // Two rows carrying BOTH a populated Tags primitive collection AND a Posts navigation whose elements differ
+    // in whether they satisfy the non-renderable element predicate — the seed the two array-sibling tests below
+    // need, and which neither RowWithTags (empty Posts) nor MatchRow (empty Tags) provides alone.
+    private static BsonDocument TagsAndPostsRow(string title, string[] tags, int matching, int nonMatching)
+    {
+        var posts = new BsonArray();
+        for (var i = 0; i < matching; i++) posts.Add(PostDoc(rank: 5, heading: "m" + i));
+        for (var i = 0; i < nonMatching; i++) posts.Add(PostDoc(rank: -5, heading: "n" + i));
+        return new BsonDocument
+        {
+            { "_id", ObjectId.GenerateNewId() }, { "Title", title },
+            { "Home", new BsonDocument { { "Notes", new BsonArray() } } },
+            { "Tags", new BsonArray(tags) }, { "Posts", posts }
+        };
+    }
+
+    [Fact]
+    public void Primitive_collection_sibling_of_a_non_renderable_filtered_count_falls_back_with_correct_data_EF365()
+    {
+        // MEASURED, and it corrected a prediction: a PRIMITIVE-collection leaf (`b.Tags`) is a
+        // MongoFieldExpression, not a MongoElementRefExpression, so NativeProjectionBinder does NOT count it as
+        // an array leaf and the sibling whole-document-readability gate never engages. This projection is
+        // therefore ADMITTED with a computed count sibling — which makes it the sharpest version of the
+        // mixed-projection risk case, so it asserts the DATA (a collection leaf AND a computed leaf together),
+        // not merely that nothing threw. It is safe for the documented reason: no leaf registers an alias
+        // override, so the late fallback does not strip the driver's $project and every alias is still the
+        // projection member name the driver emits.
+        var collection = Seed(
+            nameof(Primitive_collection_sibling_of_a_non_renderable_filtered_count_falls_back_with_correct_data_EF365),
+            TagsAndPostsRow("x", ["a", "bb"], matching: 2, nonMatching: 1),
+            TagsAndPostsRow("y", ["c"], matching: 0, nonMatching: 1));
+
+        AssertNonRenderableElementPredicateFallsBackGracefully(
+            collection,
+            q => q.Select(b => new { b.Title, b.Tags, N = b.Posts.Count(p => p.Heading!.StartsWith("m")) })
+                .ToList()
+                .OrderBy(r => r.Title)
+                .Select(r => $"{r.Title}=[{string.Join("|", r.Tags)}]/{r.N}")
+                .ToList(),
+            ["x=[a|bb]/2", "y=[c]/0"]);
+    }
+
+    [Fact]
+    public void Owned_collection_array_leaf_sibling_of_a_filtered_count_still_declines_before_mutating_EF365()
+    {
+        // The OTHER half of the mixed-projection risk, and the one that really is an array leaf: an OWNED
+        // COLLECTION navigation (`b.Posts`) projected alongside the computed count. Once any array leaf is
+        // admitted, NativeProjectionBinder forces IsWholeDocumentReadableLeaf on every sibling, and a computed
+        // count is backed by no document element at all — so the WHOLE projection declines before mutating
+        // anything, Route stays Fallback, and the shape hard-fails exactly as it did before EF-365. Pinned as a
+        // tripwire: if this ever stops throwing, the alias-agreement invariant has been reopened and the
+        // stripped-back-to-whole-documents fallback would read the count leaf's alias off a raw document.
+        var collection = Seed(
+            nameof(Owned_collection_array_leaf_sibling_of_a_filtered_count_still_declines_before_mutating_EF365),
+            TagsAndPostsRow("x", ["a"], matching: 2, nonMatching: 1));
+
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq, MongoQueryMode.NativeOnly })
+        {
+            using var db = CreateContext(collection, mode, BlogModel);
+            Assert.Throws<InvalidOperationException>(
+                () => db.Entities.AsNoTracking()
+                    .Select(b => new { b.Posts, N = b.Posts.Count(p => p.Heading!.StartsWith("m")) }).ToList());
         }
     }
 
@@ -1108,7 +1303,13 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
     // builder — missing-vs-null is exactly the distinction this oracle exists to check, and conflating them would
     // silently drop the "field absent" state DifferentialRows needs.
     private static BsonDocument NoRankPostDoc(string heading)
-        => new() { { "Heading", heading }, { "Other", 0 }, { "Title", "p" }, { "Comments", new BsonArray() } };
+        => new()
+        {
+            { "Heading", heading }, { "Other", 0 }, { "Title", "p" }, { "Comments", new BsonArray() },
+            // Pinned is non-nullable (EF-365 fixture): every seeded post must carry it or materialization fails.
+            // Only Rank's absence is under test here.
+            { "Pinned", false }, { "Flagged", BsonNull.Value }
+        };
 
     // ---- Oracle-theory rows: MEASURED (not assumed) to AGREE with in-memory LINQ across every
     // DifferentialRows() state, including the ragged (missing-field / explicit-null-field) elements. ----

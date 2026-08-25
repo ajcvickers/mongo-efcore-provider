@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 using MongoDB.EntityFrameworkCore.Infrastructure;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -803,6 +804,159 @@ public class NativeComputedSortTests(TemporaryDatabaseFixture database) : IClass
             {"_t", nameof(SortDomItem)}
         }));
         return database.MongoDatabase.GetCollection<SortDomItem>(collectionName);
+    }
+
+    // ── EF-408: the synthetic $set sort field must not clobber a real mapped element ────────────────
+    //
+    // The SyntheticSortFieldAllocator reserves the root entity type's top-level element names because $set
+    // silently OVERWRITES a same-named field (and the trailing $unset then REMOVES it). Its doc comment used
+    // to record two gaps as "accepted but unverified"; EF-408 measured BOTH reachable and closed them. The
+    // two tests below are the end-to-end pins, run under NativeOnly so a driver-LINQ fallback cannot mask
+    // them; MongoSelectLowererTests has the matching allocator-level unit tests.
+
+    public class ClashItem
+    {
+        public ObjectId Id { get; set; }
+        public int A { get; set; }
+        public int B { get; set; }
+        public string Label { get; set; } = "";
+    }
+
+    // The TPH derived sibling. Special is mapped onto "__sort0" — the FIRST synthetic sort field name the
+    // allocator hands out — and is declared ONLY here, so IEntityType.GetProperties() on ClashItem never
+    // returns it.
+    public class ClashItemDerived : ClashItem
+    {
+        public int Special { get; set; }
+    }
+
+    [Fact]
+    public void Synthetic_sort_field_does_not_clobber_a_TPH_derived_types_own_element()
+    {
+        // EF-408 gap 2. Before the fix, this query emitted $set{__sort0: {$add:[A,B]}} → $sort → $unset
+        // __sort0, which OVERWROTE and then DELETED the derived row's real "__sort0" element: the query
+        // failed with InvalidOperationException("Document element is missing for required non-nullable
+        // property 'Special'") — silent data loss for a nullable property, a crash for this one — under the
+        // DEFAULT Native mode. MEASURED before/after on this exact fixture.
+        var name = UniqueCollectionName(nameof(Synthetic_sort_field_does_not_clobber_a_TPH_derived_types_own_element));
+        database.MongoDatabase.GetCollection<BsonDocument>(name).InsertMany(
+        [
+            new BsonDocument {{"_id", ObjectId.GenerateNewId()}, {"A", 9}, {"B", 1}, {"Label", "pC"}, {"_t", nameof(ClashItem)}},
+            new BsonDocument {{"_id", ObjectId.GenerateNewId()}, {"A", 1}, {"B", 2}, {"Label", "pD"}, {"_t", nameof(ClashItem)}},
+            new BsonDocument
+            {
+                {"_id", ObjectId.GenerateNewId()}, {"A", 2}, {"B", 23}, {"Label", "pA"},
+                {"__sort0", 42}, {"_t", nameof(ClashItemDerived)}
+            },
+        ]);
+
+        using var db = CreateContextWithLogging(
+            database.MongoDatabase.GetCollection<ClashItem>(name), MongoQueryMode.NativeOnly, out var spy,
+            mb => mb.Entity<ClashItemDerived>().Property(x => x.Special).HasElementName("__sort0"));
+
+        // NativeOnly: reaching a result at all proves the query genuinely went native (a fallback throws
+        // NativeTranslationNotSupportedException here).
+        var rows = db.Entities.AsNoTracking().OrderBy(x => x.A + x.B).ToList();
+
+        // Order is asserted, never just the count — a dropped $sort still returns every row (A+B: 3, 10, 25).
+        Assert.Equal(["pD", "pC", "pA"], rows.Select(x => x.Label));
+
+        // The derived row's own element survived intact rather than being clobbered by the sort key (25).
+        var derived = Assert.IsType<ClashItemDerived>(Assert.Single(rows.OfType<ClashItemDerived>()));
+        Assert.Equal(42, derived.Special);
+
+        // And the pipeline really did allocate a DIFFERENT synthetic name (the guard skipped "__sort0"),
+        // rather than the row surviving for some unrelated reason.
+        var mql = spy.GetLogMessageByEventId(MongoEventId.ExecutedMqlQuery)!;
+        Assert.Contains("__sort1", mql);
+    }
+
+    // ── Gap 1: a set-op operand of a DIFFERENT entity type ──────────────────────────────────────────
+
+    public class SetOpMain
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    public class SetOpOther
+    {
+        public ObjectId Id { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+
+        // Mapped onto "__sort0" — the operand's own top-level namespace, invisible from the outer query's
+        // root entity type.
+        public string Clash { get; set; } = "";
+    }
+
+    [Fact]
+    public void Synthetic_sort_field_does_not_clobber_a_set_op_operands_own_element()
+    {
+        // EF-408 gap 1. A PROJECTED-operand set op does not require the operands to share an entity type
+        // (TryTranslateSetOperation's projected branch checks ProjectionShapesMatch only), and the operand's
+        // own ops lower through the SAME SyntheticSortFieldAllocator into the nested $unionWith pipeline. So
+        // a computed sort on the operand allocated "__sort0" — reserved against the ROOT type only — and
+        // $set/$unset destroyed the operand's real "__sort0" element BEFORE its own $project read it. The
+        // measured pre-fix symptom was InvalidOperationException("Document element 'N' is missing...").
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var mains = UniqueCollectionName(nameof(Synthetic_sort_field_does_not_clobber_a_set_op_operands_own_element)) + "M" + suffix;
+        var others = UniqueCollectionName(nameof(Synthetic_sort_field_does_not_clobber_a_set_op_operands_own_element)) + "O" + suffix;
+
+        database.MongoDatabase.GetCollection<BsonDocument>(mains).InsertMany(
+        [
+            new BsonDocument {{"_id", ObjectId.GenerateNewId()}, {"Name", "m1"}},
+        ]);
+        database.MongoDatabase.GetCollection<BsonDocument>(others).InsertMany(
+        [
+            new BsonDocument {{"_id", ObjectId.GenerateNewId()}, {"X", 1}, {"Y", 2}, {"__sort0", "o1"}},
+            new BsonDocument {{"_id", ObjectId.GenerateNewId()}, {"X", 5}, {"Y", 1}, {"__sort0", "o2"}},
+        ]);
+
+        using var db = new SetOpElementNameContext(database, mains, others, MongoQueryMode.NativeOnly);
+
+        // NativeOnly again: a fallback would throw rather than mask the collision.
+        var rows = db.Mains.AsNoTracking().Select(m => new {N = m.Name})
+            .Union(db.Others.AsNoTracking().OrderBy(o => o.X + o.Y).Select(o => new {N = o.Clash}))
+            .AsEnumerable()
+            .Select(x => x.N)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(["m1", "o1", "o2"], rows);
+    }
+
+    private class SetOpElementNameContext : DbContext
+    {
+        private readonly string _mains;
+        private readonly string _others;
+
+        public SetOpElementNameContext(TemporaryDatabaseFixture db, string mains, string others, MongoQueryMode mode)
+            : base(new DbContextOptionsBuilder<SetOpElementNameContext>()
+                .UseMongoDB(db.Client, db.MongoDatabase.DatabaseNamespace.DatabaseName, b => b.UseQueryMode(mode))
+                .ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+                .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning))
+                .Options)
+        {
+            _mains = mains;
+            _others = others;
+        }
+
+        public DbSet<SetOpMain> Mains { get; set; } = null!;
+        public DbSet<SetOpOther> Others { get; set; } = null!;
+
+        protected override void OnModelCreating(ModelBuilder mb)
+        {
+            mb.Entity<SetOpMain>().ToCollection(_mains);
+            mb.Entity<SetOpOther>().ToCollection(_others);
+            mb.Entity<SetOpOther>().Property(x => x.Clash).HasElementName("__sort0");
+        }
+
+        private sealed class IgnoreCacheKeyFactory : Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory
+        {
+            private static int _count;
+            public object Create(DbContext context, bool designTime) => System.Threading.Interlocked.Increment(ref _count);
+        }
     }
 
     private string UniqueCollectionName(string name)

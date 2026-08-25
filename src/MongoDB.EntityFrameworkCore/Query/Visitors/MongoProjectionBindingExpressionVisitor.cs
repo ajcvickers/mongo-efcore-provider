@@ -756,6 +756,64 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                         filteredCountShaper,
                         filteredCountLambda);
             }
+
+            // EF-425. No case above claimed this Queryable operator, so it is about to reach the generic
+            // fall-through at the bottom of this method. That fall-through re-Visits every argument (including
+            // Arguments[0], which the `visitedSource` above already visited once) and then calls
+            // `methodCallExpression.Update(...)` — rebuilding the SAME Queryable call around the visited
+            // source. Both halves of that are unsound once the source has been visited into a MATERIALIZED
+            // collection expression, and each half produced its own bare, unnamed crash in EVERY query mode
+            // (Native, DriverLinq and NativeOnly alike — this runs at translation time, before the compile-time
+            // gate ever reads MongoQueryMode):
+            //
+            //   * `Update` re-validates argument assignability through Expression.Call's own BCL checks, and a
+            //     Queryable operator's first parameter is `IQueryable<T>`, which neither a
+            //     CollectionShaperExpression (typed as the navigation's List<T>) nor the `Enumerable.Select`
+            //     call the adjacent Select case rebuilds (typed IEnumerable<T>) is assignable to. MatchTypes
+            //     cannot rescue it: it only inserts a Convert when the target type has NO item type, and
+            //     `IQueryable<T>` always has one. Measured today on `b.Posts.Take(2).Select(p => p.Heading)`
+            //     and the `Reverse` analogue (EF pushes the projection INSIDE those two, so the source the
+            //     operator sees is the raw collection shaper): `ArgumentException: Expression of type
+            //     'List<Post>' cannot be used for parameter of type 'IQueryable<Post>'`.
+            //   * The second Visit of Arguments[0] is not side-effect-free when that subtree is an
+            //     owned-collection `Select`: the Select case above registers its lambda parameter in
+            //     `_collectionShaperMapping` with a non-idempotent `.Add`, so visiting it twice throws
+            //     `ArgumentException: An item with the same key has already been added. Key: p`. Measured today
+            //     on `b.Posts.Select(p => p.Heading).Distinct()` and the `DefaultIfEmpty` analogue (neither can
+            //     be pushed inside the projection, so the source they see IS the rebuilt Select). This is the
+            //     hazard the Count arms' `break` comments above already flag as the limit of their safety.
+            //
+            // Declining here — BEFORE the fall-through mutates anything — converts both into the same clean,
+            // named `InvalidOperationException` every other unsupported shape in this file produces, and
+            // `Print()` names the operator and the navigation (`Concat` already landed here by a different
+            // route and produced exactly this exception, which is why it never showed the crash).
+            //
+            // Deliberately a THROW, not `return null`: a null return folds through
+            // `MatchTypes(null, targetType)` to `Expression.Default(targetType)` — a silent null/empty
+            // collection for a collection-typed projection leaf — which is wrong data rather than a decline.
+            // Same reasoning the Count arms above give for using `break` rather than `return null`.
+            //
+            // Deliberately a STRUCTURAL guard rather than one case per operator. The failing family is not a
+            // fixed list of five methods: it is "any Queryable operator with no case of its own whose source
+            // has been rewritten into a materialized collection", so keying on assignability catches Skip,
+            // ElementAt, Where and the rest of the long tail on the same terms. It cannot fire on a shape that
+            // survives the fall-through today: `Expression.Call` (and hence `Update`) enforces this exact
+            // assignability itself, so any input that reaches and survives `Update` already satisfies the
+            // condition below and is left untouched.
+            //
+            // INSTRUMENTED, not assumed (temporary trace at this line, removed): across the whole functional
+            // Query suite the only inputs that reach this point at all are the four crashing shapes —
+            // `Distinct`/`DefaultIfEmpty` arriving with an `IEnumerable<string>`-typed rebuilt Select, and
+            // `Take`/`Reverse` arriving with a `List<Post>`-typed CollectionShaperExpression. Notably the
+            // wrapped filtered-`Count` declines whose comments above describe this fall-through never reach
+            // here (their `b.Posts.Count(pred)` binds to `Enumerable`, not `Queryable`, so this whole block is
+            // skipped for them) — which is why the EF-365 graceful-fallback shapes are unaffected.
+            if (visitedSource != null
+                && !ReferenceEquals(visitedSource, methodCallExpression.Arguments[0])
+                && !method.GetParameters()[0].ParameterType.IsAssignableFrom(visitedSource.Type))
+            {
+                throw new InvalidOperationException(CoreStrings.TranslationFailed(methodCallExpression.Print()));
+            }
         }
 
         var newObject = Visit(methodCallExpression.Object);

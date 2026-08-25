@@ -358,11 +358,20 @@ internal static class NativeSelectManyBinder
     /// The folded branch is defensive-only: EF's nav-expansion emits the nested shape
     /// (<c>Where(Where(root, fkPred), userPred)</c>), whose user predicates the caller peels off as separate
     /// <c>Where</c> layers before this method ever sees a folded predicate — so no real query reaches the
-    /// folded branch today. It is best-effort, with a known limitation: a user conjunct shaped <c>x != null</c>
-    /// folded with the FK equality can be swallowed by the matcher's null-guard handling (it doesn't verify the
-    /// guarded key matches the FK key), silently dropping that user filter. Harmless while the branch is
-    /// unreachable; fixing it requires distinguishing an outer-key null-guard from an inner-element user
-    /// <c>!= null</c> without regressing a legitimately null-guarded nested FK correlation.
+    /// folded branch today.
+    /// <para>
+    /// EF-355. A conjunctive predicate is NEVER handed to <see cref="NativeCorrelationMatcher"/> whole: the
+    /// matcher accepts <c>(x != null) AndAlso equality</c> as a null-guarded correlation without checking that
+    /// the guarded member is the equality's own key, so a folded USER conjunct shaped <c>innerField != null</c>
+    /// would be absorbed into the match and the bind would succeed with <paramref name="userBody"/>
+    /// <see langword="null"/> — silently returning every child instead of only the non-null ones. Instead every
+    /// top-level conjunct is classified here: exactly one must be the FK equality on its own; a conjunct that
+    /// is a null-guard on that SAME key (the shape EF emits when the outer key's CLR type is nullable) is the
+    /// correlation's own guard and is dropped, exactly as the matcher would have done; every OTHER conjunct is
+    /// a user filter and is returned in <paramref name="userBody"/> for translation (a translation failure
+    /// there declines the whole bind, so a user conjunct is never dropped). The distinguishing signal is key
+    /// identity, not shape — the two are otherwise structurally identical.
+    /// </para>
     /// </remarks>
     private static bool TrySplitCorrelation(
         Expression predicateBody, IEntityType outerEntityType, ParameterExpression outerParam,
@@ -370,17 +379,16 @@ internal static class NativeSelectManyBinder
     {
         userBody = null;
 
-        // Nested / pure FK correlation: the whole innermost predicate IS the FK correlation.
-        if (NativeCorrelationMatcher.TryMatchCorrelatedCollection(
-                predicateBody, outerEntityType, outerParam, targetEntityType, requireEmbedded: false, out navigation))
-            return true;
+        // Non-conjunctive: the whole innermost predicate IS the FK correlation (or nothing recognizable).
+        if (predicateBody.RemoveConvert() is not BinaryExpression { NodeType: ExpressionType.AndAlso })
+            return NativeCorrelationMatcher.TryMatchCorrelatedCollection(
+                predicateBody, outerEntityType, outerParam, targetEntityType, requireEmbedded: false, out navigation);
 
-        // Folded: fkPred && userPred. Flatten top-level AndAlso conjuncts, find the ONE that is the FK
-        // correlation, recombine the rest as the user filter.
+        // Conjunctive: flatten top-level AndAlso conjuncts, find the ONE that is the FK correlation on its own,
+        // then classify the rest (see the remarks above — this is where EF-355's silent drop was).
+        navigation = null!;
         var conjuncts = new List<Expression>();
-        FlattenAndAlso(predicateBody, conjuncts);
-        if (conjuncts.Count < 2)
-            return false;
+        FlattenAndAlso(predicateBody.RemoveConvert()!, conjuncts);
 
         Expression? fkConjunct = null;
         var rest = new List<Expression>();
@@ -394,12 +402,88 @@ internal static class NativeSelectManyBinder
                 rest.Add(conjunct);
         }
 
-        if (fkConjunct == null || rest.Count == 0)
+        if (fkConjunct == null)
             return false;
 
-        userBody = rest.Aggregate(Expression.AndAlso);
+        var userConjuncts = rest.Where(c => !IsCorrelationNullGuard(c, fkConjunct, outerParam)).ToList();
+        if (userConjuncts.Count > 0)
+            userBody = userConjuncts.Aggregate(Expression.AndAlso);
         return true;
     }
+
+    /// <summary>
+    /// Decides whether <paramref name="conjunct"/> is the FK correlation's OWN null-guard — <c>k != null</c>
+    /// where <c>k</c> is the very same outer-key member <paramref name="fkConjunct"/> compares — as opposed to
+    /// a user <c>!= null</c> filter on some other (inner-element) member. Only the former may be dropped; see
+    /// <see cref="TrySplitCorrelation"/>'s remarks (EF-355).
+    /// </summary>
+    private static bool IsCorrelationNullGuard(Expression conjunct, Expression fkConjunct, ParameterExpression outerParam)
+    {
+        if (conjunct.RemoveConvert() is not BinaryExpression { NodeType: ExpressionType.NotEqual } notEqual)
+            return false;
+
+        Expression guarded;
+        if (IsNullConstant(notEqual.Right)) guarded = notEqual.Left;
+        else if (IsNullConstant(notEqual.Left)) guarded = notEqual.Right;
+        else return false;
+
+        // A guard on anything not rooted at the OUTER parameter is by definition an inner-element user filter.
+        if (!ReferencesParameter(guarded, outerParam))
+            return false;
+
+        // ...and even an outer-rooted guard only counts when it guards the key the FK equality itself uses.
+        return TryGetEqualitySides(fkConjunct, out var left, out var right)
+               && (IsSameMemberAccess(guarded, left) || IsSameMemberAccess(guarded, right));
+    }
+
+    private static bool IsNullConstant(Expression node)
+        => node.RemoveConvert() is ConstantExpression { Value: null };
+
+    /// <summary>
+    /// Extracts the two compared sides of the FK-equality conjunct, in the same three spellings
+    /// <see cref="NativeCorrelationMatcher"/> accepts (<c>==</c>, <c>object.Equals(x, y)</c>, <c>x.Equals(y)</c>).
+    /// Deliberately a local copy: the shared matcher's own contract is not widened for this caller.
+    /// </summary>
+    private static bool TryGetEqualitySides(Expression conjunct, out Expression left, out Expression right)
+    {
+        switch (conjunct.RemoveConvert())
+        {
+            case BinaryExpression { NodeType: ExpressionType.Equal } equal:
+                left = equal.Left;
+                right = equal.Right;
+                return true;
+
+            case MethodCallExpression
+            {
+                Method: { Name: nameof(Equals), IsStatic: true, DeclaringType: var declaringType },
+                Arguments: [var arg0, var arg1]
+            } when declaringType == typeof(object):
+                left = arg0;
+                right = arg1;
+                return true;
+
+            case MethodCallExpression { Method.Name: nameof(Equals), Object: { } instance, Arguments: [var arg] }:
+                left = instance;
+                right = arg;
+                return true;
+
+            default:
+                left = right = null!;
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Structural identity of two (possibly <c>EF.Property</c>-spelled, possibly <c>Convert</c>-wrapped) member
+    /// accesses: same member name off the same root expression instance.
+    /// </summary>
+    private static bool IsSameMemberAccess(Expression a, Expression b)
+        => a.RemoveConvert() is { } strippedA
+           && b.RemoveConvert() is { } strippedB
+           && TryGetMemberAccess(strippedA, out var rootA, out var nameA)
+           && TryGetMemberAccess(strippedB, out var rootB, out var nameB)
+           && nameA == nameB
+           && ReferenceEquals(rootA.RemoveConvert(), rootB.RemoveConvert());
 
     private static void FlattenAndAlso(Expression expression, List<Expression> conjuncts)
     {

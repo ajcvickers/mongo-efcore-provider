@@ -1252,7 +1252,8 @@ internal static class NativeProjectionBinder
                 or MongoBinaryExpression
                 {
                     Operator: MongoBinaryOperator.Add or MongoBinaryOperator.Subtract
-                    or MongoBinaryOperator.Multiply or MongoBinaryOperator.Divide or MongoBinaryOperator.Modulo
+                    or MongoBinaryOperator.Multiply or MongoBinaryOperator.Divide
+                    or MongoBinaryOperator.IntegerDivide or MongoBinaryOperator.Modulo
                 } when IsArrayFreeComputedSubtree(leaf):
                 break;
 
