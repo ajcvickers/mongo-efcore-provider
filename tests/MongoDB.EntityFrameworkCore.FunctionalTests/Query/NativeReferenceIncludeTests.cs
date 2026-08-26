@@ -150,6 +150,36 @@ public class NativeReferenceIncludeTests(TemporaryDatabaseFixture database)
             () => db.Orders.Include(o => o.Buyer).ThenInclude(b => b.Address).ThenInclude(a => a.Region).ToList());
     }
 
+    [Fact]
+    public void Deep_ThenInclude_through_embedded_hop_returns_correct_data_via_fallback()
+    {
+        // EF-407: this exact shape declines natively (see the test above) and falls back to DriverLinq
+        // under the default Native mode. EF-407 alleged that fallback silently materialized Region as
+        // null. Re-measured 2026-08-26: it does not — the fallback's join-stripping bridge
+        // (MongoEFToLinqTranslatingExpressionVisitor.LeftJoin.cs) correctly scopes the second $lookup's
+        // localField under the first lookup's alias ("_lookup_Buyer.Address.RegionId"), most likely fixed
+        // as a side effect of EF-380's PeelEmbeddedSegments/AnalyzeKeySelectorTarget machinery, which both
+        // the native lowerer and this fallback bridge share via the same registered LookupExpression list.
+        // Pinned here so a future regression in that shared machinery is caught by data, not just by the
+        // decline-under-NativeOnly assertion above (which only proves a clean decline, not correct fallback
+        // data).
+        using var nativeDb = CreateContext(MongoQueryMode.Native,
+            nameof(Deep_ThenInclude_through_embedded_hop_returns_correct_data_via_fallback) + "_Native");
+        var nativeResults = nativeDb.Orders.Include(o => o.Buyer).ThenInclude(b => b.Address).ThenInclude(a => a.Region)
+            .ToList();
+
+        using var driverDb = CreateContext(MongoQueryMode.DriverLinq,
+            nameof(Deep_ThenInclude_through_embedded_hop_returns_correct_data_via_fallback) + "_DriverLinq");
+        var driverResults = driverDb.Orders.Include(o => o.Buyer).ThenInclude(b => b.Address).ThenInclude(a => a.Region)
+            .ToList();
+
+        // O3's buyer is dangling (required FK), so 3 of the 4 seeded orders survive the Buyer unwind.
+        Assert.Equal(3, nativeResults.Count);
+        Assert.Equal(3, driverResults.Count);
+        Assert.All(nativeResults, o => Assert.Equal("Midwest", o.Buyer.Address.Region?.Name));
+        Assert.All(driverResults, o => Assert.Equal("Midwest", o.Buyer.Address.Region?.Name));
+    }
+
     /// <summary>
     /// EF-368 Task 6: every decline in <c>TryConfirmReferenceInclude</c> must be a decline, not a silent
     /// pass (design §5.3). Each row here asserts BOTH halves: <see cref="MongoQueryMode.NativeOnly"/>
