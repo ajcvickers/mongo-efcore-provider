@@ -1722,34 +1722,34 @@ public class NativeCastTests(TemporaryDatabaseFixture database) : IClassFixture<
                 new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
             });
 
-    // ── 26. BOUNDARY (not a defect): a WIDENING cast projection leaf still falls back (fix round 1) ──
+    // ── 26. EF-410: a WIDENING cast projection leaf now goes native (fix round 2) ─────────────────
     //
-    // IMPORTANT FINDING FROM REVIEW: (long)x.I / (double)x.I are the COMMONEST numeric-cast projection shapes,
-    // and TranslateOperand's Convert branch UNWRAPS a widening conversion entirely rather than wrapping it in
-    // a MongoConvertExpression -- the resulting node kind is a bare MongoFieldExpression, which the merged
-    // cast/count gate correctly declines (it is not one of the three admitted kinds). The plain-field branch
-    // also declines the RAW leaf (it is a UnaryExpression, not a MemberExpression), so the whole WRAPPED
-    // projection falls back to driver-LINQ. This is GRACEFUL and VALUE-CORRECT -- not a defect -- but it means
-    // roughly HALF of ordinary numeric-cast projection shapes are still on the fallback path after this task.
-    // Recorded as a boundary, not fixed here: admitting an unwrapped field ref through this gate would mean
-    // projecting the raw stored field under a leaf whose declared CLR type is the CAST's target type, and the
-    // read-back type question that raises needs its own measurement. TRACKED AS EF-410 — the follow-up the task
-    // report recommended is now filed, so this comment is no longer the only record of the gap.
+    // Fix round 1 left this as a documented boundary: (long)x.I / (double)x.I are the COMMONEST numeric-cast
+    // projection shapes, and TranslateOperand's Convert branch UNWRAPS a widening conversion entirely rather
+    // than wrapping it in a MongoConvertExpression -- the resulting node kind is a bare MongoFieldExpression,
+    // indistinguishable by node kind alone from a leaf that was never cast at all. EF-410 closes this: the
+    // gate now also re-derives "was this leaf syntactically a cast" from the ORIGINAL (pre-translation)
+    // leafExpression, so this NativeOnly leg now SUCCEEDS instead of throwing. Updated in place, per the
+    // EF-335 precedent, rather than orphaned — it is still the correctness pin for this shape, just with the
+    // opposite expected disposition.
 
     [Fact]
-    public void Widening_cast_projection_leaf_still_falls_back_gracefully()
+    public void Widening_cast_projection_leaf_now_goes_native()
     {
-        var collection = Seed(nameof(Widening_cast_projection_leaf_still_falls_back_gracefully));
+        var collection = Seed(nameof(Widening_cast_projection_leaf_now_goes_native));
 
         using var nativeOnly = CreateContext(collection, MongoQueryMode.NativeOnly);
-        Assert.Throws<NativeTranslationNotSupportedException>(
-            () => nativeOnly.Entities.AsNoTracking().Select(x => new { x.Label, X = (long)x.I }).ToList());
+        var nativeOnlyResult = nativeOnly.Entities.AsNoTracking().OrderBy(x => x.Label)
+            .Select(x => new { x.Label, X = (long)x.I }).ToList();
+        Assert.Equal(
+            Rows.OrderBy(r => r.Label).Select(r => (r.Label, (long)r.I)).ToList(),
+            nativeOnlyResult.Select(r => (r.Label, r.X)).ToList());
 
         using var native = CreateContext(collection, MongoQueryMode.Native);
         var nativeResult = native.Entities.AsNoTracking().OrderBy(x => x.Label)
             .Select(x => new { x.Label, X = (long)x.I }).ToList();
         Assert.Equal(
-            Rows.OrderBy(r => r.Label).Select(r => (r.Label, (long)r.I)).ToList(),
+            nativeOnlyResult.Select(r => (r.Label, r.X)).ToList(),
             nativeResult.Select(r => (r.Label, r.X)).ToList());
 
         using var driverLinq = CreateContext(collection, MongoQueryMode.DriverLinq);
@@ -1757,6 +1757,32 @@ public class NativeCastTests(TemporaryDatabaseFixture database) : IClassFixture<
             .Select(x => new { x.Label, X = (long)x.I }).ToList();
         Assert.Equal(
             nativeResult.Select(r => (r.Label, r.X)).ToList(), driverLinqResult.Select(r => (r.Label, r.X)).ToList());
+    }
+
+    // ── 26a. EF-410: a widening cast as a BARE (non-`new{}`) projection leaf now goes native too ────
+    //
+    // TranslateOperand unwraps (long)x.I to a bare MongoFieldExpression (correct — see its own remarks), so the
+    // tier-2 bare-projection gate's post-translation node-kind check alone can't tell "was cast" from "was never
+    // cast". The fix re-derives that fact from the ORIGINAL leafExpression's own node kind instead.
+
+    [Fact]
+    public void Widening_cast_bare_projection_leaf_goes_native()
+    {
+        var collection = Seed(nameof(Widening_cast_bare_projection_leaf_goes_native));
+
+        var expected = "[1,2,3,-1,50000]";
+        var legs = new List<(string Leg, string Outcome)>();
+
+        foreach (var mode in new[] {MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq})
+        {
+            using var db = CreateContext(collection, mode);
+            legs.Add(($"{mode}", LegOutcome(
+                () => db.Entities.AsNoTracking().OrderBy(x => x.Label).Select(x => (long)x.I).ToList())));
+        }
+
+        Assert.Equal(
+            [("NativeOnly", expected), ("Native", expected), ("DriverLinq", expected)],
+            legs);
     }
 
     // ── 27. THE OWNER RULING (Task 7): a narrowing cast vs. a CONSTANT now returns the CLR answer, and ─

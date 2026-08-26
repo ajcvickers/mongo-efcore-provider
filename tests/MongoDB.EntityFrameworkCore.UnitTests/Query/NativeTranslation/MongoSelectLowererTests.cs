@@ -389,6 +389,75 @@ public class MongoSelectLowererTests
             s => Assert.IsType<MongoUnionWithStage>(s));
     }
 
+    // ── EF-397: a collection-Include $lookup on a SET-OP query is emitted AFTER the set-op stage ──
+    //
+    // The stage-order fact the feature rests on, pinned here in isolation from the end-to-end tests in
+    // NativeSetOpsTests. Emitted at the ordinary step-2 position it would precede the $unionWith and so join
+    // only source1's rows — the operand pipeline nested inside the $unionWith lowers from
+    // OperandSelect.PipelineOps alone and never carries a lookup.
+
+    [Fact]
+    public void SetOp_defers_the_collection_lookup_until_after_the_union_stage()
+    {
+        var (query, navigation) = TestReferenceSelect();
+        var lookup = new LookupExpression(navigation); // collection nav, no ForceUnwind => IsNativeCollectionLookup
+        query.AddLookup(lookup);
+        query.Select.AddPredicateConjunct(new MongoConstantExpression(true, null));
+        query.Select.SetOperation = new MongoSetOperation(
+            MongoSetOperationKind.Union, new MongoSelectDefinition(), "others", query.CollectionExpression.EntityType);
+        query.Select.IsSetOp = true;
+
+        var stages = new MongoSelectLowerer().Lower(query);
+
+        Assert.Collection(stages,
+            s => Assert.IsType<MongoMatchStage>(s),                                    // source1's own ops
+            s => Assert.True(Assert.IsType<MongoUnionWithStage>(s).Dedup),             // the combine + dedup
+            s => Assert.Same(lookup, Assert.IsType<MongoLookupStage>(s).Lookup));      // then, and only then, the join
+    }
+
+    [Fact]
+    public void SetOp_emits_the_deferred_lookup_after_trailing_ops_and_before_the_projection()
+    {
+        // The deferred block keeps the SAME relative slot the non-set-op path gives it: ops -> $lookup ->
+        // $project. A trailing Take must therefore page the combined stream BEFORE the join runs (so only
+        // surviving rows are joined), and the $project must still see the joined array.
+        var (query, navigation) = TestReferenceSelect();
+        var lookup = new LookupExpression(navigation);
+        query.AddLookup(lookup);
+        query.Select.SetOperation = new MongoSetOperation(
+            MongoSetOperationKind.Concat, new MongoSelectDefinition(), "others", query.CollectionExpression.EntityType);
+        query.Select.IsSetOp = true;
+        query.Select.AppendLimit(new MongoConstantExpression(2, null)); // lands in TrailingOps (post-set-op)
+        query.Select.AddProjection(new MongoProjection("Name", new MongoFieldExpression(property: null!, elementName: "Name")));
+
+        var stages = new MongoSelectLowerer().Lower(query);
+
+        Assert.Collection(stages,
+            s => Assert.IsType<MongoUnionWithStage>(s),
+            s => Assert.IsType<MongoLimitStage>(s),
+            s => Assert.Same(lookup, Assert.IsType<MongoLookupStage>(s).Lookup),
+            s => Assert.IsType<MongoProjectStage>(s));
+    }
+
+    [Fact]
+    public void Non_set_op_lookup_position_is_unchanged()
+    {
+        // The complement of the two tests above: with no set op the lookup still lands at step 2, right
+        // after the ops and before the projection. Pins that the deferral is scoped to set-op queries only.
+        var (query, navigation) = TestReferenceSelect();
+        var lookup = new LookupExpression(navigation);
+        query.AddLookup(lookup);
+        query.Select.AppendLimit(new MongoConstantExpression(2, null));
+        query.Select.AddProjection(new MongoProjection("Name", new MongoFieldExpression(property: null!, elementName: "Name")));
+
+        var stages = new MongoSelectLowerer().Lower(query);
+
+        Assert.Collection(stages,
+            s => Assert.IsType<MongoLimitStage>(s),
+            s => Assert.Same(lookup, Assert.IsType<MongoLookupStage>(s).Lookup),
+            s => Assert.IsType<MongoProjectStage>(s));
+    }
+
     // ── Test 15: Owned-collection SelectMany unwind lowers to $unwind then $project (EF-347 slice 3) ──
 
     [Fact]

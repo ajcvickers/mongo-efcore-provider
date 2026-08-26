@@ -212,12 +212,16 @@ public class SlotPopulationTests
     // FLIPPED by EF-322 step 3a. This test used to use a BARE scalar body (`c => c.Name`) as its example of a
     // non-representable projection; that shape is now native (see Bare_scalar_projection_is_native above), so the
     // example has to be one the binder still declines or the test would be asserting the opposite of the truth.
-    // A type-CHANGING cast leaf is the closest still-declining shape — the computed long tail, unrelated to the
-    // bare/wrapped boundary — so what this test pins is unchanged: a declined projection drives Route to Fallback.
+    // A WIDENING cast (`(long)c.Age`) was this test's example through EF-410; that shape is now ALSO native (a
+    // widening Convert is admitted as a bare MongoFieldExpression — see NativeProjectionBinder's tier-2 gate),
+    // so the example moved again, to a NARROWING cast with no admissible MQL conversion operator ($toShort does
+    // not exist — see MongoConvertExpression.ToOperatorFor). That is the still-declining computed long tail,
+    // unrelated to the bare/wrapped boundary — so what this test pins is unchanged: a declined projection drives
+    // Route to Fallback.
     [Fact]
     public void A_declined_projecting_Select_is_not_native_representable()
     {
-        var mongoQ = TranslateToMongoQuery<Customer>(q => q.Select(c => (long)c.Age));
+        var mongoQ = TranslateToMongoQuery<Customer>(q => q.Select(c => (short)c.Age));
 
         Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
         Assert.Empty(mongoQ.Select.Projection);
@@ -336,9 +340,12 @@ public class SlotPopulationTests
     }
 
     [Fact]
+    // A WIDENING cast member (`(long)c.Age`) was this test's example through EF-410; that shape is now native
+    // (see NativeCastTests.Widening_cast_projection_leaf_now_goes_native), so this uses a NARROWING cast to a
+    // target with no admissible MQL conversion operator ($toShort does not exist) instead, which still declines.
     public void Cast_member_projection_is_not_native()
     {
-        var mongoQuery = TranslateToMongoQuery<Customer>(q => q.Select(c => new { Position = (long)c.Age }));
+        var mongoQuery = TranslateToMongoQuery<Customer>(q => q.Select(c => new { Position = (short)c.Age }));
 
         Assert.Equal(NativeRoute.Fallback, mongoQuery.Select.Route);
         Assert.Empty(mongoQuery.Select.Projection);

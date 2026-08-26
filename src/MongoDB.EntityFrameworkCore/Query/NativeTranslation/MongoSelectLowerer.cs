@@ -86,7 +86,18 @@ internal sealed class MongoSelectLowerer
         // (InjectAfterRoot=true) so its _lookup_<Nav> array is already present by the time the $project
         // below reads it via $size — placing lookups after the filter/sort/page block (but before $project)
         // satisfies that without any lowerer change.
-        AppendLookupStages(query, stages);
+        //
+        // EF-397: a SET-OP query defers this block until AFTER the set-op stage and TrailingOps (see the
+        // deferred call below). Emitting a $lookup here would join only source1's rows: the operand pipeline
+        // nested inside $unionWith/$setDifference lowers from setOp.OperandSelect.PipelineOps alone and
+        // carries no lookups, so every row contributed by the operand would come back with an EMPTY joined
+        // array — silent wrong data, which is exactly the failure mode TranslateSelect's collection-Include
+        // post-terminal guard used to avoid by declining outright. Running the join over the COMBINED
+        // (and, for Union, already-deduped) result joins every row exactly once instead.
+        if (select.SetOperation == null)
+        {
+            AppendLookupStages(query, stages);
+        }
 
         // Set operation terminal ($unionWith [+ dedup] or a set-difference shape for Intersect/Except).
         // Guaranteed whole-entity by the QMTEV guard (the operand is a plain whole-entity select — no
@@ -129,6 +140,24 @@ internal sealed class MongoSelectLowerer
             // aggregate/reducer). UnwindSource/Grouping stay empty for a set-op query and their blocks are
             // skipped.
             AppendSelectOpStages(select.TrailingOps, stages, sortFields);
+
+            // EF-397: the deferred $lookup block (see the skipped call at step 2). Emitted here — after the
+            // combine and after the trailing filter/sort/page, before the Projection and Cardinality blocks
+            // — so it occupies exactly the same slot relative to the surrounding stages that it does on the
+            // non-set-op path (ops → $lookup → $project → terminal), just over the combined stream.
+            // Placing it after the Union dedup ($group{_id:"$$ROOT"}) / Intersect-Except source tagging is
+            // also required for correctness of the SET operation itself: those compare whole documents by
+            // value, so a joined array present at that point would join the comparison key and dedup by
+            // "entity + its children" rather than by entity.
+            // FUTURE EDITORS: this deferred-emission mechanism ASSUMES a PROJECTED set-op operand never
+            // carries a $lookup of its own. If one ever did, the pre-combine $project emitted above (the
+            // OperandsProjected branch) would run BEFORE this block and read a joined field that does not
+            // exist yet — silently projecting a missing value, and dropping the lookup array from the
+            // combined stream. Currently unreachable: an operand only reaches here through
+            // MongoQueryableMethodTranslatingExpressionVisitor.IsPlainProjectedSelect, which requires
+            // Lookups.Count == 0 && !IsJoinQuery (and IsPlainWholeEntitySelect requires the same for the
+            // whole-entity form). Weaken either of those and this ordering must be revisited.
+            AppendLookupStages(query, stages);
             // NB: no early return — control continues to the Cardinality block.
         }
 

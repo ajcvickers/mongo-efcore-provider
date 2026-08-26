@@ -473,49 +473,55 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
     // first documented. MongoExpressionTranslator's Not arm gates on
     // `operand is MongoBinaryExpression { Left: MongoSizeExpression }`; a MongoFilteredSizeExpression fails that
     // pattern, so MongoExpressionNegator.TryNegate is NEVER CALLED for this shape. The node falls through to
-    // `return new MongoUnaryExpression(Not, operand)` and the decline happens later, at RENDER time:
-    // MongoQueryLanguageRenderer.RenderUnary's operand is a MongoBinaryExpression that is NOT a query-native
-    // comparison (its Left is a MongoFilteredSizeExpression, not a MongoFieldExpression), so it reaches the
-    // "only supports Not over a MongoFieldExpression or a query-native comparison" throw, which
-    // MongoShapedQueryCompilingExpressionVisitor.TryBuildPipeline's typed
-    // `catch (NativeTranslationNotSupportedException) when (mode != MongoQueryMode.NativeOnly)` converts into a
-    // driver-LINQ fallback. CONSEQUENCE FOR A FUTURE EDITOR: adding a MongoExpressionNegator arm for the new node
-    // would change NOTHING here, because the negator is never reached. (The negator does independently fail
-    // closed, via its own IsQueryDialectRenderable gate — but that is a second, UNREACHED line of defence, not
-    // the operative mechanism.)
+    // `return new MongoUnaryExpression(Not, operand)`, and — before EF-396 — the decline happened at RENDER
+    // time: MongoQueryLanguageRenderer.RenderUnary's operand is a MongoBinaryExpression that is NOT a
+    // query-native comparison (its Left is a MongoFilteredSizeExpression, not a MongoFieldExpression), so it
+    // reached the "only supports Not over a MongoFieldExpression or a query-native comparison" throw.
     //
-    // Added at the whole-branch review: this was the only entry on the Query/AGENTS.md "declines that fall back
-    // gracefully, each pinned" list with no named test.
+    // EF-396: RenderUnary's decline branch now first asks MongoAggregationExpressionRenderer.CanRender on the
+    // operand before throwing. CanRender's MongoBinaryExpression arm recurses into a MongoFilteredSizeExpression
+    // via `CanRender(filtered.ElementPredicate)`, and the element predicate here (`p.Rank > 0`) is a plain
+    // field/constant comparison, so CanRender admits the whole operand — the shape now renders natively via
+    // `{ $expr: { $not: [ { $gt: [ { $size: { $filter: ... } }, 1 ] } ] } }` instead of declining to
+    // driver-LINQ. This test used to pin the decline; it now pins the (intended) native widening.
     [Fact]
-    public void Negated_filtered_count_comparison_declines_and_falls_back_to_correct_rows()
+    public void Negated_filtered_count_comparison_now_goes_native_with_correct_rows()
     {
-        // Deliberately NOT MatchRows(): the fallback here is driver-LINQ, which renders a bare $size with no
-        // $ifNull and ABORTS the aggregate on a missing or explicitly-null array (see
-        // NativeOwnedCollectionCountTests.Wrapped_count_projection_under_DriverLinq_works_for_present_arrays_and_
-        // aborts_on_a_missing_array). Those two rows would make the Native leg throw for a reason unrelated to
-        // this decline, so the seed is the well-formed subset plus an empty array.
         var collection = Seed(
-            nameof(Negated_filtered_count_comparison_declines_and_falls_back_to_correct_rows),
+            nameof(Negated_filtered_count_comparison_now_goes_native_with_correct_rows),
             MatchRow("none", 0, 3), MatchRow("one", 1, 2), MatchRow("three", 3, 0), Row("empty", new BsonArray()));
 
-        // NativeOnly does not swallow the render-time throw, so the decline is observable rather than silent.
-        using (var db = CreateContext(collection, MongoQueryMode.NativeOnly, BlogModel))
-        {
-            Assert.Throws<NativeTranslationNotSupportedException>(
-                () => db.Entities.AsNoTracking().Where(b => !(b.Posts.Count(p => p.Rank > 0) > 1)).ToList());
-        }
-
-        // Native falls back and must return the exact COMPLEMENT of the un-negated predicate over this seed
+        // NativeOnly succeeds (rather than throwing NativeTranslationNotSupportedException), proving this
+        // goes native. Must return the exact COMPLEMENT of the un-negated predicate over this seed
         // (Filtered_count_predicate_goes_native's "three" is the only row with more than one matching element).
-        // Asserted as real rows, so a decline that silently returned nothing — or everything — fails here rather
+        // Asserted as real rows, so a bug that silently returned nothing — or everything — fails here rather
         // than passing vacuously.
-        using (var db = CreateContext(collection, MongoQueryMode.Native, BlogModel))
+        using (var db = CreateContext(collection, MongoQueryMode.NativeOnly, BlogModel))
         {
             var titles = db.Entities.AsNoTracking()
                 .Where(b => !(b.Posts.Count(p => p.Rank > 0) > 1))
                 .ToList().Select(b => b.Title).OrderBy(t => t).ToList();
 
             Assert.Equal(["empty", "none", "one"], titles);
+        }
+
+        // Native and driver-LINQ (the previous behavior) must still agree on the well-formed subset — the
+        // empty-array row is excluded here because the driver-LINQ leg renders a bare $size with no $ifNull
+        // and ABORTS the aggregate on a missing/empty array (see
+        // NativeOwnedCollectionCountTests.Wrapped_count_projection_under_DriverLinq_works_for_present_arrays_and_
+        // aborts_on_a_missing_array), which is unrelated to this decline-to-native flip.
+        using (var native = CreateContext(collection, MongoQueryMode.Native, BlogModel))
+        using (var driver = CreateContext(collection, MongoQueryMode.DriverLinq, BlogModel))
+        {
+            var nativeTitles = native.Entities.AsNoTracking()
+                .Where(b => !(b.Posts.Count(p => p.Rank > 0) > 1) && b.Title != "empty")
+                .ToList().Select(b => b.Title).OrderBy(t => t).ToList();
+            var driverTitles = driver.Entities.AsNoTracking()
+                .Where(b => !(b.Posts.Count(p => p.Rank > 0) > 1) && b.Title != "empty")
+                .ToList().Select(b => b.Title).OrderBy(t => t).ToList();
+
+            Assert.Equal(driverTitles, nativeTitles);
+            Assert.Equal(["none", "one"], nativeTitles);
         }
     }
 
@@ -693,16 +699,28 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
             ["none=0", "one=1", "three=3"]);
     }
 
+    // EF-413 RE-BASELINE. These two used to be
+    // Contains/Unary_not_element_predicate_filtered_projection_falls_back_gracefully_EF365 — EF-365 documented
+    // both as declining gracefully because MongoAggregationExpressionRenderer had no arm for MongoInExpression
+    // or MongoUnaryExpression, so the render-time throw (inside MongoPipelineFactory.Create) was caught and
+    // turned into a driver-LINQ fallback for Native/DriverLinq, and NativeOnly threw
+    // NativeTranslationNotSupportedException outright. EF-413 added both arms (RenderIn/RenderUnary), so the
+    // SAME render call these leaves already reach — MongoFilteredSizeExpression's element predicate is rendered
+    // through this very renderer, regardless of position (sort key or filtered-count projection) — now
+    // succeeds instead of throwing. There is no separate gate to update for this position: the projection-side
+    // filtered-count branch was already deliberately gate-free (see the comment above
+    // AssertNonRenderableElementPredicateFallsBackGracefully), so adding a Render arm is *sufficient* on its own
+    // to flip these two rows from graceful-fallback to genuinely-native, including under NativeOnly.
+
     [Fact]
-    public void Contains_element_predicate_filtered_projection_falls_back_gracefully_EF365()
+    public void Contains_element_predicate_filtered_projection_goes_native_EF413()
     {
-        // Contains over a captured collection translates to MongoInExpression, which HAS a query dialect but no
-        // aggregation-dialect arm — a different decline mechanism from the regex above.
-        var collection = Seed(nameof(Contains_element_predicate_filtered_projection_falls_back_gracefully_EF365),
+        // Contains over a captured collection translates to MongoInExpression, which now renders via RenderIn.
+        var collection = Seed(nameof(Contains_element_predicate_filtered_projection_goes_native_EF413),
             MatchRowsNoRagged());
         var wanted = new[] { "m0", "m1" };
 
-        AssertNonRenderableElementPredicateFallsBackGracefully(
+        AssertElementPredicateGoesNative(
             collection,
             q => ProjectTitleAndCount(
                 q.Select(b => new { b.Title, N = b.Posts.Count(p => wanted.Contains(p.Heading)) }),
@@ -711,21 +729,116 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
     }
 
     [Fact]
-    public void Unary_not_element_predicate_filtered_projection_falls_back_gracefully_EF365()
+    public void Unary_not_element_predicate_filtered_projection_goes_native_EF413()
     {
         // A unary Not over a NON-nullable bool is the only spelling that actually builds a MongoUnaryExpression
-        // (a nullable bool's Not is declined earlier — see the bare-nullable-bool test below). PostDoc sets
-        // Pinned = (Rank > 0), so `!p.Pinned` counts exactly the complement of the canonical predicate:
-        // none(0 matching, 3 non) => 3, one(1, 2) => 2, three(3, 0) => 0.
-        var collection = Seed(nameof(Unary_not_element_predicate_filtered_projection_falls_back_gracefully_EF365),
+        // (a nullable bool's Not is declined earlier — see the bare-nullable-bool test below), and now renders
+        // via RenderUnary. PostDoc sets Pinned = (Rank > 0), so `!p.Pinned` counts exactly the complement of the
+        // canonical predicate: none(0 matching, 3 non) => 3, one(1, 2) => 2, three(3, 0) => 0.
+        var collection = Seed(nameof(Unary_not_element_predicate_filtered_projection_goes_native_EF413),
             MatchRowsNoRagged());
 
-        AssertNonRenderableElementPredicateFallsBackGracefully(
+        AssertElementPredicateGoesNative(
             collection,
             q => ProjectTitleAndCount(
                 q.Select(b => new { b.Title, N = b.Posts.Count(p => !p.Pinned) }),
                 r => (r.Title, r.N)),
             ["none=3", "one=2", "three=0"]);
+    }
+
+    // EF-413's counterpart to AssertNonRenderableElementPredicateFallsBackGracefully: unlike that helper,
+    // NativeOnly must SUCCEED here (not throw) — the whole point of the two tests above is that these element
+    // predicates now render natively rather than declining in any mode.
+    private void AssertElementPredicateGoesNative(
+        IMongoCollection<Blog> collection, Func<IQueryable<Blog>, List<string>> run, string[] expected)
+    {
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq, MongoQueryMode.NativeOnly })
+        {
+            using var db = CreateContext(collection, mode, BlogModel);
+            Assert.Equal(expected, run(db.Entities.AsNoTracking()));
+        }
+    }
+
+    // CODE-REVIEW FIX (EF-413): a filtered count's element predicate containing a Not over a VALUE-CONVERTED
+    // bool must decline (fall back), never silently answer wrong. MongoFilteredSizeExpression's element
+    // predicate is deliberately NOT checked at TRANSLATE time (see MongoExpressionTranslator's count-branch
+    // remarks and NativeComputedSortTests.Filtered_owned_collection_count_sort_key_goes_native — a blanket
+    // translate-time check was tried once for this position specifically and MEASURED WRONG: it hard-fails
+    // the whole leaf with InvalidOperationException in EVERY mode, including DriverLinq, instead of a graceful
+    // decline). So the fix for THIS position lives at RENDER time instead:
+    // MongoAggregationExpressionRenderer.RenderUnary itself throws when the operand is a non-default-serialized
+    // bare field, which the existing render-time catch turns into the correct disposition.
+    public class ConvertedFlagOwner
+    {
+        public ObjectId Id { get; set; }
+        public string Title { get; set; } = "";
+        public List<ConvertedFlagPost> Posts { get; set; } = [];
+    }
+
+    public class ConvertedFlagPost
+    {
+        // Same non-empty-string-either-way converter as NativeComputedSortTests.ConvertedFlagModel, so a
+        // raw-field $not is wrong for EVERY Flag==false element, not just some.
+        public bool Flag { get; set; }
+    }
+
+    private static readonly Action<ModelBuilder> ConvertedFlagOwnerModel =
+        mb => mb.Entity<ConvertedFlagOwner>().OwnsMany(b => b.Posts, p =>
+            p.Property(x => x.Flag).HasConversion(v => v ? "Y" : "N", v => v == "Y"));
+
+    [Fact]
+    public void Filtered_count_element_predicate_using_Not_over_a_value_converted_bool_declines_instead_of_answering_wrong()
+    {
+        var name = UniqueCollectionName(
+            nameof(Filtered_count_element_predicate_using_Not_over_a_value_converted_bool_declines_instead_of_answering_wrong));
+        database.MongoDatabase.GetCollection<BsonDocument>(name).InsertMany(
+        [
+            new BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Title", "two-false" },
+                { "Posts", new BsonArray { new BsonDocument { { "Flag", "N" } }, new BsonDocument { { "Flag", "N" } }, new BsonDocument { { "Flag", "Y" } } } }
+            },
+            new BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Title", "one-false" },
+                { "Posts", new BsonArray { new BsonDocument { { "Flag", "N" } }, new BsonDocument { { "Flag", "Y" } }, new BsonDocument { { "Flag", "Y" } } } }
+            }
+        ]);
+        var collection = database.MongoDatabase.GetCollection<ConvertedFlagOwner>(name);
+
+        // The CLR-correct answer would be: Count(p => !p.Flag) is the number of Flag==false elements —
+        // "two-false" has 2 (Flag: N, N, Y); "one-false" has 1 (Flag: N, Y, Y). MEASURED: the MongoDB driver's
+        // own LINQ v3 provider does NOT reach that answer for this shape either — like the computed-SORT-KEY
+        // position (see NativeComputedSortTests' sibling test), it renders `!p.Flag` as the same raw-field
+        // truthiness $not, independent of this provider's translator entirely, so DriverLinq itself answers
+        // 0 for every row here (every element is truthy either way). That residual driver-level limitation is
+        // out of scope for EF-413. What this fix actually guarantees — and what's asserted below — is: (1)
+        // NativeOnly must NEVER silently succeed with wrong data, and (2) Native must never independently
+        // compute a WORSE, DIFFERENT wrong answer than DriverLinq — before the fix, Native answered 0 as well,
+        // by coincidence of the same truthiness bug running natively instead of via the driver, so this second
+        // assertion does not by itself discriminate the fix; the discriminating assertion is the first one.
+        List<string> Run(MongoQueryMode mode)
+        {
+            using var db = CreateContext(collection, mode, ConvertedFlagOwnerModel);
+            return db.Entities.AsNoTracking()
+                .Select(b => new { b.Title, N = b.Posts.Count(p => !p.Flag) })
+                .ToList().OrderBy(r => r.Title).Select(r => $"{r.Title}={r.N}").ToList();
+        }
+
+        // NativeOnly: a clean decline (NativeTranslationNotSupportedException), NEVER silently-wrong data —
+        // THE load-bearing assertion of this test. Before the fix, this SUCCEEDED and silently answered every
+        // count as 0 (raw-field $not over "Y"/"N" is always false, so the $filter's cond never matches).
+        using (var nativeOnly = CreateContext(collection, MongoQueryMode.NativeOnly, ConvertedFlagOwnerModel))
+        {
+            Assert.Throws<NativeTranslationNotSupportedException>(
+                () => nativeOnly.Entities.AsNoTracking()
+                    .Select(b => new { b.Title, N = b.Posts.Count(p => !p.Flag) })
+                    .ToList());
+        }
+
+        // Native must agree with whatever DriverLinq itself answers (the fallback it declines to), not
+        // silently diverge from it under its own, separately-wrong computation.
+        Assert.Equal(Run(MongoQueryMode.DriverLinq), Run(MongoQueryMode.Native));
     }
 
     [Fact]

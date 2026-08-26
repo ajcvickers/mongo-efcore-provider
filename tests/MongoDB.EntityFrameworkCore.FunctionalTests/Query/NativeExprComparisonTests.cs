@@ -462,23 +462,30 @@ public class NativeExprComparisonTests(TemporaryDatabaseFixture database)
     // resulting bare form) is recorded in task-3-report.md, not as a permanent test — reverting the guard
     // removal would defeat its own purpose.
 
+    // EF-396: a Not over a conjunction is not itself a comparison, so IsQueryDialectRenderable still refuses
+    // it at the QUERY-dialect level — that boundary (only All()'s own negator does De Morgan at the query
+    // level; a bare Where(!(a && b)) does not) is unchanged. But RenderUnary's new fallback branch now asks
+    // MongoAggregationExpressionRenderer.CanRender, which DOES admit a conjunction of renderable comparisons
+    // (IsRenderableOperator includes AndAlso/OrElse) — so this shape now goes native via
+    // { $expr: { $not: [ { $and: [...] } ] } } instead of declining. This test used to pin the decline; it
+    // now pins the (correct, intended) native widening instead.
     [Fact]
-    public void Negated_conjunction_predicate_still_falls_back()
+    public void Negated_conjunction_predicate_now_goes_native_via_expr()
     {
-        // A Not over a conjunction is not itself a comparison, so IsQueryDialectRenderable still refuses it
-        // — this is the boundary that keeps Where-level De Morgan out of scope (only All()'s own negator
-        // does De Morgan; a bare Where(!(a && b)) does not). Values: Alice (Age=7) is the only row for which
-        // (Age > 5 && Name == "Alice") is true, so negating it yields a genuine two-row/one-row split, not a
-        // vacuous all-true/all-false predicate.
-        var (collection, logs) = SeedCustomers(nameof(Negated_conjunction_predicate_still_falls_back));
+        // Values: Alice (Age=7) is the only row for which (Age > 5 && Name == "Alice") is true, so negating
+        // it yields a genuine two-row/one-row split, not a vacuous all-true/all-false predicate.
+        var (collection, logs) = SeedCustomers(nameof(Negated_conjunction_predicate_now_goes_native_via_expr));
         using var nativeOnly = CreateContext(collection, logs, MongoQueryMode.NativeOnly);
 
-        Assert.Throws<NativeTranslationNotSupportedException>(
-            () => nativeOnly.Entities.Where(c => !(c.Age > 5 && c.Name == "Alice")).ToList());
+        var nativeNames = nativeOnly.Entities.Where(c => !(c.Age > 5 && c.Name == "Alice"))
+            .ToList().Select(c => c.Name).OrderBy(n => n).ToList(); // succeeds => went native
 
-        using var native = CreateContext(collection, [], MongoQueryMode.Native);
+        var mql = Mql(logs);
+        Assert.Contains("$expr", mql);
+        Assert.Contains("\"$not\"", mql);
+        Assert.Contains("\"$and\"", mql);
+
         using var driver = CreateContext(collection, [], MongoQueryMode.DriverLinq);
-        var nativeNames = native.Entities.Where(c => !(c.Age > 5 && c.Name == "Alice")).Select(c => c.Name).OrderBy(n => n).ToList();
         var driverNames = driver.Entities.Where(c => !(c.Age > 5 && c.Name == "Alice")).Select(c => c.Name).OrderBy(n => n).ToList();
         Assert.Equal(driverNames, nativeNames);
         Assert.Equal(["Bob", "Carol"], nativeNames); // Alice is the only row excluded
