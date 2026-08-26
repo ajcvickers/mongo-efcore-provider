@@ -156,7 +156,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
 
         AssertMql(
             """
-            Entities.{ "$match" : { "_id" : 2 } }, { "$project" : { "_id" : "$_id", "Number" : "$RequiredReference.Number" } }
+            Entities.{ "$match" : { "_id" : 2 } }, { "$project" : { "Id" : "$_id", "Number" : "$RequiredReference.Number", "_id" : 0 } }
             """);
     }
 
@@ -166,7 +166,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
 
         AssertMql(
             """
-            Entities.{ "$match" : { "_id" : 4 } }, { "$project" : { "_id" : "$_id", "Number" : "$RequiredReference.Number" } }
+            Entities.{ "$match" : { "_id" : 4 } }, { "$project" : { "Id" : "$_id", "Number" : "$RequiredReference.Number", "_id" : 0 } }
             """);
     }
 

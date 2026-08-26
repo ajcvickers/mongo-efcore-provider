@@ -677,6 +677,18 @@ internal sealed partial class MongoExpressionTranslator
         if (rightOperand is null)
             return null;
 
+        // An $expr field reference reads the RAW STORED value, with no serializer applied. A value-converted
+        // or non-default-represented operand on EITHER side would therefore be compared in provider (stored)
+        // form rather than model form -- a value-transforming converter compares scaled/re-encoded numbers
+        // against each other or against an unconverted operand (silently wrong rows), and a re-encoding
+        // converter or non-default BsonRepresentation compares across BSON types, which MongoDB type-brackets
+        // by BSON total order rather than by value (e.g. a string-encoded int sorts after every number,
+        // independent of its numeric value). MEASURED (EF-404): both operands default-serialized is required;
+        // this mirrors TranslateOperand's own MongoConvertExpression guard, but that guard only fires for a
+        // cast -- a PLAIN field-to-field/arithmetic comparison with no cast reached this path unchecked.
+        if (!AllFieldsDefaultSerialized(leftOperand) || !AllFieldsDefaultSerialized(rightOperand))
+            return null;
+
         // Normalize a count-vs-value comparison so the size node is on the LEFT, mirroring the operator: the
         // query renderer's array-index form recognizes only that orientation. Field-to-field and arithmetic
         // comparisons are deliberately NOT mirrored — they render inside $expr, where operand order matters.
@@ -718,8 +730,11 @@ internal sealed partial class MongoExpressionTranslator
     /// BSON value including null and missing). For a NON-nullable property a missing/null element is already a
     /// schema violation the read path rejects, so nullability (not "every relational cast") is the correct key —
     /// gating more broadly would revoke the deliberate CLR-correct divergence this fall-through exists for.
-    /// A plain field-to-field/arithmetic comparison with no cast still reaches the general <c>$expr</c> path
-    /// with no default-serialization check at all — that gap is known and tracked separately, not fixed here.
+    /// A plain field-to-field/arithmetic comparison with no cast also reaches the general <c>$expr</c> path, but
+    /// (EF-404) it is now guarded there directly — <see cref="TranslateComparison"/>'s general path applies
+    /// <see cref="AllFieldsDefaultSerialized"/> to both fully-translated operands before emitting the <c>$expr</c>
+    /// node, declining (falling back to driver-LINQ, which has no working oracle for this shape either and
+    /// itself throws) rather than comparing raw stored values in the wrong representation.
     /// </remarks>
     private static bool CanFallThroughToExpr(IProperty property, ExpressionType comparisonNodeType)
         => NativeGroupByBinder.HasDefaultKeySerialization(property)

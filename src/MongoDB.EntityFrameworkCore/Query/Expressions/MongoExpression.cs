@@ -64,8 +64,8 @@ internal enum MongoBinaryOperator
     /// answer the wrong value for a comparison and fail to deserialize into an integral projection member.
     /// </summary>
     /// <remarks>
-    /// The choice between this and <see cref="Divide"/> is made at TRANSLATE time, from the CLR
-    /// <see cref="System.Linq.Expressions.BinaryExpression.Type"/> of the division node — not at render time
+    /// The choice between this and <see cref="Divide"/> is made at TRANSLATE time, from the CLR type of the division
+    /// node — not at render time
     /// from the operands' types. That is deliberate: an operand's widening <c>Convert</c> (e.g.
     /// <c>(double)a / b</c>) is unwrapped by <c>TranslateOperand</c>, so by render time both operands look
     /// integral even though C# computed in <c>double</c>. Only the original node's type distinguishes them.
