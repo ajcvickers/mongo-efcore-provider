@@ -187,8 +187,7 @@ internal sealed class MongoSelectDefinition
     /// so it still reaches the driver and CSHARP-6017 still applies; <see cref="HasPagingAnywhere"/> must
     /// therefore see it. Deliberately does NOT mark the query non-native — every caller already does that for
     /// its own reason.
-    /// TODO(EF-406): delete together with <see cref="HasPagingAnywhere"/> and
-    /// <see cref="MarkPagedJoinInnerFallbackUnsafe"/> when the driver stops folding — signalled by the tripwire
+    /// TODO(EF-406): delete together with <see cref="HasPagingAnywhere"/> when the driver stops folding — signalled by the tripwire
     /// test <c>NativeJoinPagedInnerDeclineTests.Driver_still_folds_a_paged_join_inner_into_the_lookup_subpipeline_CSHARP_6017</c>
     /// going RED, NOT by CSHARP-6017 closing (that driver ticket is already Closed/Done at fixVersion 3.10.0,
     /// the driver version this branch pins, and the fold is MEASURED still live against it).
@@ -208,7 +207,7 @@ internal sealed class MongoSelectDefinition
     /// <c>Skip</c>/<c>Take</c> RECORDED ANYWHERE on this sequence?", which is the right question because the
     /// guard's real subject is the captured method chain the driver-LINQ fallback executes, not the native op
     /// lists — a <c>Skip</c>/<c>Take</c> the native path declined is still in that chain and still folded.
-    /// TODO(EF-406): delete together with <see cref="MarkPagedJoinInnerFallbackUnsafe"/> when the driver stops
+    /// TODO(EF-406): delete when the driver stops
     /// folding an uncorrelated join inner's paging into the correlated <c>$lookup</c> sub-pipeline — signalled
     /// by the tripwire test going red, NOT by CSHARP-6017 closing (already Closed/Done at fixVersion 3.10.0,
     /// the version this branch pins; the fold is MEASURED still live). See <see cref="MarkSawUnrecordedPaging"/>.

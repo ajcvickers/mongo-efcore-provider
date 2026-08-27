@@ -886,12 +886,12 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
 
     /// <summary>
     /// Recognizes <paramref name="selector"/> as a reference-Include chain (structurally identical to
-    /// <see cref="TryGetReferenceIncludeChain"/>'s shape) with exactly one additional single-level,
+    /// <see cref="TryGetReferenceIncludeChain(LambdaExpression)"/>'s shape) with exactly one additional single-level,
     /// non-embedded COLLECTION <c>Include</c> mixed in anywhere among the <c>EntityExpression</c>-nested
     /// levels — the "reference + collection" combo, e.g.
     /// <c>Orders.Include(o =&gt; o.Buyer).Include(o =&gt; o.Lines)</c>. Returns <see langword="false"/> (with
     /// empty/null outputs) for a PURE reference-only chain (handled by
-    /// <see cref="TryGetReferenceIncludeChain"/> instead) or a bare single collection <c>Include</c> with no
+    /// <see cref="TryGetReferenceIncludeChain(LambdaExpression)"/> instead) or a bare single collection <c>Include</c> with no
     /// reference sibling (handled by <see cref="IsSingleLevelCollectionIncludeSelector"/> instead) — the
     /// three recognizers partition the space without overlap.
     /// <para>
@@ -926,7 +926,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     }
 
     /// <summary>
-    /// Shared structural walk behind <see cref="TryGetReferenceIncludeChain"/> and
+    /// Shared structural walk behind <see cref="TryGetReferenceIncludeChain(LambdaExpression)"/> and
     /// <see cref="TryGetMixedReferenceAndCollectionIncludeChain"/>. Walks the SIBLING spine — a chain of
     /// <see cref="IncludeExpression"/>s nested via <see cref="IncludeExpression.EntityExpression"/> — and,
     /// for each sibling level found, ALSO follows a linear <c>ThenInclude</c> chain hanging off it via
@@ -1046,7 +1046,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
 
     /// <summary>
     /// Validates and confirms every navigation in a recognized reference-Include chain
-    /// (<see cref="TryGetReferenceIncludeChain"/>), all-or-nothing, or returns <see langword="false"/> to
+    /// (<see cref="TryGetReferenceIncludeChain(LambdaExpression)"/>), all-or-nothing, or returns <see langword="false"/> to
     /// decline the WHOLE chain.
     /// <para>
     /// For N=1 (today's ordinary single reference Include) this constructs and registers the
