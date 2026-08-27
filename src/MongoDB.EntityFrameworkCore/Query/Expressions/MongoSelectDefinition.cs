@@ -644,9 +644,11 @@ internal sealed class MongoSelectDefinition
         => _candidateReferenceIncludeJoins++;
 
     /// <summary>
-    /// Records that a trailing <c>Select</c> was recognized as a single-level reference <c>Include</c>
-    /// (see <c>MongoQueryableMethodTranslatingExpressionVisitor.IsSingleLevelReferenceIncludeSelector</c>),
-    /// confirming ONE of the candidate joins recorded by <see cref="MarkSawCandidateReferenceIncludeJoin"/>.
+    /// Records that a trailing <c>Select</c> was recognized as a reference <c>Include</c> chain level
+    /// (see <c>MongoQueryableMethodTranslatingExpressionVisitor.TryGetReferenceIncludeChain</c>/
+    /// <c>TryConfirmReferenceIncludeChain</c>), confirming ONE of the candidate joins recorded by
+    /// <see cref="MarkSawCandidateReferenceIncludeJoin"/> — called once per navigation in the chain, so N
+    /// sibling reference Includes confirm N candidates, not just one.
     /// </summary>
     internal void MarkReferenceIncludeConfirmed()
         => _confirmedReferenceIncludes++;
@@ -667,7 +669,7 @@ internal sealed class MongoSelectDefinition
     /// not a bare collection scan — i.e. its own <see cref="MongoSelectDefinition"/> carried at least one
     /// recorded operation (a <c>$match</c>/<c>$sort</c>/<c>$skip</c>/<c>$limit</c> op, a projection, a
     /// terminal, a cardinality, or an operator that was declined outright). Set by the QMTEV's
-    /// <c>TranslateJoinCore</c>, read by <c>TryConfirmReferenceInclude</c>.
+    /// <c>TranslateJoinCore</c>, read by <c>TryConfirmReferenceIncludeChain</c>.
     /// <para>
     /// This replaces an earlier metadata-only guard that consulted <c>navigation.TargetEntityType.GetQueryFilter()</c>,
     /// which misses a filter declared on the ROOT of a TPH hierarchy when read from a DERIVED target, and
