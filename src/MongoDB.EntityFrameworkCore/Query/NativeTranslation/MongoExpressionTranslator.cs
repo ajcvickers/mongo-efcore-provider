@@ -1138,10 +1138,23 @@ internal sealed partial class MongoExpressionTranslator
     /// renders at all — see <see cref="ConstantSerializationContext"/>'s remarks).
     /// </summary>
     /// <remarks>
-    /// Four shapes are identity-like: enum → its own underlying type or a WIDENING of it (and back);
-    /// <see cref="char"/> → <see cref="int"/>; and <c>T</c> → <see cref="object"/> (boxing for a value type, or
-    /// a plain reference upcast for a reference type — both leave the stored value unchanged, only its declared
-    /// CLR type, so both count as identity-like despite the method name's "boxing" resonance).
+    /// Five shapes are identity-like: enum → its own underlying type or a WIDENING of it (and back); enum →
+    /// an UNRELATED enum with the SAME underlying type (e.g. an entity enum reinterpreted as a DTO enum with
+    /// matching members — the two CLR types disagree, but the stored value doesn't change); <see cref="char"/>
+    /// → <see cref="int"/>; and <c>T</c> → <see cref="object"/> (boxing for a value type, or a plain reference
+    /// upcast for a reference type — both leave the stored value unchanged, only its declared CLR type, so
+    /// both count as identity-like despite the method name's "boxing" resonance).
+    /// <para>
+    /// The enum-to-enum arm requires an EXACT underlying-type match, not a widening one: composing it with a
+    /// genuine cross-width conversion (e.g. a <c>byte</c>-backed enum reinterpreted as an <c>int</c>-backed
+    /// one) would need an actual numeric conversion this arm does not attempt, so a mismatch declines rather
+    /// than mis-serializing. A chain like <c>(int)(DtoEnum)entity.SourceEnum</c> (the shape a C# enum equality
+    /// comparison against an unrelated enum constant lowers to, since both operands are promoted to their
+    /// shared underlying type before comparing) is still admitted overall: the OUTER <c>Convert(DtoEnum, int)</c>
+    /// layer is caught by the pre-existing enum-to-its-own-underlying-type arm below, and this arm catches the
+    /// INNER <c>Convert(SourceEnum, DtoEnum)</c> layer — <see cref="HasNumericConvert"/> walks every layer, so
+    /// each is classified independently.
+    /// </para>
     /// <para>
     /// The enum arm checks against the enum's OWN underlying type, not against <see cref="int"/>: C# promotes a
     /// sub-<c>int</c> enum (<c>short</c>/<c>byte</c>/<c>ushort</c>/<c>sbyte</c>-backed) to <see cref="int"/> for
@@ -1159,6 +1172,11 @@ internal sealed partial class MongoExpressionTranslator
     /// </remarks>
     private static bool IsIdentityLikeConvert(Type fromType, Type toType)
     {
+        if (fromType.IsEnum && toType.IsEnum)
+        {
+            return Enum.GetUnderlyingType(fromType) == Enum.GetUnderlyingType(toType);
+        }
+
         if (fromType.IsEnum)
         {
             var underlying = Enum.GetUnderlyingType(fromType);
