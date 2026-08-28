@@ -73,6 +73,49 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     private static readonly Type[] AllowedQueryableExtensions =
         [typeof(Queryable), typeof(MongoQueryableExtensions), typeof(Driver.Linq.MongoQueryable)];
 
+#if EF8 || EF9
+    // EF Core's nav-expansion flattens a GroupJoin+SelectMany(g => g.DefaultIfEmpty()) pair into a LeftJoin
+    // call on EF8/EF9 too (EF-436), but pre-.NET10 there is no System.Linq.Queryable.LeftJoin BCL method for
+    // it to use (that overload was added to the BCL in .NET 10, alongside QueryableMethods.LeftJoin). EF Core
+    // instead flattens onto its own pre-existing internal-API shim,
+    // Microsoft.EntityFrameworkCore.Internal.QueryableExtensions.LeftJoin (a throw-only marker method).
+    //
+    // That SAME MethodInfo is ALSO emitted directly by EF Core's own internal optional-reference-navigation
+    // lowering (NavigationExpandingExpressionVisitor, e.g. for an Include over an optional reference nav) -
+    // an entirely different, much larger, and NOT-yet-supported-on-EF8/EF9 surface (see the pinned
+    // RequiredNavigationUnwindTests.Optional_reference_Include_is_not_translated_on_EF8_EF9 invariant).
+    // Recognizing the shim MethodInfo unconditionally therefore over-admits: it must be paired with
+    // IsRecognizedGroupJoinFlattenLeftJoin below.
+    //
+    // MEASURED (not assumed): a per-CALL reference-identity check against the ORIGINAL key-selector lambdas
+    // does NOT work - EF Core's nav-expansion reduction rewrites and RENAMES every join's key-selector
+    // parameters uniformly (e.g. a plain `c => c.CustomerID` the user wrote becomes `ti => ti.Outer.CustomerID`
+    // once expansion finishes), for EVERY join regardless of origin, so no per-call structural or reference
+    // signal survives to distinguish the two at admission time - this matches this file's own prior finding
+    // that "disambiguating [a join] from an Include-generated join is not possible given current EF Core
+    // nav-expansion behavior" (see Query/AGENTS.md's Include section). The check below is therefore
+    // deliberately scoped to the QUERY as a whole, not the individual call: it admits every shim LeftJoin
+    // call ONLY when the ORIGINAL (pre-nav-expansion) query contained at least one raw
+    // GroupJoin(...).SelectMany(...) pair anywhere in it (a shape only the user's own LINQ - never EF's
+    // internal nav-expansion - can produce). This preserves the EF8/EF9 invariant for every query that does
+    // NOT itself author such a pair (the overwhelming majority, including every reference-Include/optional-nav
+    // regression this needed to avoid), at the cost of a narrow residual gap: a query that BOTH authors an
+    // explicit GroupJoin-flatten AND separately triggers an unrelated optional-reference-nav Include would
+    // now admit the latter too. That residual gap is far smaller than, and strictly a subset of, the blast
+    // radius this check exists to close off.
+    private static readonly MethodInfo Ef8Ef9LeftJoinMethod =
+        typeof(Microsoft.EntityFrameworkCore.Internal.QueryableExtensions)
+            .GetTypeInfo().GetDeclaredMethods("LeftJoin").Single(mi => mi.GetParameters().Length == 5);
+
+    /// <summary>
+    /// Whether the CURRENT query being compiled contains at least one raw <c>GroupJoin(...).SelectMany(...)</c>
+    /// pair in its original (pre-nav-expansion) form - see <see cref="Ef8Ef9LeftJoinMethod"/>'s remarks for why
+    /// this is a per-query, not per-call, signal.
+    /// </summary>
+    private bool IsRecognizedGroupJoinFlattenLeftJoin()
+        => ((MongoQueryCompilationContext)QueryCompilationContext).HasGroupJoinFlattenPair;
+#endif
+
     private static readonly HashSet<string> OrderingMethodNames =
     [
         nameof(Queryable.OrderBy), nameof(Queryable.OrderByDescending),
@@ -209,8 +252,21 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (method.DeclaringType == typeof(EntityFrameworkQueryableExtensions))
             return base.VisitMethodCall(methodCallExpression);
 #endif
+#if EF8 || EF9
+        // See Ef8Ef9LeftJoinMethod's remarks: only admit the shim LeftJoin call when this query is recognizably
+        // one that authored an explicit GroupJoin+SelectMany(DefaultIfEmpty) pair somewhere in its original
+        // form - every other use of that MethodInfo (in particular EF's own optional-reference-navigation
+        // lowering) must decline exactly as it did before EF-436, since that is a much larger,
+        // not-yet-supported-on-EF8/EF9 surface.
+        var isGroupJoinFlattenLeftJoin = method.Name == "LeftJoin"
+            && method.DeclaringType == typeof(Microsoft.EntityFrameworkCore.Internal.QueryableExtensions)
+            && IsRecognizedGroupJoinFlattenLeftJoin();
+        if (!AllowedQueryableExtensions.Contains(method.DeclaringType) && !isGroupJoinFlattenLeftJoin)
+            return QueryCompilationContext.NotTranslatedExpression;
+#else
         if (!AllowedQueryableExtensions.Contains(method.DeclaringType))
             return QueryCompilationContext.NotTranslatedExpression;
+#endif
 
         var source = Visit(methodCallExpression.Arguments[0]);
         if (source is ShapedQueryExpression shapedQueryExpression)
@@ -245,6 +301,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 case nameof(Queryable.GroupJoin) when methodDefinition == QueryableMethods.GroupJoin:
 #if !EF8 && !EF9
                 case nameof(Queryable.LeftJoin) when methodDefinition == QueryableMethods.LeftJoin:
+#else
+                // See Ef8Ef9LeftJoinMethod's remarks: EF8/EF9 flatten GroupJoin+SelectMany(DefaultIfEmpty) onto
+                // EF Core's own pre-.NET10 internal-API LeftJoin shim, not a BCL Queryable.LeftJoin.
+                case "LeftJoin" when methodDefinition == Ef8Ef9LeftJoinMethod && isGroupJoinFlattenLeftJoin:
 #endif
                 case nameof(Queryable.DefaultIfEmpty) when methodDefinition == QueryableMethods.DefaultIfEmptyWithArgument
                                                            || methodDefinition == QueryableMethods.DefaultIfEmptyWithoutArgument:

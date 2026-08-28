@@ -970,12 +970,10 @@ Orders.{ "$sort" : { "CustomerID" : 1 } }, { "$lookup" : { "from" : "Customers",
 
     public override async Task Select_GetValueOrDefault_on_DateTime_with_null_values(bool async)
     {
-#if EF8 || EF9
-        // Fails: Unsupported by driver EF-X003
-        await AssertTranslationFailed(() => base.Select_GetValueOrDefault_on_DateTime_with_null_values(async));
-
-        AssertMql();
-#else
+        // Fails: Unsupported by driver EF-X003. EF-436: this shape reaches the driver identically on
+        // EF8/EF9/EF10 (the stale EF8/EF9 "declines before reaching our translator at all" gate was a
+        // symptom of the same LeftJoin-recognition gap fixed for NorthwindJoinQueryMongoTest
+        // .GroupJoin_DefaultIfEmpty_multiple), so all three versions share this same partial capture.
         await AssertTranslationFailed(() =>
             base.Select_GetValueOrDefault_on_DateTime_with_null_values(async));
 
@@ -990,7 +988,6 @@ Orders.{ "$sort" : { "CustomerID" : 1 } }, { "$lookup" : { "from" : "Customers",
 Customers.
 """);
         }
-#endif
     }
 
     public override async Task Cast_on_top_level_projection_brings_explicit_Cast(bool async)
@@ -1469,12 +1466,10 @@ Customers.
 
     public override async Task Reverse_in_join_inner(bool async)
     {
-#if EF8 || EF9
-        // Fails: Reverse not supported CSHARP-5836
-        await AssertTranslationFailed(() => base.Reverse_in_join_inner(async));
-
-        AssertMql();
-#else
+        // Fails: Reverse not supported CSHARP-5836. EF-436: this shape reaches the driver identically on
+        // EF8/EF9/EF10 (the stale EF8/EF9 "declines before reaching our translator at all" gate was a
+        // symptom of the same LeftJoin-recognition gap fixed for NorthwindJoinQueryMongoTest
+        // .GroupJoin_DefaultIfEmpty_multiple), so all three versions share this same partial capture.
         await AssertTranslationFailed(() =>
             base.Reverse_in_join_inner(async));
 
@@ -1489,24 +1484,20 @@ Customers.
 Customers.
 """);
         }
-#endif
     }
 
     public override async Task Reverse_in_join_inner_with_skip(bool async)
     {
-#if EF8 || EF9
-        // Fails: Reverse not supported CSHARP-5836
-        await AssertTranslationFailed(() => base.Reverse_in_join_inner_with_skip(async));
-
-        AssertMql();
-#else
         // Fails: Join/GroupJoin inner sub-query (filtered/ordered) not supported EF-X022. The join's inner is
         // Orders.OrderByDescending(OrderID).Skip(2).Reverse() — a sorted+paged sub-query, which driver 3.11
         // rejects with ExpressionNotSupportedException ("expression must be a MongoDB IQueryable against a
         // collection"); see docs/failing-spec-tests.md § EF-X022. This query never returned wrong rows on any
         // driver version: the driver's LINQ provider ALSO separately rejects Reverse inside a join
-        // (CSHARP-5836, the same reason the EF8/EF9 arm above throws), so this has always been a clean throw.
-        // The rejection happens after the outer collection is logged, so a partial pipeline is captured.
+        // (CSHARP-5836), so this has always been a clean throw. EF-436: EF8/EF9 previously declined even
+        // earlier (before reaching our translator at all) due to the same stale LeftJoin-recognition gap
+        // fixed for NorthwindJoinQueryMongoTest.GroupJoin_DefaultIfEmpty_multiple - now all three versions
+        // reach the driver identically, and the rejection happens after the outer collection is logged, so a
+        // partial pipeline is captured on all three.
         await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
             () => base.Reverse_in_join_inner_with_skip(async));
 
@@ -1521,7 +1512,6 @@ Customers.
             Customers.
             """);
         }
-#endif
     }
 
     public override async Task Reverse_in_SelectMany(bool async)

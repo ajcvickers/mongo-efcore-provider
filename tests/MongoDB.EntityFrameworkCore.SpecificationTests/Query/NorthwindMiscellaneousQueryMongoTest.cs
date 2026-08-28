@@ -2988,9 +2988,13 @@ Orders.{ "$match" : { "OrderDate" : { "$ne" : null } } }, { "$project" : { "Orde
     public override async Task No_orderby_added_for_fully_translated_manually_constructed_LOJ(bool async)
     {
 #if EF8 || EF9
-        // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
+        // Fails: single-join driver-LINQ-bridge LeftJoin-recognition gap (same as
+        // NorthwindJoinQueryMongoTest.GroupJoin_DefaultIfEmpty - see its comment) - out of scope for EF-436.
         await AssertTranslationFailed(() => base.No_orderby_added_for_fully_translated_manually_constructed_LOJ(async));
-        AssertMql();
+        AssertMql(
+    """
+Employees.
+""");
 #else
         // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.No_orderby_added_for_fully_translated_manually_constructed_LOJ(async);
