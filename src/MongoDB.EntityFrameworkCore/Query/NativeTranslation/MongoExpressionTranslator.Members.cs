@@ -362,9 +362,16 @@ internal sealed partial class MongoExpressionTranslator
         if (current is not ParameterExpression rootParam || names.Count == 0)
             return false;
 
+        // EF-446: mirrors TryResolveMember's identity check — a non-outer root in two-scope mode is scoped to
+        // _entityType, not declined outright. The blanket decline this replaced was inconsistent with every
+        // other resolver in this file and blocked a plain (non-correlated) nested quantifier over the element's
+        // OWN collection whenever it happened to sit inside an already-correlated outer quantifier — e.g.
+        // `b.Posts.Any(p => p.Comments.Any(c => c.Title == b.Title))`, where p.Comments is an ordinary
+        // element-scoped collection and only the innermost predicate correlates back to the root. This is
+        // distinct from a quantifier whose ARRAY itself is reached through the outer scope (still declined by
+        // the separate `sourceIsOuter` check in the caller) — see NativeOwnedCollectionCorrelatedTests'
+        // Nested_quantifier_over_the_elements_own_collection_* tests for the shape this unblocks.
         isOuter = _outerParam is not null && ReferenceEquals(rootParam, _outerParam);
-        if (_outerParam is not null && !isOuter)
-            return false; // two-scope mode, rooted on neither known parameter — decline
 
         names.Reverse(); // now root-first: [ownedRefNav, ..., collectionNav]
 

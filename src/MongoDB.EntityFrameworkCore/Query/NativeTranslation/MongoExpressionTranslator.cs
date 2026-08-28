@@ -105,11 +105,43 @@ internal sealed partial class MongoExpressionTranslator
     /// review fix: corrected a factually wrong claim that this setter existed because ONE translator instance
     /// was reused ACROSS SEVERAL slot operators — it never is; each call to <c>PopulateNativeSlots</c> handles
     /// one operator and constructs one translator). Always <see langword="null"/> on a two-scope translator
-    /// (the constructor below never sets it) — a correlation nested two-or-more scopes deep is out of EF-421's
-    /// scope and must keep declining, which requires that a two-scope child never itself exposes a further
+    /// (the constructor below never sets it) — see <see cref="TryResolveCorrelationRoot"/> for how a two-scope
+    /// translator still recognizes a correlation back to the SAME root without exposing its own
     /// <see cref="SelfParam"/>.
     /// </summary>
     internal ParameterExpression? SelfParam { get; set; }
+
+    /// <summary>
+    /// Resolves the parameter/entity-type pair a nested quantifier/filtered-count's free parameter must match
+    /// to be admitted as a correlation to the ROOT scope — <see cref="SelfParam"/> on a single-scope
+    /// translator, or the already-established <c>_outerParam</c>/<c>_outerEntityType</c> on a two-scope
+    /// translator (EF-446). This is what lets a correlation to the SAME root surface at any nesting depth
+    /// (<see cref="Expressions.MongoOuterFieldExpression"/> always resolves at document ROOT regardless of
+    /// <c>$filter</c>/<c>$map</c> nesting depth, so depth alone is not a correctness boundary), while a
+    /// correlation to an INTERMEDIATE scope (neither of these two identities — e.g. the middle parameter of a
+    /// three-level-deep quantifier chain) still declines untouched: that shape has no known root to resolve
+    /// against and remains out of scope.
+    /// </summary>
+    private bool TryResolveCorrelationRoot(out ParameterExpression? rootParam, out IEntityType? rootEntityType)
+    {
+        if (SelfParam is not null)
+        {
+            rootParam = SelfParam;
+            rootEntityType = _entityType;
+            return true;
+        }
+
+        if (_outerParam is not null)
+        {
+            rootParam = _outerParam;
+            rootEntityType = _outerEntityType;
+            return true;
+        }
+
+        rootParam = null;
+        rootEntityType = null;
+        return false;
+    }
 
     /// <summary>
     /// Attempts to translate an EF Core expression body into a <see cref="MongoExpression"/>.
@@ -712,11 +744,12 @@ internal sealed partial class MongoExpressionTranslator
                 // (correlation reaching past the immediate enclosing scope) still declines exactly as before.
                 if (ReferencesEnclosingScope(elementLambda.Body, elementLambda.Parameters[0], out var quantifierFreeParam))
                 {
-                    if (SelfParam is null || !ReferenceEquals(quantifierFreeParam, SelfParam))
+                    if (!TryResolveCorrelationRoot(out var quantifierRootParam, out var quantifierRootEntityType)
+                        || !ReferenceEquals(quantifierFreeParam, quantifierRootParam))
                         return null;
 
                     var correlatedElementTranslator = new MongoExpressionTranslator(
-                        elementType, outerParam: SelfParam, outerEntityType: _entityType, innerPrefix: null);
+                        elementType, outerParam: quantifierRootParam!, outerEntityType: quantifierRootEntityType!, innerPrefix: null);
                     if (!correlatedElementTranslator.TryTranslate(elementLambda.Body, out var correlatedPredicate))
                         return null;
 
@@ -1264,7 +1297,9 @@ internal sealed partial class MongoExpressionTranslator
             MongoExpressionTranslator countElementTranslator;
             if (ReferencesEnclosingScope(countPredicate.Body, countPredicate.Parameters[0], out var countFreeParam))
             {
-                if (SelfParam is null || countFreeParam is null || !ReferenceEquals(countFreeParam, SelfParam))
+                if (countFreeParam is null
+                    || !TryResolveCorrelationRoot(out var countRootParam, out var countRootEntityType)
+                    || !ReferenceEquals(countFreeParam, countRootParam))
                     return null;
 
                 // innerPrefix is deliberately null, not "": the element predicate here is rendered via
@@ -1273,7 +1308,7 @@ internal sealed partial class MongoExpressionTranslator
                 // itself prepends "$$e." at render time. Passing "" would bake in a leading-dot path segment
                 // instead (see the two-scope constructor's remarks).
                 countElementTranslator = new MongoExpressionTranslator(
-                    countElementType, outerParam: SelfParam, outerEntityType: _entityType, innerPrefix: null);
+                    countElementType, outerParam: countRootParam!, outerEntityType: countRootEntityType!, innerPrefix: null);
             }
             else
             {
