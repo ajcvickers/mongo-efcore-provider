@@ -866,10 +866,16 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 //
                 // NOT REDUNDANT WITH `ContainsShaperReference` BELOW — the two guards protect DIFFERENT
                 // residual shapes. The reachability guard alone does NOT restore the WRAPPED CORRELATED residual
-                // (`Correlated_primitive_and_where_count_filtered_projections_still_hard_fail_in_every_mode`'s
-                // first row) — a proxy for "does this predicate reference the enclosing shaper", not that
+                // — a proxy for "does this predicate reference the enclosing shaper", not that
                 // property itself; see `ContainsShaperReference`'s own doc comment for why a BARE correlated
-                // predicate slips past reachability but is caught by the structural check. Conversely,
+                // predicate slips past reachability but is caught by the structural check. (EF-421 Task 7:
+                // SelfParam now reaches NativeProjectionBinder unconditionally, so a WRAPPED correlated
+                // predicate — formerly pinned by `NativeOwnedCollectionFilteredCountTests`'s
+                // `Correlated_primitive_and_where_count_filtered_projections_still_hard_fail_in_every_mode`'s
+                // first row, now split out to that file's `Correlated_count_filtered_projection_goes_native_
+                // EF421` — goes native upstream (Route stays Projection) and never reaches this Fallback-only
+                // arm at all any more; this guard's own reasoning is otherwise unchanged and is exercised now
+                // by any OTHER Fallback-reaching wrapped correlated shape.) Conversely,
                 // `ContainsShaperReference` alone does NOT restore the WRAPPED NON-RENDERABLE residual
                 // (`Non_renderable_element_predicate_filtered_projection_still_hard_fails_in_every_mode`, the
                 // `StartsWith` case): that predicate references only its own element parameter `p` — no shaper
