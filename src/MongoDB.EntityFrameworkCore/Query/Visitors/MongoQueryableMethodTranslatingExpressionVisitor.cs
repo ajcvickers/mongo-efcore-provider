@@ -487,8 +487,16 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             // $unwind. See MongoSelectDefinition.HasConfirmedJoinLookup.
             mongoQueryExpression.Select.MarkJoinLookupConfirmed();
 
+            // Fold the join's transparent-identifier shaper into the selector body BEFORE building the result
+            // shaper, so a whole-entity leaf (x.Outer/x.Inner verbatim) arrives as the StructuralTypeShaperExpression
+            // the join already built, rather than as a bare MemberExpression over the transparent identifier
+            // parameter — BindResultMember below then re-binds that shaper by index over its own
+            // EntityProjectionExpression instead of mis-registering it as a scalar alias read (EF-444).
+            var foldedJoinBody = ReplacingExpressionVisitor.Replace(
+                selector.Parameters.Single(), source.ShaperExpression, selector.Body);
+
             return source.UpdateShaperExpression(
-                BuildSelectManyResultShaper(mongoQueryExpression, selector.Body));
+                BuildSelectManyResultShaper(mongoQueryExpression, selector.Body, foldedJoinBody));
         }
         else if (!IsTransparentIdentifierSelector(selector) && !IsSingleLevelCollectionIncludeSelector(selector)
                  && !IsTransparentIdentifierMemberAccessSelector(selector)
@@ -2750,7 +2758,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         return source.UpdateShaperExpression(wrappedShaper);
     }
 
-    private static Expression BuildSelectManyResultShaper(MongoQueryExpression mongoQueryExpression, Expression projectionBody)
+    private static Expression BuildSelectManyResultShaper(
+        MongoQueryExpression mongoQueryExpression, Expression projectionBody, Expression? foldedBody = null)
     {
         switch (projectionBody)
         {
@@ -2758,20 +2767,27 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 when newExpression.Members != null
                      && newExpression.Members.Count == newExpression.Arguments.Count
                      && newExpression.Arguments.Count > 0:
+                var foldedNew = foldedBody as NewExpression;
                 var arguments = new Expression[newExpression.Arguments.Count];
                 for (var i = 0; i < arguments.Length; i++)
-                    arguments[i] = BindSelectManyMember(mongoQueryExpression, newExpression.Members[i].Name, newExpression.Arguments[i]);
+                    arguments[i] = BindResultMember(
+                        mongoQueryExpression, newExpression.Members[i].Name, newExpression.Arguments[i],
+                        foldedNew?.Arguments[i]);
                 return newExpression.Update(arguments);
 
             case MemberInitExpression memberInit
                 when memberInit.NewExpression.Arguments.Count == 0
                      && memberInit.Bindings.Count > 0:
+                var foldedMemberInit = foldedBody as MemberInitExpression;
                 var bindings = new MemberBinding[memberInit.Bindings.Count];
                 for (var i = 0; i < bindings.Length; i++)
                 {
                     var assignment = (MemberAssignment)memberInit.Bindings[i];
+                    var foldedAssignment = foldedMemberInit?.Bindings[i] as MemberAssignment;
                     bindings[i] = assignment.Update(
-                        BindSelectManyMember(mongoQueryExpression, assignment.Member.Name, assignment.Expression));
+                        BindResultMember(
+                            mongoQueryExpression, assignment.Member.Name, assignment.Expression,
+                            foldedAssignment?.Expression));
                 }
 
                 return memberInit.Update((NewExpression)memberInit.NewExpression, bindings);
@@ -2794,6 +2810,35 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     {
         var index = mongoQueryExpression.AddToProjection(valueExpression, alias);
         return new ProjectionBindingExpression(mongoQueryExpression, index, valueExpression.Type);
+    }
+
+    // Join-result-only sibling of BindSelectManyMember (EF-444): when the FOLDED leaf (the selector body member
+    // with the join's own transparent-identifier shaper already substituted in, via the caller's
+    // foldedJoinBody) is a whole-entity StructuralTypeShaperExpression, rebind that shaper's own
+    // EntityProjectionExpression under this member's alias instead of falling through to BindSelectManyMember,
+    // which would register the raw (unfolded) leaf — a bare MemberExpression over the transparent identifier —
+    // as an ordinary scalar alias read and die in the shaper with "No known serializer for type '<Entity>'"
+    // (measured in the EF-444 Task 0 spike). Any leaf that isn't a folded whole-entity shaper (a plain
+    // scalar/computed member) falls through unchanged. foldedExpression is null for every non-join caller of
+    // BuildSelectManyResultShaper (foldedBody defaults to null), so this is byte-for-byte inert there.
+    private static Expression BindResultMember(
+        MongoQueryExpression mongoQueryExpression, string alias, Expression valueExpression, Expression? foldedExpression)
+    {
+        if (foldedExpression is StructuralTypeShaperExpression shaper
+            && shaper.ValueBufferExpression is ProjectionBindingExpression shaperBinding)
+        {
+            var entityProjection = shaperBinding.Index is int existingIndex
+                                   && shaperBinding.QueryExpression == mongoQueryExpression
+                ? (EntityProjectionExpression)mongoQueryExpression.Projection[existingIndex].Expression
+                : (EntityProjectionExpression)mongoQueryExpression.GetMappedProjection(shaperBinding.ProjectionMember!);
+
+            var entityIndex = mongoQueryExpression.AddToProjection(entityProjection, alias);
+
+            return shaper.Update(
+                new ProjectionBindingExpression(mongoQueryExpression, entityIndex, typeof(ValueBuffer)));
+        }
+
+        return BindSelectManyMember(mongoQueryExpression, alias, valueExpression);
     }
 
     protected override ShapedQueryExpression? TranslateSelectMany(ShapedQueryExpression source, LambdaExpression selector)

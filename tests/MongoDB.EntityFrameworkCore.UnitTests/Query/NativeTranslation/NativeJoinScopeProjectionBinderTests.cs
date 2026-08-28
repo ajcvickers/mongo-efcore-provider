@@ -110,18 +110,182 @@ public class NativeJoinScopeProjectionBinderTests
     }
 
     [Fact]
-    public void Declines_when_any_leaf_is_a_whole_entity_reference()
+    public void Binds_a_whole_inner_entity_leaf_mixed_with_a_scalar()
     {
-        // `new { o, r.Total }` — Outer captured WHOLE. No native shaper exists for an entity-typed projection
-        // leaf anywhere in this codebase (Task 5b), so the WHOLE projection must decline with no partial
-        // commit, not be half-supported.
+        // `new { o.Name, r }` — Inner captured WHOLE, mixed with a scalar Outer leaf. EF-444 Task 2: the Inner
+        // leaf now stages too, but under a FIXED, self-referential alias (scope.InnerPrefix) rather than the
+        // member's own alias ("r") — see NativeJoinScopeProjectionBinder's "Alias space" remarks for why.
         var mongoQ = TranslateJoinQuery((owners, orders) =>
-            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r.Total }));
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o.Name, r }));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        var innerPrefix = mongoQ.Select.JoinScope!.InnerPrefix;
+
+        // The emitted alias is the join's own $lookup prefix, NOT the member name "r".
+        Assert.Equal(["Name", innerPrefix], mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+
+        var outerLeaf = Assert.IsType<MongoFieldExpression>(mongoQ.Select.Projection[0].Expression);
+        Assert.DoesNotContain(".", outerLeaf.ElementName);
+
+        // Self-referential: both the alias and the MongoElementRefExpression's own path are innerPrefix.
+        var innerLeaf = Assert.IsType<MongoElementRefExpression>(mongoQ.Select.Projection[1].Expression);
+        Assert.Equal(innerPrefix, innerLeaf.Path);
+
+        Assert.Single(mongoQ.Lookups);
+        Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
+    }
+
+    [Fact]
+    public void Binds_both_whole_entity_leaves_with_no_scalars()
+    {
+        // `new { o, r }` — mirrors the exact shape SpecificationTests' Applied_to_projection/
+        // GroupJoin_projection/Select_Navigations exercise. Both sides are whole-entity leaves; both now go
+        // native (EF-444 Tasks 1+2).
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r }));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        var innerPrefix = mongoQ.Select.JoinScope!.InnerPrefix;
+
+        Assert.Equal(["o", innerPrefix], mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+
+        var outerLeaf = Assert.IsType<MongoElementRefExpression>(mongoQ.Select.Projection[0].Expression);
+        Assert.Equal(MongoElementRefExpression.WholeRootDocumentPath, outerLeaf.Path);
+
+        var innerLeaf = Assert.IsType<MongoElementRefExpression>(mongoQ.Select.Projection[1].Expression);
+        Assert.Equal(innerPrefix, innerLeaf.Path);
+        // Explicitly NOT the member's own alias "r" — the single most important correction this task makes.
+        Assert.NotEqual("r", innerLeaf.Path);
+
+        Assert.Single(mongoQ.Lookups);
+        Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
+    }
+
+    [Fact]
+    public void Binds_a_duplicated_inner_leaf_without_crashing()
+    {
+        // `new { a = r, b = r }` — the real hazard the Task 0 spike found: both members want the SAME fixed
+        // self-referential alias (scope.InnerPrefix), which would otherwise crash MongoPipelineFactory with
+        // "Duplicate element name" at pipeline-build time under MongoQueryMode.Native/NativeOnly (an explicit
+        // DriverLinq builds no native pipeline at all, so it cannot crash there — that leg's own correctness is
+        // pinned by the NativeJoinTests theory of the same name). The dedup guard must stage the alias exactly
+        // once, and must do so only when the entry already holding it really is a previous Inner leaf.
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { a = r, b = r }));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        var innerPrefix = mongoQ.Select.JoinScope!.InnerPrefix;
+
+        // Exactly ONE staged entry for the fixed alias, not two — that is precisely what the guard prevents.
+        var projection = Assert.Single(mongoQ.Select.Projection);
+        Assert.Equal(innerPrefix, projection.Alias);
+        var innerLeaf = Assert.IsType<MongoElementRefExpression>(projection.Expression);
+        Assert.Equal(innerPrefix, innerLeaf.Path);
+
+        Assert.Single(mongoQ.Lookups);
+        Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
+    }
+
+    [Fact]
+    public void Binds_a_duplicated_outer_leaf_with_a_dead_projection_field()
+    {
+        // `new { a = o, b = o }` — the mirror case. No guard is needed here: each Outer leaf stages under its
+        // OWN alias (unlike Inner's fixed alias), so both "a" and "b" are legitimately distinct $project
+        // fields, both reading $$ROOT. AddToProjection dedups the BIND side back to a single index regardless,
+        // so both members materialize correctly even though the emitted $project carries one field ("b") that
+        // nothing ends up reading.
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { a = o, b = o }));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(["a", "b"], mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+
+        foreach (var projection in mongoQ.Select.Projection)
+        {
+            var leaf = Assert.IsType<MongoElementRefExpression>(projection.Expression);
+            Assert.Equal(MongoElementRefExpression.WholeRootDocumentPath, leaf.Path);
+        }
+
+        Assert.Single(mongoQ.Lookups);
+        Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
+    }
+
+    [Fact]
+    public void Declines_when_a_sibling_leaf_reached_through_the_whole_entity_reference_is_untranslatable()
+    {
+        // `new { o, Foo = o.Name.ToUpper() }` — the whole OUTER leaf (`o`) is itself perfectly native (Task 1),
+        // but a SIBLING leaf reached through that same reference (`o.Name.ToUpper()`, a string transform
+        // NativeJoinScopeTranslator/MongoExpressionTranslator does not support) is not. Out of scope per the
+        // design doc's out-of-scope list: EF-444 gives whole-entity leaves a native shaper, it does not widen
+        // the scalar/computed translator's own acceptance set. One untranslatable sibling must still decline
+        // the WHOLE projection — no partial commit — even though the whole-entity leaf alone would succeed.
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, Foo = o.Name.ToUpper() }));
 
         Assert.NotNull(mongoQ.Select.JoinScope);
         Assert.Empty(mongoQ.Select.Projection);
         Assert.Empty(mongoQ.Lookups);
         Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
+    }
+
+    [Fact]
+    public void Declines_a_computed_leaf_beside_a_whole_entity_leaf()
+    {
+        // FINAL-REVIEW FINDING 7. `new { o, X = r.Total * 2 }` — the EF-444 Task 4 carve-out, isolated at the
+        // UNIT level for the first time. Every other decline test in this class declines EARLIER, inside
+        // NativeJoinScopeTranslator.TryTranslateValue (a string transform / method call it cannot translate),
+        // so none of them ever reaches the guard under test here. This leaf translates PERFECTLY WELL —
+        // arithmetic over an Inner scalar is squarely inside the translator's acceptance set — and is stopped
+        // only by the whole-entity-sibling readability guard that runs just before the commit block: a
+        // MongoBinaryExpression is neither a MongoElementRefExpression nor a MongoFieldExpression, so it has no
+        // document path for the whole-document fallback legs the `o` leaf forces.
+        //
+        // The end-to-end proof that the resulting fallback still reads CORRECTLY lives in
+        // NativeJoinTests.Computed_leaf_beside_a_whole_entity_leaf_declines_and_still_reads_correctly; this
+        // test pins that the decline happens at THIS guard, which routing alone cannot distinguish.
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, X = r.Total * 2 }));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Empty(mongoQ.Select.Projection);
+        Assert.Empty(mongoQ.Lookups);
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
+
+        // NOT VACUOUS: the same computed leaf WITHOUT the whole-entity sibling binds fine, so the decline above
+        // is attributable to the whole-entity-leaf interaction and not to the arithmetic being untranslatable.
+        // Without this half, a future regression that broke arithmetic translation outright would leave the
+        // assertions above still green while the guard they name became dead code.
+        var computedOnly = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o.Name, X = r.Total * 2 }));
+
+        Assert.Equal(["Name", "X"], computedOnly.Select.Projection.Select(p => p.Alias).ToArray());
+        Assert.Equal(NativeRoute.Projection, computedOnly.Select.Route);
+    }
+
+    [Fact]
+    public void Binds_a_whole_outer_entity_leaf_mixed_with_a_scalar()
+    {
+        // `new { o, r.Total }` — Outer captured WHOLE, mixed with a scalar Inner leaf. EF-444 Task 1: the Outer
+        // leaf now stages a $$ROOT reference instead of declining the whole projection.
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r.Total }));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(["o", "Total"], mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+
+        var outerLeaf = Assert.IsType<MongoElementRefExpression>(mongoQ.Select.Projection[0].Expression);
+        Assert.Equal(MongoElementRefExpression.WholeRootDocumentPath, outerLeaf.Path);
+
+        var innerLeaf = Assert.IsType<MongoFieldExpression>(mongoQ.Select.Projection[1].Expression);
+        Assert.StartsWith(mongoQ.Select.JoinScope!.InnerPrefix + ".", innerLeaf.ElementName);
+
+        Assert.Single(mongoQ.Lookups);
+        Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
     }
 
     [Fact]
