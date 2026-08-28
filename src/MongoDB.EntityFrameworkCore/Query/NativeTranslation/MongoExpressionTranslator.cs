@@ -652,9 +652,21 @@ internal sealed partial class MongoExpressionTranslator
 
             case MethodCallExpression call when TryMatchRegexMethod(call, out var kind, out var receiver, out var termExpr):
             {
-                if (!TryResolveMember(Unwrap(receiver), out var property, out var fieldPath, out var receiverIsOuter)
-                    || receiverIsOuter) // an outer-scoped receiver is out of EF-421's scope — decline
+                if (!TryResolveMember(Unwrap(receiver), out var property, out var fieldPath, out var receiverIsOuter))
                     return null; // receiver must resolve to a bare string field
+
+                // An outer-scoped receiver reached from the NEW element-scope translators (Count(pred)/
+                // quantifier, both built with innerPrefix: null) is still out of EF-421's scope — MongoRegexExpression
+                // is strictly typed to MongoFieldExpression, and this shape would need MongoOuterFieldExpression's
+                // document-root-regardless-of-elementVariable rendering to be correct inside a $filter/$map.
+                // But an outer-scoped receiver reached from a PRE-EXISTING two-scope translator (NativeSelectManyBinder,
+                // NativeJoinScopeTranslator — both built with a real non-null innerPrefix) is NOT a new shape this
+                // plan needs to gate at all: TryResolveMember already resolves it to the correct, unprefixed
+                // OUTER-relative path, exactly as it did before this plan ever touched this method, so it renders
+                // correctly as a plain MongoFieldExpression (query-dialect $regularExpression, not $expr). Declining
+                // it here regressed x.Outer.Name.StartsWith(...) inside a join-scope Where predicate.
+                if (receiverIsOuter && _innerPrefix is null)
+                    return null;
 
                 if (property!.ClrType != typeof(string))
                     return null;
@@ -1182,6 +1194,15 @@ internal sealed partial class MongoExpressionTranslator
 
         if (TryResolveMember(node, out var property, out var fieldPath, out var operandIsOuter))
         {
+            // Deliberately NOT confined to _innerPrefix is null here, unlike TranslateComparison's two
+            // branches and the bare-bool arm: this is the field-to-field/arithmetic/computed-value operand
+            // path, which never reaches the query-native dialect regardless of node type (IsQueryNativeComparison
+            // requires a bare field vs. a simple value on the OTHER side, never two operands both resolved
+            // through this method), so MongoOuterFieldExpression renders identically to MongoFieldExpression
+            // here — "$" + ElementName, outside any element-variable scope. NativeSelectManyBinderTests'
+            // correlated arithmetic/numeric-comparison shapes (established in the plan that added
+            // MongoOuterFieldExpression) assert MongoOuterFieldExpression at this exact site; confining it
+            // here would only break that type assertion for zero MQL benefit.
             return operandIsOuter
                 ? new MongoOuterFieldExpression(property, fieldPath!)
                 : new MongoFieldExpression(property, fieldPath!);
