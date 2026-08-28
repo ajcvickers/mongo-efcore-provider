@@ -34,8 +34,8 @@ public class NorthwindAsTrackingQueryMongoTest : NorthwindAsTrackingQueryTestBas
         base.Applied_to_body_clause();
 
         AssertMql(
-"""
-Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_outer._id" : "ALFKI" } }
+            """
+Customers.{ "$match" : { "_id" : "ALFKI" } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$unwind" : { "path" : "$_lookup_Orders", "preserveNullAndEmptyArrays" : false } }
 """);
     }
 
@@ -51,12 +51,23 @@ Customers.
 
     public override void Applied_to_projection()
     {
-        base.Applied_to_projection();
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // Fails: native $project has no support for a whole-entity projection leaf (EF-392 chunk A
+            // rescope, Task 5b — see docs/superpowers/specs/2026-08-27-native-join-translation-v2-design.md).
+            AssertTranslationFailed(() => base.Applied_to_projection());
 
-        AssertMql(
+            AssertMql();
+        }
+        else
+        {
+            base.Applied_to_projection();
+
+            AssertMql(
 """
 Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_outer._id" : "ALFKI" } }
 """);
+        }
     }
 
     public override void Applied_to_multiple_body_clauses()
@@ -70,12 +81,23 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
 
     public override void Applied_to_body_clause_with_projection()
     {
-        base.Applied_to_body_clause_with_projection();
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // Fails: native $project has no support for a whole-entity projection leaf (EF-392 chunk A
+            // rescope, Task 5b — see docs/superpowers/specs/2026-08-27-native-join-translation-v2-design.md).
+            AssertTranslationFailed(() => base.Applied_to_body_clause_with_projection());
 
-        AssertMql(
+            AssertMql();
+        }
+        else
+        {
+            base.Applied_to_body_clause_with_projection();
+
+            AssertMql(
 """
 Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_outer._id" : "ALFKI" } }
 """);
+        }
     }
 
     private static void AssertTranslationFailed(Action query)
