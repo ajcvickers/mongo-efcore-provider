@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using System.Linq;
 using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Serializers;
@@ -86,6 +87,13 @@ internal static class MongoAggregationExpressionRenderer
                 }),
             MongoDatePartExpression datePart => RenderDatePart(datePart, placeholders, elementVariable),
             MongoQuantifierExpression quantifier => RenderQuantifier(quantifier, placeholders, elementVariable),
+            // A constructed nested sub-document leaf (EF-447, `new Book { Id = e.Id, Title = e.Title }`).
+            // Each member renders through this SAME Render call, recursively, so a nested field ref renders as
+            // "$ElementName" (an aggregation-expression field path) exactly like any other computed leaf value —
+            // never a bare unprefixed name, which $project would otherwise misread as an inclusion flag.
+            MongoDocumentConstructionExpression construction
+                => new BsonDocument(construction.Members.Select(
+                    m => new BsonElement(m.MemberName, Render(m.Value, placeholders, elementVariable)))),
             _ => throw new NativeTranslationNotSupportedException(
                 $"MongoAggregationExpressionRenderer does not support node type '{node.GetType().Name}'.")
         };

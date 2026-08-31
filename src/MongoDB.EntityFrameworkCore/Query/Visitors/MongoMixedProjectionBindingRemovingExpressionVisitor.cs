@@ -111,6 +111,20 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
                     return navMemberRead;
                 }
 
+                // A CONSTRUCTED sub-entity leaf (EF-447, `new { Book = new Book { Id = e.Id, ... } }`), mixed
+                // alongside the (also-native) Score leaf. MongoProjectionBindingExpressionVisitor registers the
+                // whole New/MemberInit node as a single projection-mapping leaf (see its own matching Visit()
+                // case), keyed to the SAME MongoDocumentConstructionExpression NativeProjectionBinder built at
+                // emit time. Rebuild the CLR object here by reading each member off the WHOLE document at its
+                // own NATURAL root-relative path — this visitor only ever sees whole, un-projected documents
+                // (the pushed-down Select is always stripped), which never carry this leaf's native $project
+                // alias at all. BuildDocumentConstructionExpression (base class) does the shared reconstruction;
+                // ReadDocumentConstructionMember (overridden just below) supplies the per-member READ.
+                if (sourceExpression is MongoDocumentConstructionExpression documentConstruction)
+                {
+                    return BuildDocumentConstructionExpression(documentConstruction, alias!);
+                }
+
                 // A computed-arithmetic leaf (e.g. select new { c, Total = c.Age * c.Score }) mixed alongside
                 // a whole entity reference. MongoProjectionBindingExpressionVisitor registers the raw binary
                 // expression as a single projection-mapping leaf (see its arithmetic BinaryExpression case);
@@ -304,6 +318,26 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
             ? valueExpression
             : Expression.Convert(valueExpression, projectionBindingExpression.Type);
         return true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Ignores <paramref name="alias"/> entirely and reads <paramref name="field"/> at its own NATURAL
+    /// root-relative document location instead — the mirror of <c>TryResolveFieldAccess</c>'s ordinary
+    /// scalar-leaf read, redirected through the driver's own "_outer" sub-document when
+    /// <see cref="MongoQueryExpression.UsesDriverJoinFields"/>, exactly like every other read in this visitor.
+    /// </remarks>
+    protected override Expression ReadDocumentConstructionMember(
+        MongoDocumentConstructionExpression construction, string alias, string memberName, MongoFieldExpression field,
+        Type memberType)
+    {
+        var docExpr = (Expression)_docParameter;
+        if (_queryExpression.UsesDriverJoinFields)
+        {
+            docExpr = CreateGetValueExpression(_docParameter, "_outer", true, typeof(BsonDocument));
+        }
+
+        return CreateGetValueExpression(docExpr, field.Property, memberType);
     }
 
     /// <summary>

@@ -633,4 +633,77 @@ public class SlotPopulationTests
         // representable, the graceful-fallback disposition Union/Concat get (see TryTranslateSetOperation).
         Assert.Null(mongoQuery.Select.SetOperation);
     }
+
+    // ══════════════════════════════════════════════════════════════════════════════════════════════
+    //  EF-447: a CONSTRUCTED (non-navigation) sub-entity leaf — `new { Copy = new CustomerDto { Id =
+    //  c.Id, ... } }` — mixed with a computed sibling in a projection.
+    // ══════════════════════════════════════════════════════════════════════════════════════════════
+
+    // A plain, unmapped DTO type reconstructed from root-level scalar fields — NOT a navigation, and not
+    // itself part of the model. Distinguishes this leaf from EF-441's owned-nav-entity leaf, which aliases an
+    // ALREADY-STORED owned sub-document.
+    private class CustomerDto
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = "";
+        public int Age { get; set; }
+    }
+
+    [Fact]
+    public void Document_construction_leaf_populates_projection_natively()
+    {
+        var mongoQuery = TranslateToMongoQuery<Customer>(
+            q => q.Select(c => new { Copy = new CustomerDto { Id = c.Id, Name = c.Name, Age = c.Age } }));
+
+        Assert.Equal(NativeRoute.Projection, mongoQuery.Select.Route);
+        var p = Assert.Single(mongoQuery.Select.Projection);
+        Assert.Equal("Copy", p.Alias);
+        var construction = Assert.IsType<MongoDocumentConstructionExpression>(p.Expression);
+        Assert.Equal(3, construction.Members.Count);
+        Assert.Equal("Id", construction.Members[0].MemberName);
+        Assert.Equal("_id", Assert.IsType<MongoFieldExpression>(construction.Members[0].Value).ElementName);
+        Assert.Equal("Name", construction.Members[1].MemberName);
+        Assert.Equal("Age", construction.Members[2].MemberName);
+        // This leaf carries NO owner-key hazard (every member is a plain root-relative field, readable at its
+        // own natural path on a whole/un-projected document too — see the mixed-visitor read side), so unlike
+        // the owned-array/owned-nav-entity leaves it must NOT set HasArrayProjectionLeaf.
+        Assert.False(mongoQuery.Select.HasArrayProjectionLeaf);
+    }
+
+    // The POSITIVE case this ticket is actually about: a constructed sub-entity leaf mixed with a COMPUTED
+    // sibling goes native, unlike EF-441's owned-nav-entity leaf (which forces the sibling-readability sweep
+    // and therefore declines a computed sibling). No sweep applies here because this leaf's own members are
+    // independently readable off a whole document by their own natural paths, so a computed sibling's lack of
+    // a document path is not a hazard for THIS leaf the way it is for the array/owned-nav-entity leaves.
+    [Fact]
+    public void Document_construction_leaf_mixed_with_computed_sibling_populates_projection_natively()
+    {
+        var mongoQuery = TranslateToMongoQuery<Customer>(
+            q => q.Select(c => new
+            {
+                Copy = new CustomerDto { Id = c.Id, Name = c.Name, Age = c.Age },
+                Total = c.Age * c.Age
+            }));
+
+        Assert.Equal(NativeRoute.Projection, mongoQuery.Select.Route);
+        Assert.Equal(2, mongoQuery.Select.Projection.Count);
+        Assert.Equal("Copy", mongoQuery.Select.Projection[0].Alias);
+        Assert.IsType<MongoDocumentConstructionExpression>(mongoQuery.Select.Projection[0].Expression);
+        Assert.Equal("Total", mongoQuery.Select.Projection[1].Alias);
+        Assert.IsType<MongoBinaryExpression>(mongoQuery.Select.Projection[1].Expression);
+    }
+
+    // A member value that is not a plain top-level scalar field (here, `c.Name.Length` — a MemberExpression
+    // whose OWN receiver is `c.Name`, not the selector parameter `c` itself) declines the WHOLE leaf, not just
+    // that member — this is a strict, minimal widening, not a general nested-projection engine.
+    [Fact]
+    public void Document_construction_leaf_with_computed_member_declines_to_fallback()
+    {
+        var mongoQuery = TranslateToMongoQuery<Customer>(
+            q => q.Select(c => new { Copy = new CustomerDto { Id = c.Id, Name = c.Name, Age = c.Name.Length } }));
+
+        Assert.Equal(NativeRoute.Fallback, mongoQuery.Select.Route);
+        Assert.Empty(mongoQuery.Select.Projection);
+    }
+
 }

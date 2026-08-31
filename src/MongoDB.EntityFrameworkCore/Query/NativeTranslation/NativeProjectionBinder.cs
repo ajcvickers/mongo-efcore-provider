@@ -434,6 +434,94 @@ internal static class NativeProjectionBinder
     }
 
     /// <summary>
+    /// Matches a CONSTRUCTED (non-navigation) sub-entity leaf (EF-447) — <c>new Book { Id = e.Id, Title =
+    /// e.Title }</c> — and recursively translates its own member bindings into a
+    /// <see cref="MongoDocumentConstructionExpression"/> representing the literal nested sub-document a
+    /// <c>$project</c> should emit for it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Scope is deliberately narrow, matching this ticket's minimal-fix shape: every member's own value must
+    /// itself be a plain top-level scalar leaf (a bare member access or the shadow-safe <c>EF.Property</c>
+    /// spelling) resolving via <see cref="MongoExpressionTranslator.TryTranslateField"/> — the SAME translation a
+    /// top-level wrapped-body member uses. A computed/nested/navigation member declines the WHOLE leaf (not just
+    /// that member), keeping this a strict, minimal widening rather than a general nested-projection engine.
+    /// </para>
+    /// <para>
+    /// A DOTTED field (reached through an owned single-reference hop) also declines here, for the same
+    /// non-default-serialization-adjacent reason <see cref="TryTranslateLeaf"/>'s own plain-member arm declines
+    /// one: this leaf's read side resolves each member by its OWN natural (root-relative, undotted) document
+    /// path on a late fallback (see the class remarks on <see cref="Expressions.MongoDocumentConstructionExpression"/>
+    /// and the mixed-visitor read side), and a dotted path has no such single-segment natural read.
+    /// </para>
+    /// <para>
+    /// Unlike the owned-array/owned-nav-entity leaves, this leaf registers NO owner-key retention and is NOT
+    /// subject to the sibling-readability sweep: every member is read directly off the query ROOT by its own
+    /// natural element name (never an owned sub-document's own path), so a late fallback that hands the shaper a
+    /// whole, un-projected root document can still resolve every member correctly — see the mixed-visitor read
+    /// side's own remarks for the mechanism that makes this true.
+    /// </para>
+    /// </remarks>
+    private static bool TryGetDocumentConstructionLeaf(
+        MongoExpressionTranslator translator,
+        Expression leafExpression,
+        [NotNullWhen(true)] out MongoDocumentConstructionExpression? result)
+    {
+        result = null;
+
+        IReadOnlyList<MemberInfo> members;
+        IReadOnlyList<Expression> values;
+        switch (leafExpression)
+        {
+            case NewExpression { Members: not null } newExpression
+                when newExpression.Members.Count == newExpression.Arguments.Count && newExpression.Arguments.Count > 0:
+                members = newExpression.Members;
+                values = newExpression.Arguments;
+                break;
+
+            case MemberInitExpression { NewExpression.Arguments.Count: 0 } memberInit when memberInit.Bindings.Count > 0:
+                var boundMembers = new List<MemberInfo>();
+                var boundValues = new List<Expression>();
+                foreach (var binding in memberInit.Bindings)
+                {
+                    if (binding is not MemberAssignment assignment)
+                        return false;
+
+                    boundMembers.Add(assignment.Member);
+                    boundValues.Add(assignment.Expression);
+                }
+
+                members = boundMembers;
+                values = boundValues;
+                break;
+
+            default:
+                return false;
+        }
+
+        var translatedMembers = new List<(string, MongoExpression)>();
+        var seenMembers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < members.Count; i++)
+        {
+            if ((values[i] is MemberExpression
+                    || (values[i] is MethodCallExpression efPropertyCall && efPropertyCall.Method.IsEFPropertyMethod()))
+                && translator.TryTranslateField(values[i], out var field)
+                && !field.ElementName.Contains('.')
+                && NativeGroupByBinder.HasDefaultKeySerialization(field.Property)
+                && seenMembers.Add(members[i].Name))
+            {
+                translatedMembers.Add((members[i].Name, field));
+                continue;
+            }
+
+            return false;
+        }
+
+        result = new MongoDocumentConstructionExpression(leafExpression, translatedMembers);
+        return true;
+    }
+
+    /// <summary>
     /// Translates a single projection leaf: a plain top-level member access, an owned entity-collection leaf
     /// (<c>b.Posts</c> — a <see cref="MaterializeCollectionNavigationExpression"/>), or a projected
     /// collection-navigation <c>Count</c>/<c>LongCount</c> (see <see cref="TryTranslateProjectedCollectionCount"/>,
@@ -550,6 +638,23 @@ internal static class NativeProjectionBinder
         {
             result = new MongoElementRefExpression(ownedNavElementName, ownedNav.TargetEntityType.ClrType);
             isOwnedNavEntityLeaf = true;
+            return true;
+        }
+
+        // A CONSTRUCTED (non-navigation) sub-entity leaf (EF-447) — `new { Book = new Book { Id = e.Id, ... } }`.
+        // A freshly-built CLR object whose own members are plain root-relative scalar fields, as opposed to the
+        // owned-nav-entity leaf just above (which aliases an ALREADY-STORED owned sub-document). Gated to
+        // WRAPPED selector bodies only (allowWholeRootEntityLeaf) — this arm is reached ONLY when this
+        // New/MemberInit is itself the VALUE of a member inside an outer wrapped body (`Book = new Book {...}`);
+        // a New/MemberInit that IS the selector body itself (`b => new Book { Id = b.Id, ... }`) is not "bare"
+        // in any sense this ticket needs to handle at all — the pre-existing top-level switch in
+        // TryPopulateNativeProjection already treats it as an ordinary WRAPPED multi-member projection (each
+        // binding becomes its own top-level $project field, exactly like an anonymous `new {...}`), and that
+        // pre-existing behavior is untouched by this ticket.
+        if (allowWholeRootEntityLeaf
+            && TryGetDocumentConstructionLeaf(translator, leafExpression, out var construction))
+        {
+            result = construction;
             return true;
         }
 
