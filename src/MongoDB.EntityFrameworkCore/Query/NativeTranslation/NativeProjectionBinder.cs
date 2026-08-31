@@ -42,7 +42,7 @@ internal static class NativeProjectionBinder
 {
     internal static bool TryPopulateNativeProjection(MongoQueryExpression mongoQ, LambdaExpression selector)
     {
-        var translator = new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType);
+        var translator = new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType, selector.Parameters[0]);
         var projections = new List<MongoProjection>();
         // Parallel to projections: true at index i when that leaf is itself the owned array leaf. Used by the
         // sibling-readability check below, which skips the array leaf(s) (already proven whole-document-readable

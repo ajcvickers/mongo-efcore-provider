@@ -242,17 +242,28 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
             return false;
         }
 
-        MongoFieldExpression? field = null;
+        // MongoOuterFieldExpression is a sibling of MongoFieldExpression (a join scope's OUTER-side scalar
+        // leaf resolves as one via NativeJoinScopeTranslator's shared operand path — see
+        // MongoExpressionTranslator.TranslateOperand's own remarks), and it is exactly as root-relative/
+        // document-path-readable as MongoFieldExpression, so it must be admitted here too — matching
+        // NativeJoinScopeProjectionBinder's own "every sibling leaf must be whole-document-readable" gate,
+        // which likewise treats the two as equivalent.
+        (IProperty Property, string ElementName)? field = null;
         foreach (var staged in _queryExpression.Select.Projection)
         {
             if (staged.Alias == alias)
             {
-                field = staged.Expression as MongoFieldExpression;
+                field = staged.Expression switch
+                {
+                    MongoFieldExpression f => (f.Property, f.ElementName),
+                    MongoOuterFieldExpression o => (o.Property, o.ElementName),
+                    _ => null
+                };
                 break;
             }
         }
 
-        if (field == null || field.ElementName == alias)
+        if (field is not { } fieldInfo || fieldInfo.ElementName == alias)
         {
             return false;
         }
@@ -265,22 +276,23 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
         // (EF-402) and stages the nullable property itself. Unwrap both sides before comparing so neither
         // direction trips, but keep the assert: without it a future change that stages a leaf whose property
         // genuinely disagrees with the binding would mis-deserialise through the wrong serializer silently.
-        if (field.Property.ClrType != projectionBindingExpression.Type
-            && field.Property.ClrType.UnwrapNullableType() != projectionBindingExpression.Type.UnwrapNullableType())
+        if (fieldInfo.Property.ClrType != projectionBindingExpression.Type
+            && fieldInfo.Property.ClrType.UnwrapNullableType() != projectionBindingExpression.Type.UnwrapNullableType())
         {
             throw new InvalidOperationException(
                 $"Aliased projection type '{projectionBindingExpression.Type}' does not match source property " +
-                $"'{field.Property.Name}' of type '{field.Property.ClrType}'; the property's serializer " +
+                $"'{fieldInfo.Property.Name}' of type '{fieldInfo.Property.ClrType}'; the property's serializer " +
                 "may produce values that cannot be cast to the binding's outer type.");
         }
 
         // No BsonArray/BsonDocument arms, unlike the sibling CreateGetValueExpression(…, IProperty, …) this
-        // otherwise mirrors: those exist for a leaf bound to a raw BSON type, and a MongoFieldExpression is
-        // always backed by a scalar IProperty (an array/owned leaf is a different MongoExpression kind and is
-        // filtered out by the `as MongoFieldExpression` above). The two paths differ deliberately; if a raw-BSON
-        // field leaf ever becomes possible, add the arms rather than assuming this read covers it.
+        // otherwise mirrors: those exist for a leaf bound to a raw BSON type, and a bare field leaf
+        // (MongoFieldExpression/MongoOuterFieldExpression) is always backed by a scalar IProperty (an
+        // array/owned leaf is a different MongoExpression kind and is filtered out by the switch above). The
+        // two paths differ deliberately; if a raw-BSON field leaf ever becomes possible, add the arms rather
+        // than assuming this read covers it.
         var valueExpression = BsonBinding.CreateGetPropertyValueAtPath(
-            _docParameter, field.ElementName.Split('.'), field.Property, projectionBindingExpression.Type);
+            _docParameter, fieldInfo.ElementName.Split('.'), fieldInfo.Property, projectionBindingExpression.Type);
 
         // MANDATORY, not defensive, and the exact mirror of what the native leg does after the same read:
         // CreateGetPropertyValueAtPath's generic argument is `property.IsNullable ? mappedType.MakeNullable()
