@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using System.Linq;
 using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Serializers;
@@ -83,6 +84,9 @@ internal static class MongoAggregationExpressionRenderer
                     { "amount", FieldRef(local.Operand.ElementName + ".Offset", elementVariable) }
                 }),
             MongoDatePartExpression datePart => RenderDatePart(datePart, placeholders, elementVariable),
+            MongoConcatExpression concat
+                => new BsonDocument("$concat",
+                    new BsonArray(concat.Operands.Select(o => Render(o, placeholders, elementVariable)))),
             _ => throw new NativeTranslationNotSupportedException(
                 $"MongoAggregationExpressionRenderer does not support node type '{node.GetType().Name}'.")
         };
@@ -149,6 +153,7 @@ internal static class MongoAggregationExpressionRenderer
                 => CanRender(conditional.Test) && CanRender(conditional.IfTrue) && CanRender(conditional.IfFalse),
             MongoDateTimeOffsetLocalExpression local => CanRender(local.Operand),
             MongoDatePartExpression datePart => CanRender(datePart.Operand),
+            MongoConcatExpression concat => concat.Operands.All(CanRender),
             _ => false
         };
 
