@@ -538,6 +538,51 @@ internal sealed partial class MongoExpressionTranslator
             case BinaryExpression be when IsComparison(be.NodeType):
                 return TranslateComparison(be);
 
+            // --- Instance Equals(...) method call: e.Field.Equals(value) ≡ e.Field == value ---
+            //
+            // Only the type's own IEquatable<T>.Equals(T) overload is admitted here (parameter type is NOT
+            // object) — never Equals(object). Reaching Equals(object) requires the compiler to BOX the
+            // argument, and TranslateComparisonCore's Unwrap strips ANY Convert unconditionally, including a
+            // boxing one; admitting Equals(object) here would silently unwrap a boxed, genuinely-mismatched-
+            // type argument (e.g. ((int)21).Equals((object)(ulong)21), which plain C# evaluates false — Int32
+            // .Equals(object) checks `obj is int` first) down to a raw constant and emit a native $eq that
+            // MongoDB WOULD match (BSON compares numeric subtypes by value) — the OPPOSITE result. That
+            // mismatched-type shape has no native form yet and must keep falling back to the driver-LINQ
+            // bridge, which already special-cases it (see MongoEFToLinqTranslatingExpressionVisitor's
+            // IsAlwaysFalseAcrossTypeMismatch). Once the object-overload is excluded, the argument can only
+            // carry a genuine (non-boxing) implicit numeric widening — the same shape `==` already handles —
+            // so delegating straight to TranslateComparisonCore reuses that logic unchanged.
+            case MethodCallExpression
+                {
+                    Method.Name: nameof(object.Equals), Object: not null, Arguments.Count: 1
+                } equalsCall
+                when equalsCall.Method.GetParameters()[0].ParameterType != typeof(object):
+                return TranslateComparisonCore(equalsCall.Object!, equalsCall.Arguments[0], ExpressionType.Equal);
+
+            // --- Static object.Equals(a, b) method call ---
+            //
+            // The static overload's parameters are ALWAYS object (there is only one), so both arguments are
+            // ALWAYS boxed regardless of their own static types — the parameter-type gate the instance-call
+            // case above uses cannot distinguish "same type" from "mismatched type" here. Mirrors the
+            // driver-LINQ bridge's own rule for this exact shape (MongoEFToLinqTranslatingExpressionVisitor's
+            // static-Equals case): peel exactly one boxing layer off each argument
+            // (ExpressionExtensionMethods.RemoveObjectConvert — unlike Unwrap, this strips ONLY a single
+            // Convert-to-object layer, leaving any numeric/widening conversion underneath intact) and require
+            // the UNBOXED types to match. A mismatch (e.g. object.Equals(intField, (long)21)) declines rather
+            // than mistranslate — same correctness reasoning as the instance-call case above.
+            case MethodCallExpression
+                {
+                    Method.Name: nameof(object.Equals), Object: null, Arguments.Count: 2
+                } staticEqualsCall:
+            {
+                var leftArg = staticEqualsCall.Arguments[0].RemoveObjectConvert();
+                var rightArg = staticEqualsCall.Arguments[1].RemoveObjectConvert();
+                if (leftArg.Type != rightArg.Type)
+                    return null;
+
+                return TranslateComparisonCore(leftArg, rightArg, ExpressionType.Equal);
+            }
+
             // --- Negation of a boolean field ---
 
             case UnaryExpression { NodeType: ExpressionType.Not } not:
@@ -868,9 +913,21 @@ internal sealed partial class MongoExpressionTranslator
     /// </para>
     /// </remarks>
     private MongoBinaryExpression? TranslateComparison(BinaryExpression be)
+        => TranslateComparisonCore(be.Left, be.Right, be.NodeType);
+
+    /// <summary>
+    /// The shared core of <see cref="TranslateComparison"/>, taking the two operands and the comparison's
+    /// <see cref="ExpressionType"/> directly rather than a <see cref="BinaryExpression"/> — so a non-binary
+    /// comparison shape (an instance <c>Equals(...)</c> method call) can reuse it unchanged. See the
+    /// <c>Equals(...)</c> case in <see cref="TranslateNode"/> for why it is safe to route that call's
+    /// (receiver, argument) pair through here with no extra handling: excluding the <c>Equals(object)</c>
+    /// overload there guarantees the argument carries at most a genuine (non-boxing) implicit numeric
+    /// widening — the same shape <c>==</c> already produces and this method already tolerates.
+    /// </summary>
+    private MongoBinaryExpression? TranslateComparisonCore(Expression left, Expression right, ExpressionType nodeType)
     {
-        var leftUnwrapped = Unwrap(be.Left);
-        var rightUnwrapped = Unwrap(be.Right);
+        var leftUnwrapped = Unwrap(left);
+        var rightUnwrapped = Unwrap(right);
 
         // --- Entity_equality_null / _not_null (`c == null`) and an owned single-reference nav null check
         // (`b.Address == null`) --- a comparison between an ENTITY-TYPED operand (the WHOLE root entity, or an
@@ -890,7 +947,7 @@ internal sealed partial class MongoExpressionTranslator
         if (isLeftEntityTyped && rightUnwrapped is ConstantExpression { Value: null }
             || isRightEntityTyped && leftUnwrapped is ConstantExpression { Value: null })
         {
-            var nullCheckOp = MapComparisonOperator(be.NodeType);
+            var nullCheckOp = MapComparisonOperator(nodeType);
             if (nullCheckOp is null)
                 return null;
 
@@ -908,7 +965,7 @@ internal sealed partial class MongoExpressionTranslator
         // key-based entity equality semantics; see the remarks above).
         if (SelfParam is not null && ReferenceEquals(leftUnwrapped, SelfParam) && ReferenceEquals(rightUnwrapped, SelfParam))
         {
-            var selfOp = MapComparisonOperator(be.NodeType);
+            var selfOp = MapComparisonOperator(nodeType);
             if (selfOp is null)
                 return null;
 
@@ -928,14 +985,14 @@ internal sealed partial class MongoExpressionTranslator
             // ($toX). See HasNumericConvert for the three-outcome classification. CanFallThroughToExpr carries
             // the fall-through's own two preconditions — default serialization, and NOT a relational operator
             // over a nullable property (which would un-type-bracket the comparison and admit null/missing rows).
-            if (HasNumericConvert(be.Left, leftProperty!.ClrType, out var leftWideningTarget, out var leftIdentityLike))
+            if (HasNumericConvert(left, leftProperty!.ClrType, out var leftWideningTarget, out var leftIdentityLike))
             {
-                if (!CanFallThroughToExpr(leftProperty, be.NodeType))
+                if (!CanFallThroughToExpr(leftProperty, nodeType))
                     return null;
             }
             else
             {
-                var mongoOp = MapComparisonOperator(be.NodeType);
+                var mongoOp = MapComparisonOperator(nodeType);
                 if (mongoOp is null)
                     return null;
 
@@ -967,17 +1024,17 @@ internal sealed partial class MongoExpressionTranslator
         else if (TryResolveMember(rightUnwrapped, out var rightProperty, out var rightPath, out var rightIsOuter)
                  && IsSimpleValue(leftUnwrapped))
         {
-            if (HasNumericConvert(be.Right, rightProperty!.ClrType, out var rightWideningTarget, out var rightIdentityLike))
+            if (HasNumericConvert(right, rightProperty!.ClrType, out var rightWideningTarget, out var rightIdentityLike))
             {
-                // be.NodeType, NOT the mirrored operator: the four relational operators are closed under
+                // nodeType, NOT the mirrored operator: the four relational operators are closed under
                 // Mirror, so which side the member sits on cannot change the guard's answer.
-                if (!CanFallThroughToExpr(rightProperty, be.NodeType))
+                if (!CanFallThroughToExpr(rightProperty, nodeType))
                     return null;
             }
             else
             {
                 // Mirror the operator since the member is on the right-hand side but must render on the Left.
-                var mongoOp = MapComparisonOperator(Mirror(be.NodeType));
+                var mongoOp = MapComparisonOperator(Mirror(nodeType));
                 if (mongoOp is null)
                     return null;
 
@@ -996,15 +1053,15 @@ internal sealed partial class MongoExpressionTranslator
 
         // --- Field-to-field / arithmetic-operand shape: always routes to $expr ---
 
-        var generalOp = MapComparisonOperator(be.NodeType);
+        var generalOp = MapComparisonOperator(nodeType);
         if (generalOp is null)
             return null;
 
-        var leftOperand = TranslateOperand(be.Left);
+        var leftOperand = TranslateOperand(left);
         if (leftOperand is null)
             return null;
 
-        var rightOperand = TranslateOperand(be.Right);
+        var rightOperand = TranslateOperand(right);
         if (rightOperand is null)
             return null;
 
@@ -1026,7 +1083,7 @@ internal sealed partial class MongoExpressionTranslator
         if (rightOperand is MongoSizeExpression
             && leftOperand is MongoConstantExpression or MongoParameterExpression)
         {
-            var mirroredOp = MapComparisonOperator(Mirror(be.NodeType));
+            var mirroredOp = MapComparisonOperator(Mirror(nodeType));
             if (mirroredOp is null)
                 return null;
 

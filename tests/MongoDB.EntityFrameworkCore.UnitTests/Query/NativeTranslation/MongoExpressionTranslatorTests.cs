@@ -516,6 +516,112 @@ public class MongoExpressionTranslatorTests
     }
 
     // ------------------------------------------------------------------
+    // Test 11b-11d (EF-322): instance Equals(...) method calls (e.g. `e.EmployeeID.Equals(x)`) translate to
+    // the same MongoBinaryExpression(Equal, ...) an equivalent `==` comparison would — but ONLY for the
+    // type's own IEquatable<T>.Equals(T) overload, never Equals(object).
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Equals_method_call_translates_to_equal_binary()
+    {
+        var translator = NewTranslator(GetEntityType<Customer>());
+        Expression<Func<Customer, bool>> predicate = c => c.Age.Equals(21);
+
+        var translated = translator.TryTranslate(predicate.Body, out var result);
+
+        Assert.True(translated);
+        var binary = Assert.IsType<MongoBinaryExpression>(result);
+        Assert.Equal(MongoBinaryOperator.Equal, binary.Operator);
+        var field = Assert.IsType<MongoFieldExpression>(binary.Left);
+        Assert.Equal("Age", field.ElementName);
+        var constant = Assert.IsType<MongoConstantExpression>(binary.Right);
+        Assert.Equal(21, constant.Value);
+    }
+
+    // The exact shape of Where_equals_using_int_overload_on_mismatched_types (EF spec suite): the argument's
+    // static type (ushort) differs from the receiver's (int), so the compiler picks int's own Equals(int)
+    // overload (via IEquatable<int>) and inserts a WIDENING numeric Convert on the argument — a
+    // MethodCallExpression, not a BinaryExpression, but semantically identical to `c.Age == (int)shortPrm`.
+    [Fact]
+    public void Equals_method_call_with_widening_convert_translates_to_equal_binary()
+    {
+        var translator = NewTranslator(GetEntityType<Customer>());
+        Expression<Func<Customer, bool>> predicate = c => c.Age.Equals((ushort)21);
+
+        var translated = translator.TryTranslate(predicate.Body, out var result);
+
+        Assert.True(translated);
+        var binary = Assert.IsType<MongoBinaryExpression>(result);
+        Assert.Equal(MongoBinaryOperator.Equal, binary.Operator);
+        var field = Assert.IsType<MongoFieldExpression>(binary.Left);
+        Assert.Equal("Age", field.ElementName);
+        var constant = Assert.IsType<MongoConstantExpression>(binary.Right);
+        Assert.Equal(21, constant.Value);
+    }
+
+    // The exact shape of Where_equals_using_object_overload_on_mismatched_types (EF spec suite): ulong has NO
+    // implicit conversion to int, so the compiler can only satisfy the call via Equals(object), BOXING the
+    // ulong argument. This is a genuinely different overload with different semantics — Int32.Equals(object)
+    // returns false whenever the boxed argument isn't itself a boxed int, regardless of numeric value — so it
+    // must NOT be admitted here: doing so would mean unwrapping the boxing Convert down to a raw ulong
+    // constant and emitting a native $eq that MongoDB WOULD match (BSON compares numeric subtypes by value),
+    // silently returning the OPPOSITE of what plain C# returns. This shape has no native form yet and must
+    // keep falling back to the driver-LINQ bridge, which already special-cases it correctly.
+    [Fact]
+    public void Equals_method_call_using_object_overload_reports_not_translatable()
+    {
+        var translator = NewTranslator(GetEntityType<Customer>());
+        Expression<Func<Customer, bool>> predicate = c => c.Age.Equals((ulong)21);
+
+        var translated = translator.TryTranslate(predicate.Body, out var result);
+
+        Assert.False(translated);
+        Assert.Null(result);
+    }
+
+    // ------------------------------------------------------------------
+    // Test 11e-11f (EF-322 follow-up): the STATIC two-argument object.Equals(a, b) form. Both parameters are
+    // always object (there is only one static overload), so both arguments are ALWAYS boxed regardless of
+    // their own static types — unlike the instance-call case, the "is this the object overload" gate can't
+    // be a parameter-type check. Instead this mirrors the driver-LINQ bridge's own rule
+    // (MongoEFToLinqTranslatingExpressionVisitor's static-Equals case): peel exactly one boxing layer off
+    // each argument (RemoveObjectConvert) and require the UNBOXED types to match before treating it as an
+    // ordinary equality comparison.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Static_object_equals_translates_to_equal_binary()
+    {
+        var translator = NewTranslator(GetEntityType<Customer>());
+        Expression<Func<Customer, bool>> predicate = c => object.Equals(c.Age, 21);
+
+        var translated = translator.TryTranslate(predicate.Body, out var result);
+
+        Assert.True(translated);
+        var binary = Assert.IsType<MongoBinaryExpression>(result);
+        Assert.Equal(MongoBinaryOperator.Equal, binary.Operator);
+        var field = Assert.IsType<MongoFieldExpression>(binary.Left);
+        Assert.Equal("Age", field.ElementName);
+        var constant = Assert.IsType<MongoConstantExpression>(binary.Right);
+        Assert.Equal(21, constant.Value);
+    }
+
+    // The mismatched-type guard: c.Age is boxed from Int32, the second argument from Int64 — genuinely
+    // different unboxed types, exactly like Equals_method_call_using_object_overload_reports_not_translatable
+    // above but reached via the static two-arg overload instead of the instance one.
+    [Fact]
+    public void Static_object_equals_with_mismatched_types_reports_not_translatable()
+    {
+        var translator = NewTranslator(GetEntityType<Customer>());
+        Expression<Func<Customer, bool>> predicate = c => object.Equals(c.Age, (long)21);
+
+        var translated = translator.TryTranslate(predicate.Body, out var result);
+
+        Assert.False(translated);
+        Assert.Null(result);
+    }
+
+    // ------------------------------------------------------------------
     // Test 12: bare nullable-bool member access reports not translatable
     // (three-valued semantics the query dialect does not match — stays
     // out of scope for this task; must keep falling back to driver-LINQ).
