@@ -872,6 +872,50 @@ internal sealed partial class MongoExpressionTranslator
         var leftUnwrapped = Unwrap(be.Left);
         var rightUnwrapped = Unwrap(be.Right);
 
+        // --- Entity_equality_null / _not_null (`c == null`) and an owned single-reference nav null check
+        // (`b.Address == null`) --- a comparison between an ENTITY-TYPED operand (the WHOLE root entity, or an
+        // owned/embedded single-reference navigation reached from it — see TryResolveEntityTypedOperand) and a
+        // literal null. Deliberately narrowed to a literal-null OTHER side only — unlike a mapped scalar, there
+        // is no general serializer path for comparing an arbitrary CAPTURED entity instance
+        // (Entity_equality_local) against a document/sub-document reference, so that shape must keep declining
+        // to driver-LINQ; admitting it here would reach MongoParameterExpression's BsonValue.Create at
+        // execution time, which cannot map an arbitrary CLR entity to a BsonValue. Rendered as a
+        // MongoElementRefExpression, which the "$" + Path rendering rule turns into either the aggregation
+        // system variable "$$ROOT" (root entity) or a plain sub-document field reference (owned nav) — the
+        // same shape the driver's own LINQ provider already emits for a whole-entity null comparison.
+        // Both sides are resolved unconditionally (not short-circuited) so the two `out` locals below are
+        // always definitely assigned regardless of which disjunct ends up matching.
+        var isLeftEntityTyped = TryResolveEntityTypedOperand(leftUnwrapped, out var leftEntityRef);
+        var isRightEntityTyped = TryResolveEntityTypedOperand(rightUnwrapped, out var rightEntityRef);
+        if (isLeftEntityTyped && rightUnwrapped is ConstantExpression { Value: null }
+            || isRightEntityTyped && leftUnwrapped is ConstantExpression { Value: null })
+        {
+            var nullCheckOp = MapComparisonOperator(be.NodeType);
+            if (nullCheckOp is null)
+                return null;
+
+            return new MongoBinaryExpression(
+                nullCheckOp.Value,
+                (leftEntityRef ?? rightEntityRef)!,
+                new MongoConstantExpression(null, forSerialization: null));
+        }
+
+        // --- Entity_equality_self (`c == c`) --- both sides are THIS translator's own root parameter
+        // (identical reference, never by name — see SelfParam's own remarks), which is trivially always
+        // true/false regardless of the document's actual content: $$ROOT compared to itself needs no real
+        // per-field comparison, unlike comparing two DIFFERENT entity-typed operands (which would be genuine
+        // whole-document equality — not admitted anywhere in this method, and not the same thing as EF's own
+        // key-based entity equality semantics; see the remarks above).
+        if (SelfParam is not null && ReferenceEquals(leftUnwrapped, SelfParam) && ReferenceEquals(rightUnwrapped, SelfParam))
+        {
+            var selfOp = MapComparisonOperator(be.NodeType);
+            if (selfOp is null)
+                return null;
+
+            var rootRef = new MongoElementRefExpression(MongoElementRefExpression.WholeRootDocumentPath, _entityType.ClrType);
+            return new MongoBinaryExpression(selfOp.Value, rootRef, rootRef);
+        }
+
         // --- Query-native shape: member on exactly one side, value on the other ---
 
         if (TryResolveMember(leftUnwrapped, out var leftProperty, out var leftPath, out var leftIsOuter)

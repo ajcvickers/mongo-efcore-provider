@@ -55,6 +55,11 @@ internal static class MongoAggregationExpressionRenderer
         => node switch
         {
             MongoFieldExpression field => FieldRef(field.ElementName, elementVariable),
+            // NullSafe wraps a MISSING element the same as an explicitly-stored null (see the node's own
+            // remarks) — needed for an owned-nav null-equality check, where $expr's own $eq does not
+            // otherwise treat "missing" and "null" alike the way the ordinary query dialect does.
+            MongoElementRefExpression { NullSafe: true } nullSafeElementRef
+                => new BsonDocument("$ifNull", new BsonArray { FieldRef(nullSafeElementRef.Path, elementVariable), BsonNull.Value }),
             MongoElementRefExpression elementRef => FieldRef(elementRef.Path, elementVariable),
             // Always at document root, REGARDLESS of elementVariable — see the node's own remarks.
             MongoOuterFieldExpression outer => FieldRef(outer.ElementName, elementVariable: null),
