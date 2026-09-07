@@ -407,25 +407,6 @@ Customers.
 
     public override async Task GroupJoin_DefaultIfEmpty(bool async)
     {
-#if EF8 || EF9
-        // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020. This single-join shape
-        // reaches TranslateLeftJoin fine after EF-436's LeftJoin-recognition fix (see
-        // GroupJoin_DefaultIfEmpty_multiple's comment), but - unlike the two-joins-onto-the-same-type shape,
-        // which EF-375 forces onto the native $lookup-flatten path regardless of driver-LINQ support - a
-        // SINGLE join with no other join to trigger that flatten falls back to the driver-LINQ bridge, and
-        // the bridge's own LeftJoin-to-Join rewrite (MongoEFToLinqTranslatingExpressionVisitor.LeftJoin.cs,
-        // RewriteLeftJoins/StripJoinForLookup) still gates on `call.Method.DeclaringType == typeof(Queryable)`,
-        // which the EF8/EF9 LeftJoin shim fails - so the driver receives an unrewritten `.LeftJoin(...)` it has
-        // no translator for. Fixing this bridge-level gate too is out of scope for EF-436 (which named only
-        // GroupJoin_DefaultIfEmpty_multiple) - tracked as EF-X020's underlying mechanism, not re-tagged here.
-        // The outer collection access is logged before the driver rejects the join, so a partial pipeline
-        // is captured (same pattern as the other EF-X020/EF-X022 partial-capture tests in this file).
-        await AssertTranslationFailed(() => base.GroupJoin_DefaultIfEmpty(async));
-        AssertMql(
-    """
-Customers.
-""");
-#else
         // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.GroupJoin_DefaultIfEmpty(async);
 
@@ -433,7 +414,6 @@ Customers.
             """
 Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
-#endif
     }
 
     public override async Task GroupJoin_DefaultIfEmpty_multiple(bool async)
@@ -488,23 +468,12 @@ Employees.
 
     public override async Task GroupJoin_DefaultIfEmpty3(bool async)
     {
-#if EF8 || EF9
-        // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020. Same single-join
-        // driver-LINQ-bridge LeftJoin-recognition gap as GroupJoin_DefaultIfEmpty (see its comment) - out of
-        // scope for EF-436.
-        await AssertTranslationFailed(() => base.GroupJoin_DefaultIfEmpty3(async));
-        AssertMql(
-    """
-Customers.
-""");
-#else
         await base.GroupJoin_DefaultIfEmpty3(async);
 
         AssertMql(
             """
 Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
-#endif
     }
 
     public override async Task GroupJoin_Where(bool async)
@@ -529,23 +498,12 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
 
     public override async Task GroupJoin_DefaultIfEmpty_Where(bool async)
     {
-#if EF8 || EF9
-        // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020. Same single-join
-        // driver-LINQ-bridge LeftJoin-recognition gap as GroupJoin_DefaultIfEmpty (see its comment) - out of
-        // scope for EF-436.
-        await AssertTranslationFailed(() => base.GroupJoin_DefaultIfEmpty_Where(async));
-        AssertMql(
-    """
-Customers.
-""");
-#else
         await base.GroupJoin_DefaultIfEmpty_Where(async);
 
         AssertMql(
             """
 Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_inner" : { "$ne" : null }, "_inner.CustomerID" : "ALFKI" } }
 """);
-#endif
     }
 
     public override async Task Join_GroupJoin_DefaultIfEmpty_Where(bool async)
@@ -570,23 +528,12 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
 
     public override async Task GroupJoin_DefaultIfEmpty_Project(bool async)
     {
-#if EF8 || EF9
-        // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020. Same single-join
-        // driver-LINQ-bridge LeftJoin-recognition gap as GroupJoin_DefaultIfEmpty (see its comment) - out of
-        // scope for EF-436.
-        await AssertTranslationFailed(() => base.GroupJoin_DefaultIfEmpty_Project(async));
-        AssertMql(
-    """
-Customers.
-""");
-#else
         // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.GroupJoin_DefaultIfEmpty_Project(async);
         AssertMql(
             """
 Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner._id", "_id" : 0 } }
 """);
-#endif
     }
 
     public override async Task GroupJoin_SelectMany_subquery_with_filter(bool async)
@@ -849,23 +796,12 @@ Customers.
 
     public override async Task Condition_on_entity_with_include(bool async)
     {
-#if EF8 || EF9
-        // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020. Same single-join
-        // driver-LINQ-bridge LeftJoin-recognition gap as GroupJoin_DefaultIfEmpty (see its comment) - out of
-        // scope for EF-436.
-        await AssertTranslationFailed(() => base.Condition_on_entity_with_include(async));
-        AssertMql(
-    """
-Customers.
-""");
-#else
         // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.Condition_on_entity_with_include(async);
         AssertMql(
             """
 Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "a" : { "$cond" : { "if" : { "$ne" : ["$_v._inner", null] }, "then" : "$_v._inner._id", "else" : -1 } }, "_id" : 0 } }
 """);
-#endif
     }
 
     public override async Task Join_customers_orders_entities_same_entity_twice(bool async)

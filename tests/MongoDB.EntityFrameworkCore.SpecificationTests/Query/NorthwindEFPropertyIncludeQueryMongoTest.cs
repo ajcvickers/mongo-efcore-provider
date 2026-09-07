@@ -287,15 +287,6 @@ Customers.{ "$match" : { "_id" : "ALFKI ?" } }, { "$limit" : 2 }, { "$lookup" : 
 
     public override async Task Include_collection_with_left_join_clause_with_filter(bool async)
     {
-#if EF8 || EF9
-        // Fails: single-join driver-LINQ-bridge LeftJoin-recognition gap (same as
-        // NorthwindJoinQueryMongoTest.GroupJoin_DefaultIfEmpty - see its comment) - out of scope for EF-436.
-        await AssertTranslationFailed(() => base.Include_collection_with_left_join_clause_with_filter(async));
-        AssertMql(
-    """
-Customers.
-""");
-#else
         // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.Include_collection_with_left_join_clause_with_filter(async);
 
@@ -303,7 +294,6 @@ Customers.
             """
 Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_outer._id" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_outer._lookup_Orders" } }
 """);
-#endif
     }
 
     public override async Task Include_duplicate_collection(bool async)
@@ -753,22 +743,12 @@ OrderDetails.{ "$match" : { "_id.OrderID" : { "$mod" : [23, 13] } } }, { "$looku
 
     public override async Task Outer_identifier_correctly_determined_when_doing_include_on_right_side_of_left_join(bool async)
     {
-#if EF8 || EF9
-        // Fails: single-join driver-LINQ-bridge LeftJoin-recognition gap (same as
-        // NorthwindJoinQueryMongoTest.GroupJoin_DefaultIfEmpty - see its comment) - out of scope for EF-436.
-        await AssertTranslationFailed(() => base.Outer_identifier_correctly_determined_when_doing_include_on_right_side_of_left_join(async));
-        AssertMql(
-    """
-Customers.
-""");
-#else
         await base.Outer_identifier_correctly_determined_when_doing_include_on_right_side_of_left_join(async);
 
         AssertMql(
             """
 Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_outer.City" : "Seattle" } }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_inner._id", "foreignField" : "_id.OrderID", "as" : "_inner._lookup_OrderDetails" } }
 """);
-#endif
     }
 
     public override async Task SelectMany_Include_reference_GroupBy_Select(bool async)

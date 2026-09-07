@@ -2987,22 +2987,12 @@ Orders.{ "$match" : { "OrderDate" : { "$ne" : null } } }, { "$project" : { "Orde
 
     public override async Task No_orderby_added_for_fully_translated_manually_constructed_LOJ(bool async)
     {
-#if EF8 || EF9
-        // Fails: single-join driver-LINQ-bridge LeftJoin-recognition gap (same as
-        // NorthwindJoinQueryMongoTest.GroupJoin_DefaultIfEmpty - see its comment) - out of scope for EF-436.
-        await AssertTranslationFailed(() => base.No_orderby_added_for_fully_translated_manually_constructed_LOJ(async));
-        AssertMql(
-    """
-Employees.
-""");
-#else
         // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.No_orderby_added_for_fully_translated_manually_constructed_LOJ(async);
         AssertMql(
             """
 Employees.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Employees", "localField" : "_outer._id", "foreignField" : "ReportsTo", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "City1" : "$_v._outer.City", "City2" : "$_v._inner.City", "_id" : 0 } }
 """);
-#endif
     }
 
     public override async Task No_orderby_added_for_client_side_GroupJoin_dependent_to_principal_LOJ(bool async)

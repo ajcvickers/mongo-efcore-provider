@@ -103,7 +103,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     // explicit GroupJoin-flatten AND separately triggers an unrelated optional-reference-nav Include would
     // now admit the latter too. That residual gap is far smaller than, and strictly a subset of, the blast
     // radius this check exists to close off.
-    private static readonly MethodInfo Ef8Ef9LeftJoinMethod =
+    internal static readonly MethodInfo Ef8Ef9LeftJoinMethod =
         typeof(Microsoft.EntityFrameworkCore.Internal.QueryableExtensions)
             .GetTypeInfo().GetDeclaredMethods("LeftJoin").Single(mi => mi.GetParameters().Length == 5);
 
@@ -114,6 +114,24 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     /// </summary>
     private bool IsRecognizedGroupJoinFlattenLeftJoin()
         => ((MongoQueryCompilationContext)QueryCompilationContext).HasGroupJoinFlattenPair;
+#endif
+
+    /// <summary>
+    /// Whether <paramref name="method"/> is EF8/EF9's internal <c>LeftJoin</c> dispatch shim (see
+    /// <c>Ef8Ef9LeftJoinMethod</c>'s remarks). Used by <see cref="MongoEFToLinqTranslatingExpressionVisitor"/>'s
+    /// join-rewrite machinery to recognize a shim <c>LeftJoin</c> node exactly like a genuine
+    /// <c>Queryable.LeftJoin</c> once it has already been admitted past this visitor's own
+    /// query-level gate (<c>IsRecognizedGroupJoinFlattenLeftJoin</c>) - the bridge only ever sees a
+    /// <c>CapturedExpression</c> for a query that already passed that gate, so widening recognition here
+    /// does not reopen the unrelated optional-reference-nav risk that gate exists to close off. Always
+    /// <see langword="false"/> on EF10, where the shim doesn't exist and the BCL <c>Queryable.LeftJoin</c>
+    /// is used instead.
+    /// </summary>
+    internal static bool IsEf8Ef9LeftJoinShim(MethodInfo method)
+#if EF8 || EF9
+        => (method.IsGenericMethod ? method.GetGenericMethodDefinition() : method) == Ef8Ef9LeftJoinMethod;
+#else
+        => false;
 #endif
 
     private static readonly HashSet<string> OrderingMethodNames =

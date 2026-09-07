@@ -57,15 +57,6 @@ Customers.{ "$match" : { "City" : "London" } }
 
     public override async Task Entity_mapped_to_view_on_right_side_of_join(bool async)
     {
-#if EF8 || EF9
-        // Fails: single-join driver-LINQ-bridge LeftJoin-recognition gap (same as
-        // NorthwindJoinQueryMongoTest.GroupJoin_DefaultIfEmpty - see its comment) - out of scope for EF-436.
-        await AssertTranslationFailed(() => base.Entity_mapped_to_view_on_right_side_of_join(async));
-        AssertMql(
-    """
-Orders.
-""");
-#else
         // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.Entity_mapped_to_view_on_right_side_of_join(async);
 
@@ -73,7 +64,6 @@ Orders.
             """
 Orders.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Products", "localField" : "_outer.CustomerID", "foreignField" : "CategoryName", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
-#endif
     }
 
     public override async Task KeylessEntity_with_nav_defining_query(bool async)
