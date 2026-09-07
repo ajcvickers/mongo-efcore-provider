@@ -1080,7 +1080,6 @@ Products.{ "$match" : { "$and" : [{ "$expr" : { "$eq" : [{ "$mod" : ["$_id", 17]
 
     public override async Task Include_empty_reference_sets_IsLoaded(bool async)
     {
-        // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.Include_empty_reference_sets_IsLoaded(async);
 
         AssertMql(

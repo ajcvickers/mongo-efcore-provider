@@ -97,6 +97,13 @@ internal sealed class MongoSelectLowerer
         if (select.SetOperation == null)
         {
             AppendLookupStages(query, stages);
+
+            // 2b. A reference-Include null check (e.g. `Include(e => e.Manager).First(e => e.Manager ==
+            // null)`) confirmed this select's join from a bare Where, with no confirming Select reaching it —
+            // see MongoSelectDefinition.PostJoinOps's own remarks for why the $match (and, for a reducer, the
+            // trailing $limit) must land HERE, after the $lookup/$unwind, rather than in PipelineOps above.
+            // Empty (a no-op append) for every query that never took that path.
+            AppendSelectOpStages(select.PostJoinOps, stages, sortFields);
         }
 
         // Set operation terminal ($unionWith [+ dedup] or a set-difference shape for Intersect/Except).
