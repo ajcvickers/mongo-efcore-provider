@@ -282,6 +282,74 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
         Assert.True(found);
     }
 
+    [Fact]
+    public void Chained_join_Where_terminal_Count_goes_native_under_NativeOnly()
+    {
+        // Native-chained-join-scope plan (2026-09-07), Task 7. The sibling test above
+        // (Chained_join_Where_OrderBy_Any_goes_native_under_NativeOnly) already pins that a bare Any() over a
+        // fully-eligible chain reaches NativeCardinalityBinder.TryBindAggregate's chain-confirming call site
+        // (added by Task 6's fix round — see that method's own remarks). Any()/All() are the PRESENCE-ONLY
+        // arm of that same method (a boolean short-circuit); Count() is the ordinary $count arm, a distinct
+        // code path through the SAME confirming call site (which runs unconditionally right before the
+        // method's final success return, regardless of which aggregate op reached it). Both are worth pinning
+        // separately since the brief calls out Count specifically, not just Any.
+        var seed = SeedOwnersOrdersAndLines();
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Chained_join_Where_terminal_Count_goes_native_under_NativeOnly));
+
+        var count = db.Owners
+            .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+            .Join(db.OrderLines, e => e.r.Id, l => l.OrderId, (e, l) => new { e.o, e.r, l })
+            .Where(x => x.o.Name == seed.Owners[0].Name)
+            .Count();
+
+        Assert.True(count > 0);
+    }
+
+    [Fact]
+    public void Take_after_Where_over_a_two_level_collection_nav_chain_declines_cleanly_under_NativeOnly()
+    {
+        // Native-chained-join-scope plan (2026-09-07), Task 7. This task's brief proposed this exact shape
+        // (a Where then a Take over a 2-level Owners->Orders->OrderLines chain) as a test of "the existing
+        // post-confirmation Take guard" (MongoSelectDefinition.HasConfirmedJoinLookup, read by
+        // NativeSlotPopulator.cs's slot-operator check). MEASURED (temporary instrumentation added and
+        // reverted, not part of this change — probes placed both in NativeSlotPopulator.PopulateNativeSlots'
+        // Take arm and in the wrapped-Select confirming arm of
+        // MongoQueryableMethodTranslatingExpressionVisitor.TranslateSelect): that is not actually the
+        // mechanism this shape (or ANY chained-join + Take/Skip construction tried, including an EXPLICIT
+        // confirming `new {...}` Select composed immediately before Take, mirroring
+        // First_after_a_confirmed_join_declines_cleanly_under_NativeOnly's reducer pattern) exercises. EF's
+        // nav-expansion fuses even an explicit Select immediately following a join chain into the SAME
+        // deferred pending-selector mechanism an implicit trailing Select uses, so a Take is always visited
+        // — and its $limit recorded — BEFORE the chain's confirming Select runs, whether that Select is
+        // implicit or explicit. `HasConfirmedJoinLookup` therefore reads FALSE at the moment
+        // NativeSlotPopulator processes Take/Skip for every chained-join construction tried here — matching
+        // that guard's own "measured ZERO hits" comment, which this task's investigation did not overturn
+        // (nor find a new construction that does).
+        //
+        // The mechanism that ACTUALLY declines this shape (and Task 6's own adversarial chain-paging test,
+        // Chained_join_with_an_earlier_collection_nav_declines_paging_under_NativeOnly_even_when_the_last_join_is_safe,
+        // below) is the PRE-confirmation HasPaging conjunct in IsSingleEligibleNativeJoinScope: a $limit
+        // already recorded when the (deferred) confirming Select finally runs blocks confirmation outright,
+        // per level. Both levels here are ordinary Joins over COLLECTION navigations (Owner.Orders,
+        // Order.OrderLines) — each individually 1:N-unsafe — so this pins the SAME conjunct Task 6 already
+        // covers, over a DIFFERENT chain shape (two plain Joins plus an outer-scope Where, vs. Task 6's
+        // Join+LeftJoin with no Where): legitimate incremental regression coverage, but NOT proof that
+        // HasConfirmedJoinLookup's post-confirmation guard fires for a chain — nothing found in this task's
+        // investigation is. See task-7-report.md for the full investigation trail.
+        var seed = SeedOwnersOrdersAndLines();
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Take_after_Where_over_a_two_level_collection_nav_chain_declines_cleanly_under_NativeOnly));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            db.Owners
+                .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Join(db.OrderLines, e => e.r.Id, l => l.OrderId, (e, l) => new { e.o, e.r, l })
+                .Where(x => x.o.Name == seed.Owners[0].Name)
+                .Take(1)
+                .ToList());
+    }
+
 #if !EF8 && !EF9
     [Fact]
     public void Chained_join_with_an_earlier_collection_nav_declines_paging_under_NativeOnly_even_when_the_last_join_is_safe()
