@@ -260,13 +260,14 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     [Fact]
     public void Chained_join_Where_OrderBy_Any_goes_native_under_NativeOnly()
     {
-        // Native-chained-join-scope plan (2026-09-07), Task 1. This pins the CURRENT (pre-fix) behavior: a
-        // second chained Join followed by a Where/OrderBy/Any over the first join's outer scope still declines
-        // under NativeOnly, exactly like Chained_second_join_still_declines_cleanly_in_NativeOnly above — the
-        // only difference here is the trailing Where/OrderBy/Any shape instead of a projecting Select. Once the
-        // rest of that plan lands, this is expected to flip to asserting native success (Assert.True(found)
-        // with no throw), the same way earlier "still declines" tests in this file were superseded by "now goes
-        // native" ones as their binders landed.
+        // Native-chained-join-scope plan (2026-09-07), Task 1, flipped to green by Task 6. This is now a
+        // REGRESSION PIN: a second chained Join followed by a Where/OrderBy/Any over the root (outermost)
+        // scope goes native under NativeOnly — the query's implicit trailing Select (all-whole-entity-leaves
+        // over the two-level chain) is what confirms it (NativeJoinScopeProjectionBinder.TryBindProjection /
+        // ConfirmEntireChain), and NativeCardinalityBinder.TryBindAggregate confirms it independently for the
+        // no-trailing-Select shape a bare Any() actually arrives as (see IsSingleEligibleNativeJoinScope's own
+        // remarks). Originally added (pre-fix) as a "still declines" pin, superseded here by the "now goes
+        // native" assertion below, the same way earlier tests in this file evolved as their binders landed.
         var seed = SeedOwnersOrdersAndLines();
         using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
             nameof(Chained_join_Where_OrderBy_Any_goes_native_under_NativeOnly));
@@ -280,6 +281,39 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
 
         Assert.True(found);
     }
+
+#if !EF8 && !EF9
+    [Fact]
+    public void Chained_join_with_an_earlier_collection_nav_declines_paging_under_NativeOnly_even_when_the_last_join_is_safe()
+    {
+        // Fix round 1, Finding 1 (task-6-report.md review). IsSingleEligibleNativeJoinScope's
+        // paging/reducing carve-out used to inspect ONLY mongoQueryExpression.Joins[^1] (the LAST join in
+        // the chain) for the "$unwind preserves the outer row count 1:1" property. That is unsound for a
+        // chain of depth > 1: checking only the last level proves nothing about EARLIER levels.
+        //
+        // Level 1 here (Owners.Join(Orders, ...)) resolves Owner.Orders — a 1:N COLLECTION navigation via
+        // an ordinary (non-left-outer) Join — UNSAFE: its $unwind (ForceUnwind, preserveNullAndEmptyArrays:
+        // false) is not 1:1, so a $limit recorded ahead of it (from the trailing Take(1)) would page the
+        // un-joined OWNER rows rather than the joined result. Level 2 (.LeftJoin(Owners again, ...))
+        // resolves Order.Owner — a REFERENCE navigation taken as a LeftJoin — SAFE on its own
+        // (preserveNullAndEmptyArrays: true, strictly 1:1). A last-only check sees ONLY level 2's safety
+        // and would wrongly admit confirmation despite level 1 being unsafe; the fix requires EVERY level
+        // in the chain to be individually 1:1-safe before paging/reducing may confirm.
+        //
+        // This test only proves native correctly DECLINES (not that the fallback returns correct data —
+        // EF Core's own driver-LINQ semantics guarantee that independently).
+        var seed = SeedOwnersAndOrders();
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Chained_join_with_an_earlier_collection_nav_declines_paging_under_NativeOnly_even_when_the_last_join_is_safe));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            db.Owners
+                .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .LeftJoin(db.Owners, e => e.r.OwnerId, o2 => o2.Id, (e, o2) => new { e.o, e.r, o2 })
+                .Take(1)
+                .ToList());
+    }
+#endif
 
     [Fact]
     public void Take_or_Skip_after_a_confirmed_join_declines_cleanly_under_NativeOnly()

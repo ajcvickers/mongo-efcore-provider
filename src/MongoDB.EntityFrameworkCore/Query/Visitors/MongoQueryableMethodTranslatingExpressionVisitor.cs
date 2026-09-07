@@ -482,6 +482,20 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // ordinary whole-entity/reducer shaping path reads the entity (the outer one straight off the root
         // document, the inner one out of the $lookup's unwound alias field) exactly as the generic shaper fold at
         // the bottom of this method builds it.
+        //
+        // DEPTH-1 ONLY, BY DESIGN, FOR NOW (native-chained-join-scope plan, Task 6 fix round, Finding 4).
+        // IsTransparentIdentifierMemberAccessSelector only ever recognizes a FLAT `ti.Outer`/`ti.Inner` member
+        // access (one hop), so for a chain (Levels.Count > 1) this arm's own recognizer never matches a leaf
+        // resolving to an arbitrary scope index (e.g. `x.Outer.Outer`/`x.Inner` off a 2+-level chain) — it was
+        // not widened the way the wrapped-leaf arm below (NativeJoinScopeProjectionBinder, which DOES resolve
+        // any scope index via MongoTransparentScopeResolver) was. The consequence is a missed optimization only,
+        // not a correctness gap: a bare leaf over a chain simply never matches this arm's own condition, falls
+        // through to the wrapped-Select branch below (which also doesn't match a bare body), and ultimately to
+        // the ordinary projected-Select / generic branch, landing on the driver-LINQ fallback with correct
+        // results. Widening this arm to call NativeJoinScopeProjectionBinder.ConfirmEntireChain for a bare leaf
+        // resolving to any chain scope index (reusing MongoTransparentScopeResolver the same way the wrapped arm
+        // does) is a reasonable follow-up, deliberately left out of this fix round to keep it narrowly scoped to
+        // the four review findings rather than adding new binder surface.
         else if (IsTransparentIdentifierMemberAccessSelector(selector)
                  && IsSingleEligibleNativeJoinScope(mongoQueryExpression, out var bareLeafJoin))
         {
@@ -816,6 +830,23 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     {
         joinInfo = null;
 
+        if (Environment.GetEnvironmentVariable("MONGODB_EF_DEBUG_JOINSCOPE") == "1")
+        {
+            Console.Error.WriteLine(
+                $"[DBG] JoinScope={mongoQueryExpression.Select.JoinScope != null}, " +
+                $"Levels={(mongoQueryExpression.Select.JoinScope?.Levels.Count ?? -1)}, " +
+                $"Joins={mongoQueryExpression.Joins.Count}, " +
+                $"HasUnsupportedOperator={mongoQueryExpression.Select.HasUnsupportedOperator}, " +
+                $"HasTerminalOperator={mongoQueryExpression.Select.HasTerminalOperator}, " +
+                $"UnwindSource={mongoQueryExpression.Select.UnwindSource != null}");
+            foreach (var j in mongoQueryExpression.Joins)
+            {
+                Console.Error.WriteLine(
+                    $"[DBG]   Join: IsNativelyEligible={j.IsNativelyEligible}, Navigation={j.Navigation?.Name}, " +
+                    $"IsLeftOuter={j.IsLeftOuter}, Lookup={(j.Lookup != null)}");
+            }
+        }
+
         if (mongoQueryExpression.Select.JoinScope is not { } scope
             || scope.Levels.Count != mongoQueryExpression.Joins.Count
             || mongoQueryExpression.Select.HasUnsupportedOperator
@@ -848,9 +879,13 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // with the $limit already recorded. (The mirror ordering — an operator composed AFTER this arm
         // confirms, which a reducer genuinely does take — is closed at the other end by
         // MongoSelectDefinition.HasConfirmedJoinLookup.) A $match/$sort needs no conjunct here: an outer-side
-        // filter commutes with the join, and no sort can have been recorded, since an OrderBy over a join scope
-        // isn't translatable by the single-scope slot arms and so marks the query non-native (caught by
-        // HasUnsupportedOperator above).
+        // filter commutes with the join regardless of ordering, and a recorded sort is likewise safe — an
+        // OrderBy over a join scope only ever translates against the ROOT scope (NativeJoinScopeTranslator.
+        // TryTranslateRootScopeOnly, native-chained-join-scope plan, Component 4), so it too commutes with
+        // the join the same way an outer-side $match does; it is not rejected by HasUnsupportedOperator (that
+        // premise predates the native-chained-join-scope plan and no longer holds — see
+        // JoinScopeWhereSlotPopulationTests / Chained_join_Where_OrderBy_Any_goes_native_under_NativeOnly for
+        // the pinned proof that a recorded sort reaches this gate and still confirms correctly).
         //
         // The carve-out is deliberately narrow, and NOT tidiness: a left-outer REFERENCE navigation lowers to
         // an $unwind with preserveNullAndEmptyArrays: true (MongoSelectLowerer's reference arm threads
@@ -863,10 +898,22 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // Everything else declines: a COLLECTION navigation (1:N, and its ForceUnwind arm hard-codes
         // preserveNullAndEmptyArrays: false), and an INNER join over a reference navigation (preserve: false,
         // so an unmatched FK drops the row and the count is not preserved either).
-        if ((mongoQueryExpression.Select.HasPaging || mongoQueryExpression.Select.Cardinality?.Reducer != null)
-            && !(candidate.IsLeftOuter && lookup.Navigation is { IsCollection: false }))
+        // Widened to a CHAIN (fix round 1, Finding 1): the paging/reducing hazard above is not specific to
+        // the LAST join — a $skip/$limit recorded ahead of the WHOLE $lookup block is emitted ahead of EVERY
+        // level's $unwind, so ALL of them must individually be 1:1-safe, not just Joins[^1]. Checking only
+        // the last level is unsound for depth > 1: a chain whose EARLIER level is a 1:N collection-nav join
+        // (whose $unwind is NOT 1:1) but whose LAST level happens to be a left-outer reference join (which IS
+        // 1:1) would pass a last-only check while the earlier level still mis-pages. Loop over every join.
+        if (mongoQueryExpression.Select.HasPaging || mongoQueryExpression.Select.Cardinality?.Reducer != null)
         {
-            return false;
+            foreach (var level in mongoQueryExpression.Joins)
+            {
+                if (level.Lookup is not { } levelLookup
+                    || !(level.IsLeftOuter && levelLookup.Navigation is { IsCollection: false }))
+                {
+                    return false;
+                }
+            }
         }
 
         joinInfo = candidate;
@@ -2320,11 +2367,19 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // (`"{throughJoin.Alias}.{element}"`, see the LookupExpression construction just above), so an
         // exact match is only ever correct at depth 1; a transitive hop's own key equality is confirmed by
         // the prefixed field ENDING in the resolved property's element name.
-        var outerElementName = outerProperty.GetElementName();
-        var outerFieldMatches = lookup.LocalField == outerElementName
-            || lookup.LocalField.EndsWith("." + outerElementName, StringComparison.Ordinal);
+        //
+        // Both sides compare against LookupExpression.GetFieldPath (Task 6 fix round, Finding 2) rather than
+        // a plain GetElementName() — for a property that is one component of a multi-property primary key
+        // (e.g. OrderDetail's composite _id.OrderID/_id.ProductID), the emitted lookup field is
+        // "_id.<ElementName>", not the bare element name, and comparing against GetElementName() alone
+        // always disagreed, declining every join keyed on a composite-PK component regardless of chain
+        // depth. Reusing the SAME helper the lookup's own LocalField/ForeignField were built from (rather
+        // than restating a looser copy) is what keeps this comparison correct by construction.
+        var outerElementPath = LookupExpression.GetFieldPath(outerProperty);
+        var outerFieldMatches = lookup.LocalField == outerElementPath
+            || lookup.LocalField.EndsWith("." + outerElementPath, StringComparison.Ordinal);
 
-        return outerFieldMatches && lookup.ForeignField == innerProperty.GetElementName();
+        return outerFieldMatches && lookup.ForeignField == LookupExpression.GetFieldPath(innerProperty);
     }
 
     /// <summary>

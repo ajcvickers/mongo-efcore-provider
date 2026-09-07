@@ -151,7 +151,14 @@ internal sealed class LookupExpression
     /// Get the full MongoDB field path for a property, accounting for composite keys
     /// stored under the _id document.
     /// </summary>
-    private static string GetFieldPath(IReadOnlyProperty property)
+    /// <remarks>
+    /// Made <c>internal</c> (native-chained-join-scope plan, Task 6 fix round, Finding 2) so
+    /// <c>JoinLookupImplementsKeySelectors</c> in <c>MongoQueryableMethodTranslatingExpressionVisitor</c> can
+    /// compare against the SAME composite-key-aware path this lookup's own <see cref="ForeignField"/>/
+    /// <see cref="LocalField"/> were built from, rather than a plain <c>GetElementName()</c> that disagrees
+    /// for a property that is one component of a multi-property primary key.
+    /// </remarks>
+    internal static string GetFieldPath(IReadOnlyProperty property)
     {
         var elementName = property.GetElementName();
 

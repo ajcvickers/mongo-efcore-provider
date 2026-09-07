@@ -1596,7 +1596,7 @@ Customers.{ "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "__sort0" : 1 } }, 
         await base.Multiple_joins_Where_Order_Any(async);
         AssertMql(
             """
-Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$unwind" : { "path" : "$_lookup_Orders", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_lookup_Orders._id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetails" } }, { "$unwind" : { "path" : "$_lookup_OrderDetails", "preserveNullAndEmptyArrays" : false } }, { "$match" : { "City" : "London" } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }, { "$project" : { "_id" : 0, "_v" : null } }
+Customers.{ "$match" : { "City" : "London" } }, { "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$unwind" : { "path" : "$_lookup_Orders", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_lookup_Orders._id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetails" } }, { "$unwind" : { "path" : "$_lookup_OrderDetails", "preserveNullAndEmptyArrays" : false } }, { "$limit" : 1 }
 """);
     }
 
