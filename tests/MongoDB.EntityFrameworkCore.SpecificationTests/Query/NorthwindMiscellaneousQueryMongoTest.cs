@@ -391,8 +391,8 @@ Customers.{ "$sort" : { "_id" : -1 } }, { "$project" : { "_id" : "$_id" } }
 
         AssertMql(
             """
-            Customers.{ "$match" : { "_id" : "ANATR" } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
-            """);
+Customers.{ "$match" : { "_id" : "ANATR" } }, { "$project" : { "_id" : "$_id" } }
+""");
     }
 
     public override async Task Entity_equality_local_composite_key(bool async)
@@ -411,8 +411,8 @@ Customers.{ "$sort" : { "_id" : -1 } }, { "$project" : { "_id" : "$_id" } }
 
         AssertMql(
             """
-            Customers.{ "$match" : { "$and" : [{ "_id" : "ANATR" }, { "_id" : "ANATR" }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
-            """);
+Customers.{ "$match" : { "$and" : [{ "_id" : "ANATR" }, { "_id" : "ANATR" }] } }, { "$project" : { "_id" : "$_id" } }
+""");
     }
 
     public override async Task Join_with_entity_equality_local_on_both_sources(bool async)
@@ -440,8 +440,8 @@ Customers.
 
         AssertMql(
             """
-            Customers.{ "$match" : { "_id" : "ANATR" } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
-            """);
+Customers.{ "$match" : { "_id" : "ANATR" } }, { "$project" : { "_id" : "$_id" } }
+""");
     }
 
     public override async Task Entity_equality_local_inline_composite_key(bool async)

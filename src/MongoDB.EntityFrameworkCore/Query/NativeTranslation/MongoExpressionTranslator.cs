@@ -535,6 +535,19 @@ internal sealed partial class MongoExpressionTranslator
 
             // --- Comparison binary operators ---
 
+            // Root-entity structural equality (`c == local`, `c == null`) — must run before the ordinary
+            // comparison dispatch below, since neither side is a member access/simple value in this shape
+            // and TranslateComparison has no coverage for it. Declines (returns false) for anything that
+            // isn't this exact shape, falling through to the ordinary comparison path unchanged.
+            case BinaryExpression { NodeType: ExpressionType.Equal or ExpressionType.NotEqual } eq
+                when TryTranslateEntityEquality(eq, out var entityEquality):
+                return entityEquality;
+
+            // The `.Equals(...)` spelling of the same shape — the only spelling composite-key entity types
+            // support, since C# doesn't synthesize a `==` operator for them. See TryTranslateEntityEqualityCall.
+            case MethodCallExpression callEq when TryTranslateEntityEqualityCall(callEq, out var entityEqualityCall):
+                return entityEqualityCall;
+
             case BinaryExpression be when IsComparison(be.NodeType):
                 return TranslateComparison(be);
 
