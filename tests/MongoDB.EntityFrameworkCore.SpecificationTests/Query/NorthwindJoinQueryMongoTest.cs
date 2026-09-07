@@ -508,11 +508,6 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
 
     public override async Task Join_GroupJoin_DefaultIfEmpty_Where(bool async)
     {
-#if EF8 || EF9
-        // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-        await AssertTranslationFailed(() => base.Join_GroupJoin_DefaultIfEmpty_Where(async));
-        AssertMql();
-#else
         // Fails: Where over a flattened multi-join chain is not translated EF-X024.
         // This shape has two INDEPENDENT joins onto the same target type (Orders), each with its own
         // forced-unwind $lookup (EF-375). The composed Where can't be reattached to one of them
@@ -521,9 +516,10 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
         // designed for self-referencing CHAINS, not independent siblings) - so the strip declines and,
         // since native rendering can't represent two forced-unwind lookups either, translation is
         // rejected rather than risk falling back to a native pipeline that would silently double-nest.
+        // Runs on all three EF majors identically now: this shape used to also fail earlier on EF8/EF9 for
+        // the unrelated EF-X020 reason (the LeftJoin shim admission gate), now fixed.
         await AssertTranslationFailed(() => base.Join_GroupJoin_DefaultIfEmpty_Where(async));
         AssertMql();
-#endif
     }
 
     public override async Task GroupJoin_DefaultIfEmpty_Project(bool async)
