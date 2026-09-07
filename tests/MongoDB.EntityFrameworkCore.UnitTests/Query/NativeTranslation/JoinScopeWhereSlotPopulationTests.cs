@@ -140,6 +140,100 @@ public class JoinScopeWhereSlotPopulationTests
         return Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
     }
 
+    // Fixture for the embedded-outer-key-selector regression test below (EF-380 shape, depth 1, NO prior
+    // join). Deliberately separate from Owner/Order: EmbeddedAddress needs a REAL navigation of its own
+    // (LinkedTarget, FK LinkedTargetId) to JoinTarget so RebindInnerShaperToOuterQuery's navigation
+    // resolution — which walks the embedded segment via the navigation graph and then searches for a
+    // navigation ON THE EMBEDDED TYPE, not the root — actually finds one; reusing Owner/Order would leave
+    // that resolution returning null (no navigation on Address-shaped types pointing at Order), which
+    // exercises a completely different (and uninteresting) decline path.
+    private class RootWithEmbeddedKey
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public EmbeddedAddress? Address { get; set; }
+    }
+
+    private class EmbeddedAddress
+    {
+        public int LinkedTargetId { get; set; }
+        public JoinTarget? LinkedTarget { get; set; }
+    }
+
+    private class JoinTarget
+    {
+        public int Id { get; set; }
+        public string Label { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Regression test for a task-review finding on the Task 3 <c>JoinLookupImplementsKeySelectors</c> fix
+    /// (see <c>.superpowers/sdd/2026-09-07-native-chained-join-scope/task-3-report.md</c>, "Fix round 1"):
+    /// the fix's own comment claims the new <c>EndsWith</c> branch "never fires without a transitive hop",
+    /// but it ALSO fires for a depth-1 (no prior join) join whose OUTER key selector reaches through an
+    /// owned/embedded navigation (the pre-existing EF-380 shape, <c>o.Address.LinkedTargetId</c>) — because
+    /// <c>RebindInnerShaperToOuterQuery</c> walks <c>searchEntityType</c> forward through the embedded
+    /// segment BEFORE resolving the navigation, so <c>joinInfo.Navigation.DeclaringEntityType</c> ends up
+    /// being the OWNED type (<c>EmbeddedAddress</c>), not the root, and the existing (pre-Task-3)
+    /// <c>embeddedPath</c> prefixing (<c>lookup.LocalField = $"{embeddedPath}.{lookup.LocalField}"</c>)
+    /// means <c>lookup.LocalField</c> ("Address.LinkedTargetId") never equals the bare element name
+    /// ("LinkedTargetId") either — only the new <c>EndsWith</c> branch can agree here.
+    /// </summary>
+    /// <remarks>
+    /// This IS safe, and the join genuinely becomes (correctly) eligible where it previously declined for
+    /// an unrelated-to-embedding reason (the same exact-match brittleness the transitive-hop fix targets).
+    /// Walking the proof through <c>JoinLookupImplementsKeySelectors</c>: <c>joinInfo.Navigation</c> is
+    /// resolved by <c>RebindInnerShaperToOuterQuery</c> by walking the SAME embedded segment
+    /// (<c>"Address"</c>) that produced the lookup's own <c>LocalField</c> prefix — so
+    /// <c>outerAnchorEntityType</c> (<c>Navigation.DeclaringEntityType</c> == <c>EmbeddedAddress</c>) is
+    /// exactly the type <c>outerKeyName</c> ("LinkedTargetId") must be looked up against to get the RIGHT
+    /// property (the one actually reached by <c>o.Address.LinkedTargetId</c>), and
+    /// <c>lookup.LocalField</c> ("Address.LinkedTargetId") is that SAME property's element name
+    /// ("LinkedTargetId") prefixed by that SAME embedded path ("Address") — so the <c>EndsWith</c> check is
+    /// comparing two values built from the identical structural fact, not coincidentally agreeing. The
+    /// resulting <c>$lookup</c>'s <c>localField: "Address.LinkedTargetId"</c> is also literally correct: on
+    /// the outer document, <c>LinkedTargetId</c> really does live nested under the embedded <c>Address</c>
+    /// sub-document, so a dotted <c>localField</c> is exactly how Mongo addresses it. Reading
+    /// <c>mongoQ.Select.JoinScope</c> afterward is equally sound: <c>MongoJoinScope</c>/<c>MongoJoinScopeLevel</c>
+    /// only record the join's INNER entity type/alias/left-outer-ness — nothing about how the OUTER side's
+    /// own key was reached — so an embedded vs. root-property outer key makes no difference to what a
+    /// consuming <c>Where</c>/<c>Select</c> arm resolves "Outer" to (still the query's own root entity).
+    /// </remarks>
+    [Fact]
+    public void Depth_one_join_through_owned_navigation_key_selector_is_natively_eligible()
+    {
+        using var db = SingleEntityDbContext.Create<RootWithEmbeddedKey>(mb =>
+        {
+            mb.Entity<JoinTarget>();
+            mb.Entity<RootWithEmbeddedKey>().OwnsOne(o => o.Address, ab =>
+            {
+                ab.HasOne(a => a.LinkedTarget).WithMany().HasForeignKey(a => a.LinkedTargetId);
+            });
+        });
+
+        var query = db.Set<RootWithEmbeddedKey>()
+            .Join(db.Set<JoinTarget>(), o => o.Address!.LinkedTargetId, t => t.Id, (o, t) => new { o, t })
+            .Where(x => x.o.Name == "Alice");
+
+        var ccFactory = db.GetService<IQueryCompilationContextFactory>();
+        var compilationContext = ccFactory.Create(async: false);
+
+        var preprocessor = db.GetService<IQueryTranslationPreprocessorFactory>().Create(compilationContext);
+        var preprocessed = preprocessor.Process(query.Expression);
+
+        var visitor = db.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>().Create(compilationContext);
+        var result = visitor.Visit(preprocessed);
+
+        Assert.NotNull(result);
+        var shaped = Assert.IsAssignableFrom<ShapedQueryExpression>(result);
+        var mongoQ = Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
+
+        var joinInfo = Assert.Single(mongoQ.Joins);
+        Assert.True(joinInfo.IsNativelyEligible);
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Single(mongoQ.Select.JoinScope!.Levels);
+    }
+
     [Fact]
     public void Two_eligible_chained_joins_build_a_two_level_scope_metadata_only()
     {
