@@ -153,7 +153,7 @@ internal static class NativeJoinScopeProjectionBinder
 
         var rootParam = selector.Parameters[0];
 
-        if (!TryReadMembers(selector.Body, out var members))
+        if (!selector.Body.TryGetProjectionMembers(out var members))
         {
             return false;
         }
@@ -400,55 +400,5 @@ internal static class NativeJoinScopeProjectionBinder
         }
 
         mongoQ.Select.MarkJoinLookupConfirmed();
-    }
-
-    /// <summary>
-    /// Splits an anonymous-type / DTO construction into its (member name, value expression) pairs.
-    /// </summary>
-    /// <remarks>
-    /// Deliberately a local copy of the same two-case shape <c>NativeProjectionBinder</c> and
-    /// <c>NativeGroupByBinder</c> each parse: theirs are inlined into their own leaf-translation loops
-    /// (interleaved with alias derivation, pending-lookup staging and array-leaf bookkeeping this binder has no
-    /// analogue for), so there is no existing accessible helper to call. Kept to the same two admitted shapes —
-    /// a <see cref="NewExpression"/> carrying <c>Members</c>, or a <see cref="MemberInitExpression"/> over a
-    /// parameterless constructor with <see cref="MemberAssignment"/> bindings only.
-    /// </remarks>
-    private static bool TryReadMembers(
-        Expression body, out IReadOnlyList<(string Alias, Expression Leaf)> members)
-    {
-        var list = new List<(string, Expression)>();
-        members = list;
-
-        switch (body)
-        {
-            case NewExpression newExpression
-                when newExpression.Members != null
-                     && newExpression.Members.Count == newExpression.Arguments.Count
-                     && newExpression.Arguments.Count > 0:
-                for (var i = 0; i < newExpression.Arguments.Count; i++)
-                {
-                    list.Add((newExpression.Members[i].Name, newExpression.Arguments[i]));
-                }
-
-                return true;
-
-            case MemberInitExpression memberInit
-                when memberInit.NewExpression.Arguments.Count == 0
-                     && memberInit.Bindings.Count > 0:
-                foreach (var binding in memberInit.Bindings)
-                {
-                    if (binding is not MemberAssignment assignment)
-                    {
-                        return false;
-                    }
-
-                    list.Add((binding.Member.Name, assignment.Expression));
-                }
-
-                return true;
-
-            default:
-                return false;
-        }
     }
 }

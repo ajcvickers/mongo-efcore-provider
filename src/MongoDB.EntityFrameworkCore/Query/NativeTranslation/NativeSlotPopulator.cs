@@ -177,63 +177,29 @@ internal static class NativeSlotPopulator
         }
         else if (methodDefinition == QueryableMethods.OrderBy || methodDefinition == QueryableMethods.OrderByDescending)
         {
-            var keySelector = call.Arguments[1].UnwrapLambdaFromQuote();
-            var ascending = methodDefinition == QueryableMethods.OrderBy;
-            translator.SelfParam = keySelector.Parameters[0];
-            if (translator.TryTranslateField(keySelector.Body, out var keyNode))
-                mongoQ.Select.StartOrReplaceSort(new MongoOrdering(keyNode, ascending));
-            else if (TryTranslateComputedSortKey(translator, keySelector.Body, out var computedKey))
-                mongoQ.Select.StartOrReplaceSort(new MongoOrdering(computedKey, ascending));
-            else if (mongoQ.Select.JoinScope is { Levels.Count: 1 } singleLevelSortScope
-                     && !NativeJoinScopeTranslator.ReferencesInnerScope(keySelector.Parameters[0], keySelector.Body)
-                     && NativeJoinScopeTranslator.TryTranslateValue(
-                         singleLevelSortScope, keySelector.Parameters[0], keySelector.Body, out var joinSortKey))
-                mongoQ.Select.StartOrReplaceSort(new MongoOrdering(joinSortKey, ascending));
-            else if (mongoQ.Select.JoinScope is { Levels.Count: > 1 } chainedSortScope
-                     && NativeJoinScopeTranslator.TryTranslateRootScopeOnly(
-                         chainedSortScope, keySelector.Parameters[0], keySelector.Body, valueMode: true, out var chainedSortKey))
-                mongoQ.Select.StartOrReplaceSort(new MongoOrdering(chainedSortKey, ascending));
-            else
-                mongoQ.Select.MarkNotNativelyRepresentable();
+            // OrderBy STARTS a sort (replacing any existing one); ThenBy APPENDS to it. That is the only
+            // difference between this arm and the next, so both share PopulateSortSlot.
+            PopulateSortSlot(
+                mongoQ, translator, call,
+                ascending: methodDefinition == QueryableMethods.OrderBy,
+                record: mongoQ.Select.StartOrReplaceSort);
         }
         else if (methodDefinition == QueryableMethods.ThenBy || methodDefinition == QueryableMethods.ThenByDescending)
         {
-            var keySelector = call.Arguments[1].UnwrapLambdaFromQuote();
-            var ascending = methodDefinition == QueryableMethods.ThenBy;
-            translator.SelfParam = keySelector.Parameters[0];
-            if (translator.TryTranslateField(keySelector.Body, out var keyNode))
-                mongoQ.Select.AppendThenBy(new MongoOrdering(keyNode, ascending));
-            else if (TryTranslateComputedSortKey(translator, keySelector.Body, out var computedKey))
-                mongoQ.Select.AppendThenBy(new MongoOrdering(computedKey, ascending));
-            else if (mongoQ.Select.JoinScope is { Levels.Count: 1 } singleLevelThenByScope
-                     && !NativeJoinScopeTranslator.ReferencesInnerScope(keySelector.Parameters[0], keySelector.Body)
-                     && NativeJoinScopeTranslator.TryTranslateValue(
-                         singleLevelThenByScope, keySelector.Parameters[0], keySelector.Body, out var joinThenByKey))
-                mongoQ.Select.AppendThenBy(new MongoOrdering(joinThenByKey, ascending));
-            else if (mongoQ.Select.JoinScope is { Levels.Count: > 1 } chainedThenByScope
-                     && NativeJoinScopeTranslator.TryTranslateRootScopeOnly(
-                         chainedThenByScope, keySelector.Parameters[0], keySelector.Body, valueMode: true, out var chainedThenByKey))
-                mongoQ.Select.AppendThenBy(new MongoOrdering(chainedThenByKey, ascending));
-            else
-                mongoQ.Select.MarkNotNativelyRepresentable();
+            PopulateSortSlot(
+                mongoQ, translator, call,
+                ascending: methodDefinition == QueryableMethods.ThenBy,
+                record: mongoQ.Select.AppendThenBy);
         }
         else if (methodDefinition == QueryableMethods.Skip)
         {
             // Repeated / non-canonical-order paging is natively representable: each Skip appends a $skip op
             // at its arrival position, and the lowerer emits ops verbatim.
-            var count = TranslateCountExpression(call.Arguments[1]);
-            if (count is null)
-                mongoQ.Select.MarkNotNativelyRepresentable();
-            else
-                mongoQ.Select.AppendSkip(count);
+            PopulatePagingSlot(mongoQ, call, mongoQ.Select.AppendSkip);
         }
         else if (methodDefinition == QueryableMethods.Take)
         {
-            var count = TranslateCountExpression(call.Arguments[1]);
-            if (count is null)
-                mongoQ.Select.MarkNotNativelyRepresentable();
-            else
-                mongoQ.Select.AppendLimit(count);
+            PopulatePagingSlot(mongoQ, call, mongoQ.Select.AppendLimit);
         }
         else if (methodDefinition == QueryableMethods.Reverse)
         {
@@ -302,6 +268,55 @@ internal static class NativeSlotPopulator
     // applied after a CONFIRMED genuine join. Both post-terminal guards in PopulateNativeSlots key off this
     // same list. Deliberately excludes Select / OfType / GroupBy and the reducer / scalar-aggregate operators
     // so the supported grouped Select is not marked non-native.
+    /// <summary>
+    /// Records an <c>OrderBy</c>/<c>OrderByDescending</c>/<c>ThenBy</c>/<c>ThenByDescending</c> key as a sort
+    /// ordering via <paramref name="record"/>, trying in turn a plain field key, a computed key, a
+    /// single-level join-scope key, and a chained join-scope root-scope key, and marking the query non-native
+    /// if none translates. The four operators differ only in <paramref name="ascending"/> and in whether they
+    /// start or extend the sort, both of which are the caller's to supply — so all four candidate translations
+    /// live here once rather than being restated per operator.
+    /// </summary>
+    private static void PopulateSortSlot(
+        MongoQueryExpression mongoQ,
+        MongoExpressionTranslator translator,
+        MethodCallExpression call,
+        bool ascending,
+        Action<MongoOrdering> record)
+    {
+        var keySelector = call.Arguments[1].UnwrapLambdaFromQuote();
+        translator.SelfParam = keySelector.Parameters[0];
+
+        if (translator.TryTranslateField(keySelector.Body, out var keyNode))
+            record(new MongoOrdering(keyNode, ascending));
+        else if (TryTranslateComputedSortKey(translator, keySelector.Body, out var computedKey))
+            record(new MongoOrdering(computedKey, ascending));
+        else if (mongoQ.Select.JoinScope is { Levels.Count: 1 } singleLevelScope
+                 && !NativeJoinScopeTranslator.ReferencesInnerScope(keySelector.Parameters[0], keySelector.Body)
+                 && NativeJoinScopeTranslator.TryTranslateValue(
+                     singleLevelScope, keySelector.Parameters[0], keySelector.Body, out var joinSortKey))
+            record(new MongoOrdering(joinSortKey, ascending));
+        else if (mongoQ.Select.JoinScope is { Levels.Count: > 1 } chainedScope
+                 && NativeJoinScopeTranslator.TryTranslateRootScopeOnly(
+                     chainedScope, keySelector.Parameters[0], keySelector.Body, valueMode: true, out var chainedSortKey))
+            record(new MongoOrdering(chainedSortKey, ascending));
+        else
+            mongoQ.Select.MarkNotNativelyRepresentable();
+    }
+
+    /// <summary>
+    /// Records a <c>Skip</c>/<c>Take</c> count via <paramref name="record"/>, marking the query non-native if
+    /// the count expression does not translate. The two operators differ only in which op they append.
+    /// </summary>
+    private static void PopulatePagingSlot(
+        MongoQueryExpression mongoQ, MethodCallExpression call, Action<MongoExpression> record)
+    {
+        var count = TranslateCountExpression(call.Arguments[1]);
+        if (count is null)
+            mongoQ.Select.MarkNotNativelyRepresentable();
+        else
+            record(count);
+    }
+
     private static bool IsSevenSlotOperator(MethodInfo methodDefinition)
         => methodDefinition == QueryableMethods.Where
            || methodDefinition == QueryableMethods.OrderBy
@@ -318,14 +333,11 @@ internal static class NativeSlotPopulator
     // QueryableMethods constant to compare against — it is recognized via the internal IsVectorSearch()
     // extension instead, whose explicit branch above runs before the catch-all, so this whitelist never needs
     // to hold it.
+    // The seven slot operators are a PREFIX of this list, by construction — expressed as a call rather than
+    // restated, so the two can no longer disagree. Keeping them as two independent copies was the "miss either
+    // half and the operator is silently dropped" trap the Query area AGENTS.md documents.
     internal static bool IsNativeRepresentableSlotOperator(MethodInfo methodDefinition)
-        => methodDefinition == QueryableMethods.Where
-           || methodDefinition == QueryableMethods.OrderBy
-           || methodDefinition == QueryableMethods.OrderByDescending
-           || methodDefinition == QueryableMethods.ThenBy
-           || methodDefinition == QueryableMethods.ThenByDescending
-           || methodDefinition == QueryableMethods.Skip
-           || methodDefinition == QueryableMethods.Take
+        => IsSevenSlotOperator(methodDefinition)
            || methodDefinition == QueryableMethods.Select
            || methodDefinition == QueryableMethods.OfType
            || methodDefinition == QueryableMethods.Distinct

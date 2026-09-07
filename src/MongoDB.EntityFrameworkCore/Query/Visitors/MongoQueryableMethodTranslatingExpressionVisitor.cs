@@ -694,34 +694,20 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     /// </summary>
     private static Expression? TryBuildGroupResultShaper(MongoQueryExpression mongoQueryExpression, LambdaExpression selector)
     {
-        switch (selector.Body)
+        // Admissibility is decided in full BEFORE any BindGroupMember call. That ordering is load-bearing:
+        // the previous inline version returned null part-way through the MemberInit loop for a non-assignment
+        // binding, by which point it had already registered projections for the earlier members — a
+        // mutate-then-decline that left the query expression half-populated.
+        if (!selector.Body.TryGetProjectionMembers(out var members))
+            return null;
+
+        var boundValues = new Expression[members.Count];
+        for (var i = 0; i < boundValues.Length; i++)
         {
-            case NewExpression newExpression
-                when newExpression.Members != null
-                     && newExpression.Members.Count == newExpression.Arguments.Count
-                     && newExpression.Arguments.Count > 0:
-                var arguments = new Expression[newExpression.Arguments.Count];
-                for (var i = 0; i < arguments.Length; i++)
-                    arguments[i] = BindGroupMember(mongoQueryExpression, newExpression.Members[i].Name, newExpression.Arguments[i]);
-                return newExpression.Update(arguments);
-
-            case MemberInitExpression memberInit
-                when memberInit.NewExpression.Arguments.Count == 0
-                     && memberInit.Bindings.Count > 0:
-                var bindings = new MemberBinding[memberInit.Bindings.Count];
-                for (var i = 0; i < bindings.Length; i++)
-                {
-                    if (memberInit.Bindings[i] is not MemberAssignment assignment)
-                        return null;
-                    bindings[i] = assignment.Update(
-                        BindGroupMember(mongoQueryExpression, assignment.Member.Name, assignment.Expression));
-                }
-
-                return memberInit.Update((NewExpression)memberInit.NewExpression, bindings);
-
-            default:
-                return null;
+            boundValues[i] = BindGroupMember(mongoQueryExpression, members[i].MemberName, members[i].Value);
         }
+
+        return selector.Body.RebuildProjectionMembers(boundValues);
     }
 
     // Registers a projection for one grouped-result member and returns a ProjectionBindingExpression reading
@@ -2922,44 +2908,33 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     private static Expression BuildSelectManyResultShaper(
         MongoQueryExpression mongoQueryExpression, Expression projectionBody, Expression? foldedBody = null)
     {
-        switch (projectionBody)
+        // NativeSelectManyBinder.TryBind already validated this shape through the SAME reader, so a decline
+        // here is unreachable in practice — thrown rather than allowed to silently mis-shape the result.
+        if (!projectionBody.TryGetProjectionMembers(out var members))
         {
-            case NewExpression newExpression
-                when newExpression.Members != null
-                     && newExpression.Members.Count == newExpression.Arguments.Count
-                     && newExpression.Arguments.Count > 0:
-                var foldedNew = foldedBody as NewExpression;
-                var arguments = new Expression[newExpression.Arguments.Count];
-                for (var i = 0; i < arguments.Length; i++)
-                    arguments[i] = BindResultMember(
-                        mongoQueryExpression, newExpression.Members[i].Name, newExpression.Arguments[i],
-                        foldedNew?.Arguments[i]);
-                return newExpression.Update(arguments);
-
-            case MemberInitExpression memberInit
-                when memberInit.NewExpression.Arguments.Count == 0
-                     && memberInit.Bindings.Count > 0:
-                var foldedMemberInit = foldedBody as MemberInitExpression;
-                var bindings = new MemberBinding[memberInit.Bindings.Count];
-                for (var i = 0; i < bindings.Length; i++)
-                {
-                    var assignment = (MemberAssignment)memberInit.Bindings[i];
-                    var foldedAssignment = foldedMemberInit?.Bindings[i] as MemberAssignment;
-                    bindings[i] = assignment.Update(
-                        BindResultMember(
-                            mongoQueryExpression, assignment.Member.Name, assignment.Expression,
-                            foldedAssignment?.Expression));
-                }
-
-                return memberInit.Update((NewExpression)memberInit.NewExpression, bindings);
-
-            default:
-                // NativeSelectManyBinder.TryBind already validated this shape (TryReadProjection accepts only
-                // these two forms), so this is unreachable in practice — defensive rather than silently
-                // mis-shaping the result.
-                throw new InvalidOperationException(
-                    $"Unexpected SelectMany projection shape '{projectionBody.GetType().Name}' after successful native binding.");
+            throw new InvalidOperationException(
+                $"Unexpected SelectMany projection shape '{projectionBody.GetType().Name}' after successful native binding.");
         }
+
+        // The FOLDED body (EF-444: the same construction with the join's own shaper substituted in) is read
+        // through the same reader, so its members arrive in the same order and pair up by index — which is the
+        // alignment the previous per-spelling code assumed when it indexed foldedNew.Arguments/foldedMemberInit
+        // .Bindings directly.
+        IReadOnlyList<(string MemberName, Expression Value)>? foldedMembers = null;
+        if (foldedBody is not null && foldedBody.TryGetProjectionMembers(out var readFolded))
+        {
+            foldedMembers = readFolded;
+        }
+
+        var boundValues = new Expression[members.Count];
+        for (var i = 0; i < boundValues.Length; i++)
+        {
+            boundValues[i] = BindResultMember(
+                mongoQueryExpression, members[i].MemberName, members[i].Value,
+                foldedMembers is not null && i < foldedMembers.Count ? foldedMembers[i].Value : null);
+        }
+
+        return projectionBody.RebuildProjectionMembers(boundValues);
     }
 
     // Registers a projection for one SelectMany-result member and returns a ProjectionBindingExpression
@@ -3091,7 +3066,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
            && mongo.Select.Projection.Count == 0
            && !mongo.IsJoinQuery
            && mongo.Lookups.Count == 0
-           && !ContainsVectorSearch(mongo.CapturedExpression);
+           && !mongo.CapturedExpression.ContainsVectorSearch();
 
     // A plain projected select: a terminal anonymous/DTO member-access Select is the SOLE thing done
     // (Projection populated, Route == Projection) — no grouping, scalar cardinality, its own set op,
@@ -3147,7 +3122,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
            && mongo.Select.UnwindSource == null
            && !mongo.IsJoinQuery
            && mongo.Lookups.Count == 0
-           && !ContainsVectorSearch(mongo.CapturedExpression);
+           && !mongo.CapturedExpression.ContainsVectorSearch();
 
     // The two operands' projected shapes must have identical top-level alias SETS (same count, same alias names).
     // The output documents' fields are exactly these aliases, and Union dedup / Intersect-Except source-tagging
@@ -3180,26 +3155,6 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         }
 
         return true;
-    }
-
-    // Local, minimal duplicate of MongoShapedQueryCompilingExpressionVisitor.ContainsVectorSearch (that
-    // gate method is private and deliberately not made public — see the Query area AGENTS.md for the
-    // rationale on why VectorSearch must be checked via the captured chain rather than a select-tree flag).
-    // Walks the captured Queryable method chain looking for a VectorSearch call, descending through the
-    // source argument of each call (VectorSearch sits at the root, optionally under a single pre-Where).
-    private static bool ContainsVectorSearch(Expression? captured)
-    {
-        while (captured is MethodCallExpression call)
-        {
-            if (call.IsVectorSearch())
-            {
-                return true;
-            }
-
-            captured = call.Arguments.Count > 0 ? call.Arguments[0] : null;
-        }
-
-        return false;
     }
 
     protected override ShapedQueryExpression? TranslateWhere(ShapedQueryExpression source, LambdaExpression predicate)
