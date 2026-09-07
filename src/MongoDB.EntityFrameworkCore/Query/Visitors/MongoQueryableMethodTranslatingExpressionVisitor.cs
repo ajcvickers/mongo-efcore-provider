@@ -2183,26 +2183,29 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         var reboundInnerShaper = RebindInnerShaperToOuterQuery(
             inner.ShaperExpression, innerQueryExpression, outerQueryExpression, outerKeySelector, innerKeySelector, joinInfo);
 
-        // Record join-scope metadata for a single-level, eligible join, so a subsequent Where/Select can
-        // resolve x.Outer.Foo / x.Inner.Foo member access natively (Tasks 3-5). This does NOT call AddLookup
-        // or MarkReferenceIncludeConfirmed — registering the $lookup here, unconditionally, would flip
-        // UsesDriverJoinFields for every single-join query (including ones that never go native), changing
-        // the driver-LINQ fallback's own document shape. That registration is deferred to the point a
-        // Where/Select actually succeeds translating against the scope (Tasks 4/5).
-        //
-        // Eligibility mirrors what reference-Include already requires: a resolved model navigation, a
-        // bare-collection-scan inner, not GroupBy/Distinct-sourced, and not already chained onto a prior
-        // join on this select (chained/nested joins are out of scope for this chunk — see the design doc).
-        if (joinInfo.Navigation is { } eligibleNavigation
+        // Per-join eligibility, computed unconditionally (no longer gated on "is this the first join") —
+        // every join records its own verdict so a later join can find out whether EVERY join so far, itself
+        // included, qualifies. See docs/superpowers/specs/2026-09-07-native-chained-join-scope-design.md,
+        // Component 2 — this builds ONLY the JoinScope metadata; confirming the join ($lookup registration,
+        // Route) stays deferred to the consuming Select arm (Task 6), exactly as depth-1 already works today.
+        joinInfo.IsNativelyEligible =
+            joinInfo.Navigation is { } eligibleNavigation
             && innerQueryExpression.Select.IsBareCollectionScan
             && !outerQueryExpression.Select.IsGroupBy && !innerQueryExpression.Select.IsGroupBy
             && !outerQueryExpression.Select.IsDistinct && !innerQueryExpression.Select.IsDistinct
-            && outerQueryExpression.Select.JoinScope == null
-            && JoinLookupImplementsKeySelectors(joinInfo, outerQueryExpression, outerKeySelector, innerKeySelector))
+            && !(joinInfo.IsLeftOuter && eligibleNavigation.IsCollection)
+            && JoinLookupImplementsKeySelectors(joinInfo, outerQueryExpression, outerKeySelector, innerKeySelector);
+
+        // Rebuild the chain from scratch each time: it covers exactly the LEADING run of eligible joins, so the
+        // moment any join is ineligible, JoinScope stops being extended past it (a "chain with a hole" is not
+        // attempted — see the spec's Component 2 note on partial eligibility).
+        if (outerQueryExpression.Joins.All(j => j.IsNativelyEligible))
         {
             outerQueryExpression.Select.JoinScope = new MongoJoinScope(
                 outerQueryExpression.CollectionExpression.EntityType,
-                [new MongoJoinScopeLevel(eligibleNavigation.TargetEntityType, joinInfo.Alias, joinInfo.IsLeftOuter)]);
+                outerQueryExpression.Joins
+                    .Select(j => new MongoJoinScopeLevel(j.InnerEntityType, j.Alias, j.IsLeftOuter))
+                    .ToList());
         }
 
         var newResultSelector = ReplacingExpressionVisitor.Replace(
@@ -2261,13 +2264,30 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             return false;
         }
 
-        var outerProperty = outerQueryExpression.CollectionExpression.EntityType.FindProperty(outerKeyName);
+        // The outer property's OWNING entity type is the join's own resolved navigation's declaring type,
+        // not unconditionally the outermost root: for a single-level join those are the same type, but for
+        // a join CHAINED onto a prior one (outer key selector reaching through a prior join's Inner side,
+        // e.g. `e.r.Id`) the navigation was resolved against that prior hop's inner entity type
+        // (RebindInnerShaperToOuterQuery's `anchorEntityType`/`searchEntityType`), not the root - reading
+        // the root type here would look up the wrong property (or, coincidentally, a same-named one on the
+        // wrong entity) and can never agree with the lookup's own (correctly prefixed) LocalField.
+        var outerAnchorEntityType = joinInfo.Navigation!.DeclaringEntityType;
+        var outerProperty = outerAnchorEntityType.FindProperty(outerKeyName);
         var innerProperty = joinInfo.InnerEntityType.FindProperty(innerKeyName);
+        if (outerProperty == null || innerProperty == null)
+        {
+            return false;
+        }
 
-        return outerProperty != null
-               && innerProperty != null
-               && lookup.LocalField == outerProperty.GetElementName()
-               && lookup.ForeignField == innerProperty.GetElementName();
+        // For a transitive hop the emitted LocalField is prefixed with the prior join's own alias
+        // (`"{throughJoin.Alias}.{element}"`, see the LookupExpression construction just above), so an
+        // exact match is only ever correct at depth 1; a transitive hop's own key equality is confirmed by
+        // the prefixed field ENDING in the resolved property's element name.
+        var outerElementName = outerProperty.GetElementName();
+        var outerFieldMatches = lookup.LocalField == outerElementName
+            || lookup.LocalField.EndsWith("." + outerElementName, StringComparison.Ordinal);
+
+        return outerFieldMatches && lookup.ForeignField == innerProperty.GetElementName();
     }
 
     /// <summary>

@@ -60,6 +60,18 @@ public class JoinScopeWhereSlotPopulationTests
         public int OwnerId { get; set; }
         public Owner? Owner { get; set; }
         public decimal Total { get; set; }
+        public List<OrderLine> Lines { get; set; } = [];
+    }
+
+    // Third source for the chained-join (Task 3) test below - same navigation-property requirement as
+    // Owner/Order above (TranslateJoinCore's eligibility check needs a real CLR navigation property to
+    // resolve, not a shadow/convention-only FK).
+    private class OrderLine
+    {
+        public int Id { get; set; }
+        public int OrderId { get; set; }
+        public Order? Order { get; set; }
+        public string Sku { get; set; } = "";
     }
 
     /// <summary>
@@ -96,6 +108,52 @@ public class JoinScopeWhereSlotPopulationTests
         Assert.NotNull(result);
         var shaped = Assert.IsAssignableFrom<ShapedQueryExpression>(result);
         return Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
+    }
+
+    /// <summary>
+    /// Three-source variant of <see cref="TranslateJoinQuery"/>, for Task 3's chained-join metadata test —
+    /// same pipeline, same rationale (real preprocessing is required to get EF's normalized
+    /// <c>TransparentIdentifier</c> shape), just with a second <c>Join</c> source added.
+    /// </summary>
+    private static MongoQueryExpression TranslateThreeSourceJoinQuery(
+        Func<IQueryable<Owner>, IQueryable<Order>, IQueryable<OrderLine>, IQueryable> buildQuery)
+    {
+        using var db = SingleEntityDbContext.Create<Owner>(mb =>
+        {
+            mb.Entity<Order>();
+            mb.Entity<OrderLine>();
+        });
+
+        var query = buildQuery(db.Set<Owner>(), db.Set<Order>(), db.Set<OrderLine>());
+
+        var ccFactory = db.GetService<IQueryCompilationContextFactory>();
+        var compilationContext = ccFactory.Create(async: false);
+
+        var preprocessor = db.GetService<IQueryTranslationPreprocessorFactory>().Create(compilationContext);
+        var preprocessed = preprocessor.Process(query.Expression);
+
+        var visitor = db.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>().Create(compilationContext);
+        var result = visitor.Visit(preprocessed);
+
+        Assert.NotNull(result);
+        var shaped = Assert.IsAssignableFrom<ShapedQueryExpression>(result);
+        return Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
+    }
+
+    [Fact]
+    public void Two_eligible_chained_joins_build_a_two_level_scope_metadata_only()
+    {
+        var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Join(lines, e => e.r.Id, l => l.OrderId, (e, l) => new { e.o, e.r, l })
+                .Where(x => x.o.Name == "Alice"));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
+
+        // Confirmation is a SEPARATE, later step (Task 6) - this task deliberately does not flip Route or
+        // HasUnconfirmedCandidateJoin, so both still read exactly as they did before this task.
+        Assert.True(mongoQ.Select.HasUnconfirmedCandidateJoin);
     }
 
     [Fact]
