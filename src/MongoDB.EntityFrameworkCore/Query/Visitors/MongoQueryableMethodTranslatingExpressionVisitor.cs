@@ -717,28 +717,44 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
 
     /// <summary>
     /// The single admissibility gate shared by both join-scope <c>Select</c> arms in
-    /// <see cref="TranslateSelect"/> (EF-392, Task 5): the bare whole-entity leaf and
-    /// <see cref="NativeJoinScopeProjectionBinder"/>'s wrapped scalar-only projection. On success,
-    /// <paramref name="joinInfo"/> is the ONE join this select's <see cref="MongoSelectDefinition.JoinScope"/>
-    /// belongs to, with a non-null <see cref="JoinInfo.Lookup"/> the lowerer can actually emit.
+    /// <see cref="TranslateSelect"/> (EF-392, Task 5; widened to a CHAIN by the native-chained-join-scope plan,
+    /// Task 6): the bare whole-entity leaf and <see cref="NativeJoinScopeProjectionBinder"/>'s wrapped
+    /// whole-entity-leaves-only projection. On success, <paramref name="joinInfo"/> is the LAST join in the
+    /// chain this select's <see cref="MongoSelectDefinition.JoinScope"/> describes (<c>Joins[^1]</c>) — for a
+    /// depth-1 scope that is, as before, the only join; the bare-leaf arm's own single <c>AddLookup</c> call
+    /// stays correct for a chain because <c>TranslateJoinCore</c> already unconditionally registers every
+    /// join's own <c>$lookup</c> the moment <c>Joins.Count &gt; 1</c> (the fallback-shape registration — see
+    /// that method's own remarks), so re-adding just the last one here is redundant-but-harmless (<c>AddLookup</c>
+    /// dedupes by alias), not a silent omission of the earlier levels. The wrapped-leaf arm's own per-level
+    /// <c>AddLookup</c>/confirm bookkeeping is done inside <see cref="NativeJoinScopeProjectionBinder"/> itself,
+    /// which reads <see cref="MongoSelectDefinition.JoinScope"/>/<c>.Levels</c> directly rather than through
+    /// <paramref name="joinInfo"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b><c>Joins.Count == 1</c> is the conjunct that closes <c>NativeJoinScopeTranslator</c>'s documented
-    /// RESIDUAL GAP</b> (read that file's comment first). That gap is: two DIFFERENT flat joins whose
-    /// Outer/Inner CLR types coincide cannot be told apart by the translator's type-shape check, so a scope
-    /// recorded for join #1 could be used to resolve join #2's Inner side against join #1's
-    /// <c>InnerPrefix</c> ($lookup alias) — silent wrong data. Task 4 neutralized it for the <c>Where</c> arm
-    /// by blocking ALL Inner access there; these Select arms legitimately need Inner access, so they close it
-    /// structurally instead. <c>TranslateJoinCore</c> records a <c>JoinScope</c> only for the FIRST join on a
-    /// select (<c>Select.JoinScope == null</c>) and <c>AddJoin</c> appends to the SAME <c>Joins</c> list on the
-    /// SAME <c>MongoQueryExpression</c> — a trailing <c>Select</c> never forks a new one (every
-    /// <c>Translate*</c> here returns <c>source.UpdateShaperExpression(...)</c>). So "exactly one join has ever
-    /// been recorded on this select" and "the recorded scope describes that join" are the same fact, and
-    /// <c>scope.InnerPrefix == Joins[0].Alias</c> holds by construction. The gap's own example —
-    /// <c>Join(a, b, …).Select(x =&gt; x.Outer).Join(c, d, …)</c> — reaches this gate with
-    /// <c>Joins.Count == 2</c> at the trailing Select and is declined here, unconfirmed, exactly as it was
-    /// before this slice (pinned by <c>NativeJoinTests.Chained_second_join_still_declines_cleanly_in_NativeOnly</c>).
+    /// <b><c>scope.Levels.Count == Joins.Count</c> is the conjunct that closes <c>NativeJoinScopeTranslator</c>'s
+    /// documented RESIDUAL GAP, generalized from the old <c>Joins.Count == 1</c> check.</b> That gap is: two
+    /// DIFFERENT flat joins whose Outer/Inner CLR types coincide cannot be told apart by the translator's
+    /// type-shape check, so a scope recorded for join #1 could be used to resolve join #2's Inner side against
+    /// join #1's <c>InnerPrefix</c> ($lookup alias) — silent wrong data. Task 4 neutralized it for the
+    /// <c>Where</c> arm by blocking ALL Inner access there; these Select arms legitimately need Inner access,
+    /// so they close it structurally instead. <c>TranslateJoinCore</c> now (re)builds <c>JoinScope</c> as a
+    /// chain covering every join so far, but ONLY while every one of them is individually eligible
+    /// (<c>JoinInfo.IsNativelyEligible</c>) — the moment any join in the chain is ineligible, <c>JoinScope</c>
+    /// stops being extended past it, so <c>scope.Levels.Count == Joins.Count</c> failing is exactly "this
+    /// select's join chain is not (yet, or ever) fully eligible." <b>The gap's own worked example — a chained
+    /// second join whose OWN flat <c>TransparentIdentifier&lt;TOuter,TInner&gt;</c> coincidentally matches the
+    /// FIRST join's recorded scope types (<c>Join(a, b, …).Select(x =&gt; x.Outer).Join(c, d, …)</c>) — now
+    /// PASSES this gate</b> (both joins individually eligible, so the chain is rebuilt to 2 levels covering
+    /// both) but is still closed safely one layer down, in <see cref="NativeJoinScopeProjectionBinder"/>: a
+    /// chain (<c>Levels.Count &gt; 1</c>) admits ONLY whole-entity leaves, resolved structurally via
+    /// <c>MongoTransparentScopeResolver.TryResolveScopeDepth</c> — never falls through to the flat depth-1
+    /// <c>NativeJoinScopeTranslator.TryTranslateValue</c> path that gap warns about, which is the only call
+    /// path that could actually misresolve a scalar/computed leaf against the wrong join's <c>InnerPrefix</c>.
+    /// See that binder's own remarks, and <c>NativeJoinScopeProjectionBinderTests
+    /// .Declines_a_second_chained_join_rather_than_reusing_the_first_joins_scope</c>, which still declines (its
+    /// trailing selector's leaves are scalar, not whole-entity) — pinning that this gate's widening alone does
+    /// not resurrect the gap.
     /// </para>
     /// <para>
     /// <b>The left-outer conjunct is a lowerer constraint, not a scope statement.</b>
@@ -777,23 +793,44 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     /// already excluded upstream by <c>TranslateJoinCore</c>'s own <c>JoinScope</c> eligibility.
     /// </para>
     /// </remarks>
-    private static bool IsSingleEligibleNativeJoinScope(
+    /// <remarks>
+    /// <b>Made <c>internal</c> (native-chained-join-scope plan, Task 6 final round) so
+    /// <see cref="NativeTranslation.NativeCardinalityBinder.TryBindAggregate"/> can reuse the identical
+    /// eligibility check.</b> A scalar aggregate with no selector-bearing operand (a bare
+    /// <c>Any()</c>/<c>Count()</c>) can reach that binder with NO trailing Select in the tree AT ALL: EF's
+    /// nav-expansion only synthesizes a join's pending wrap Select when something downstream needs ROW
+    /// SHAPE, and a presence/count-only aggregate doesn't — MEASURED via <c>LambdaExpression.Print()</c> on
+    /// the preprocessed tree for <c>Join(…).Join(…).Where(…).OrderBy(…).Any()</c>: no <c>Select</c> node
+    /// exists between the last <c>Join</c> and <c>Where</c>/<c>OrderBy</c>/<c>Any</c>. So the two Select-side
+    /// confirming arms in <see cref="TranslateSelect"/> never run for that shape, and without a second
+    /// confirming site the chain's candidate joins stay unconfirmed forever — <c>Route</c> stuck at
+    /// <c>Fallback</c> — even though every join in the chain is individually eligible and the aggregate
+    /// itself binds fine. <c>TryBindAggregate</c> calls this SAME method (not a looser copy) immediately
+    /// before its own unconditional success return, and on success confirms via
+    /// <see cref="NativeTranslation.NativeJoinScopeProjectionBinder.ConfirmEntireChain"/> — the identical
+    /// per-level commit <see cref="NativeTranslation.NativeJoinScopeProjectionBinder.TryBindProjection"/>
+    /// itself now delegates to, so there is exactly one place that performs this side effect.
+    /// </remarks>
+    internal static bool IsSingleEligibleNativeJoinScope(
         MongoQueryExpression mongoQueryExpression, [NotNullWhen(true)] out JoinInfo? joinInfo)
     {
         joinInfo = null;
 
-        if (mongoQueryExpression.Select.JoinScope is null
+        if (mongoQueryExpression.Select.JoinScope is not { } scope
+            || scope.Levels.Count != mongoQueryExpression.Joins.Count
             || mongoQueryExpression.Select.HasUnsupportedOperator
             || mongoQueryExpression.Select.HasTerminalOperator
-            || mongoQueryExpression.Select.UnwindSource != null
-            || mongoQueryExpression.Joins.Count != 1)
+            || mongoQueryExpression.Select.UnwindSource != null)
         {
             return false;
         }
 
-        var candidate = mongoQueryExpression.Joins[0];
-        if (candidate.Lookup is not { } lookup
-            || (candidate.IsLeftOuter && lookup.Navigation is { IsCollection: true }))
+        // Task 3's IsNativelyEligible already re-checked navigation/left-outer-collection/key-selector-implements
+        // per join before JoinScope was (re)built to cover Joins.Count levels — scope.Levels.Count ==
+        // Joins.Count above is proof every join already passed those conjuncts, so this method's OWN copy of the
+        // left-outer/collection re-check (previously duplicated here) is removed rather than left to drift.
+        var candidate = mongoQueryExpression.Joins[^1];
+        if (candidate.Lookup is not { } lookup)
         {
             return false;
         }

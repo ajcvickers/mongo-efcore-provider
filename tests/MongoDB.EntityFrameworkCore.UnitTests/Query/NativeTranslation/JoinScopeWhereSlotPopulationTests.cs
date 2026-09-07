@@ -245,9 +245,20 @@ public class JoinScopeWhereSlotPopulationTests
         Assert.NotNull(mongoQ.Select.JoinScope);
         Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
 
-        // Confirmation is a SEPARATE, later step (Task 6) - this task deliberately does not flip Route or
-        // HasUnconfirmedCandidateJoin, so both still read exactly as they did before this task.
-        Assert.True(mongoQ.Select.HasUnconfirmedCandidateJoin);
+        // UPDATED for the native-chained-join-scope plan's Task 6 (the confirming Select-side widening this
+        // task's own comment above deferred to): EF's nav-expansion always applies the join's pending result
+        // selector `new { e.o, e.r, l }` LAST — an implicit trailing Select whose three leaves are ALL
+        // whole-entity references spanning every scope in this chain (o at scope 0, e.r at scope 1, l at
+        // scope 2) — which NativeJoinScopeProjectionBinder now (Task 6) confirms fully, so both signals flip
+        // from this task's own original (deliberately temporary) pinned state.
+        Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+        Assert.Equal(2, mongoQ.Lookups.Count);
+        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
+
+        // The Where predicate itself (`x.o.Name == "Alice"`, root-scope-only) still populates a native
+        // $match — Task 4's TryTranslateRootScopeOnly arm, unaffected by Task 6's Select-side widening.
+        var matchOp = Assert.IsType<MongoMatchOp>(Assert.Single(mongoQ.Select.PipelineOps));
+        Assert.IsType<MongoBinaryExpression>(matchOp.Predicate);
     }
 
     [Fact]
