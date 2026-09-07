@@ -107,13 +107,13 @@ internal static class NativeJoinScopeTranslator
             || !TryGetOuterOrInnerMemberType(rootParam.Type, "Outer", out var outerMemberType)
             || outerMemberType != scope.OuterEntityType.ClrType
             || !TryGetOuterOrInnerMemberType(rootParam.Type, "Inner", out var innerMemberType)
-            || innerMemberType != scope.InnerEntityType.ClrType)
+            || innerMemberType != scope.Levels[0].InnerEntityType.ClrType)
         {
             return false;
         }
 
         var outerParam = Expression.Parameter(scope.OuterEntityType.ClrType, "outerScope");
-        var innerParam = Expression.Parameter(scope.InnerEntityType.ClrType, "innerScope");
+        var innerParam = Expression.Parameter(scope.Levels[0].InnerEntityType.ClrType, "innerScope");
         var splitter = new ScopeSplittingVisitor(rootParam, outerParam, innerParam);
         var rewritten = splitter.Visit(body);
 
@@ -133,7 +133,7 @@ internal static class NativeJoinScopeTranslator
             return false;
 
         var translator = new MongoExpressionTranslator(
-            scope.InnerEntityType, outerParam, scope.OuterEntityType, scope.InnerPrefix);
+            scope.Levels[0].InnerEntityType, outerParam, scope.OuterEntityType, scope.Levels[0].InnerPrefix);
 
         return valueMode
             ? translator.TryTranslateValue(rewritten, out result)

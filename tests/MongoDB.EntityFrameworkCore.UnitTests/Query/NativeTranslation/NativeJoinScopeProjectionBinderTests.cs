@@ -98,7 +98,7 @@ public class NativeJoinScopeProjectionBinderTests
 
         // The Inner leaf resolves through the join's $lookup alias; the Outer leaf reads the root document.
         var innerLeaf = Assert.IsType<MongoFieldExpression>(mongoQ.Select.Projection[1].Expression);
-        Assert.StartsWith(mongoQ.Select.JoinScope!.InnerPrefix + ".", innerLeaf.ElementName);
+        Assert.StartsWith(mongoQ.Select.JoinScope!.Levels[0].InnerPrefix + ".", innerLeaf.ElementName);
         // MongoOuterFieldExpression, not MongoFieldExpression — see NativeJoinScopeTranslatorTests'
         // Translates_outer_side_member_access_unprefixed for why (same TranslateOperand call site).
         var outerLeaf = Assert.IsType<MongoOuterFieldExpression>(mongoQ.Select.Projection[0].Expression);
@@ -121,7 +121,7 @@ public class NativeJoinScopeProjectionBinderTests
             owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o.Name, r }));
 
         Assert.NotNull(mongoQ.Select.JoinScope);
-        var innerPrefix = mongoQ.Select.JoinScope!.InnerPrefix;
+        var innerPrefix = mongoQ.Select.JoinScope!.Levels[0].InnerPrefix;
 
         // The emitted alias is the join's own $lookup prefix, NOT the member name "r".
         Assert.Equal(["Name", innerPrefix], mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
@@ -150,7 +150,7 @@ public class NativeJoinScopeProjectionBinderTests
             owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r }));
 
         Assert.NotNull(mongoQ.Select.JoinScope);
-        var innerPrefix = mongoQ.Select.JoinScope!.InnerPrefix;
+        var innerPrefix = mongoQ.Select.JoinScope!.Levels[0].InnerPrefix;
 
         Assert.Equal(["o", innerPrefix], mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
 
@@ -180,7 +180,7 @@ public class NativeJoinScopeProjectionBinderTests
             owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { a = r, b = r }));
 
         Assert.NotNull(mongoQ.Select.JoinScope);
-        var innerPrefix = mongoQ.Select.JoinScope!.InnerPrefix;
+        var innerPrefix = mongoQ.Select.JoinScope!.Levels[0].InnerPrefix;
 
         // Exactly ONE staged entry for the fixed alias, not two — that is precisely what the guard prevents.
         var projection = Assert.Single(mongoQ.Select.Projection);
@@ -285,7 +285,7 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.Equal(MongoElementRefExpression.WholeRootDocumentPath, outerLeaf.Path);
 
         var innerLeaf = Assert.IsType<MongoFieldExpression>(mongoQ.Select.Projection[1].Expression);
-        Assert.StartsWith(mongoQ.Select.JoinScope!.InnerPrefix + ".", innerLeaf.ElementName);
+        Assert.StartsWith(mongoQ.Select.JoinScope!.Levels[0].InnerPrefix + ".", innerLeaf.ElementName);
 
         Assert.Single(mongoQ.Lookups);
         Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);

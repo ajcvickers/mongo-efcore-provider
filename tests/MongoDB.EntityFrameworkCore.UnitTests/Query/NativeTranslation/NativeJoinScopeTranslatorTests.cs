@@ -70,7 +70,7 @@ public class NativeJoinScopeTranslatorTests
     private static MongoJoinScope NewScope(bool isLeftOuter = false)
     {
         var (outer, inner) = GetEntityTypes();
-        return new MongoJoinScope(outer, inner, InnerPrefix, isLeftOuter);
+        return new MongoJoinScope(outer, [new MongoJoinScopeLevel(inner, InnerPrefix, isLeftOuter)]);
     }
 
     /// <summary>The real EF-generated flat <c>TransparentIdentifier&lt;OuterEntity, InnerEntity&gt;</c> type.</summary>

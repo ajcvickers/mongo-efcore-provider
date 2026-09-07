@@ -555,7 +555,7 @@ internal sealed class MongoSelectDefinition
     /// </remarks>
     internal bool HasArrayProjectionLeaf { get; set; }
 
-    /// <summary>The native single-level join scope recorded by <c>TranslateJoinCore</c>, or <see
+    /// <summary>The native join scope chain recorded by <c>TranslateJoinCore</c>, or <see
     /// langword="null"/> if this select has no eligible native join.</summary>
     internal MongoJoinScope? JoinScope { get; set; }
 

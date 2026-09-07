@@ -42,7 +42,7 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// folds the join's own shaper into the selector body first, so the leaf arrives as the
 /// <c>StructuralTypeShaperExpression</c> the join already built and gets rebound by index, rather than
 /// mis-registered as a scalar alias read. The INNER leaf stages the SAME <c>$$ROOT</c>-analogue mechanism but
-/// under a FIXED, self-referential alias — <see cref="MongoJoinScope.InnerPrefix"/> — used as BOTH the emitted
+/// under a FIXED, self-referential alias — <see cref="MongoJoinScopeLevel.InnerPrefix"/> — used as BOTH the emitted
 /// <c>$project</c> field name AND the <see cref="MongoElementRefExpression"/>'s path, NOT the member's own
 /// alias. See the "Alias space" paragraph below for why this asymmetry is load-bearing and must not be
 /// "corrected" back to the member alias.
@@ -206,7 +206,7 @@ internal static class NativeJoinScopeProjectionBinder
                     // silently on that three-file coupling (RebindInnerShaperToOuterQuery →
                     // EntityProjectionExpression.Name → the seed loop) for the ORDINARY-leaf arm below to
                     // decline a user member spelled exactly "_lookup_<Nav>".
-                    seenAliases.Add(scope.InnerPrefix);
+                    seenAliases.Add(scope.Levels[0].InnerPrefix);
 
                     // Dedup so a duplicated Inner leaf (e.g. `new { a = r, b = r }`) stages this fixed alias
                     // only once — otherwise MongoQueryExpression/MongoPipelineFactory would hard-crash on a
@@ -220,15 +220,15 @@ internal static class NativeJoinScopeProjectionBinder
                     // Inner leaf — a dropped value, not a decline — were the seeding coupling above ever to
                     // break and let a user member named "_lookup_<Nav>" stage first. Declining converts that
                     // latent silent drop into an explicit, visible fallback.
-                    var existingIndex = staged.FindIndex(p => p.Alias == scope.InnerPrefix);
+                    var existingIndex = staged.FindIndex(p => p.Alias == scope.Levels[0].InnerPrefix);
                     if (existingIndex < 0)
                     {
                         staged.Add(new MongoProjection(
-                            scope.InnerPrefix,
-                            new MongoElementRefExpression(scope.InnerPrefix, scope.InnerEntityType.ClrType)));
+                            scope.Levels[0].InnerPrefix,
+                            new MongoElementRefExpression(scope.Levels[0].InnerPrefix, scope.Levels[0].InnerEntityType.ClrType)));
                     }
                     else if (staged[existingIndex].Expression is not MongoElementRefExpression existingRef
-                             || existingRef.Path != scope.InnerPrefix)
+                             || existingRef.Path != scope.Levels[0].InnerPrefix)
                     {
                         return false;
                     }

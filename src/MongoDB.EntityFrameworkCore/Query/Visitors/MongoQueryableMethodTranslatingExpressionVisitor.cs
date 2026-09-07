@@ -2201,8 +2201,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             && JoinLookupImplementsKeySelectors(joinInfo, outerQueryExpression, outerKeySelector, innerKeySelector))
         {
             outerQueryExpression.Select.JoinScope = new MongoJoinScope(
-                outerQueryExpression.CollectionExpression.EntityType, eligibleNavigation.TargetEntityType,
-                joinInfo.Alias, joinInfo.IsLeftOuter);
+                outerQueryExpression.CollectionExpression.EntityType,
+                [new MongoJoinScopeLevel(eligibleNavigation.TargetEntityType, joinInfo.Alias, joinInfo.IsLeftOuter)]);
         }
 
         var newResultSelector = ReplacingExpressionVisitor.Replace(

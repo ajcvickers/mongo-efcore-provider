@@ -511,7 +511,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     private static bool HasJoinScopeInnerEntityProjectionLeaf(MongoQueryExpression mongoQueryExpression)
         => mongoQueryExpression.Select.JoinScope is { } scope
            && mongoQueryExpression.Select.Projection.Any(
-               p => p.Alias == scope.InnerPrefix && p.Expression is MongoElementRefExpression);
+               p => p.Alias == scope.Levels[0].InnerPrefix && p.Expression is MongoElementRefExpression);
 
     /// <summary>
     /// A THIRD trigger (EF-447) for the same late-fallback problem <see cref="HasJoinScopeInnerEntityProjectionLeaf"/>
