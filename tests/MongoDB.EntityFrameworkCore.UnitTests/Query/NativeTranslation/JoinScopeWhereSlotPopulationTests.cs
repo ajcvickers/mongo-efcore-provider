@@ -290,6 +290,57 @@ public class JoinScopeWhereSlotPopulationTests
         // AddPredicateConjunct actually ran.
     }
 
+    /// <summary>
+    /// Task 5's own real green signal for the chained (depth &gt;= 2) case: drives a genuine two-join chain
+    /// (<c>Owner.Join(Order).Join(OrderLine)</c>) through the real EF pipeline and proves the generalized
+    /// <c>Where</c> arm's new <c>Levels.Count: &gt; 1</c> branch — <see cref="NativeJoinScopeTranslator.TryTranslateRootScopeOnly"/>
+    /// — actually resolves a predicate reading the ROOT (outermost, "o") scope against the real,
+    /// EF-generated nested <c>TransparentIdentifier&lt;TransparentIdentifier&lt;Owner,Order&gt;,OrderLine&gt;</c>
+    /// shape, exactly as <see cref="Where_reading_outer_scope_after_join_populates_predicate_natively"/> does
+    /// for depth 1. A populated <see cref="MongoMatchOp"/> on <c>PipelineOps</c> is the direct, unambiguous
+    /// signal — Task 1's end-to-end functional test can't distinguish this from an unrelated Select-side
+    /// decline (Task 6, not yet landed), so this narrower assertion is what actually proves this task's own
+    /// code path ran and succeeded.
+    /// </summary>
+    [Fact]
+    public void Where_reading_root_scope_after_chained_join_populates_predicate_natively()
+    {
+        var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Join(lines, e => e.r.Id, l => l.OrderId, (e, l) => new { e.o, e.r, l })
+                .Where(x => x.o.Name == "Alice"));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
+
+        var matchOp = Assert.IsType<MongoMatchOp>(Assert.Single(mongoQ.Select.PipelineOps));
+        Assert.IsType<MongoBinaryExpression>(matchOp.Predicate);
+    }
+
+    /// <summary>
+    /// Companion to the above for the <c>OrderBy</c> arm's new chained-scope branch — same two-join chain,
+    /// same root-scope-only key selector, but asserting a <see cref="MongoSortOp"/> lands on
+    /// <c>PipelineOps</c> instead of a <see cref="MongoMatchOp"/>. Proves
+    /// <c>NativeSlotPopulator</c>'s <c>OrderBy</c>/<c>OrderByDescending</c> arm's new
+    /// <c>Levels.Count: &gt; 1</c> fallback (added by this task; previously OrderBy had NO join-scope arm at
+    /// all, even for depth 1) actually populates the sort slot for a chained scope.
+    /// </summary>
+    [Fact]
+    public void OrderBy_reading_root_scope_after_chained_join_populates_sort_natively()
+    {
+        var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Join(lines, e => e.r.Id, l => l.OrderId, (e, l) => new { e.o, e.r, l })
+                .OrderBy(x => x.o.Name));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
+
+        var sortOp = Assert.IsType<MongoSortOp>(Assert.Single(mongoQ.Select.PipelineOps));
+        var ordering = Assert.Single(sortOp.Orderings);
+        Assert.True(ordering.Ascending);
+    }
+
     [Fact]
     public void Where_reading_inner_scope_after_join_still_declines_gracefully()
     {

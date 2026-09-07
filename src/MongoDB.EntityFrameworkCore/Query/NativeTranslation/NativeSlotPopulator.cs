@@ -156,11 +156,18 @@ internal static class NativeSlotPopulator
             // confirmed through the shared gate, so every one of those conjuncts held. The asymmetry is
             // therefore deliberate: do NOT copy this shorter set to a registering call site, and do not weaken
             // the Select arms' gate to match it.
-            else if (mongoQ.Select.JoinScope is { } joinScope
+            else if (mongoQ.Select.JoinScope is { Levels.Count: 1 } singleLevelScope
                      && !NativeJoinScopeTranslator.ReferencesInnerScope(predicate.Parameters[0], predicate.Body)
                      && NativeJoinScopeTranslator.TryTranslatePredicate(
-                         joinScope, predicate.Parameters[0], predicate.Body, out var joinPredicateNode))
+                         singleLevelScope, predicate.Parameters[0], predicate.Body, out var joinPredicateNode))
                 mongoQ.Select.AddPredicateConjunct(joinPredicateNode);
+            // Chained (depth >= 2) join scope: only the root/outermost scope is resolvable here — any access
+            // to an Inner side at any depth defers to the Select-side binder, same rationale as the depth-1
+            // ReferencesInnerScope check above. TryTranslateRootScopeOnly enforces this by construction.
+            else if (mongoQ.Select.JoinScope is { Levels.Count: > 1 } chainedScope
+                     && NativeJoinScopeTranslator.TryTranslateRootScopeOnly(
+                         chainedScope, predicate.Parameters[0], predicate.Body, valueMode: false, out var chainedPredicateNode))
+                mongoQ.Select.AddPredicateConjunct(chainedPredicateNode);
             else
                 mongoQ.Select.MarkNotNativelyRepresentable();
         }
@@ -173,6 +180,15 @@ internal static class NativeSlotPopulator
                 mongoQ.Select.StartOrReplaceSort(new MongoOrdering(keyNode, ascending));
             else if (TryTranslateComputedSortKey(translator, keySelector.Body, out var computedKey))
                 mongoQ.Select.StartOrReplaceSort(new MongoOrdering(computedKey, ascending));
+            else if (mongoQ.Select.JoinScope is { Levels.Count: 1 } singleLevelSortScope
+                     && !NativeJoinScopeTranslator.ReferencesInnerScope(keySelector.Parameters[0], keySelector.Body)
+                     && NativeJoinScopeTranslator.TryTranslateValue(
+                         singleLevelSortScope, keySelector.Parameters[0], keySelector.Body, out var joinSortKey))
+                mongoQ.Select.StartOrReplaceSort(new MongoOrdering(joinSortKey, ascending));
+            else if (mongoQ.Select.JoinScope is { Levels.Count: > 1 } chainedSortScope
+                     && NativeJoinScopeTranslator.TryTranslateRootScopeOnly(
+                         chainedSortScope, keySelector.Parameters[0], keySelector.Body, valueMode: true, out var chainedSortKey))
+                mongoQ.Select.StartOrReplaceSort(new MongoOrdering(chainedSortKey, ascending));
             else
                 mongoQ.Select.MarkNotNativelyRepresentable();
         }
@@ -185,6 +201,15 @@ internal static class NativeSlotPopulator
                 mongoQ.Select.AppendThenBy(new MongoOrdering(keyNode, ascending));
             else if (TryTranslateComputedSortKey(translator, keySelector.Body, out var computedKey))
                 mongoQ.Select.AppendThenBy(new MongoOrdering(computedKey, ascending));
+            else if (mongoQ.Select.JoinScope is { Levels.Count: 1 } singleLevelThenByScope
+                     && !NativeJoinScopeTranslator.ReferencesInnerScope(keySelector.Parameters[0], keySelector.Body)
+                     && NativeJoinScopeTranslator.TryTranslateValue(
+                         singleLevelThenByScope, keySelector.Parameters[0], keySelector.Body, out var joinThenByKey))
+                mongoQ.Select.AppendThenBy(new MongoOrdering(joinThenByKey, ascending));
+            else if (mongoQ.Select.JoinScope is { Levels.Count: > 1 } chainedThenByScope
+                     && NativeJoinScopeTranslator.TryTranslateRootScopeOnly(
+                         chainedThenByScope, keySelector.Parameters[0], keySelector.Body, valueMode: true, out var chainedThenByKey))
+                mongoQ.Select.AppendThenBy(new MongoOrdering(chainedThenByKey, ascending));
             else
                 mongoQ.Select.MarkNotNativelyRepresentable();
         }
