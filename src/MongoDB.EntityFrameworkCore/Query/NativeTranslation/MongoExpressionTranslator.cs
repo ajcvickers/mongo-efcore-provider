@@ -593,6 +593,11 @@ internal sealed partial class MongoExpressionTranslator
                 // wrapping it in a generic Not node (there is no query-dialect "not $in" wrapper).
                 if (operand is MongoInExpression inExpr)
                     return new MongoInExpression(inExpr.Field, inExpr.Values, negated: !inExpr.Negated);
+                // !data.Contains(computed) → flip Negated on the MongoComputedInExpression, mirroring the
+                // MongoInExpression case immediately above — same "no query-dialect not-$in wrapper" reason.
+                if (operand is MongoComputedInExpression computedInExpr)
+                    return new MongoComputedInExpression(
+                        computedInExpr.Needle, computedInExpr.Values, negated: !computedInExpr.Negated);
                 // !arrayField.Contains(constant) → flip Negated on the MongoArrayContainsExpression rather
                 // than wrapping in a generic Not node — mirrors the MongoInExpression case immediately above;
                 // { field: { $ne: value } } is the exact complement (see RenderArrayContains's remarks).
@@ -684,16 +689,39 @@ internal sealed partial class MongoExpressionTranslator
 
             case MethodCallExpression call when TryMatchContainsMethod(call, out var collectionExpr, out var itemExpr):
             {
-                if (!TryResolveMember(Unwrap(itemExpr), out var property, out var fieldPath, out var itemIsOuter)
-                    || itemIsOuter) // an outer-scoped item is out of EF-421's scope — decline
-                    return null; // item must resolve to a bare field
+                if (TryResolveMember(Unwrap(itemExpr), out var property, out var fieldPath, out var itemIsOuter))
+                {
+                    if (itemIsOuter) // an outer-scoped item is out of EF-421's scope — decline
+                        return null;
 
-                var valuesNode = TranslateInValues(collectionExpr, property);
-                if (valuesNode is null)
-                    return null;
+                    var valuesNode = TranslateInValues(collectionExpr, property);
+                    if (valuesNode is null)
+                        return null;
 
-                var fieldExpr2 = new MongoFieldExpression(property, fieldPath);
-                return new MongoInExpression(fieldExpr2, valuesNode, negated: false);
+                    var fieldExpr2 = new MongoFieldExpression(property, fieldPath);
+                    return new MongoInExpression(fieldExpr2, valuesNode, negated: false);
+                }
+
+                // The item isn't a bare field — try a COMPUTED needle (e.g. string concatenation of a
+                // column with a constant/other column: `data.Contains(c.CustomerID + "SomeConstant")`).
+                // A computed needle has no query-dialect form at all (only a bare field can key
+                // { field: { $in: [...] } }), so it can only be tested via $expr's array-form $in — hence
+                // MongoComputedInExpression, not MongoInExpression. Scoped to a STRING-typed needle (the
+                // only computed shape TranslateValue produces that TranslateInValuesRaw can serialize
+                // without a backing IProperty) and gated by CanRender so a needle shape the aggregation
+                // renderer can't express declines here rather than throwing at render time.
+                if (TryTranslateValue(itemExpr, out var needleNode)
+                    && needleNode.Type == typeof(string)
+                    && MongoAggregationExpressionRenderer.CanRender(needleNode))
+                {
+                    var rawValuesNode = TranslateInValuesRaw(collectionExpr, typeof(string));
+                    if (rawValuesNode is null)
+                        return null;
+
+                    return new MongoComputedInExpression(needleNode, rawValuesNode, negated: false);
+                }
+
+                return null;
             }
 
             // --- String prefix/suffix/substring: string.StartsWith/EndsWith/Contains(string) ---

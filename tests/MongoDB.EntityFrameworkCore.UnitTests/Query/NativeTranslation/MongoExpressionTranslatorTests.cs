@@ -830,6 +830,65 @@ public class MongoExpressionTranslatorTests
     }
 
     // ------------------------------------------------------------------
+    // Test 18g: Contains over a COMPUTED (string concatenation) item → MongoComputedInExpression, not a
+    // decline. The needle has no bare field to key a query-dialect { field: { $in: [...] } } on, so it must
+    // be a $expr array-form $in instead — the sibling of Test 18b/18c's plain-field MongoInExpression.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Contains_over_string_concat_item_translates_to_computed_in()
+    {
+        var entityType = GetEntityType<Customer>();
+        var translator = NewTranslator(entityType);
+
+        // data.Contains(c.Name + "Suffix") — the collection is a ConstantExpression (see Test 14's own
+        // remarks on why this is built by hand rather than relying on the compiler's closure capture).
+        var data = new[] { "AliceSuffix", "BobSuffix" };
+        var cParam = Expression.Parameter(typeof(Customer), "c");
+        var nameMember = Expression.MakeMemberAccess(cParam, typeof(Customer).GetProperty(nameof(Customer.Name))!);
+        var concatItem = Expression.Add(
+            nameMember, Expression.Constant("Suffix"),
+            typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!);
+        var containsMethod = typeof(Enumerable).GetMethods()
+            .First(m => m.Name == nameof(Enumerable.Contains) && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(string));
+        var body = Expression.Call(containsMethod, Expression.Constant(data), concatItem);
+
+        Assert.True(translator.TryTranslate(body, out var result));
+        var computedIn = Assert.IsType<MongoComputedInExpression>(result);
+        Assert.False(computedIn.Negated);
+        var concat = Assert.IsType<MongoConcatExpression>(computedIn.Needle);
+        Assert.Equal(2, concat.Operands.Count);
+        Assert.IsType<MongoFieldExpression>(concat.Operands[0]);
+        var constant = Assert.IsType<MongoConstantExpression>(computedIn.Values);
+        var values = Assert.IsType<string[]>(constant.Value);
+        Assert.Equal(["AliceSuffix", "BobSuffix"], values);
+    }
+
+    [Fact]
+    public void Not_over_string_concat_contains_flips_negated()
+    {
+        var entityType = GetEntityType<Customer>();
+        var translator = NewTranslator(entityType);
+
+        var data = new[] { "AliceSuffix", "BobSuffix" };
+        var cParam = Expression.Parameter(typeof(Customer), "c");
+        var nameMember = Expression.MakeMemberAccess(cParam, typeof(Customer).GetProperty(nameof(Customer.Name))!);
+        var concatItem = Expression.Add(
+            nameMember, Expression.Constant("Suffix"),
+            typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!);
+        var containsMethod = typeof(Enumerable).GetMethods()
+            .First(m => m.Name == nameof(Enumerable.Contains) && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(string));
+        var containsCall = Expression.Call(containsMethod, Expression.Constant(data), concatItem);
+        var body = Expression.Not(containsCall);
+
+        Assert.True(translator.TryTranslate(body, out var result));
+        var computedIn = Assert.IsType<MongoComputedInExpression>(result);
+        Assert.True(computedIn.Negated);
+    }
+
+    // ------------------------------------------------------------------
     // Test 18c-18f (EF-382): arrayField.Contains(constant) — the MIRROR shape of the $in arm above (there
     // the ITEM resolves to a field and the collection is a client-side set of values; here the RECEIVER is a
     // genuine stored array FIELD and the item is a single constant value). MongoDB's implicit array-element
