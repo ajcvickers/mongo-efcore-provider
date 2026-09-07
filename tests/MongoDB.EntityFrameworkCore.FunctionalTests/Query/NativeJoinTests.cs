@@ -262,12 +262,15 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     {
         // Native-chained-join-scope plan (2026-09-07), Task 1, flipped to green by Task 6. This is now a
         // REGRESSION PIN: a second chained Join followed by a Where/OrderBy/Any over the root (outermost)
-        // scope goes native under NativeOnly — the query's implicit trailing Select (all-whole-entity-leaves
-        // over the two-level chain) is what confirms it (NativeJoinScopeProjectionBinder.TryBindProjection /
-        // ConfirmEntireChain), and NativeCardinalityBinder.TryBindAggregate confirms it independently for the
-        // no-trailing-Select shape a bare Any() actually arrives as (see IsSingleEligibleNativeJoinScope's own
-        // remarks). Originally added (pre-fix) as a "still declines" pin, superseded here by the "now goes
-        // native" assertion below, the same way earlier tests in this file evolved as their binders landed.
+        // scope goes native under NativeOnly. Confirmation is via NativeCardinalityBinder.TryBindAggregate
+        // ONLY: EF's nav-expansion elides the join's pending wrap Select entirely for this selector-less bare
+        // Any() (MEASURED via LambdaExpression.Print() on the preprocessed tree — no Select node exists between
+        // the last Join and Where/OrderBy/Any), so there is no trailing Select for
+        // NativeJoinScopeProjectionBinder.TryBindProjection to ever see for THIS test's shape; only
+        // TryBindAggregate's no-trailing-Select confirming path (see IsSingleEligibleNativeJoinScope's own
+        // remarks) ever runs here. Originally added (pre-fix) as a "still declines" pin, superseded here by the
+        // "now goes native" assertion below, the same way earlier tests in this file evolved as their binders
+        // landed.
         var seed = SeedOwnersOrdersAndLines();
         using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
             nameof(Chained_join_Where_OrderBy_Any_goes_native_under_NativeOnly));
@@ -304,6 +307,51 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
             .Count();
 
         Assert.True(count > 0);
+    }
+
+    [Fact]
+    public void Chained_join_onto_the_same_target_entity_type_disambiguates_lookup_aliases_under_NativeOnly()
+    {
+        // Final-review fix (M9b). The final whole-branch review verified the "two joins onto the same target
+        // entity type within one chain" alias-disambiguation behavior (UniquifyLookupAlias producing
+        // "_lookup_Orders" then "_lookup_Orders_1") by hand but found it untested — this pins it. Both joins
+        // here are Owner.Orders (the SAME navigation, resolved twice): the second join's outer key selector
+        // (`e.o.Id`) reaches back to the ROOT scope through a pure Outer-hop chain (isDirectFromRoot), not
+        // through the first join's Inner side, so both joins resolve against Owner.GetNavigations() and find
+        // the identical Owner.Orders collection navigation — the exact shape that requires
+        // UniquifyLookupAlias's counter suffix rather than a bare navigation-name alias, or the second join's
+        // $lookup would collide with the first's.
+        var seed = SeedOwnersOrdersAndLines();
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Chained_join_onto_the_same_target_entity_type_disambiguates_lookup_aliases_under_NativeOnly),
+            out var spyLogger);
+
+        var results = db.Owners
+            .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+            .Join(db.Orders, e => e.o.Id, r2 => r2.OwnerId, (e, r2) => new { e.o, e.r, r2 })
+            .Where(x => x.o.Name == seed.Owners[0].Name)
+            .AsEnumerable()
+            .Select(x => (x.r.Total, x.r2.Total))
+            .OrderBy(x => x.Item1).ThenBy(x => x.Item2)
+            .ToList();
+
+        // Owner[0] ("Alice") has exactly two orders in SeedOwnersOrdersAndLines (order1: 10, order2: 20), so
+        // the cross-product over both joins keyed on the SAME owner is 2 x 2 = 4 combinations.
+        var ownerAOrders = seed.Orders.Where(o => o.OwnerId == seed.Owners[0].Id).ToList();
+        var expected = (from r in ownerAOrders
+                         from r2 in ownerAOrders
+                         select (r.Total, r2.Total))
+            .OrderBy(x => x.Item1).ThenBy(x => x.Item2)
+            .ToList();
+
+        Assert.Equal(expected, results);
+
+        // Succeeding under NativeOnly is itself the "went native" signal — this is the actual point of the
+        // test, since a driver-LINQ fallback would ALSO happen to produce disambiguated aliases (the aliasing
+        // mechanism lives in TranslateJoinCore, shared by both legs) and so wouldn't distinguish the two.
+        var message = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutedMqlQuery);
+        Assert.Contains("_lookup_Orders\"", message);
+        Assert.Contains("_lookup_Orders_1\"", message);
     }
 
     [Fact]

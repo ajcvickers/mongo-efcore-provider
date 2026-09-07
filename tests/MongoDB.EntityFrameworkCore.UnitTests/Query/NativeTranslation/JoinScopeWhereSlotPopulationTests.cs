@@ -352,6 +352,33 @@ public class JoinScopeWhereSlotPopulationTests
         Assert.True(ordering.Ascending);
     }
 
+    /// <summary>
+    /// Final-review fix (M9a) — the chained <c>Where</c> and <c>OrderBy</c> arms above both have dedicated
+    /// coverage; <c>ThenBy</c> (added by the same Task 5 five-branch structure — plain field, computed key,
+    /// depth-1 join scope, chained join scope, decline) did not. Same two-join chain and root-scope-only key
+    /// selectors as <see cref="OrderBy_reading_root_scope_after_chained_join_populates_sort_natively"/>, just
+    /// with a second ordering key appended via <c>ThenBy</c> — proves <c>NativeSlotPopulator</c>'s
+    /// <c>ThenBy</c>/<c>ThenByDescending</c> arm's <c>Levels.Count: &gt; 1</c> branch actually appends to the
+    /// existing sort instead of declining or overwriting it.
+    /// </summary>
+    [Fact]
+    public void ThenBy_reading_root_scope_after_chained_join_populates_sort_natively()
+    {
+        var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Join(lines, e => e.r.Id, l => l.OrderId, (e, l) => new { e.o, e.r, l })
+                .OrderBy(x => x.o.Name)
+                .ThenBy(x => x.o.Id));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
+
+        var sortOp = Assert.IsType<MongoSortOp>(Assert.Single(mongoQ.Select.PipelineOps));
+        Assert.Equal(2, sortOp.Orderings.Count);
+        Assert.True(sortOp.Orderings[0].Ascending);
+        Assert.True(sortOp.Orderings[1].Ascending);
+    }
+
     [Fact]
     public void Where_reading_inner_scope_after_join_still_declines_gracefully()
     {
