@@ -830,23 +830,6 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     {
         joinInfo = null;
 
-        if (Environment.GetEnvironmentVariable("MONGODB_EF_DEBUG_JOINSCOPE") == "1")
-        {
-            Console.Error.WriteLine(
-                $"[DBG] JoinScope={mongoQueryExpression.Select.JoinScope != null}, " +
-                $"Levels={(mongoQueryExpression.Select.JoinScope?.Levels.Count ?? -1)}, " +
-                $"Joins={mongoQueryExpression.Joins.Count}, " +
-                $"HasUnsupportedOperator={mongoQueryExpression.Select.HasUnsupportedOperator}, " +
-                $"HasTerminalOperator={mongoQueryExpression.Select.HasTerminalOperator}, " +
-                $"UnwindSource={mongoQueryExpression.Select.UnwindSource != null}");
-            foreach (var j in mongoQueryExpression.Joins)
-            {
-                Console.Error.WriteLine(
-                    $"[DBG]   Join: IsNativelyEligible={j.IsNativelyEligible}, Navigation={j.Navigation?.Name}, " +
-                    $"IsLeftOuter={j.IsLeftOuter}, Lookup={(j.Lookup != null)}");
-            }
-        }
-
         if (mongoQueryExpression.Select.JoinScope is not { } scope
             || scope.Levels.Count != mongoQueryExpression.Joins.Count
             || mongoQueryExpression.Select.HasUnsupportedOperator
