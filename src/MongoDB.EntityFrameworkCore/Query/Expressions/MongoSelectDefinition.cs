@@ -562,9 +562,15 @@ internal sealed class MongoSelectDefinition
     private bool _hasConfirmedJoinLookup;
 
     /// <summary>
-    /// <see langword="true"/> once one of the two Select-side arms in <c>TranslateSelect</c> has CONFIRMED the
-    /// genuine two-sided join described by <see cref="JoinScope"/> and registered its <c>$lookup</c> (the bare
-    /// whole-entity-leaf arm, or <c>NativeJoinScopeProjectionBinder.TryBindProjection</c>). Set by
+    /// <see langword="true"/> once one of THREE setters has CONFIRMED the genuine two-sided join (chain)
+    /// described by <see cref="JoinScope"/> and registered its <c>$lookup</c>(s): the two Select-side arms in
+    /// <c>TranslateSelect</c> (the bare whole-entity-leaf arm, and
+    /// <c>NativeJoinScopeProjectionBinder.TryBindProjection</c>), and — since the native-chained-join-scope plan
+    /// — <c>NativeTranslation.NativeCardinalityBinder.TryBindAggregate</c>, the second confirming call site
+    /// added for a selector-less scalar aggregate (a bare <c>Any()</c>/<c>Count()</c>) whose tree has NO
+    /// trailing Select at all for EF's own nav-expansion to run either Select-side arm against. All three call
+    /// the shared <c>NativeJoinScopeProjectionBinder.ConfirmEntireChain</c> commit helper (directly, or via
+    /// <c>TryBindProjection</c>), which is the one place that actually flips this flag. Set by
     /// <see cref="MarkJoinLookupConfirmed"/>; never unset.
     /// </summary>
     /// <remarks>
@@ -622,8 +628,9 @@ internal sealed class MongoSelectDefinition
     internal bool HasConfirmedJoinLookup => _hasConfirmedJoinLookup;
 
     /// <summary>
-    /// Records that a Select-side arm has confirmed this select's genuine two-sided join and registered its
-    /// <c>$lookup</c>. See <see cref="HasConfirmedJoinLookup"/>.
+    /// Records that one of the three confirming call sites (see <see cref="HasConfirmedJoinLookup"/>'s own
+    /// remarks) has confirmed this select's genuine two-sided join (chain) and registered its <c>$lookup</c>(s).
+    /// See <see cref="HasConfirmedJoinLookup"/>.
     /// </summary>
     internal void MarkJoinLookupConfirmed()
         => _hasConfirmedJoinLookup = true;

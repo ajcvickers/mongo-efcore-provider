@@ -118,10 +118,14 @@ internal static class NativeSlotPopulator
         // anyway: it costs one predicate, and it is what stops the hazard the moment the ordering changes
         // (a confirming arm that runs earlier, or an EF normalization change).
         //
-        // Scoped to the seven slot operators, matching the guard above. Reverse needs no arm here: it declines
-        // on its own unless the tail op is literally a $sort, and no sort can have been recorded before a
-        // confirmed join (an OrderBy over a join scope isn't translatable by the single-scope arms below, so it
-        // marks the query non-native, which in turn blocks confirmation via HasUnsupportedOperator). The
+        // Scoped to the seven slot operators, matching the guard above. Reverse needs no arm here: any sort
+        // recorded before a confirmed join is safe to flip regardless — an OrderBy over a join scope only ever
+        // translates against the ROOT scope (NativeJoinScopeTranslator.TryTranslateRootScopeOnly for a chain,
+        // depth 1's TryTranslateValue guarded by !ReferencesInnerScope otherwise; see the
+        // native-chained-join-scope plan), so it commutes with the join the same way an outer-side $match does
+        // — this is NOT rejected by HasUnsupportedOperator, unlike what an earlier version of this comment
+        // claimed (see JoinScopeWhereSlotPopulationTests / Chained_join_Where_OrderBy_Any_goes_native_under_NativeOnly
+        // for the pinned proof that a recorded sort reaches confirmation and still confirms correctly). The
         // reducer arm's own gate lives in NativeCardinalityBinder.TryBindReducer; scalar AGGREGATES are
         // deliberately not gated, because their $count/$group stage is emitted AFTER the lookup block.
         if (mongoQ.Select.HasConfirmedJoinLookup && IsSevenSlotOperator(methodDefinition))
