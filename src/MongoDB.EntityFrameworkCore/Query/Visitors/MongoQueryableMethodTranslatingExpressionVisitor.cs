@@ -483,20 +483,25 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // document, the inner one out of the $lookup's unwound alias field) exactly as the generic shaper fold at
         // the bottom of this method builds it.
         //
-        // DEPTH-1 ONLY, BY DESIGN, FOR NOW (native-chained-join-scope plan, Task 6 fix round, Finding 4).
-        // IsTransparentIdentifierMemberAccessSelector only ever recognizes a FLAT `ti.Outer`/`ti.Inner` member
-        // access (one hop), so for a chain (Levels.Count > 1) this arm's own recognizer never matches a leaf
-        // resolving to an arbitrary scope index (e.g. `x.Outer.Outer`/`x.Inner` off a 2+-level chain) — it was
-        // not widened the way the wrapped-leaf arm below (NativeJoinScopeProjectionBinder, which DOES resolve
-        // any scope index via MongoTransparentScopeResolver) was. The consequence is a missed optimization only,
-        // not a correctness gap: a bare leaf over a chain simply never matches this arm's own condition, falls
-        // through to the wrapped-Select branch below (which also doesn't match a bare body), and ultimately to
-        // the ordinary projected-Select / generic branch, landing on the driver-LINQ fallback with correct
-        // results. Widening this arm to call NativeJoinScopeProjectionBinder.ConfirmEntireChain for a bare leaf
-        // resolving to any chain scope index (reusing MongoTransparentScopeResolver the same way the wrapped arm
-        // does) is a reasonable follow-up, deliberately left out of this fix round to keep it narrowly scoped to
-        // the four review findings rather than adding new binder surface.
+        // DEPTH-1 ONLY, BY DESIGN, FOR NOW (final-review fix, I2 — corrects a prior fix round's wrong
+        // explanation of why this is safe). IsTransparentIdentifierMemberAccessSelector recognizes ANY flat
+        // one-hop `x.Outer`/`x.Inner` member access off the selector's own parameter — and over a chain, a
+        // one-hop access off the OUTERMOST parameter (e.g. `x.Inner` for the last join, or `x.Outer` reaching
+        // the whole nested TransparentIdentifier built by every join but the last) DOES structurally match this
+        // recognizer. The recognizer itself does NOT decline a chain — a prior fix round's comment here claimed
+        // it did, which was false. The reason this arm still only ever confirms a DEPTH-1 scope is not the
+        // recognizer at all: it calls MarkReferenceIncludeConfirmed() exactly ONCE regardless of chain depth,
+        // so for a 2+-level chain the confirmation COUNT (1) never matches the candidate-join COUNT
+        // (Joins.Count >= 2), and HasUnconfirmedCandidateJoin's strict count-equality check is what actually
+        // blocks the query from ever reaching Route != Fallback — an accidental, not a structural, guard. The
+        // explicit `Levels.Count: 1` conjunct below makes this arm structurally depth-1-only, matching what the
+        // old comment incorrectly claimed the recognizer already did, rather than relying on that
+        // confirmation-count accident to keep it safe. Widening this arm to call
+        // NativeJoinScopeProjectionBinder.ConfirmEntireChain for a bare leaf resolving to any chain scope index
+        // (reusing MongoTransparentScopeResolver the same way the wrapped arm does) is a reasonable follow-up,
+        // deliberately left out of this fix round to keep it narrowly scoped.
         else if (IsTransparentIdentifierMemberAccessSelector(selector)
+                 && mongoQueryExpression.Select.JoinScope is { Levels.Count: 1 }
                  && IsSingleEligibleNativeJoinScope(mongoQueryExpression, out var bareLeafJoin))
         {
             mongoQueryExpression.AddLookup(bareLeafJoin.Lookup!);
@@ -847,6 +852,24 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (candidate.Lookup is not { } lookup)
         {
             return false;
+        }
+
+        // Final-review fix (I1): EVERY join in the chain must have a resolved Lookup, not just the last one.
+        // NativeJoinScopeProjectionBinder.ConfirmEntireChain loops over every scope.Levels entry and calls
+        // MarkReferenceIncludeConfirmed() for that level UNCONDITIONALLY, even when that level's own
+        // mongoQ.Joins[i].Lookup is null (it only conditionally calls AddLookup, but always confirms) — so a
+        // last-only Lookup check here would let a chain with a null-Lookup EARLIER level through this gate,
+        // producing a pipeline missing that level's own $lookup stage while the projection still expects to
+        // read from its alias. Not known-reachable today (eligibility requires a resolved Navigation, and
+        // Lookup is built whenever a navigation resolves), but this is the exact "check only the last join"
+        // pattern that was already a real Critical bug elsewhere in this same plan's fix round — close it
+        // structurally here too, rather than relying on it never coming up.
+        foreach (var chainJoin in mongoQueryExpression.Joins)
+        {
+            if (chainJoin.Lookup is null)
+            {
+                return false;
+            }
         }
 
         // PAGING/REDUCING RECORDED BEFORE THIS ARM CONFIRMS (EF-392 final review, Critical 1). A $skip/$limit

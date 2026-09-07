@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 
@@ -379,6 +380,15 @@ internal static class NativeJoinScopeProjectionBinder
     /// </summary>
     internal static void ConfirmEntireChain(MongoQueryExpression mongoQ, MongoJoinScope scope)
     {
+        // Defense-in-depth (final-review fix, I1/M1): every caller of this method reaches it only after
+        // IsSingleEligibleNativeJoinScope has confirmed scope.Levels.Count == mongoQ.Joins.Count AND every
+        // join's Lookup is non-null — so this bound should always hold. Asserting it here means a future
+        // caller that skips (or weakens) that gate fails loudly instead of silently under-registering a
+        // $lookup while still marking that level's reference-Include confirmed.
+        Debug.Assert(
+            scope.Levels.Count == mongoQ.Joins.Count,
+            "ConfirmEntireChain requires one MongoJoinScopeLevel per join on mongoQ.Joins.");
+
         for (var i = 0; i < scope.Levels.Count; i++)
         {
             if (mongoQ.Joins[i].Lookup is { } levelLookup)
