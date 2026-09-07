@@ -63,6 +63,49 @@ internal static class NativeJoinScopeTranslator
         return detector.Found;
     }
 
+    /// <summary>
+    /// Resolves member access over a CHAINED join's nested <c>TransparentIdentifier(TransparentIdentifier(...),
+    /// Inner)</c> shape, restricted to the OUTERMOST root scope only (scope index 0) — no Inner access at any
+    /// level is admitted. Used once <paramref name="scope"/>.Levels.Count > 1; the existing flat single-hop
+    /// entry points (<see cref="TryTranslatePredicate"/>/<see cref="TryTranslateValue"/>) remain the depth-1 path
+    /// and are unchanged. Reuses <see cref="MongoTransparentScopeResolver"/> (originally built for
+    /// <c>SelectMany</c>'s chained scopes) rather than writing bespoke nested-tree-walking logic: hop names
+    /// <c>["Outer", "Inner"]</c> and <c>sourceCount = scope.Levels.Count</c> give the identical numbering a
+    /// chained join's own nested shape produces — scope index <c>0</c> is the root, index <c>k</c>
+    /// (1&lt;=k&lt;=Levels.Count) is <c>scope.Levels[k-1]</c>'s own Inner element. See
+    /// docs/superpowers/specs/2026-09-07-native-chained-join-scope-design.md, Component 3.
+    /// </summary>
+    public static bool TryTranslateRootScopeOnly(
+        MongoJoinScope scope, ParameterExpression rootParam, Expression body, bool valueMode,
+        [NotNullWhen(true)] out MongoExpression? result)
+    {
+        result = null;
+        var sourceCount = scope.Levels.Count;
+
+        // scopeParams: index 0 is the root scope's own synthetic parameter; indices 1..sourceCount are each
+        // level's Inner synthetic parameter (unused here — CrossScope/ResolvedScope!=0 rejects any access to
+        // them — but ScopeRerootingVisitor's constructor still needs one entry per index).
+        var rootScopeParam = Expression.Parameter(scope.OuterEntityType.ClrType, "rootScope");
+        var scopeParams = new ParameterExpression[sourceCount + 1];
+        scopeParams[0] = rootScopeParam;
+        for (var i = 0; i < sourceCount; i++)
+        {
+            scopeParams[i + 1] = Expression.Parameter(scope.Levels[i].InnerEntityType.ClrType, $"innerScope{i}");
+        }
+
+        var visitor = new MongoTransparentScopeResolver.ScopeRerootingVisitor(
+            rootParam, hopNames: ["Outer", "Inner"], sourceCount, scopeParams);
+        var rewritten = visitor.Visit(body);
+
+        if (visitor.CrossScope || visitor.ResolvedScope is not 0)
+            return false;
+
+        var translator = new MongoExpressionTranslator(scope.OuterEntityType);
+        return valueMode
+            ? translator.TryTranslateValue(rewritten, out result)
+            : translator.TryTranslate(rewritten, out result);
+    }
+
     private static bool TryTranslateCore(
         MongoJoinScope scope, ParameterExpression rootParam, Expression body, bool valueMode,
         [NotNullWhen(true)] out MongoExpression? result)
