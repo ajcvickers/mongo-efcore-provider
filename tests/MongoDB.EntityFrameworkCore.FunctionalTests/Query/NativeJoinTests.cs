@@ -258,6 +258,30 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     }
 
     [Fact]
+    public void Chained_join_Where_OrderBy_Any_goes_native_under_NativeOnly()
+    {
+        // Native-chained-join-scope plan (2026-09-07), Task 1. This pins the CURRENT (pre-fix) behavior: a
+        // second chained Join followed by a Where/OrderBy/Any over the first join's outer scope still declines
+        // under NativeOnly, exactly like Chained_second_join_still_declines_cleanly_in_NativeOnly above — the
+        // only difference here is the trailing Where/OrderBy/Any shape instead of a projecting Select. Once the
+        // rest of that plan lands, this is expected to flip to asserting native success (Assert.True(found)
+        // with no throw), the same way earlier "still declines" tests in this file were superseded by "now goes
+        // native" ones as their binders landed.
+        var seed = SeedOwnersOrdersAndLines();
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Chained_join_Where_OrderBy_Any_goes_native_under_NativeOnly));
+
+        var found = db.Owners
+            .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+            .Join(db.OrderLines, e => e.r.Id, l => l.OrderId, (e, l) => new { e.o, e.r, l })
+            .Where(x => x.o.Name == seed.Owners[0].Name)
+            .OrderBy(x => x.o.Id)
+            .Any();
+
+        Assert.True(found);
+    }
+
+    [Fact]
     public void Take_or_Skip_after_a_confirmed_join_declines_cleanly_under_NativeOnly()
     {
         // FINAL-REVIEW CRITICAL 1. A Take/Skip composed onto a join was recorded into PipelineOps, which
