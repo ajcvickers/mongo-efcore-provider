@@ -23,7 +23,6 @@ using MongoDB.EntityFrameworkCore.Diagnostics;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 using MongoDB.EntityFrameworkCore.Infrastructure;
-using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 
@@ -31,10 +30,11 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 /// Generalizations of the Entity_equality_null native translation (spec test) to two closely-related
 /// whole-entity-typed shapes that reuse the SAME <c>MongoElementRefExpression</c>-vs-null mechanism:
 /// an owned single-reference navigation compared to null (<c>b.Address == null</c>), and the root entity
-/// compared to itself (<c>c == c</c>), which is trivially true regardless of document content. Neither is
-/// admitted for a non-null, non-self entity-typed operand (<c>Entity_equality_local</c>'s shape) — see
-/// <c>MongoExpressionTranslator.TryResolveEntityTypedOperand</c>'s own remarks for why that would require
-/// genuinely different (key-based) machinery instead.
+/// compared to itself (<c>c == c</c>), which is trivially true regardless of document content. Also covers
+/// the remaining whole-entity shape, a non-null, non-self entity-typed operand (<c>Entity_equality_local</c>'s
+/// shape, <c>c == other</c>) — this one goes native via genuinely different, key-based machinery instead
+/// (<c>MongoExpressionTranslator.EntityEquality.cs</c>), since comparing against an arbitrary OTHER entity
+/// is EF's key-based equality semantics, not document equality.
 /// </summary>
 [XUnitCollection("QueryTests")]
 public class NativeEntityEqualityTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
@@ -181,19 +181,45 @@ public class NativeEntityEqualityTests(TemporaryDatabaseFixture database) : ICla
     }
 
     // ════════════════════════════════════════════════════════════════════════════════════════════
-    //  Guard: entity-vs-non-null-entity still declines (Entity_equality_local's shape) — no serializer
-    //  path for comparing an arbitrary captured entity against $$ROOT/a sub-document.
+    //  Entity vs. a DIFFERENT, non-null captured entity (`Entity_equality_local`'s shape) — goes native
+    //  via a primary-key comparison (MongoExpressionTranslator.EntityEquality.cs), not the $$ROOT/self
+    //  mechanism above: comparing a whole entity to an arbitrary OTHER entity value is EF's key-based
+    //  equality semantics, not document equality, and has no serializer path for `$$ROOT`/a sub-document
+    //  against an unrelated CLR object — so this needed genuinely different machinery.
     // ════════════════════════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void Entity_equality_against_a_captured_local_still_falls_back()
+    public void Entity_equality_against_a_captured_local_goes_native()
     {
-        var collection = SeedCustomers(nameof(Entity_equality_against_a_captured_local_still_falls_back));
+        var collection = SeedCustomers(nameof(Entity_equality_against_a_captured_local_goes_native));
+
+        // Fetched via the raw driver, not EF, so the logger captured below sees only the query under test.
+        var existingId = collection.Find(FilterDefinition<Customer>.Empty)
+            .ToList().Single(c => c.Name == "Alpha").Id;
+
+        using var db = CreateContextWithLogging(collection, MongoQueryMode.NativeOnly, null, out var spyLogger);
+        var other = new Customer { Id = existingId, Name = "Ignored — only the key is compared" };
+
+        // Under NativeOnly a shape that falls back throws NativeTranslationNotSupportedException; success
+        // here proves `c == other` went through the native key-based path rather than driver-LINQ.
+        var results = db.Entities.AsNoTracking().Where(c => c == other).ToList();
+
+        var found = Assert.Single(results);
+        Assert.Equal("Alpha", found.Name);
+        AssertMql(spyLogger, "\"_id\" :");
+        Assert.DoesNotContain("$$ROOT", spyLogger.GetLogMessageByEventId(MongoEventId.ExecutedMqlQuery));
+    }
+
+    [Fact]
+    public void Entity_equality_against_a_captured_local_with_no_match_returns_empty()
+    {
+        var collection = SeedCustomers(nameof(Entity_equality_against_a_captured_local_with_no_match_returns_empty));
         using var db = CreateContextWithLogging(collection, MongoQueryMode.NativeOnly, null, out _);
 
         var other = new Customer { Id = ObjectId.GenerateNewId(), Name = "Other" };
 
-        Assert.Throws<NativeTranslationNotSupportedException>(
-            () => db.Entities.AsNoTracking().Where(c => c == other).ToList());
+        var results = db.Entities.AsNoTracking().Where(c => c == other).ToList();
+
+        Assert.Empty(results);
     }
 }
