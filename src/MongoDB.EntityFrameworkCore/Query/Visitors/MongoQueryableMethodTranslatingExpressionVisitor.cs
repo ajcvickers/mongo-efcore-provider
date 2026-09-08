@@ -3046,6 +3046,28 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 new ProjectionBindingExpression(mongoQueryExpression, entityIndex, typeof(ValueBuffer)));
         }
 
+        // A NESTED wrapped leaf sourced from a join scope (native-join-scope-nested-projection ticket):
+        // NativeJoinScopeProjectionBinder.TryBindProjection already translated this alias into a
+        // MongoDocumentConstructionExpression and staged it into mongoQueryExpression.Select.Projection (the
+        // native IR list — separate from mongoQueryExpression.Projection, the EF-facing list this method builds
+        // the shaper against). Falling through to BindSelectManyMember below would register the RAW, untranslated
+        // valueExpression (the original `new { Name = o.Customer!.Name }` NewExpression) under this alias
+        // instead — MongoProjectionBindingRemovingExpressionVisitor's MongoDocumentConstructionExpression case
+        // (VisitExtension) would then never match, and the shaper would fall through to an ordinary alias read
+        // that hands the WHOLE anonymous member type to BsonBinding.GetElementValue<T>, which has no serializer
+        // for an anonymous type and throws (MEASURED: "Unsupported collection type '<>f__AnonymousTypeN<...>'").
+        // Registering the ALREADY-TRANSLATED MongoDocumentConstructionExpression instead (not the raw
+        // valueExpression) is what makes the downstream MongoDocumentConstructionExpression case fire and read
+        // each member back via its own dotted alias.memberName path.
+        foreach (var projection in mongoQueryExpression.Select.Projection)
+        {
+            if (projection.Alias == alias && projection.Expression is MongoDocumentConstructionExpression construction)
+            {
+                var constructionIndex = mongoQueryExpression.AddToProjection(construction, alias);
+                return new ProjectionBindingExpression(mongoQueryExpression, constructionIndex, valueExpression.Type);
+            }
+        }
+
         return BindSelectManyMember(mongoQueryExpression, alias, valueExpression);
     }
 
