@@ -822,8 +822,16 @@ Orders.{ "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "forei
 
     public override async Task Intersect_on_distinct(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() => base.Intersect_on_distinct(async));
+        // EF-322: a projected Distinct() as an Intersect operand now goes native too (IsPlainDistinctSelect).
+        // Unlike Union/Concat, Intersect/Except have NO driver-LINQ fallback at all, so this used to hard-fail
+        // translation in every mode — now it succeeds and, per AssertQuery's in-memory-oracle comparison
+        // inside base.Intersect_on_distinct, returns the CORRECT result.
+        await base.Intersect_on_distinct(async);
+
+        AssertMql(
+            """
+            Customers.{ "$match" : { "City" : "México D.F." } }, { "$group" : { "_id" : { "CompanyName" : "$CompanyName" } } }, { "$project" : { "CompanyName" : "$_id.CompanyName", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$project" : { "_id" : 0, "_doc" : "$_id", "_a" : { "$literal" : true }, "_b" : { "$literal" : false } } }, { "$unionWith" : { "coll" : "Customers", "pipeline" : [{ "$match" : { "ContactTitle" : "Owner" } }, { "$project" : { "CompanyName" : "$CompanyName", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$project" : { "_id" : 0, "_doc" : "$_id", "_a" : { "$literal" : false }, "_b" : { "$literal" : true } } }] } }, { "$group" : { "_id" : "$_doc", "_a" : { "$max" : "$_a" }, "_b" : { "$max" : "$_b" } } }, { "$match" : { "_a" : true, "_b" : true } }, { "$replaceRoot" : { "newRoot" : "$_id" } }
+            """);
     }
 
     public override async Task Union_on_distinct(bool async)
@@ -832,17 +840,20 @@ Orders.{ "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "forei
 
         AssertMql(
             """
-            Customers.{ "$match" : { "City" : "México D.F." } }, { "$project" : { "_v" : "$CompanyName", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$unionWith" : { "coll" : "Customers", "pipeline" : [{ "$match" : { "ContactTitle" : "Owner" } }, { "$project" : { "_v" : "$CompanyName", "_id" : 0 } }] } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }
+            Customers.{ "$match" : { "City" : "México D.F." } }, { "$group" : { "_id" : { "CompanyName" : "$CompanyName" } } }, { "$project" : { "CompanyName" : "$_id.CompanyName", "_id" : 0 } }, { "$unionWith" : { "coll" : "Customers", "pipeline" : [{ "$match" : { "ContactTitle" : "Owner" } }, { "$project" : { "CompanyName" : "$CompanyName", "_id" : 0 } }] } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }
             """);
     }
 
     public override async Task Except_on_distinct(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Except_on_distinct(async));
+        // EF-322: a projected Distinct() as an Except operand now goes native too (IsPlainDistinctSelect) —
+        // same rationale as Intersect_on_distinct above.
+        await base.Except_on_distinct(async);
 
         AssertMql(
-        );
+            """
+            Customers.{ "$match" : { "City" : "México D.F." } }, { "$group" : { "_id" : { "CompanyName" : "$CompanyName" } } }, { "$project" : { "CompanyName" : "$_id.CompanyName", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$project" : { "_id" : 0, "_doc" : "$_id", "_a" : { "$literal" : true }, "_b" : { "$literal" : false } } }, { "$unionWith" : { "coll" : "Customers", "pipeline" : [{ "$match" : { "ContactTitle" : "Owner" } }, { "$project" : { "CompanyName" : "$CompanyName", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$project" : { "_id" : 0, "_doc" : "$_id", "_a" : { "$literal" : false }, "_b" : { "$literal" : true } } }] } }, { "$group" : { "_id" : "$_doc", "_a" : { "$max" : "$_a" }, "_b" : { "$max" : "$_b" } } }, { "$match" : { "_a" : true, "_b" : false } }, { "$replaceRoot" : { "newRoot" : "$_id" } }
+            """);
     }
 
 #endif
