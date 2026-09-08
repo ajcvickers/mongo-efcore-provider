@@ -1289,9 +1289,9 @@ internal sealed partial class MongoExpressionTranslator
     internal static MongoBinaryOperator? MapArithmeticOperator(BinaryExpression node)
         => node.NodeType switch
         {
-            ExpressionType.Add => MongoBinaryOperator.Add,
-            ExpressionType.Subtract => MongoBinaryOperator.Subtract,
-            ExpressionType.Multiply => MongoBinaryOperator.Multiply,
+            ExpressionType.Add or ExpressionType.AddChecked => MongoBinaryOperator.Add,
+            ExpressionType.Subtract or ExpressionType.SubtractChecked => MongoBinaryOperator.Subtract,
+            ExpressionType.Multiply or ExpressionType.MultiplyChecked => MongoBinaryOperator.Multiply,
             ExpressionType.Divide => IsIntegerType(node.Type)
                 ? MongoBinaryOperator.IntegerDivide
                 : MongoBinaryOperator.Divide,
