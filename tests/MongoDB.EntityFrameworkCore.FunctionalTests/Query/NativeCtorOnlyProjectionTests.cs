@@ -85,6 +85,22 @@ public class NativeCtorOnlyProjectionTests(TemporaryDatabaseFixture database) : 
         Assert.Contains(results, r => r.Id == "ANATR");
     }
 
+    [Fact]
+    public void Select_with_whole_entity_ctor_only_dto_still_works_under_explicit_driver_linq_mode()
+    {
+        var collection = SeedCustomers(
+            nameof(Select_with_whole_entity_ctor_only_dto_still_works_under_explicit_driver_linq_mode));
+        using var db = CreateContext(collection, MongoQueryMode.DriverLinq);
+
+        // This ticket adds a native path alongside the existing driver-LINQ fallback; it must not change the
+        // fallback path's own behavior. Forcing DriverLinq here proves the pre-existing path still works.
+        var results = db.Entities.Select(x => new CustomerDtoWithEntityInCtor(x)).ToList();
+
+        Assert.Equal(2, results.Count);
+        Assert.Contains(results, r => r.Id == "ALFKI");
+        Assert.Contains(results, r => r.Id == "ANATR");
+    }
+
     // ════════════════════════════════════════════════════════════════════════════════════════════
     //  Sub-case 2a: scalar ctor argument
     // ════════════════════════════════════════════════════════════════════════════════════════════
