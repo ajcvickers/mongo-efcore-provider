@@ -902,6 +902,17 @@ internal sealed partial class MongoExpressionTranslator
                     new MongoConstantExpression(null, nullableProperty));
             }
 
+            // --- Literal boolean predicate root (e.g. `x => true`, typically reached only after a
+            // constant-folded lambda body such as `All(x => true)`/`Where(_ => false)`) ---
+            //
+            // Renders through the generic MongoConstantExpression value path: with no query-dialect case of
+            // its own, RenderNode's catch-all wraps it as `{ $expr: true }`/`{ $expr: false }`, both of which
+            // are valid, unconditionally-true/false MQL filters. Must sit BEFORE the bare-boolean-member
+            // default below: a ConstantExpression is never a member access, so the default would reach
+            // TryResolveMember, fail to resolve a property from a constant node, and decline.
+            case ConstantExpression { Value: bool literalBool }:
+                return new MongoConstantExpression(literalBool, forSerialization: null);
+
             // --- Bare boolean member access (c.Active) ---
 
             default:
