@@ -62,6 +62,25 @@ public class NativeProjectionBinderStringSequenceTests
         var projection = Assert.Single(mongoQ.Select.Projection, p => p.Alias == "Property");
         var field = Assert.IsType<MongoFieldExpression>(projection.Expression);
         Assert.Equal("City", field.ElementName);
+
+        // The provenance flag the push-down gate keys off. Route == Projection alone cannot express what this
+        // leaf needs: "every leaf resolved to a bare field" is true, but this one is only correct when a shaper
+        // THIS provider built reads it back — the driver's own LINQ v3 provider cannot project an
+        // Enumerable.*-over-string call at all (EF-250/EF-231). See
+        // MongoShapedQueryCompilingExpressionVisitor.VisitProjectedQuery's CanPushDown gate.
+        Assert.True(mongoQ.Select.HasStringSequenceProjectionLeaf);
+    }
+
+    [Fact]
+    public void A_plain_string_member_leaf_does_not_set_the_string_sequence_provenance_flag()
+    {
+        var mongoQ = TestQuery();
+        Expression<Func<Customer, string>> selector = c => c.City;
+
+        Assert.True(NativeProjectionBinder.TryPopulateNativeProjection(mongoQ, selector));
+
+        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
+        Assert.False(mongoQ.Select.HasStringSequenceProjectionLeaf);
     }
 
     [Fact]
@@ -101,6 +120,10 @@ public class NativeProjectionBinderStringSequenceTests
         Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
         var projection = Assert.Single(mongoQ.Select.Projection);
         Assert.IsType<MongoFieldExpression>(projection.Expression);
+
+        // The BARE-body spelling must set the provenance flag too — it reaches the binder through
+        // TryBindAsBareProjection rather than the wrapped-member loop.
+        Assert.True(mongoQ.Select.HasStringSequenceProjectionLeaf);
     }
 
     [Fact]
