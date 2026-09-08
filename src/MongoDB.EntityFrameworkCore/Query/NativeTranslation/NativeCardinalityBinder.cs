@@ -139,14 +139,20 @@ internal static class NativeCardinalityBinder
         // genuine IsGroupBy) are NOT the KeyNotFoundException hazard above — the lowerer now ALWAYS emits
         // PostGroupOps before falling through to this aggregate's own terminal stage (see MongoSelectLowerer's
         // Grouping block), so a terminal $count/$limit stage IS emitted right after it, same as for the direct
-        // (no-Select) Sum/Min/Max/Average carve-out above. Scoped to presence/count aggregates only — a
-        // selector-bearing Sum/Min/Max/Average composed after Where/OrderBy/etc. stays out of scope (only the
-        // DIRECT, no-intervening-op form above is handled) since a selector here would mean reducing some
-        // OTHER value than what Distinct flattened, which this binder does not attempt.
+        // (no-Select) Sum/Min/Max/Average carve-out above. A selector-bearing Sum/Min/Max/Average is admitted
+        // too — its selector resolves against the Distinct's OWN flattened output alias via
+        // MongoExpressionTranslator.DistinctAliasScope below (same as Count(pred)/Any(pred)/All(pred)), reusing
+        // the ordinary operand-resolution arm just below rather than reducing some OTHER, unflattened value. A
+        // selector-LESS Sum/Min/Max/Average (only reachable over a genuinely scalar-projected Distinct) is
+        // deliberately excluded here — that shape is the DIRECT TryBindDistinctTerminalAggregate carve-out
+        // above, which requires no Select ever intervened; requiring a selector here keeps the two mutually
+        // exclusive rather than double-deciding the bare-scalar case.
         var isPostDistinctAggregate = select.IsDistinct && !select.IsGroupBy && select.Grouping != null
             && select.Cardinality == null
-            && op is MongoAggregateOperator.Count or MongoAggregateOperator.LongCount
-                or MongoAggregateOperator.Any or MongoAggregateOperator.All;
+            && (op is MongoAggregateOperator.Count or MongoAggregateOperator.LongCount
+                or MongoAggregateOperator.Any or MongoAggregateOperator.All
+                || (op is MongoAggregateOperator.Sum or MongoAggregateOperator.Min
+                    or MongoAggregateOperator.Max or MongoAggregateOperator.Average && selector != null));
 
         if (select.HasTerminalOperator && !select.IsSetOpTerminalOnly && !isPostDistinctAggregate)
             return false;
@@ -156,9 +162,10 @@ internal static class NativeCardinalityBinder
         // for a nested Count(pred)/Any/All to correlate against anyway.
         var translator = new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType, predicate?.Parameters[0]);
 
-        // EF-322: a Count(pred)/Any(pred)/All(pred) composed after a projected Distinct resolves its predicate
-        // against the Distinct's own flattened output alias, never the entity — same rationale and mechanism
-        // as NativeSlotPopulator's Where arm (MongoExpressionTranslator.DistinctAliasScope's own remarks).
+        // EF-322: a Count(pred)/Any(pred)/All(pred)/Sum(selector)/Min(selector)/Max(selector)/Average(selector)
+        // composed after a projected Distinct resolves its predicate/selector against the Distinct's own
+        // flattened output alias, never the entity — same rationale and mechanism as NativeSlotPopulator's
+        // Where arm (MongoExpressionTranslator.DistinctAliasScope's own remarks).
         if (isPostDistinctAggregate)
             translator.DistinctAliasScope = select.Grouping;
 

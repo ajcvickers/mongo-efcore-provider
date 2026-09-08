@@ -477,18 +477,111 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
-    public void Wrapped_projection_Distinct_then_Sum_still_falls_back_under_native_only()
+    public void Wrapped_projection_Distinct_then_Sum_goes_native()
     {
-        // Sum/Min/Max/Average require a selector-less call reducing whatever Distinct() already flattened —
-        // the parameterless overloads are only reachable over a genuinely scalar-projected Distinct (C#'s
-        // IComparable constraint rules out an anonymous-type source). A Sum(x => x.Year) OVER a wrapped
-        // projection's member is a different (still out-of-scope) shape: TryBindDistinctTerminalAggregate
-        // declines whenever a selector is present, so this keeps falling back gracefully.
+        // EF-322: Sum(selector) over a WRAPPED (named-member) projected Distinct now goes native too — the
+        // selector resolves against the Distinct's own flattened output alias (the SAME
+        // MongoExpressionTranslator.DistinctAliasScope mechanism Where/Count(pred) use), reusing the ordinary
+        // Sum/Min/Max/Average operand-resolution machinery in NativeCardinalityBinder.TryBindAggregate.
+        // Distinct {Country, Year} pairs: (US,2020),(US,2021),(UK,2020),(FR,2021) — sum of Year = 8082.
         using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(Wrapped_projection_Distinct_then_Sum_still_falls_back_under_native_only));
+            nameof(Wrapped_projection_Distinct_then_Sum_goes_native));
+
+        Assert.Equal(8082, db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Sum(r => r.Year));
+    }
+
+    [Fact]
+    public void Wrapped_projection_Distinct_then_Min_goes_native()
+    {
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Wrapped_projection_Distinct_then_Min_goes_native));
+
+        Assert.Equal(2020, db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Min(r => r.Year));
+    }
+
+    [Fact]
+    public void Wrapped_projection_Distinct_then_Max_goes_native()
+    {
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Wrapped_projection_Distinct_then_Max_goes_native));
+
+        Assert.Equal(2021, db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Max(r => r.Year));
+    }
+
+    [Fact]
+    public void Wrapped_projection_Distinct_then_Average_goes_native()
+    {
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Wrapped_projection_Distinct_then_Average_goes_native));
+
+        Assert.Equal(2020.5, db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Average(r => r.Year));
+    }
+
+    [Fact]
+    public void Wrapped_projection_Distinct_then_Sum_Min_Max_Average_match_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Wrapped_projection_Distinct_then_Sum_Min_Max_Average_match_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Wrapped_projection_Distinct_then_Sum_Min_Max_Average_match_driver_linq) + "D");
+
+        (int Sum, int Min, int Max, double Average) Run(SingleEntityDbContext<Order> db) =>
+            (db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Sum(r => r.Year),
+             db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Min(r => r.Year),
+             db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Max(r => r.Year),
+             db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Average(r => r.Year));
+
+        var native = Run(nativeDb);
+        Assert.Equal((8082, 2020, 2021, 2020.5), native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Distinct_then_Where_then_Sum_with_selector_goes_native()
+    {
+        // Proves composition with an already-native post-Distinct Where (previous commit): the Where's $match
+        // lands in PostGroupOps, and the Sum's terminal accumulator stage still follows it correctly (the SAME
+        // MongoSelectLowerer fix that made Where-then-Count work). Distinct {Country, Year} pairs excluding
+        // FR: (US,2020),(US,2021),(UK,2020) — sum of Year = 6061.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Where_then_Sum_with_selector_goes_native));
+
+        Assert.Equal(
+            6061,
+            db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Where(r => r.Country != "FR").Sum(r => r.Year));
+    }
+
+    [Fact]
+    public void Distinct_then_Where_then_Sum_with_selector_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Where_then_Sum_with_selector_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Where_then_Sum_with_selector_matches_driver_linq) + "D");
+
+        int Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Where(r => r.Country != "FR").Sum(r => r.Year);
+
+        var native = Run(nativeDb);
+        Assert.Equal(6061, native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Wrapped_projection_Distinct_then_Sum_with_computed_selector_still_falls_back_under_native_only()
+    {
+        // A computed selector (not a bare member access naming one of the Distinct's own key parts) must still
+        // decline — the pre-existing "computed selectors fall back" guard in NativeCardinalityBinder
+        // .TryBindAggregate, unaffected by the EF-322 alias-scope carve-out.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Wrapped_projection_Distinct_then_Sum_with_computed_selector_still_falls_back_under_native_only));
 
         Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Entities.Select(o => new { o.Year }).Distinct().Sum(r => r.Year));
+            db.Entities.Select(o => new { o.Country, o.Year }).Distinct().Sum(r => r.Year * 2));
     }
 
     [Fact]
