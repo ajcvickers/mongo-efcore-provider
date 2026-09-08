@@ -148,36 +148,56 @@ public class NativeJoinScopeNestedProjectionTests
     }
 
     [Fact]
-    public void Nested_leaf_with_outer_sourced_member_translates()
+    public void Nested_leaf_with_outer_sourced_member_declines_whole_projection()
     {
-        // The nested body's member may also be sourced from the OUTER side.
+        // An OUTER-sourced nested member DECLINES (final-review Critical 1). NativeJoinScopeTranslator's
+        // two-scope translator resolves an outer-rooted access to a MongoOuterFieldExpression, which is a
+        // SEALED SIBLING of MongoFieldExpression, not a subtype — and the shared read side
+        // (MongoProjectionBindingRemovingExpressionVisitor.ReadDocumentConstructionMemberTyped) hard-casts
+        // each staged member value to MongoFieldExpression. Accepting this shape (as this arm originally did)
+        // therefore threw InvalidCastException at query-COMPILE time in the default Native mode, for a query
+        // that works under MongoQueryMode.DriverLinq. Declining falls back instead — the exact behavior this
+        // shape had before the arm existed.
         var mongoQ = TranslateJoinQuery((owners, orders) =>
             owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { Wrap = new { OwnerName = o.Name } }));
 
-        var projection = Assert.Single(mongoQ.Select.Projection, p => p.Alias == "Wrap");
-        var construction = Assert.IsType<MongoDocumentConstructionExpression>(projection.Expression);
-        var member = Assert.Single(construction.Members);
-        Assert.Equal("OwnerName", member.MemberName);
-        var field = Assert.IsType<MongoOuterFieldExpression>(member.Value);
-        Assert.DoesNotContain('.', field.ElementName);
-
-        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Empty(mongoQ.Select.Projection);
+        Assert.Empty(mongoQ.Lookups);
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
     }
 
     [Fact]
-    public void Nested_leaf_with_computed_outer_and_inner_member_translates()
+    public void Nested_leaf_with_computed_outer_and_inner_member_declines_whole_projection()
     {
-        // The nested body's member may combine BOTH sides in a computed expression.
+        // A COMPUTED nested member DECLINES, for the same reason as the outer-sourced case above: it
+        // translates to a MongoBinaryExpression, which the shared read side's hard cast to
+        // MongoFieldExpression cannot accept. This is the exact shape the final review reproduced against a
+        // real database ("Unable to cast object of type 'MongoBinaryExpression' to type
+        // 'MongoFieldExpression'"), reduced to the binder level here.
         var mongoQ = TranslateJoinQuery((owners, orders) =>
             owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { Wrap = new { Combo = o.Id + r.OwnerId } }));
 
-        var projection = Assert.Single(mongoQ.Select.Projection, p => p.Alias == "Wrap");
-        var construction = Assert.IsType<MongoDocumentConstructionExpression>(projection.Expression);
-        var member = Assert.Single(construction.Members);
-        Assert.Equal("Combo", member.MemberName);
-        Assert.IsType<MongoBinaryExpression>(member.Value);
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Empty(mongoQ.Select.Projection);
+        Assert.Empty(mongoQ.Lookups);
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
+    }
 
-        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
+    [Fact]
+    public void Nested_leaf_with_inner_sourced_member_alongside_outer_sourced_member_declines()
+    {
+        // The accept set is per-MEMBER, and one inadmissible member declines the WHOLE outer leaf (no partial
+        // commit): an Inner-sourced member that WOULD be accepted on its own does not rescue an
+        // outer-sourced sibling inside the same nested body.
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId,
+                (o, r) => new { Wrap = new { Inner = r.OwnerId, Outer = o.Name } }));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Empty(mongoQ.Select.Projection);
+        Assert.Empty(mongoQ.Lookups);
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
     }
 
     [Fact]
