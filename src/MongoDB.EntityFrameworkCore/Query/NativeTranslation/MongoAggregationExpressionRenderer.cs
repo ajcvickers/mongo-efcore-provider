@@ -67,6 +67,10 @@ internal static class MongoAggregationExpressionRenderer
             MongoConstantExpression or MongoParameterExpression => MongoValueRenderer.RenderValue(node, placeholders),
             MongoBinaryExpression binary => RenderBinary(binary, placeholders, elementVariable),
             MongoSizeExpression size => RenderSize(size, elementVariable),
+            // EF-322: $avg/$max/$min/$sum as an ARRAY-expression operator (over the $addToSet accumulator's
+            // own output field), not a $group accumulator — see the node's own remarks.
+            MongoArrayReduceExpression arrayReduce
+                => new BsonDocument(arrayReduce.OperatorName, FieldRef(arrayReduce.FieldName, elementVariable)),
             MongoFilteredSizeExpression filtered => RenderFilteredSize(filtered, placeholders, elementVariable),
             MongoInExpression inExpr => RenderIn(inExpr, placeholders, elementVariable),
             MongoComputedInExpression computedIn => RenderComputedIn(computedIn, placeholders, elementVariable),

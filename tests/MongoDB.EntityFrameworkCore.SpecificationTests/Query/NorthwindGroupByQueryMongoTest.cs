@@ -1784,7 +1784,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : "$_id" } } }, { "
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : "$CustomerID", "__agg0" : { "$addToSet" : "$_id" }, "__agg1" : { "$addToSet" : "$EmployeeID" }, "__agg2" : { "$addToSet" : "$OrderDate" } } }, { "$project" : { "Key" : "$_id", "Average" : { "$avg" : "$__agg0" }, "Count" : { "$size" : "$__agg1" }, "LongCount" : { "$size" : "$__agg1" }, "Max" : { "$max" : "$__agg2" }, "Min" : { "$min" : "$__agg2" }, "Sum" : { "$sum" : "$__agg0" }, "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : "$CustomerID", "Average" : { "$addToSet" : "$_id" }, "Count" : { "$addToSet" : "$EmployeeID" }, "LongCount" : { "$addToSet" : "$EmployeeID" }, "Max" : { "$addToSet" : "$OrderDate" }, "Min" : { "$addToSet" : "$OrderDate" }, "Sum" : { "$addToSet" : "$_id" } } }, { "$project" : { "Key" : "$_id", "Average" : { "$avg" : "$Average" }, "Count" : { "$size" : "$Count" }, "LongCount" : { "$size" : "$LongCount" }, "Max" : { "$max" : "$Max" }, "Min" : { "$min" : "$Min" }, "Sum" : { "$sum" : "$Sum" }, "_id" : 0 } }
             """);
     }
 
