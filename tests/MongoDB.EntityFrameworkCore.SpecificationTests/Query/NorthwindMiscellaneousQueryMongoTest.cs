@@ -1404,7 +1404,7 @@ Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$project" : { "City"
 
         AssertMql(
             """
-            Customers.{ "$match" : { "$nor" : [{ "$expr" : { "$eq" : [{ "$indexOfCP" : ["$ContactName", "$ContactName"] }, 0] } }] } }, { "$limit" : 1 }, { "$project" : { "_id" : 0, "_v" : null } }
+            Customers.{ "$match" : { "$expr" : { "$not" : [{ "$eq" : [{ "$indexOfCP" : ["$ContactName", "$ContactName"] }, 0] }] } } }, { "$limit" : 1 }
             """);
     }
 
