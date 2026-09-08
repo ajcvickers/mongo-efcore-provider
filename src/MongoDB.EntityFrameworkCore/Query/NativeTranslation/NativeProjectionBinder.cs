@@ -213,49 +213,72 @@ internal static class NativeProjectionBinder
                       ?? BareLeafProvisionalAlias
                     : BareLeafProvisionalAlias;
 
-                // allowWholeRootEntityLeaf defaults to false here, so the owned-nav-entity leaf arm (gated on
-                // that same flag, for the same reason as the whole-root-entity leaf) never fires for a bare
-                // body — a bare `b => b.Address` keeps declining exactly as before this ticket.
-                if (!TryTranslateLeaf(mongoQ, translator, selector.Parameters[0], selector.Body, provisionalAlias,
-                        pendingLookups, pendingReducerLeaves, out var bareLeaf, out var bareIsArrayLeaf, out _))
+                // allowWholeRootEntityLeaf is false here, so the owned-nav-entity leaf arm (gated on that same
+                // flag, for the same reason as the whole-root-entity leaf) never fires for a TRUE bare body —
+                // a bare `b => b.Address` keeps declining exactly as before this ticket. The ctor-wrap arm
+                // below (added by the native-ctor-only-dto-projection ticket) passes true instead, deliberately
+                // — see its own remarks.
+                if (!TryBindAsBareProjection(selector.Body, provisionalAlias, allowWholeRootEntityLeafForThis: false))
                 {
                     return false;
                 }
 
-                // Derive the FINAL alias from the translated leaf rather than from the syntax.
-                //
-                // Tier 1 is tried first, and the ordering is load-bearing: a leaf with a root-relative document
-                // path must take it, since that's what makes the alias-addressed read and the document-path
-                // read the same read, letting the late-fallback strip work for it. Tier 2 answers only for a
-                // leaf tier 1 cannot — a computed leaf backed by no document element — by choosing the alias the
-                // driver would emit for a bare body, so leaving the driver's push-down in place is the correct
-                // fallback (hence Synthetic, and hence the strip not firing).
-                string derivedAlias;
-                if (TryDeriveDocumentPathAlias(bareLeaf, out var documentPathAlias))
-                {
-                    derivedAlias = documentPathAlias;
-                    bareProjectionTier = ProjectionAliasTier.DocumentPath;
-                }
-                else if (TryDeriveSyntheticAlias(bareLeaf, selector, pendingLookups, out var syntheticAlias))
-                {
-                    derivedAlias = syntheticAlias;
-                    bareProjectionTier = ProjectionAliasTier.Synthetic;
-                }
-                else
-                {
-                    return false;
-                }
-
-                bareProjectionAlias = derivedAlias;
-                seenAliases.Add(derivedAlias);
-                projections.Add(new MongoProjection(derivedAlias, bareLeaf));
-                leafIsArray.Add(bareIsArrayLeaf);
-                hasArrayLeaf |= bareIsArrayLeaf;
-                // A bare body never admits the owned-nav-entity leaf (see the comment at the call site above) —
-                // always false here, kept only so leafIsOwnedNavEntity stays index-parallel with projections.
-                leafIsOwnedNavEntity.Add(false);
                 break;
             }
+        }
+
+        // Extracted from the bare-body arm above so the native-ctor-only-dto-projection ticket's new switch
+        // arm (a single-argument ctor-only DTO's sole constructor argument, treated the same way a true bare
+        // selector body is) can reuse the identical leaf-translation/alias-derivation/registration logic
+        // without duplicating it. Closes over this method's own locals rather than taking them as parameters —
+        // they are mutated here exactly as the original inline code mutated them.
+        //
+        // Derive the FINAL alias from the translated leaf rather than from the syntax.
+        //
+        // Tier 1 is tried first, and the ordering is load-bearing: a leaf with a root-relative document path
+        // must take it, since that's what makes the alias-addressed read and the document-path read the same
+        // read, letting the late-fallback strip work for it. Tier 2 answers only for a leaf tier 1 cannot — a
+        // computed leaf backed by no document element — by choosing the alias the driver would emit for a bare
+        // body, so leaving the driver's push-down in place is the correct fallback (hence Synthetic, and hence
+        // the strip not firing).
+        bool TryBindAsBareProjection(Expression bareLikeExpr, string provisionalAlias, bool allowWholeRootEntityLeafForThis)
+        {
+            if (!TryTranslateLeaf(mongoQ, translator, selector.Parameters[0], bareLikeExpr, provisionalAlias,
+                    pendingLookups, pendingReducerLeaves, out var bareLeaf, out var bareIsArrayLeaf, out _,
+                    allowWholeRootEntityLeafForThis))
+            {
+                return false;
+            }
+
+            string derivedAlias;
+            if (TryDeriveDocumentPathAlias(bareLeaf, out var documentPathAlias))
+            {
+                derivedAlias = documentPathAlias;
+                bareProjectionTier = ProjectionAliasTier.DocumentPath;
+            }
+            else if (TryDeriveSyntheticAlias(bareLeaf, selector, pendingLookups, out var syntheticAlias))
+            {
+                derivedAlias = syntheticAlias;
+                bareProjectionTier = ProjectionAliasTier.Synthetic;
+            }
+            else
+            {
+                return false;
+            }
+
+            bareProjectionAlias = derivedAlias;
+            seenAliases.Add(derivedAlias);
+            projections.Add(new MongoProjection(derivedAlias, bareLeaf));
+            leafIsArray.Add(bareIsArrayLeaf);
+            hasArrayLeaf |= bareIsArrayLeaf;
+            // A bare body never admits the owned-nav-entity leaf when allowWholeRootEntityLeafForThis is false
+            // (see the comment at the true-bare-body call site); the ctor-wrap arm passes true and CAN admit
+            // one, but that leaf is never THIS one — the owned-nav-entity leaf's own isOwnedNavEntityLeaf out
+            // parameter is discarded here (`out _`) because it can only ever be produced through the WRAPPED
+            // arm's own alias-must-equal-member-name path (see TryTranslateLeaf's remarks on that leaf kind),
+            // never through this bare/positional path, so it is always false for any leaf this function admits.
+            leafIsOwnedNavEntity.Add(false);
+            return true;
         }
 
         // An array leaf's own alias-agreement conjunct (see IsNativeArrayProjectionLeaf) proves ITS
