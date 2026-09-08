@@ -335,6 +335,16 @@ internal sealed class MongoSelectLowerer
                 continue;
             }
 
+            // EF-322: a whole-entity Distinct() lowers to TWO stages (the $group{_id:"$$ROOT"} dedup, then
+            // the $replaceRoot reading "$_id" back out to restore the plain document) — every other op in
+            // this list is exactly one stage, so this needs its own arm rather than a `switch` expression arm.
+            if (op is MongoDistinctOp)
+            {
+                stages.Add(new MongoGroupByRootStage());
+                stages.Add(new MongoReplaceRootStage("_id", mergeOwnerKeySentinels: false));
+                continue;
+            }
+
             stages.Add(op switch
             {
                 MongoMatchOp m => new MongoMatchStage(m.Predicate),

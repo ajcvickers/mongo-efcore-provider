@@ -1188,7 +1188,7 @@ Orders.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "fro
 
         AssertMql(
             """
-            Orders.{ "$limit" : 5 }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$count" : "_v" }
+            Orders.{ "$limit" : 5 }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$count" : "v" }
             """);
     }
 
@@ -1198,7 +1198,7 @@ Orders.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "fro
 
         AssertMql(
             """
-            Orders.{ "$match" : { "CustomerID" : "FRANK" } }, { "$limit" : 5 }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$count" : "_v" }
+            Orders.{ "$match" : { "CustomerID" : "FRANK" } }, { "$limit" : 5 }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$count" : "v" }
             """);
     }
 
@@ -1876,7 +1876,7 @@ Customers.{ "$sort" : { "_id" : 1 } }, { "$project" : { "c" : "$$ROOT", "_id" : 
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$limit" : 5 }, { "$count" : "_v" }
+            Orders.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$limit" : 5 }, { "$count" : "v" }
             """);
     }
 
@@ -3372,7 +3372,7 @@ Orders.{ "$group" : { "_id" : { "_id" : "$_id" } } }, { "$project" : { "_id" : "
 
         AssertMql(
             """
-            Customers.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$count" : "_v" }
+            Customers.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$count" : "v" }
             """);
     }
 
@@ -3382,7 +3382,7 @@ Orders.{ "$group" : { "_id" : { "_id" : "$_id" } } }, { "$project" : { "_id" : "
 
         AssertMql(
             """
-            Customers.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$count" : "_v" }
+            Customers.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$count" : "v" }
             """);
     }
 

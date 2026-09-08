@@ -203,6 +203,14 @@ internal sealed class MongoSelectDefinition
     /// <see cref="ActiveOps"/>.</summary>
     public void AppendLimit(MongoExpression count) => ActiveOps.Add(new MongoLimitOp(count));
 
+    /// <summary>
+    /// EF-322: a whole-entity <c>Distinct()</c> (no preceding <c>Select</c>) → append a
+    /// <see cref="MongoDistinctOp"/> to <see cref="ActiveOps"/>, exactly like any other filter/sort/page
+    /// operator. See <see cref="MongoDistinctOp"/>'s own remarks for why this needs none of the
+    /// <see cref="Grouping"/>/<see cref="PostGroupOps"/> machinery a PROJECTED Distinct requires.
+    /// </summary>
+    public void AppendDistinct() => ActiveOps.Add(new MongoDistinctOp());
+
     // HasPaging/HasOrdering/HasLimit deliberately scan _pipelineOps only: they gate a PRE-terminal GroupBy
     // (NativeGroupByBinder), which is unreachable after a set op (a trailing GroupBy is rejected by
     // HasTerminalOperator), so they must not see the post-set-op _trailingOps.

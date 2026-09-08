@@ -916,7 +916,7 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$group" : { "_id" : "$CustomerID", "__agg0" : { "$sum" : 1 } } }, { "$project" : { "Key" : "$_id", "c" : "$__agg0", "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$group" : { "_id" : "$CustomerID", "c" : { "$sum" : 1 } } }, { "$project" : { "Key" : "$_id", "c" : "$c", "_id" : 0 } }
             """);
     }
 

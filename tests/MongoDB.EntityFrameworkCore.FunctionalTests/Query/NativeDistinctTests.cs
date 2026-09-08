@@ -126,12 +126,85 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
-    public void Whole_entity_Distinct_falls_back_under_native_only()
+    public void Whole_entity_Distinct_goes_native()
+    {
+        // EF-322: a whole-entity Distinct() (no preceding Select) now goes native too — a new MongoDistinctOp
+        // is appended to the ordinary PipelineOps list (like Match/Sort/Skip/Limit), lowering to the SAME
+        // $group{_id:"$$ROOT"}/$replaceRoot dedup pattern already used for Union's own dedup
+        // (MongoPipelineFactory.RenderUnionWith). Every row has a unique Id, so whole-entity Distinct is
+        // structurally always a no-op here (matching driver-LINQ) — this proves it goes native and returns
+        // the right rows, not that it actually collapses duplicates (impossible with a unique key).
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Whole_entity_Distinct_goes_native));
+
+        var result = db.Entities.Distinct().ToList();
+
+        Assert.Equal(6, result.Count);
+    }
+
+    [Fact]
+    public void Whole_entity_Distinct_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Whole_entity_Distinct_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Whole_entity_Distinct_matches_driver_linq) + "D");
+
+        string[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Distinct().AsEnumerable().Select(o => o.Country).OrderBy(c => c).ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal(6, native.Length);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Whole_entity_Distinct_composes_with_where_orderby_skip_take_goes_native()
+    {
+        // Proves a whole-entity Distinct needs none of the projected-Distinct family's special-casing
+        // (DistinctAliasScope, PostGroupOps, PriorGrouping): it is just another op in the ordinary
+        // PipelineOps list, so everything composed around it — Where before, OrderBy/Skip/Take after —
+        // already works via the SAME pre-existing mechanisms with zero new guards.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Whole_entity_Distinct_composes_with_where_orderby_skip_take_goes_native));
+
+        var result = db.Entities.Where(o => o.Country != "FR").Distinct()
+            .OrderBy(o => o.Country).Skip(1).Take(2).ToList();
+
+        Assert.Equal(2, result.Count);
+        Assert.All(result, o => Assert.NotEqual("FR", o.Country));
+    }
+
+    [Fact]
+    public void Whole_entity_Distinct_composes_with_where_orderby_skip_take_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Whole_entity_Distinct_composes_with_where_orderby_skip_take_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Whole_entity_Distinct_composes_with_where_orderby_skip_take_matches_driver_linq) + "D");
+
+        string[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Where(o => o.Country != "FR").Distinct()
+                .OrderBy(o => o.Country).Skip(1).Take(2)
+                .AsEnumerable().Select(o => o.Country).ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Whole_entity_Distinct_then_Select_goes_native()
     {
         using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(Whole_entity_Distinct_falls_back_under_native_only));
+            nameof(Whole_entity_Distinct_then_Select_goes_native));
 
-        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Distinct().ToList());
+        var result = db.Entities.Distinct().Select(o => o.Country).OrderBy(c => c).ToList();
+
+        Assert.Equal(["FR", "UK", "UK", "US", "US", "US"], result);
     }
 
     [Fact]

@@ -2043,15 +2043,40 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     /// translates to a degenerate <c>$group</c> — group by the projected value(s), zero accumulators — via
     /// <see cref="NativeGroupByBinder.TryBindDistinctFromProjection"/>. The shaper is unchanged: it was
     /// already built by the preceding <c>Select</c> to read the top-level result aliases, and those same
-    /// aliases survive as the flattening <c>$project</c> that follows the <c>$group</c>. A bare-scalar
-    /// projection (no native <c>Projection</c> populated) or a whole-entity source falls back to driver-LINQ.
+    /// aliases survive as the flattening <c>$project</c> that follows the <c>$group</c>.
+    /// EF-322: a WHOLE-ENTITY source (no projection to flatten) is handled by a second, much simpler path —
+    /// <see cref="MongoSelectDefinition.AppendDistinct"/> records a plain <see cref="MongoDistinctOp"/>, which
+    /// needs none of the Grouping/DistinctAliasScope/PostGroupOps machinery the projected form requires
+    /// because the row shape never changes (see <see cref="MongoDistinctOp"/>'s own remarks). Only when
+    /// NEITHER path applies (e.g. a bare-scalar projection with no native <c>Projection</c> populated) does
+    /// this fall back to driver-LINQ.
     /// </summary>
     protected override ShapedQueryExpression? TranslateDistinct(ShapedQueryExpression source)
     {
         var mongoQ = (MongoQueryExpression)source.QueryExpression;
-        if (!NativeGroupByBinder.TryBindDistinctFromProjection(mongoQ))
+        if (!NativeGroupByBinder.TryBindDistinctFromProjection(mongoQ) && !TryBindWholeEntityDistinct(mongoQ))
             mongoQ.Select.MarkNotNativelyRepresentable();
-        return source; // shaper unchanged: the Select's projection shaper reads the flatten aliases
+        return source; // shaper unchanged: either path leaves the existing shaper (projection or entity) valid
+    }
+
+    /// <summary>
+    /// EF-322: a whole-entity <c>Distinct()</c> — no preceding <c>Select</c> has populated
+    /// <see cref="MongoSelectDefinition.Projection"/> — records a plain <see cref="MongoDistinctOp"/> in the
+    /// ordinary ordered op list instead of building a <see cref="MongoSelectDefinition.Grouping"/>. Declines
+    /// (returns <see langword="false"/>) whenever a projection, grouping, cardinality, or unwind source is
+    /// already present — those are either the DIFFERENT projected-Distinct shape (handled by
+    /// <see cref="NativeGroupByBinder.TryBindDistinctFromProjection"/>, tried first) or a terminal this method
+    /// has no business touching.
+    /// </summary>
+    private static bool TryBindWholeEntityDistinct(MongoQueryExpression mongoQ)
+    {
+        var select = mongoQ.Select;
+        if (select.Projection.Count > 0 || select.Grouping != null || select.Cardinality != null
+            || select.UnwindSource != null)
+            return false;
+
+        select.AppendDistinct();
+        return true;
     }
 
     #region Methods that just require shaper reshaping
