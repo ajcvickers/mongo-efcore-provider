@@ -430,6 +430,22 @@ internal static class NativeProjectionBinder
         => (Nullable.GetUnderlyingType(type) ?? type).IsEnum;
 
     /// <summary>
+    /// True for <c>Enumerable.AsEnumerable</c>/<c>ToList</c>/<c>ToArray</c> called on a plain
+    /// <see langword="string"/> source — the shape behind EF's own <c>AsEnumerable_over_string</c>/
+    /// <c>ToList_over_string</c>/<c>ToArray_over_string</c> conformance tests (<c>e.City.AsEnumerable()</c> etc.,
+    /// treating the string as its own <c>IEnumerable&lt;char&gt;</c>). MongoDB has no native char/char-sequence
+    /// BSON representation, so this leaf pushes down only the raw string field (see the <c>TryTranslateLeaf</c>
+    /// call site below) and defers the actual char-sequence materialization to the compiled shaper — see
+    /// <c>MongoProjectionBindingExpressionVisitor.Visit</c> and
+    /// <c>MongoProjectionBindingRemovingExpressionVisitor</c>'s own remarks for the write/read halves.
+    /// </summary>
+    internal static bool IsStringSequenceMaterializationCall(MethodCallExpression call)
+        => call is { Method.DeclaringType: var declaringType, Arguments: [var source] }
+           && declaringType == typeof(Enumerable)
+           && call.Method.Name is nameof(Enumerable.AsEnumerable) or nameof(Enumerable.ToList) or nameof(Enumerable.ToArray)
+           && source.Type == typeof(string);
+
+    /// <summary>
     /// Matches an OWNED SINGLE-REFERENCE navigation entity leaf (EF-441) — <c>b.Address</c> — in EITHER spelling
     /// EF Core produces: a bare <see cref="MemberExpression"/> off the selector's own parameter, or the
     /// shadow-safe <c>EF.Property(receiver, "Address")</c> call.
@@ -606,6 +622,34 @@ internal static class NativeProjectionBinder
                 return false;
             }
             result = field;
+            return true;
+        }
+
+        // A string-to-char-sequence projection leaf — `new { Property = e.City.AsEnumerable() }`, or the
+        // `.ToList()`/`.ToArray()` spellings (EF's own AsEnumerable_over_string/ToList_over_string/
+        // ToArray_over_string conformance shapes). MongoDB has no native char/char-sequence BSON representation,
+        // so there is nothing to compute server-side beyond the raw string field itself: translate the call's OWN
+        // argument exactly like a bare member leaf (same MongoFieldExpression, same $project output a plain
+        // `new { Property = e.City }` would produce) and let the read side re-apply the original .NET call to the
+        // raw string value it reads back — see MongoProjectionBindingExpressionVisitor.Visit and
+        // MongoProjectionBindingRemovingExpressionVisitor for the write/read halves that make that happen.
+        if (leafExpression is MethodCallExpression stringSequenceCall
+            && IsStringSequenceMaterializationCall(stringSequenceCall)
+            && (stringSequenceCall.Arguments[0] is MemberExpression
+                || (stringSequenceCall.Arguments[0] is MethodCallExpression stringSeqEfPropertyCall
+                    && stringSeqEfPropertyCall.Method.IsEFPropertyMethod()))
+            && translator.TryTranslateField(stringSequenceCall.Arguments[0], out var stringSeqField))
+        {
+            // Mirrors the plain-field branch's own dotted/non-default-serialized decline immediately above: an
+            // owned nested string field cannot yet be re-read back into the shaper's chosen property/serializer
+            // through this leaf's alias.
+            if (!NativeGroupByBinder.HasDefaultKeySerialization(stringSeqField.Property) && stringSeqField.ElementName.Contains('.'))
+            {
+                result = null!;
+                return false;
+            }
+
+            result = stringSeqField;
             return true;
         }
 
