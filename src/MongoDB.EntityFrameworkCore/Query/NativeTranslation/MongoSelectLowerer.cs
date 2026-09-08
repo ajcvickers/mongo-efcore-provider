@@ -239,6 +239,10 @@ internal sealed class MongoSelectLowerer
 
             if (select.Cardinality?.Aggregate is null)
             {
+                // EF-322: an OrderBy/ThenBy composed after a projected Distinct (never a genuine GroupBy —
+                // NativeSlotPopulator's carve-out only routes here for IsDistinct) lands past the flatten
+                // $project, sorting the Distinct's OWN output rather than the pre-group documents.
+                AppendSelectOpStages(select.PostGroupOps, stages, sortFields);
                 return stages;
             }
         }

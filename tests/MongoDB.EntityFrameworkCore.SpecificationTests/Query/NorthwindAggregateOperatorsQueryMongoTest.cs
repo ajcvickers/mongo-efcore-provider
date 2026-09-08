@@ -1169,7 +1169,7 @@ OrderDetails.{ "$match" : { "_id.ProductID" : 1 } }, { "$group" : { "_id" : null
 
         AssertMql(
             """
-            Customers.{ "$project" : { "CustomerID" : "$_id", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$sort" : { "CustomerID" : 1 } }
+            Customers.{ "$group" : { "_id" : { "CustomerID" : "$_id" } } }, { "$project" : { "CustomerID" : "$_id.CustomerID", "_id" : 0 } }, { "$sort" : { "CustomerID" : 1 } }
             """);
     }
 
