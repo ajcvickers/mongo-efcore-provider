@@ -3966,7 +3966,7 @@ Customers.{ "$match" : { } }
 
         AssertMql(
             """
-            Customers.{ "$sort" : { "_id" : 1 } }
+            Customers.{ "$sort" : { "_id" : 1 } }, { "$project" : { "Property" : "$City", "_id" : 0 } }
             """);
     }
 
@@ -3976,7 +3976,7 @@ Customers.{ "$match" : { } }
 
         AssertMql(
             """
-            Customers.{ "$sort" : { "_id" : 1 } }
+            Customers.{ "$sort" : { "_id" : 1 } }, { "$project" : { "Property" : "$City", "_id" : 0 } }
             """);
     }
 
@@ -3986,7 +3986,7 @@ Customers.{ "$match" : { } }
 
         AssertMql(
             """
-            Customers.{ "$sort" : { "_id" : 1 } }
+            Customers.{ "$sort" : { "_id" : 1 } }, { "$project" : { "Property" : "$City", "_id" : 0 } }
             """);
     }
 
