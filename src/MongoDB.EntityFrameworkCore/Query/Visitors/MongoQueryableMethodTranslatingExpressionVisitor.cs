@@ -370,12 +370,21 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             // the query is marked non-native and this same anonymous-shaper (no GroupByShaperExpression left)
             // lets the driver-LINQ push-down path run the GroupBy server-side and pass its objects straight
             // through — CanPushDown succeeds because there is no entity reference in the shaper.
-            if (!NativeGroupByBinder.TryBindGroupProjection(mongoQueryExpression, selector))
+            if (!NativeGroupByBinder.TryBindGroupProjection(mongoQueryExpression, selector, out var bareGroupLeafAlias))
             {
                 mongoQueryExpression.Select.MarkNotNativelyRepresentable();
             }
 
-            var groupShaper = TryBuildGroupResultShaper(mongoQueryExpression, selector);
+            // A BARE (non-`new {}`/DTO) result selector — e.g. `g => g.Sum(o => o.OrderID)` — was bound under
+            // the reserved alias the binder chose and handed back; anything else is the wrapped anonymous/DTO
+            // shape TryBuildGroupResultShaper walks member by member (including the case just above where
+            // binding declined but the body was still a wrapped construction — bareGroupLeafAlias stays null
+            // on any decline, so this falls through to that method exactly as before). Keyed on the binder's
+            // OWN answer (not a restatement of "which bodies are bare" here), same split as the SelectMany
+            // bare/wrapped branch just above, so the shaper can never disagree with what was actually bound.
+            var groupShaper = bareGroupLeafAlias != null
+                ? BindGroupMember(mongoQueryExpression, bareGroupLeafAlias, selector.Body)
+                : TryBuildGroupResultShaper(mongoQueryExpression, selector);
 
             // A projection shape we cannot rewrite (not an anonymous/DTO construction) keeps the placeholder
             // GroupByShaperExpression; the gate rejects it under NativeOnly and the driver reports it under
@@ -697,7 +706,9 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // Admissibility is decided in full BEFORE any BindGroupMember call. That ordering is load-bearing:
         // the previous inline version returned null part-way through the MemberInit loop for a non-assignment
         // binding, by which point it had already registered projections for the earlier members — a
-        // mutate-then-decline that left the query expression half-populated.
+        // mutate-then-decline that left the query expression half-populated. A bare (non-`new {}`/DTO) body —
+        // e.g. `g.Sum(...)` — is NOT handled here: it is bound (if at all) via the caller's own
+        // bareGroupLeafAlias branch, mirroring the SelectMany bare/wrapped split just above.
         if (!selector.Body.TryGetProjectionMembers(out var members, allowPositionalConstructorArguments: true))
             return null;
 

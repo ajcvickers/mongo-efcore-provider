@@ -172,7 +172,24 @@ internal static class NativeCardinalityBinder
                 || (op is MongoAggregateOperator.Sum or MongoAggregateOperator.Min
                     or MongoAggregateOperator.Max or MongoAggregateOperator.Average && selector != null));
 
-        if (select.HasTerminalOperator && !select.IsSetOpTerminalOnly && !isPostDistinctAggregate)
+        // A scalar aggregate composed after an ORDINARY (non-nested) GroupBy(key).Select(aggregate) — e.g.
+        // Orders.GroupBy(o => o.CustomerID).Select(g => g.Sum(o => o.OrderID)).All(v => ...) — is the SAME
+        // shape as isPostDistinctAggregate above, just reached via a genuine IsGroupBy rather than IsDistinct:
+        // the preceding Select already finalized Grouping/Projection (NativeGroupByBinder.TryBindGroupProjection),
+        // so this aggregate's predicate/selector resolves against that Select's OWN flattened output alias,
+        // exactly like the Distinct case. Excludes a GroupBy nested on a projected Distinct (where IsDistinct
+        // is ALSO true) — that shape's PostGroupOps placement is handled structurally by MongoSelectLowerer via
+        // PriorGrouping, not by this per-operator carve-out, so it stays declined exactly as before.
+        var isPostGroupBySelectAggregate = select.IsGroupBy && !select.IsDistinct && select.Grouping != null
+            && select.Cardinality == null
+            && (op is MongoAggregateOperator.Count or MongoAggregateOperator.LongCount
+                or MongoAggregateOperator.Any or MongoAggregateOperator.All
+                || (op is MongoAggregateOperator.Sum or MongoAggregateOperator.Min
+                    or MongoAggregateOperator.Max or MongoAggregateOperator.Average && selector != null));
+
+        var isPostGroupTerminalAggregate = isPostDistinctAggregate || isPostGroupBySelectAggregate;
+
+        if (select.HasTerminalOperator && !select.IsSetOpTerminalOnly && !isPostGroupTerminalAggregate)
             return false;
 
         // predicate is null for Sum/Min/Max/Average (which take a selector instead) and for a bare Any()/Count()
@@ -181,10 +198,11 @@ internal static class NativeCardinalityBinder
         var translator = new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType, predicate?.Parameters[0]);
 
         // EF-322: a Count(pred)/Any(pred)/All(pred)/Sum(selector)/Min(selector)/Max(selector)/Average(selector)
-        // composed after a projected Distinct resolves its predicate/selector against the Distinct's own
-        // flattened output alias, never the entity — same rationale and mechanism as NativeSlotPopulator's
-        // Where arm (MongoExpressionTranslator.DistinctAliasScope's own remarks).
-        if (isPostDistinctAggregate)
+        // composed after a projected Distinct OR an ordinary GroupBy(key).Select(aggregate) resolves its
+        // predicate/selector against that Select's own flattened output alias, never the entity — same
+        // rationale and mechanism as NativeSlotPopulator's Where arm (MongoExpressionTranslator
+        // .DistinctAliasScope's own remarks).
+        if (isPostGroupTerminalAggregate)
             translator.DistinctAliasScope = select.Grouping;
 
         MongoFieldExpression? operand = null;
@@ -283,15 +301,15 @@ internal static class NativeCardinalityBinder
             op, operand, emptyBehavior, emptyValue, resultType, presenceOnly, presentValue);
 
         // EF-322: Cardinality and Grouping are ordinarily mutually exclusive (see the Cardinality setter's own
-        // remarks), but a Count/LongCount/Any/All composed after a projected Distinct is the SAME sanctioned
-        // exception as the bare-GroupBy-terminal-aggregate shape above (EF-449) — the lowerer's Grouping block
-        // now unconditionally emits PostGroupOps before falling through to this aggregate's own terminal
-        // stage, so both a $group AND a terminal $count/$limit are genuinely needed. postGroupPredicate is
-        // deliberately null here (unlike the EF-449 call): any predicate this method built above was already
-        // routed into PostGroupOps via AddPredicateConjunct (ActiveOps targets _postGroupOps for this exact
-        // IsDistinct-and-Grouping-set condition), not the separate single-slot PostGroupPredicate field the
-        // EF-449 HAVING shape uses.
-        if (isPostDistinctAggregate)
+        // remarks), but a Count/LongCount/Any/All composed after a projected Distinct OR an ordinary
+        // GroupBy(key).Select(aggregate) is the SAME sanctioned exception as the bare-GroupBy-terminal-aggregate
+        // shape above (EF-449) — the lowerer's Grouping block now unconditionally emits PostGroupOps before
+        // falling through to this aggregate's own terminal stage, so both a $group AND a terminal
+        // $count/$limit are genuinely needed. postGroupPredicate is deliberately null here (unlike the EF-449
+        // call): any predicate this method built above was already routed into PostGroupOps via
+        // AddPredicateConjunct (ActiveOps targets _postGroupOps for this exact condition), not the separate
+        // single-slot PostGroupPredicate field the EF-449 HAVING shape uses.
+        if (isPostGroupTerminalAggregate)
             select.SetGroupedTerminalAggregate(select.Grouping!, cardinality, postGroupPredicate: null);
         else
             select.Cardinality = cardinality;

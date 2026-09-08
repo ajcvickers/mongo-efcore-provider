@@ -113,18 +113,28 @@ internal static class NativeGroupByBinder
 
     /// <summary>
     /// Parses the <c>Select</c> result selector against the pending key from <see cref="TryBindGroupKey"/>,
-    /// finalizing <see cref="MongoSelectDefinition.Grouping"/>. The body must be a <see cref="NewExpression"/>
-    /// (anonymous type) or <see cref="MemberInitExpression"/> (DTO) where every member is either a grouping-key
-    /// access (<c>g.Key</c> / <c>g.Key.&lt;Sub&gt;</c>) or a supported aggregate over the grouping
-    /// (<c>g.Count()</c>/<c>g.LongCount()</c> → <c>$sum:1</c>; <c>g.Sum/Min/Max/Average(x =&gt; x.Field)</c>
-    /// over a plain member selector). Returns <see langword="false"/> for any other shape, or when no
-    /// accumulator is produced, so the caller falls back.
+    /// finalizing <see cref="MongoSelectDefinition.Grouping"/>. The body is either a <see cref="NewExpression"/>
+    /// (anonymous type) or <see cref="MemberInitExpression"/> (DTO) whose members, or (when the body carries no
+    /// member name at all, e.g. <c>g.Sum(...)</c> with no wrapping <c>new {}</c>) the bare body itself, must
+    /// each be either a grouping-key access (<c>g.Key</c> / <c>g.Key.&lt;Sub&gt;</c>) or a supported aggregate
+    /// over the grouping (<c>g.Count()</c>/<c>g.LongCount()</c> → <c>$sum:1</c>;
+    /// <c>g.Sum/Min/Max/Average(x =&gt; x.Field)</c> over a plain member selector). Returns
+    /// <see langword="false"/> for any other shape, or when no accumulator is produced, so the caller falls
+    /// back.
     /// </summary>
     /// <param name="mongoQ">The query whose <see cref="MongoSelectDefinition"/> is being populated.</param>
     /// <param name="resultSelector">The <c>Select</c> result selector lambda over the grouping.</param>
+    /// <param name="bareLeafAlias">
+    /// On success, the reserved alias (<see cref="NativeProjectionBinder.SyntheticBareProjectionAlias"/>) the
+    /// bare-body case was bound under, so the caller can build a single-member shaper instead of walking
+    /// <c>resultSelector.Body</c>'s (nonexistent) constructor members; <see langword="null"/> when the body was
+    /// a wrapped anonymous/DTO projection (the caller's ordinary member-by-member shaper applies instead), and
+    /// undefined when this method returns <see langword="false"/>.
+    /// </param>
     internal static bool TryBindGroupProjection(
-        MongoQueryExpression mongoQ, LambdaExpression resultSelector)
+        MongoQueryExpression mongoQ, LambdaExpression resultSelector, out string? bareLeafAlias)
     {
+        bareLeafAlias = null;
         var select = mongoQ.Select;
         if (select.PendingGroupKey is not { } keyParts)
             return false;
@@ -141,8 +151,22 @@ internal static class NativeGroupByBinder
         if (select.PendingGroupPredicate != null)
             return false;
 
-        if (!resultSelector.Body.TryGetProjectionMembers(out var bindings, allowPositionalConstructorArguments: true))
-            return false;
+        var isBareBody = !resultSelector.Body.TryGetProjectionMembers(out var bindings, allowPositionalConstructorArguments: true);
+        if (isBareBody)
+        {
+            // A BARE (non-`new {}`/DTO) result selector — e.g. `GroupBy(o => o.CustomerID)
+            // .Select(g => g.Sum(o => o.OrderID))` — carries no member name, so it is projected under the
+            // reserved `_v` alias, the SAME tier-2 (ProjectionAliasTier.Synthetic) convention
+            // NativeProjectionBinder/NativeSelectManyBinder use for a bare computed/aggregate body: `_v` is
+            // what the driver itself names a bare projection, so a late fallback (which leaves this query's
+            // captured chain un-stripped) has the driver's own push-down write the very element the
+            // alias-addressed shaper already reads by. The single-entry list is then walked by the SAME
+            // key/accumulator loop below, so a bare body that is neither a key access nor a recognized
+            // accumulator shape (e.g. a computed expression) still declines exactly as before — bareLeafAlias
+            // is set only once every guard below has actually admitted this body (mirrors the "commit once
+            // every gate has passed" discipline TryBuildGroupResultShaper's own remarks require).
+            bindings = [(NativeProjectionBinder.SyntheticBareProjectionAlias, resultSelector.Body)];
+        }
 
         var translator = new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType);
 
@@ -185,6 +209,8 @@ internal static class NativeGroupByBinder
         select.Grouping = new MongoGrouping(keyParts, accumulators);
         foreach (var projection in flatten)
             select.AddProjection(projection);
+        if (isBareBody)
+            bareLeafAlias = NativeProjectionBinder.SyntheticBareProjectionAlias;
         return true;
     }
 
