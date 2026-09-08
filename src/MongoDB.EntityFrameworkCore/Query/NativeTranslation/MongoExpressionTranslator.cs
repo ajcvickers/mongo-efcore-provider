@@ -112,6 +112,22 @@ internal sealed partial class MongoExpressionTranslator
     internal ParameterExpression? SelfParam { get; set; }
 
     /// <summary>
+    /// EF-322: when set, a single-hop member access on <see cref="SelfParam"/> resolves against THESE grouping
+    /// key parts — a projected <c>Distinct()</c>'s own flattened output schema — instead of against
+    /// <see cref="_entityType"/>. Set by <see cref="NativeSlotPopulator.PopulateNativeSlots"/>'s <c>Where</c>
+    /// arm only when <c>Select.IsDistinct &amp;&amp; !Select.IsGroupBy &amp;&amp; Select.Grouping != null</c> (a
+    /// pure projected-Distinct terminal, never a genuine <c>GroupBy</c>). Required because a Distinct's
+    /// anonymous/DTO member name is independent of, but can coincide with, a real entity property of the same
+    /// name (<c>Select(o => new { Country = o.City }).Distinct().Where(x => x.Country == "...")</c> names its
+    /// member "Country" while sourcing it from <c>City</c>) — resolving by entity-property name, this
+    /// translator's ordinary behavior, would silently filter on the WRONG (untouched) field. See
+    /// <see cref="MongoExpressionTranslator.TryResolveMember"/>'s use of this scope: a member name that does
+    /// NOT match one of these key parts declines outright rather than falling through to the entity, so a
+    /// computed/out-of-scope predicate still falls back to driver-LINQ instead of silently mistranslating.
+    /// </summary>
+    internal MongoGrouping? DistinctAliasScope { get; set; }
+
+    /// <summary>
     /// Attempts to translate an EF Core expression body into a <see cref="MongoExpression"/>.
     /// </summary>
     /// <param name="efBody">The expression body (from a predicate or key-selector lambda).</param>

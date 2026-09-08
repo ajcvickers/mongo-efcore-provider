@@ -135,13 +135,102 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
-    public void Operator_after_Distinct_falls_back_under_native_only()
+    public void Distinct_then_Where_goes_native()
     {
+        // EF-322: Where composed AFTER a projected Distinct now resolves its predicate against the Distinct's
+        // OWN flattened output alias (MongoExpressionTranslator.DistinctAliasScope), not the root entity —
+        // succeeding under NativeOnly is the "went native" signal.
         using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(Operator_after_Distinct_falls_back_under_native_only));
+            nameof(Distinct_then_Where_goes_native));
+
+        var result = db.Entities.Select(o => new { o.Country }).Distinct().Where(r => r.Country == "US").ToList();
+
+        Assert.Equal(["US"], result.Select(r => r.Country).ToArray());
+    }
+
+    [Fact]
+    public void Distinct_then_Where_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Where_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Where_matches_driver_linq) + "D");
+
+        string[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { o.Country }).Distinct().Where(r => r.Country == "US")
+                .AsEnumerable().Select(r => r.Country).ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal(["US"], native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Distinct_then_Where_on_renamed_member_filters_by_the_projected_source_not_the_colliding_entity_property()
+    {
+        // Select(o => new { Country = o.City }) deliberately reuses the entity's real "Country" property name
+        // for a DIFFERENT source field (City). If Where(x => x.Country == "NYC") resolved by name against the
+        // root entity (as the ordinary MongoExpressionTranslator does), it would silently filter on the
+        // entity's real Country field ("US"/"UK"/"FR") instead of the projected City value — wrong data.
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Where_on_renamed_member_filters_by_the_projected_source_not_the_colliding_entity_property) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Where_on_renamed_member_filters_by_the_projected_source_not_the_colliding_entity_property) + "D");
+
+        string[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { Country = o.City }).Distinct().Where(r => r.Country == "NYC")
+                .AsEnumerable().Select(r => r.Country).ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal(["NYC"], native); // filtered by City's value, not the real Country field (which is never "NYC")
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Distinct_then_Where_on_unrelated_computed_key_falls_back_under_native_only()
+    {
+        // A computed predicate member (not one of the Distinct's own key part aliases) must still decline
+        // rather than silently resolving against the entity — the whole point of DistinctAliasScope is that a
+        // member name outside the key parts is out of scope, not a fallthrough.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Where_on_unrelated_computed_key_falls_back_under_native_only));
 
         Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Entities.Select(o => new { o.Country }).Distinct().Where(r => r.Country == "US").ToList());
+            db.Entities.Select(o => new { o.Country }).Distinct().Where(r => r.Country.Length == 2).ToList());
+    }
+
+    [Fact]
+    public void Distinct_then_Skip_goes_native_and_dedups()
+    {
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Skip_goes_native_and_dedups));
+
+        var result = db.Entities.Select(o => new { o.Country }).Distinct().OrderBy(r => r.Country).Skip(1).ToList();
+
+        Assert.Equal(new[] { "UK", "US" }, result.Select(r => r.Country).ToArray());
+    }
+
+    [Fact]
+    public void Distinct_then_Skip_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Skip_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Skip_matches_driver_linq) + "D");
+
+        string[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { o.Country }).Distinct().OrderBy(r => r.Country).Skip(1)
+                .AsEnumerable().Select(r => r.Country).ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal(new[] { "UK", "US" }, native);
+        Assert.Equal(Run(driverDb), native);
     }
 
     [Fact]
@@ -385,18 +474,29 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
-    public void Distinct_then_Take_falls_back_and_matches_driver_linq()
+    public void Distinct_then_Take_goes_native_and_dedups()
     {
-        // Take(n) applied directly after a projected Distinct — same post-Distinct-reducer family as First()
-        // above; EMPIRICALLY falls back to driver-LINQ under Native so the returned subset matches DriverLinq.
-        // An OrderBy between Distinct and Take stabilizes which 2 of the 3 distinct countries come back
-        // (otherwise Take(n) over an unordered Distinct has no guaranteed subset).
+        // EF-322: Take(n) composed directly after a projected Distinct now goes native too (it has no field
+        // reference to get wrong, unlike Where/OrderBy) — succeeding under NativeOnly is the "went native"
+        // signal. An OrderBy between Distinct and Take stabilizes which 2 of the 3 distinct countries come
+        // back (otherwise Take(n) over an unordered Distinct has no guaranteed subset).
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Take_goes_native_and_dedups));
+
+        var result = db.Entities.Select(o => new { o.Country }).Distinct().OrderBy(r => r.Country).Take(2).ToList();
+
+        Assert.Equal(new[] { "FR", "UK" }, result.Select(r => r.Country).ToArray()); // alphabetically first 2 of (FR, UK, US)
+    }
+
+    [Fact]
+    public void Distinct_then_Take_matches_driver_linq()
+    {
         var seed = SeedOrders();
 
         using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
-            nameof(Distinct_then_Take_falls_back_and_matches_driver_linq) + "N");
+            nameof(Distinct_then_Take_matches_driver_linq) + "N");
         using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
-            nameof(Distinct_then_Take_falls_back_and_matches_driver_linq) + "D");
+            nameof(Distinct_then_Take_matches_driver_linq) + "D");
 
         string[] Run(SingleEntityDbContext<Order> db) =>
             db.Entities.Select(o => new { o.Country }).Distinct().OrderBy(r => r.Country).Take(2)
@@ -405,16 +505,6 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
         var native = Run(nativeDb);
         Assert.Equal(new[] { "FR", "UK" }, native); // alphabetically first 2 of (FR, UK, US)
         Assert.Equal(Run(driverDb), native);
-    }
-
-    [Fact]
-    public void Distinct_then_Take_throws_under_native_only()
-    {
-        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(Distinct_then_Take_throws_under_native_only));
-
-        Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Entities.Select(o => new { o.Country }).Distinct().OrderBy(r => r.Country).Take(2).ToList());
     }
 
     [Fact]
