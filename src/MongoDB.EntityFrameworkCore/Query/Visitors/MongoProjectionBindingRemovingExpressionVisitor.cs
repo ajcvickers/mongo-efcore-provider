@@ -29,6 +29,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
+using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation.Stages;
 using MongoDB.EntityFrameworkCore.Storage;
 
@@ -256,6 +257,26 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                     // now peels a `Nullable<T>.Value` leaf (EF-402) — the property can be the NULLABLE form of a
                     // non-nullable binding type (`x.Converted.Value` binds as `int` against a `Converted` property
                     // typed `int?`). Unwrap both sides before comparing so either direction is accepted.
+                    // Native string-to-char-sequence projection leaf: the WRITE side
+                    // (NativeProjectionBinder.TryTranslateLeaf, MongoProjectionBindingExpressionVisitor.Visit)
+                    // pushed down only the raw string field under this alias — MongoDB has no native
+                    // char/char-sequence BSON representation — and registered the WHOLE
+                    // AsEnumerable()/ToList()/ToArray() call as this leaf's projection mapping. Read the raw
+                    // string back through the ordinary property-aware path (so a value converter / non-default
+                    // BsonRepresentation on the source property still applies), then rebuild the ORIGINAL call
+                    // with its single argument replaced by that raw read: the compiled shaper lambda performs
+                    // the actual char-sequence materialization at execution time exactly as
+                    // `Enumerable.ToList(rawString)` would in memory, since `string` implements
+                    // `IEnumerable<char>`.
+                    if (projection.Expression is MethodCallExpression stringSequenceCall
+                        && NativeProjectionBinder.IsStringSequenceMaterializationCall(stringSequenceCall)
+                        && TryResolveFieldAccess(stringSequenceCall.Arguments[0]).Property is { } stringSequenceProperty)
+                    {
+                        var rawStringRead = BsonBinding.CreateGetValueExpression(
+                            DocParameter, projection.Alias, stringSequenceProperty, typeof(string));
+                        return Expression.Call(stringSequenceCall.Method, rawStringRead);
+                    }
+
                     var fieldAccess = TryResolveFieldAccess(projection.Expression);
                     if (fieldAccess.Property != null)
                     {
