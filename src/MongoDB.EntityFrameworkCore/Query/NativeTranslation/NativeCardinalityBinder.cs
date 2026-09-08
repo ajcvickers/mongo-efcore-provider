@@ -44,7 +44,17 @@ internal static class NativeCardinalityBinder
         // the reducer's own $limit (below) would truncate the grouped rows instead of reducing over them.
         // A set-op-only terminal is exempt: a reducer composed after a set op goes native, recording its
         // $limit into TrailingOps (after the set-op stage) instead of PipelineOps.
-        if (select.HasTerminalOperator && !select.IsSetOpTerminalOnly)
+        //
+        // EF-322 carve-out: a reducer (First/FirstOrDefault/Single/SingleOrDefault, Last/LastOrDefault via the
+        // sort-flip below) composed after a projected Distinct (IsDistinct, never a genuine IsGroupBy) is NOT
+        // the KeyNotFoundException hazard above — same rationale as NativeCardinalityBinder.TryBindAggregate's
+        // own EF-322 carve-out (the lowerer's Grouping block now ALWAYS emits PostGroupOps, and a reducer has
+        // no field reference of its own to resolve, so no DistinctAliasScope wiring is needed here at all —
+        // the synthesized $limit below routes into PostGroupOps via the SAME ActiveOps mechanism Where/OrderBy/
+        // Skip/Take already use).
+        var isPostDistinctReducer = select.IsDistinct && !select.IsGroupBy && select.Grouping != null;
+
+        if (select.HasTerminalOperator && !select.IsSetOpTerminalOnly && !isPostDistinctReducer)
             return false;
 
         // A reducer composed after a CONFIRMED genuine two-sided join must fall back too (EF-392). The $limit
@@ -80,7 +90,15 @@ internal static class NativeCardinalityBinder
 
         var limit = kind is MongoReducerKind.Single or MongoReducerKind.SingleOrDefault ? 2 : 1;
         select.AppendLimit(new MongoConstantExpression(limit, forSerialization: null));
-        select.Cardinality = MongoCardinality.ForReducer(kind, resultType);
+        var cardinality = MongoCardinality.ForReducer(kind, resultType);
+
+        // EF-322: Cardinality and Grouping are ordinarily mutually exclusive (see the Cardinality setter's own
+        // remarks), but a reducer composed after a projected Distinct is the SAME sanctioned exception
+        // TryBindAggregate's own EF-322 carve-out already uses.
+        if (isPostDistinctReducer)
+            select.SetGroupedTerminalAggregate(select.Grouping!, cardinality, postGroupPredicate: null);
+        else
+            select.Cardinality = cardinality;
         return true;
     }
 

@@ -764,37 +764,84 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
-    public void Distinct_then_First_falls_back_and_matches_driver_linq()
+    public void Distinct_then_First_goes_native()
     {
-        // First() applied directly after a projected Distinct is a post-Distinct reducer, like Count/GroupBy/
-        // Join above — EMPIRICALLY the IsDistinct guard forces a clean fallback to driver-LINQ under Native.
+        // EF-322: First()/Single() (an entity-REDUCER, not a scalar aggregate) composed directly after a
+        // projected Distinct now goes native too. It has no field reference of its own to get wrong — the
+        // reducer's synthesized $limit just needs to land in the right place (PostGroupOps, via the SAME
+        // ActiveOps routing Where/OrderBy/Skip/Take already use) and Cardinality needs the SAME
+        // SetGroupedTerminalAggregate sanctioned exception Count/Sum use to coexist with Grouping.
         // A bare (unordered) Distinct().First() is not deterministic in general (no guaranteed row order
         // without a $sort), so an explicit OrderBy is chained between Distinct and First to stabilize the
-        // "first" row for a meaningful equality assertion — this is still a post-Distinct reducer/ordering
-        // composition, just made deterministic.
+        // "first" row for a meaningful equality assertion.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_First_goes_native));
+
+        var result = db.Entities.Select(o => new { o.Country }).Distinct().OrderBy(r => r.Country).First();
+
+        Assert.Equal("FR", result.Country); // alphabetically first of the 3 distinct countries (FR, UK, US)
+    }
+
+    [Fact]
+    public void Distinct_then_First_matches_driver_linq()
+    {
         var seed = SeedOrders();
 
         using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
-            nameof(Distinct_then_First_falls_back_and_matches_driver_linq) + "N");
+            nameof(Distinct_then_First_matches_driver_linq) + "N");
         using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
-            nameof(Distinct_then_First_falls_back_and_matches_driver_linq) + "D");
+            nameof(Distinct_then_First_matches_driver_linq) + "D");
 
         string Run(SingleEntityDbContext<Order> db) =>
             db.Entities.Select(o => new { o.Country }).Distinct().OrderBy(r => r.Country).First().Country;
 
         var native = Run(nativeDb);
-        Assert.Equal("FR", native); // alphabetically first of the 3 distinct countries (FR, UK, US)
+        Assert.Equal("FR", native);
         Assert.Equal(Run(driverDb), native);
     }
 
     [Fact]
-    public void Distinct_then_First_throws_under_native_only()
+    public void Distinct_then_Single_goes_native()
     {
         using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(Distinct_then_First_throws_under_native_only));
+            nameof(Distinct_then_Single_goes_native));
 
-        Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Entities.Select(o => new { o.Country }).Distinct().OrderBy(r => r.Country).First());
+        var result = db.Entities.Select(o => new { o.Country }).Distinct().Single(r => r.Country == "FR");
+
+        Assert.Equal("FR", result.Country);
+    }
+
+    [Fact]
+    public void Distinct_then_Where_then_First_goes_native()
+    {
+        // Proves composition with an already-native post-Distinct Where: the Where's $match and the
+        // reducer's own $limit both land in PostGroupOps, in arrival order.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Where_then_First_goes_native));
+
+        var result = db.Entities.Select(o => new { o.Country }).Distinct()
+            .Where(r => r.Country != "FR").OrderBy(r => r.Country).First();
+
+        Assert.Equal("UK", result.Country);
+    }
+
+    [Fact]
+    public void Distinct_then_Where_then_First_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Where_then_First_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Where_then_First_matches_driver_linq) + "D");
+
+        string Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { o.Country }).Distinct()
+                .Where(r => r.Country != "FR").OrderBy(r => r.Country).First().Country;
+
+        var native = Run(nativeDb);
+        Assert.Equal("UK", native);
+        Assert.Equal(Run(driverDb), native);
     }
 
     [Fact]
