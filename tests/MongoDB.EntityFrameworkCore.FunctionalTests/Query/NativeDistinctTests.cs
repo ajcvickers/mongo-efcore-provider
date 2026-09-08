@@ -126,6 +126,38 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
+    public void Bare_scalar_projection_Distinct_then_OrderBy_with_identity_selector_goes_native()
+    {
+        // EF-322: a bare-scalar Distinct's own OrderBy key selector is necessarily the identity function
+        // (c => c) — the projected result IS the scalar directly, with no member to access — a shape
+        // TryResolveDistinctOrderingKey previously declined (it only recognized a MemberExpression key).
+        // Resolves against the Distinct's sole (unnamed... well, alias-bearing) key part directly.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Bare_scalar_projection_Distinct_then_OrderBy_with_identity_selector_goes_native));
+
+        var result = db.Entities.Select(o => o.Country).Distinct().OrderBy(c => c).ToList();
+        Assert.Equal(["FR", "UK", "US"], result);
+    }
+
+    [Fact]
+    public void Bare_scalar_projection_Distinct_then_OrderBy_with_identity_selector_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Bare_scalar_projection_Distinct_then_OrderBy_with_identity_selector_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Bare_scalar_projection_Distinct_then_OrderBy_with_identity_selector_matches_driver_linq) + "D");
+
+        string[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => o.Country).Distinct().OrderBy(c => c).ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal(["FR", "UK", "US"], native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
     public void Whole_entity_Distinct_goes_native()
     {
         // EF-322: a whole-entity Distinct() (no preceding Select) now goes native too — a new MongoDistinctOp

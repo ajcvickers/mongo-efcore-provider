@@ -660,6 +660,17 @@ internal static class NativeGroupByBinder
         [NotNullWhen(true)] out MongoFieldExpression? result)
     {
         result = null;
+
+        // A bare-scalar Distinct's own OrderBy key selector is necessarily the IDENTITY function
+        // (Select(o => o.Country).Distinct().OrderBy(c => c)): the projected result IS the scalar directly,
+        // so there is no member to access at all — the key selector body is exactly the parameter itself.
+        // Matches the sole key part unconditionally (a bare-scalar Distinct always has exactly one).
+        if (ReferenceEquals(keySelectorBody, selfParam) && grouping.Key is [{ FieldRef: MongoFieldExpression soleField } soleKeyPart])
+        {
+            result = new MongoFieldExpression(soleField.Property, soleKeyPart.Name!);
+            return true;
+        }
+
         if (keySelectorBody is not MemberExpression { Expression: ParameterExpression param } member
             || !ReferenceEquals(param, selfParam))
             return false;
