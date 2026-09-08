@@ -109,6 +109,8 @@ internal static class ExpressionExtensionMethods
     /// positional constructors) or a <see cref="MemberInitExpression"/> over a parameterless constructor
     /// (object-initializer syntax).
     /// </summary>
+    /// <param name="body">The projection body to read — a <see cref="NewExpression"/> or a <see cref="MemberInitExpression"/>.</param>
+    /// <param name="members">The (member name, value) pairs the body was read into, or empty when this returns <see langword="false"/>.</param>
     /// <param name="allowPositionalConstructorArguments">
     /// When <see langword="true"/>, additionally admits a <see cref="NewExpression"/> whose
     /// <see cref="NewExpression.Members"/> is <see langword="null"/> (a constructor-only DTO). The compiler only
