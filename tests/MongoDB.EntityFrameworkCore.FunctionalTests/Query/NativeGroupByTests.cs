@@ -785,18 +785,21 @@ public class NativeGroupByTests(TemporaryDatabaseFixture database) : IClassFixtu
     }
 
     [Fact]
-    public void GroupBy_then_scalar_aggregate_throws_clean_decline_under_native_only()
+    public void GroupBy_then_scalar_aggregate_goes_native()
     {
-        // Under NativeOnly a post-group scalar aggregate must decline cleanly with
-        // NativeTranslationNotSupportedException — NOT crash with KeyNotFoundException (the pre-guard bug).
+        // EF-149 generalized the post-group terminal-aggregate carve-out (previously bare-scalar-Select-only)
+        // to any ordinary GroupBy(key).Select(aggregate), so this now goes native rather than declining — see
+        // that commit's NativeCardinalityBinder changes. Still must not crash with KeyNotFoundException (the
+        // original pre-guard bug) or return the wrong count.
         using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(GroupBy_then_scalar_aggregate_throws_clean_decline_under_native_only));
+            nameof(GroupBy_then_scalar_aggregate_goes_native));
 
-        Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Entities
-                .GroupBy(o => o.Country)
-                .Select(g => new { Country = g.Key, Total = g.Sum(o => o.Amount) })
-                .Count());
+        var count = db.Entities
+            .GroupBy(o => o.Country)
+            .Select(g => new { Country = g.Key, Total = g.Sum(o => o.Amount) })
+            .Count();
+
+        Assert.Equal(3, count);
     }
 
     [Fact]
