@@ -191,8 +191,19 @@ internal static class NativeCardinalityBinder
         if (op is MongoAggregateOperator.Sum or MongoAggregateOperator.Min
                or MongoAggregateOperator.Max or MongoAggregateOperator.Average)
         {
-            // Selector must be a plain member access → field ref. Computed selectors fall back.
-            if (selector?.Body is not MemberExpression || !translator.TryTranslateField(selector.Body, out operand))
+            // Selector must be a plain member access → field ref, or — for Min/Max only — a Convert wrapping
+            // one (e.g. `(short?)detail.Quantity`, EF-322's "cast to same nullable type"). TryTranslateField
+            // already unwraps such casts via UnwrapOrderPreserving when resolving the field, and Min/Max need
+            // only order preservation (the same guarantee that helper documents for sort keys) — unlike
+            // Sum/Average, which need exact value preservation and so keep the stricter bare-member check.
+            // A cast TryTranslateField can't unwrap (narrowing, non-numeric) simply fails to resolve a member
+            // and declines below, so this can't admit an unsafe cast for the wrong reason.
+            var selectorBody = selector?.Body;
+            var isEligibleSelector = selectorBody is MemberExpression
+                || (op is MongoAggregateOperator.Min or MongoAggregateOperator.Max
+                    && selectorBody is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked });
+
+            if (!isEligibleSelector || !translator.TryTranslateField(selectorBody!, out operand))
                 return false;
         }
 

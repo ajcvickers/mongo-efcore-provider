@@ -256,20 +256,12 @@ public class NorthwindAggregateOperatorsQueryMongoTest
 
     public override async Task Min_no_data_cast_to_nullable(bool async)
     {
-        // Fails: Max over empty nullables issue EF-227
-        await AssertTranslationFailed(() => base.Min_no_data_cast_to_nullable(async));
+        await base.Min_no_data_cast_to_nullable(async);
 
-        if (MongoSpecTestHelpers.IsNativeOnly)
-        {
-            AssertMql();
-        }
-        else
-        {
-            AssertMql(
-    """
-            Orders.{ "$match" : { "_id" : -1 } }, { "$group" : { "_id" : null, "_min" : { "$min" : { "_v" : "$_id" } } } }, { "$replaceRoot" : { "newRoot" : "$_min" } }
+        AssertMql(
+            """
+            Orders.{ "$match" : { "_id" : -1 } }, { "$group" : { "_id" : null, "v" : { "$min" : "$_id" } } }
             """);
-        }
     }
 
     public override async Task Min_no_data_subquery(bool async)
@@ -303,20 +295,12 @@ public class NorthwindAggregateOperatorsQueryMongoTest
 
     public override async Task Max_no_data_cast_to_nullable(bool async)
     {
-        // Fails: Max over empty nullables issue EF-227
-        await AssertTranslationFailed(() => base.Max_no_data_cast_to_nullable(async));
+        await base.Max_no_data_cast_to_nullable(async);
 
-        if (MongoSpecTestHelpers.IsNativeOnly)
-        {
-            AssertMql();
-        }
-        else
-        {
-            AssertMql(
-    """
-            Orders.{ "$match" : { "_id" : -1 } }, { "$group" : { "_id" : null, "_max" : { "$max" : { "_v" : "$_id" } } } }, { "$replaceRoot" : { "newRoot" : "$_max" } }
+        AssertMql(
+            """
+            Orders.{ "$match" : { "_id" : -1 } }, { "$group" : { "_id" : null, "v" : { "$max" : "$_id" } } }
             """);
-        }
     }
 
     public override async Task Max_no_data_subquery(bool async)

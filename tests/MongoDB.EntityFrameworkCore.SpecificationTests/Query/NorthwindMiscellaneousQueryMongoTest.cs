@@ -3895,8 +3895,8 @@ OrderDetails.{ "$match" : { "$and" : [{ "$expr" : { "$eq" : [{ "$add" : [{ "$toI
 
         AssertMql(
             """
-            OrderDetails.{ "$group" : { "_id" : null, "_max" : { "$max" : { "_v" : "$Quantity" } } } }, { "$replaceRoot" : { "newRoot" : "$_max" } }
-            """);
+OrderDetails.{ "$group" : { "_id" : null, "v" : { "$max" : "$Quantity" } } }
+""");
     }
 
     public override async Task Entity_equality_with_null_coalesce_client_side(bool async)
