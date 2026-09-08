@@ -404,7 +404,7 @@ internal sealed class MongoSelectLowerer
             }
             else if (lookup.IsNativeCollectionLookup
                      || (lookup.Navigation is { IsCollection: true } pipelinedNav
-                         && lookup.PipelineKind == LookupPipelineKind.NestedInclude
+                         && lookup.PipelineKind is LookupPipelineKind.NestedInclude or LookupPipelineKind.FilteredInclude
                          && !lookup.ForceUnwind
                          && lookup.As == LookupExpression.GetLookupAlias(pipelinedNav))
                      || lookup.IsTransitiveCollectionLookup)
@@ -414,18 +414,19 @@ internal sealed class MongoSelectLowerer
                 // IncludeCollection fixup, exactly as on the driver-LINQ path.
                 //
                 // The second disjunct widens this beyond IsNativeCollectionLookup's plain (no-pipeline)
-                // form to also admit a collection-then-collection/reference ThenInclude (EF-450): its
-                // nested $lookup(s) are staged into PipelineStages by
-                // MongoProjectionBindingExpressionVisitor's ExtractNestedIncludePipeline/
-                // ExtractThenIncludesFromSubquery/AddReferenceLookupStages — the SAME registration path the
-                // driver-LINQ fallback bridge already used — which also stamp PipelineKind.NestedInclude
+                // form to also admit a collection-then-collection/reference ThenInclude (EF-450) AND a
+                // filtered Include (OrderBy/Skip/Take on the Include target, EF-322/EF-440): their
+                // sub-pipelines are staged into PipelineStages by MongoProjectionBindingExpressionVisitor's
+                // ExtractNestedIncludePipeline/ExtractThenIncludesFromSubquery/AddReferenceLookupStages/
+                // ExtractFilteredIncludePipeline — the SAME registration path the driver-LINQ fallback
+                // bridge already used — which stamp PipelineKind.NestedInclude/FilteredInclude respectively
                 // (guarded: never overwriting an already-FallbackOnly kind, e.g. a TPH discriminator-narrowed
-                // target or a sibling filtered-Include stage — both stay fallback-only, unaffected).
-                // MongoLookupStage/RenderLookup render this via LookupExpression.ToLookupStageDocument()'s
-                // let+pipeline form, the SAME shape the fallback bridge already emitted for this kind — this
-                // check is keyed on PipelineKind rather than bare HasPipeline specifically so it does NOT
-                // also swallow a PipelineKind.CorrelatedReducer lookup (EF-449, also a collection nav): that
-                // kind needs its own dedicated branch below (a mandatory left-outer $unwind + a DIFFERENT
+                // target, which stays fallback-only, unaffected). MongoLookupStage/RenderLookup render this
+                // via LookupExpression.ToLookupStageDocument()'s let+pipeline form, the SAME shape the
+                // fallback bridge already emitted for this kind — this check is keyed on PipelineKind rather
+                // than bare HasPipeline specifically so it does NOT also swallow a
+                // PipelineKind.CorrelatedReducer lookup (EF-449, also a collection nav): that kind needs its
+                // own dedicated branch below (a mandatory left-outer $unwind + a DIFFERENT
                 // localField/foreignField+pipeline BSON shape), and would otherwise be silently
                 // mis-rendered here with no $unwind at all.
                 //
