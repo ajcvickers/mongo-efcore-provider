@@ -271,6 +271,46 @@ internal static class NativeJoinScopeProjectionBinder
                 continue;
             }
 
+            // A NESTED wrapped leaf (`CustomerId = new { Id = o.Customer!.CustomerID }`) — one level of
+            // nesting only (native-join-scope-nested-projection ticket). Declines the WHOLE outer leaf (not
+            // just this member) on any inner shape this doesn't recognize, exactly as
+            // NativeProjectionBinder.TryGetDocumentConstructionLeaf does for its own plain-root nested
+            // leaves — this is a SEPARATE recognizer building the same MongoDocumentConstructionExpression
+            // node, not a relaxation of that one's dotted-field decline.
+            if (scope.Levels.Count == 1
+                && leafBody.TryGetProjectionMembers(out var nestedMembers))
+            {
+                var translatedNestedMembers = new List<(string, MongoExpression)>();
+                var seenNestedMembers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var declined = false;
+
+                foreach (var (nestedMemberName, nestedValue) in nestedMembers)
+                {
+                    if (!NativeJoinScopeTranslator.TryTranslateValue(scope, rootParam, nestedValue, out var nestedLeaf)
+                        || !seenNestedMembers.Add(nestedMemberName))
+                    {
+                        declined = true;
+                        break;
+                    }
+
+                    translatedNestedMembers.Add((nestedMemberName, nestedLeaf));
+                }
+
+                if (declined)
+                {
+                    return false;
+                }
+
+                if (!seenAliases.Add(alias))
+                {
+                    return false;
+                }
+
+                staged.Add(new MongoProjection(
+                    alias, new MongoDocumentConstructionExpression(leafBody, translatedNestedMembers)));
+                continue;
+            }
+
             // ORDINARY (scalar/computed) leaf. Only attempted for a DEPTH-1 scope, unchanged from before this
             // task — NativeJoinScopeTranslator.TryTranslateValue's own flat-shape check (TryTranslateCore) only
             // ever resolves against scope.Levels[0], and its documented RESIDUAL GAP is precisely that a
