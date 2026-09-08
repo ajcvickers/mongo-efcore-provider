@@ -24,6 +24,7 @@ using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 using MongoDB.EntityFrameworkCore.Infrastructure;
+using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 
@@ -107,6 +108,23 @@ public class NativeJoinScopeNestedProjectionTests(TemporaryDatabaseFixture datab
         }
 
         using var db = new JoinScopeDbContext(database, ordersName, customersName, mode);
+
+#if EF8 || EF9
+        // The feature under test (native translation of a nested anonymous-projection member sourced from a
+        // reference-Include join scope) is EF10-scoped only — see the design doc referenced in the class
+        // remarks. On EF8/EF9, MongoQueryMode.NativeOnly correctly forbids the driver-LINQ fallback this shape
+        // still needs, so it must throw rather than execute; MongoQueryMode.Native (which allows the fallback)
+        // is unaffected and is exercised below like on EF10.
+        if (mode == MongoQueryMode.NativeOnly)
+        {
+            Assert.Throws<NativeTranslationNotSupportedException>(() =>
+                db.Set<Order>().Include(o => o.Customer)
+                    .OrderBy(o => o.OrderNo)
+                    .Select(Selector)
+                    .ToList());
+            return;
+        }
+#endif
 
         var actual = db.Set<Order>().Include(o => o.Customer)
             .OrderBy(o => o.OrderNo)
