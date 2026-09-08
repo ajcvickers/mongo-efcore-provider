@@ -532,11 +532,28 @@ internal static class NativeSlotPopulator
         if (!MongoAggregationExpressionRenderer.CanRender(translated))
             return false;
 
-        if (!TryProbeBareValueRenders(translated, keySelectorBody.Type))
+        if (!TryProbeBareValueRenders(translated, UnwrapBoxingToObjectType(keySelectorBody)))
             return false;
 
         result = translated;
         return true;
+    }
+
+    /// <summary>
+    /// Strips top-level boxing-to-<see cref="object"/> <c>Convert</c> layers (e.g. <c>(object)i</c> over a
+    /// captured <c>int</c>) to recover the actual declared type of a bare value/parameter sort key, matching
+    /// what <c>MongoExpressionTranslator.TranslateOperand</c> itself unwraps unconditionally. Without this, a
+    /// boxed key's <c>Type</c> stays <see cref="object"/> and <see cref="TryProbeBareValueRenders"/> would
+    /// reject a <see cref="MongoParameterExpression"/> under its reference-type allowlist even though the
+    /// value underneath boxes cleanly.
+    /// </summary>
+    private static Type UnwrapBoxingToObjectType(Expression e)
+    {
+        while (e is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Type: var t } u
+               && t == typeof(object))
+            e = u.Operand;
+
+        return e.Type;
     }
 
     /// <summary>
