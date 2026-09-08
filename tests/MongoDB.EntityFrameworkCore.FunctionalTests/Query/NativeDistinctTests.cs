@@ -271,19 +271,27 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
-    public void Distinct_then_Count_falls_back_and_matches_driver_linq()
+    public void Distinct_then_Count_goes_native()
     {
-        // A scalar aggregate (Count) applied AFTER a projected Distinct must fall back cleanly: the Distinct
-        // bound the degenerate $group (Route=GroupBy), and setting Cardinality on it would flip Route to
-        // ScalarAggregate while the lowerer still emits [$group, $project] with no terminal $count — the same
-        // crash the GroupBy post-group guard prevents. The IsDistinct guard in NativeCardinalityBinder forces
-        // a clean driver-LINQ fallback so Native == DriverLinq (3 distinct countries: US, UK, FR).
+        // EF-322: a bare Count() applied AFTER a projected Distinct now goes native too — the terminal $count
+        // stage is emitted right after the $group + flattening $project (and after any PostGroupOps already
+        // recorded) instead of being dropped. Succeeding under NativeOnly is the "went native" signal (3
+        // distinct countries: US, UK, FR).
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Count_goes_native));
+
+        Assert.Equal(3, db.Entities.Select(o => new { o.Country }).Distinct().Count());
+    }
+
+    [Fact]
+    public void Distinct_then_Count_matches_driver_linq()
+    {
         var seed = SeedOrders();
 
         using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
-            nameof(Distinct_then_Count_falls_back_and_matches_driver_linq) + "N");
+            nameof(Distinct_then_Count_matches_driver_linq) + "N");
         using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
-            nameof(Distinct_then_Count_falls_back_and_matches_driver_linq) + "D");
+            nameof(Distinct_then_Count_matches_driver_linq) + "D");
 
         int Run(SingleEntityDbContext<Order> db) =>
             db.Entities.Select(o => new { o.Country }).Distinct().Count();
@@ -294,13 +302,136 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
-    public void Distinct_then_Count_throws_under_native_only()
+    public void Distinct_then_Count_with_predicate_goes_native()
+    {
+        // EF-322: Count(pred) composed directly after a projected Distinct resolves its predicate against the
+        // Distinct's own flattened output alias (the SAME MongoExpressionTranslator.DistinctAliasScope
+        // mechanism Where uses) — succeeding under NativeOnly is the "went native" signal.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Count_with_predicate_goes_native));
+
+        Assert.Equal(2, db.Entities.Select(o => new { o.Country }).Distinct().Count(r => r.Country != "FR"));
+    }
+
+    [Fact]
+    public void Distinct_then_Count_with_predicate_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Count_with_predicate_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Count_with_predicate_matches_driver_linq) + "D");
+
+        int Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { o.Country }).Distinct().Count(r => r.Country != "FR");
+
+        var native = Run(nativeDb);
+        Assert.Equal(2, native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Distinct_then_Count_with_predicate_on_renamed_member_counts_the_projected_source_not_the_colliding_entity_property()
+    {
+        // Select(o => new { Country = o.City }) deliberately reuses the entity's real "Country" property name
+        // for a DIFFERENT source field (City). If Count(x => x.Country != "NYC") resolved by name against the
+        // root entity, it would silently count against the entity's real Country field instead of City.
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Count_with_predicate_on_renamed_member_counts_the_projected_source_not_the_colliding_entity_property) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Count_with_predicate_on_renamed_member_counts_the_projected_source_not_the_colliding_entity_property) + "D");
+
+        int Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { Country = o.City }).Distinct().Count(r => r.Country != "NYC");
+
+        var native = Run(nativeDb);
+        Assert.Equal(2, native); // London, Paris — NOT filtered against the real (always non-"NYC") Country field
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Distinct_then_Any_with_predicate_goes_native()
     {
         using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(Distinct_then_Count_throws_under_native_only));
+            nameof(Distinct_then_Any_with_predicate_goes_native));
+
+        Assert.True(db.Entities.Select(o => new { o.Country }).Distinct().Any(r => r.Country == "FR"));
+        Assert.False(db.Entities.Select(o => new { o.Country }).Distinct().Any(r => r.Country == "DE"));
+    }
+
+    [Fact]
+    public void Distinct_then_All_with_predicate_goes_native()
+    {
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_All_with_predicate_goes_native));
+
+        Assert.False(db.Entities.Select(o => new { o.Country }).Distinct().All(r => r.Country == "FR"));
+        Assert.True(db.Entities.Select(o => new { o.Country }).Distinct().All(r => r.Country != "XX"));
+    }
+
+    [Fact]
+    public void Distinct_then_Any_All_match_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Any_All_match_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Any_All_match_driver_linq) + "D");
+
+        (bool Any, bool All) Run(SingleEntityDbContext<Order> db) =>
+            (db.Entities.Select(o => new { o.Country }).Distinct().Any(r => r.Country == "FR"),
+             db.Entities.Select(o => new { o.Country }).Distinct().All(r => r.Country != "XX"));
+
+        var native = Run(nativeDb);
+        Assert.Equal((true, true), native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Distinct_then_Count_with_unrelated_computed_predicate_falls_back_under_native_only()
+    {
+        // A computed predicate member (not one of the Distinct's own key part aliases) must still decline
+        // rather than silently resolving against the entity.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Count_with_unrelated_computed_predicate_falls_back_under_native_only));
 
         Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Entities.Select(o => new { o.Country }).Distinct().Count());
+            db.Entities.Select(o => new { o.Country }).Distinct().Count(r => r.Country.Length == 2));
+    }
+
+    [Fact]
+    public void Distinct_then_Where_then_Count_goes_native()
+    {
+        // A Where composed before a bare Count() both land natively after the $group: the Where's $match into
+        // PostGroupOps (EF-322, previous commit), the Count's terminal $count stage after it (this commit's
+        // lowerer fix — PostGroupOps must still be emitted even when a trailing aggregate also sets
+        // Cardinality, or the Where's $match would be silently dropped).
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_Where_then_Count_goes_native));
+
+        Assert.Equal(1, db.Entities.Select(o => new { o.Country }).Distinct().Where(r => r.Country == "FR").Count());
+    }
+
+    [Fact]
+    public void Distinct_then_Where_then_Count_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Where_then_Count_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Where_then_Count_matches_driver_linq) + "D");
+
+        int Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { o.Country }).Distinct().Where(r => r.Country != "FR").Count();
+
+        var native = Run(nativeDb);
+        Assert.Equal(2, native);
+        Assert.Equal(Run(driverDb), native);
     }
 
     [Theory]

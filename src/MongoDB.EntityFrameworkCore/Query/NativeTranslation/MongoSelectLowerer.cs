@@ -237,12 +237,18 @@ internal sealed class MongoSelectLowerer
                 stages.Add(new MongoProjectStage(select.Projection));
             }
 
+            // EF-322: a Where/OrderBy/ThenBy/Skip/Take composed after a projected Distinct (never a genuine
+            // GroupBy — NativeSlotPopulator's carve-out only routes here for IsDistinct) lands past the
+            // flatten $project, filtering/sorting/paging the Distinct's OWN output rather than the pre-group
+            // documents. Emitted UNCONDITIONALLY (not only in the no-aggregate branch below): a trailing
+            // Count/LongCount/Any/All composed after those ops (NativeCardinalityBinder's own EF-322
+            // carve-out) ALSO finalizes Cardinality and falls through past this block to the aggregate-
+            // terminal switch further down — PostGroupOps must still land before that terminal stage, or a
+            // preceding Where's $match would be silently dropped.
+            AppendSelectOpStages(select.PostGroupOps, stages, sortFields);
+
             if (select.Cardinality?.Aggregate is null)
             {
-                // EF-322: an OrderBy/ThenBy composed after a projected Distinct (never a genuine GroupBy —
-                // NativeSlotPopulator's carve-out only routes here for IsDistinct) lands past the flatten
-                // $project, sorting the Distinct's OWN output rather than the pre-group documents.
-                AppendSelectOpStages(select.PostGroupOps, stages, sortFields);
                 return stages;
             }
         }
