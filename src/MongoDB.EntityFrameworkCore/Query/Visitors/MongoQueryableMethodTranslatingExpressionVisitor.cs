@@ -698,7 +698,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // the previous inline version returned null part-way through the MemberInit loop for a non-assignment
         // binding, by which point it had already registered projections for the earlier members — a
         // mutate-then-decline that left the query expression half-populated.
-        if (!selector.Body.TryGetProjectionMembers(out var members))
+        if (!selector.Body.TryGetProjectionMembers(out var members, allowPositionalConstructorArguments: true))
             return null;
 
         var boundValues = new Expression[members.Count];
