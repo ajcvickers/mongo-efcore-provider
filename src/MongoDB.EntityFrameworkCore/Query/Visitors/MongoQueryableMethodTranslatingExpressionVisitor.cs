@@ -3059,13 +3059,18 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // Registering the ALREADY-TRANSLATED MongoDocumentConstructionExpression instead (not the raw
         // valueExpression) is what makes the downstream MongoDocumentConstructionExpression case fire and read
         // each member back via its own dotted alias.memberName path.
-        foreach (var projection in mongoQueryExpression.Select.Projection)
+        //
+        // The lookup goes through MongoSelectDefinition.TryGetDocumentConstructionProjection — the SAME method
+        // MongoProjectionBindingExpressionVisitor.TryGetNativeDocumentConstructionLeaf uses for the plain-root
+        // EF-447 leaf — rather than a local alias scan. Final-review Finding 3: the two used to be near-
+        // identical scans with different admission rules (this one omitted the Route == Projection check, the
+        // CLR-type check and the alias-override mapping), which is exactly how a looser lookup ends up matching
+        // a staged node the stricter one refused and reading it back under a member it does not describe.
+        if (mongoQueryExpression.Select.TryGetDocumentConstructionProjection(
+                alias, valueExpression.Type, out var construction))
         {
-            if (projection.Alias == alias && projection.Expression is MongoDocumentConstructionExpression construction)
-            {
-                var constructionIndex = mongoQueryExpression.AddToProjection(construction, alias);
-                return new ProjectionBindingExpression(mongoQueryExpression, constructionIndex, valueExpression.Type);
-            }
+            var constructionIndex = mongoQueryExpression.AddToProjection(construction, alias);
+            return new ProjectionBindingExpression(mongoQueryExpression, constructionIndex, valueExpression.Type);
         }
 
         return BindSelectManyMember(mongoQueryExpression, alias, valueExpression);
