@@ -585,23 +585,41 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
-    public void Distinct_then_GroupBy_falls_back_and_matches_driver_linq()
+    public void Distinct_then_GroupBy_goes_native_and_dedups()
     {
-        // A GroupBy applied AFTER a projected Distinct must fall back cleanly. GroupBy has its own Translate
-        // override that bypasses the post-group slot/cardinality IsDistinct guards, so without the dedicated
-        // guard in TranslateGroupBy it OVERWRITES the Distinct's grouping with its own group-by-key, silently
-        // DROPPING the Distinct — emitting $group{_id:$Country, c:$sum:1} that counts ALL rows, not distinct
-        // rows. The seed has DUPLICATE (Country, Year) rows so Distinct is NOT a no-op: distinct
-        // {Country,Year} = {US2020, US2021, UK2020, FR2021}, so grouping by Country and counting yields
-        // US=2, UK=1, FR=1. If the Distinct were dropped, the raw 6 rows would give US=3, UK=2, FR=1 — wrong.
-        // This test is load-bearing: it would return the WRONG (dropped-distinct) counts under Native before
-        // the guard. With the guard the query falls back to driver-LINQ and Native == DriverLinq.
+        // EF-322: GroupBy(key).Select(aggregate) composed AFTER a projected Distinct now goes native too — a
+        // SECOND $group (+ flattening $project) is emitted after the Distinct's own $group/$project rather
+        // than overwriting it, so the Distinct's dedup still applies before the GroupBy's own aggregation.
+        // The seed has DUPLICATE (Country, Year) rows so Distinct is NOT a no-op: distinct {Country,Year} =
+        // {US2020, US2021, UK2020, FR2021}, so grouping by Country and counting yields US=2, UK=1, FR=1. If
+        // the Distinct were dropped/overwritten (the historical wrong-data hazard this feature guards
+        // against), the raw 6 rows would give US=3, UK=2, FR=1 instead — this test is load-bearing proof that
+        // does NOT happen. Succeeding under NativeOnly is the "went native" signal.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_GroupBy_goes_native_and_dedups));
+
+        var result = db.Entities
+            .Select(o => new { o.Country, o.Year })
+            .Distinct()
+            .GroupBy(x => x.Country)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .AsEnumerable()
+            .OrderBy(r => r.Key)
+            .Select(r => (r.Key, r.Count))
+            .ToArray();
+
+        Assert.Equal([("FR", 1), ("UK", 1), ("US", 2)], result); // distinct-then-group counts (NOT US=3, UK=2)
+    }
+
+    [Fact]
+    public void Distinct_then_GroupBy_matches_driver_linq()
+    {
         var seed = SeedOrders();
 
         using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
-            nameof(Distinct_then_GroupBy_falls_back_and_matches_driver_linq) + "N");
+            nameof(Distinct_then_GroupBy_matches_driver_linq) + "N");
         using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
-            nameof(Distinct_then_GroupBy_falls_back_and_matches_driver_linq) + "D");
+            nameof(Distinct_then_GroupBy_matches_driver_linq) + "D");
 
         (string Country, int Count)[] Run(SingleEntityDbContext<Order> db) =>
             db.Entities
@@ -615,21 +633,103 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
                 .ToArray();
 
         var native = Run(nativeDb);
-        Assert.Equal([("FR", 1), ("UK", 1), ("US", 2)], native); // distinct-then-group counts (NOT US=3, UK=2)
+        Assert.Equal([("FR", 1), ("UK", 1), ("US", 2)], native);
         Assert.Equal(Run(driverDb), native);
     }
 
     [Fact]
-    public void Distinct_then_GroupBy_throws_under_native_only()
+    public void Distinct_then_Where_then_GroupBy_goes_native()
     {
+        // Proves composition with an already-native post-Distinct Where: the Where's $match lands in
+        // PostGroupOps (previous commit) BETWEEN the Distinct's $group and the GroupBy's own $group — not
+        // after it, since nothing can route into PostGroupOps once IsGroupBy flips true.
         using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(Distinct_then_GroupBy_throws_under_native_only));
+            nameof(Distinct_then_Where_then_GroupBy_goes_native));
+
+        var result = db.Entities
+            .Select(o => new { o.Country, o.Year })
+            .Distinct()
+            .Where(r => r.Country != "FR")
+            .GroupBy(x => x.Country)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .AsEnumerable()
+            .OrderBy(r => r.Key)
+            .Select(r => (r.Key, r.Count))
+            .ToArray();
+
+        Assert.Equal([("UK", 1), ("US", 2)], result);
+    }
+
+    [Fact]
+    public void Distinct_then_Where_then_GroupBy_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_Where_then_GroupBy_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_Where_then_GroupBy_matches_driver_linq) + "D");
+
+        (string Country, int Count)[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities
+                .Select(o => new { o.Country, o.Year })
+                .Distinct()
+                .Where(r => r.Country != "FR")
+                .GroupBy(x => x.Country)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .AsEnumerable()
+                .OrderBy(r => r.Key)
+                .Select(r => (r.Key, r.Count))
+                .ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal([("UK", 1), ("US", 2)], native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Distinct_then_GroupBy_on_renamed_member_groups_by_the_projected_source_not_the_colliding_entity_property()
+    {
+        // Select(o => new { Country = o.City }) deliberately reuses the entity's real "Country" property name
+        // for a DIFFERENT source field (City). If GroupBy(x => x.Country) resolved by name against the root
+        // entity, it would silently group by the entity's real Country field instead of City.
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Distinct_then_GroupBy_on_renamed_member_groups_by_the_projected_source_not_the_colliding_entity_property) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Distinct_then_GroupBy_on_renamed_member_groups_by_the_projected_source_not_the_colliding_entity_property) + "D");
+
+        (string City, int Count)[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities
+                .Select(o => new { Country = o.City, o.Year })
+                .Distinct()
+                .GroupBy(x => x.Country)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .AsEnumerable()
+                .OrderBy(r => r.Key)
+                .Select(r => (r.Key, r.Count))
+                .ToArray();
+
+        var native = Run(nativeDb);
+        // Grouped by City (NYC/London/Paris), never by the real (always US/UK/FR) Country field.
+        Assert.Equal([("London", 1), ("NYC", 2), ("Paris", 1)], native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
+    public void Distinct_then_GroupBy_with_computed_key_still_falls_back_under_native_only()
+    {
+        // A computed group-by key member (not one of the Distinct's own key part aliases) must still decline
+        // rather than silently resolving against the entity.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Distinct_then_GroupBy_with_computed_key_still_falls_back_under_native_only));
 
         Assert.Throws<NativeTranslationNotSupportedException>(() =>
             db.Entities
                 .Select(o => new { o.Country, o.Year })
                 .Distinct()
-                .GroupBy(x => x.Country)
+                .GroupBy(x => x.Country + x.Year)
                 .Select(g => new { g.Key, Count = g.Count() })
                 .ToList());
     }
