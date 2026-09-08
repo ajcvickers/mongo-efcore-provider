@@ -111,17 +111,19 @@ internal static class ExpressionExtensionMethods
     /// </summary>
     /// <param name="allowPositionalConstructorArguments">
     /// When <see langword="true"/>, additionally admits a <see cref="NewExpression"/> whose
-    /// <see cref="NewExpression.Members"/> is <see langword="null"/> (a constructor-only DTO — the compiler
-    /// only populates <c>Members</c> when every constructor parameter maps 1:1 by name to a same-named
-    /// property, which a DTO computing its own properties in its body does not do), yielding synthetic
-    /// positional pseudo-names (<see cref="PositionalConstructorArgumentAliasPrefix"/> + index) instead of
-    /// real member names. Defaults to <see langword="false"/> — every pre-existing call site keeps its exact
-    /// prior behavior unless it opts in. ONLY the <c>GroupBy</c>/<c>SelectMany</c> result-selector family
-    /// (which addresses each bound value by array index, not by EF Core's <c>ProjectionMember</c>/
-    /// <c>MemberInfo</c>-keyed dictionary) may pass <see langword="true"/> — see Query's own
-    /// <c>NativeProjectionBinder</c>/<c>NativeJoinScopeProjectionBinder</c>, which must NOT, because their read
-    /// side resolves a wrapped member's alias through that dictionary, keyed by a REAL <c>MemberInfo</c>; a
-    /// synthetic name registered there is never found by that read.
+    /// <see cref="NewExpression.Members"/> is <see langword="null"/> (a constructor-only DTO). The compiler only
+    /// populates <c>Members</c> for an anonymous-type object-creation expression (and similarly
+    /// compiler-synthesized positional constructs); for <c>new SomeNamedClass(args)</c> it is ALWAYS
+    /// <see langword="null"/>, regardless of whether the constructor's parameters happen to map 1:1 by name to
+    /// same-named properties. This admits that ordinary-named-type shape, yielding synthetic positional
+    /// pseudo-names (<see cref="PositionalConstructorArgumentAliasPrefix"/> + index) instead of real member
+    /// names. Defaults to <see langword="false"/> — every pre-existing call site keeps its exact prior behavior
+    /// unless it opts in. ONLY the <c>GroupBy</c>/<c>SelectMany</c> result-selector family (which addresses each
+    /// bound value by array index, not by EF Core's <c>ProjectionMember</c>/<c>MemberInfo</c>-keyed dictionary)
+    /// may pass <see langword="true"/> — see Query's own <c>NativeProjectionBinder</c>/
+    /// <c>NativeJoinScopeProjectionBinder</c>, which must NOT, because their read side resolves a wrapped
+    /// member's alias through that dictionary, keyed by a REAL <c>MemberInfo</c>; a synthetic name registered
+    /// there is never found by that read.
     /// </param>
     /// <returns>
     /// <see langword="false"/> — leaving <paramref name="members"/> empty — for a body that is not a wrapped
@@ -162,8 +164,9 @@ internal static class ExpressionExtensionMethods
                 return true;
             }
 
-            // A CTOR-ONLY DTO — Members is null because no constructor parameter maps 1:1 to a same-named
-            // property (the compiler only synthesizes Members for that exact match). Admitted only when the
+            // A CTOR-ONLY DTO — Members is null because this is an ordinary named-type object creation, and the
+            // compiler only populates Members for an anonymous-type (or similarly compiler-synthesized
+            // positional) construction; it is null here regardless of parameter naming. Admitted only when the
             // caller opts in; see the allowPositionalConstructorArguments parameter doc for who may.
             case NewExpression
             {

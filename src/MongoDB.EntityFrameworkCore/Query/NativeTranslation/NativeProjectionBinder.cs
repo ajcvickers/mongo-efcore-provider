@@ -154,9 +154,11 @@ internal static class NativeProjectionBinder
 
             // A CTOR-ONLY DTO — `x => new CustomerDtoWithEntityInCtor(x)` — as opposed to the WRAPPED case
             // above (which requires TryGetProjectionMembers to succeed, i.e. NewExpression.Members non-null).
-            // Members is null here because the compiler only synthesizes it when every constructor parameter
-            // maps 1:1 by name to a same-named property, which a DTO computing its own properties in its body
-            // does not do. Capped at exactly one constructor argument — see this ticket's design doc for why:
+            // Members is null here because this is an ordinary named-type object creation, and the compiler only
+            // populates Members for an anonymous-type (or similarly compiler-synthesized positional)
+            // construction — it is null regardless of whether the constructor's parameters happen to map 1:1 by
+            // name to same-named properties. Capped at exactly one constructor argument — see this ticket's
+            // design doc for why:
             // the read side (MongoProjectionBindingExpressionVisitor.VisitNew) resolves a Members-null body's
             // arguments through EF Core's ProjectionMember/MemberInfo-keyed dictionary with no Enter/Exit at
             // all, so a SECOND unnamed argument would collide under the same ambient key with no safe way to
@@ -182,8 +184,7 @@ internal static class NativeProjectionBinder
                 // read machinery, MongoProjectionBindingRemovingExpressionVisitor's IsWholeRootEntityAlias, is
                 // reachable only via the WRAPPED path). Confirmed empirically against the live code during
                 // this ticket's design — do not remove this branch or reorder it after sub-case 2.
-                if (IsSelectorParameter(ctorArgument, selector.Parameters[0])
-                    && ctorArgument.Type == mongoQ.CollectionExpression.EntityType.ClrType)
+                if (IsWholeRootEntityLeaf(mongoQ, ctorArgument, selector.Parameters[0]))
                 {
                     break;
                 }
@@ -640,8 +641,7 @@ internal static class NativeProjectionBinder
         // selector bodies only (allowWholeRootEntityLeaf), never the bare-body arm — a bare
         // `c => c` must keep taking the pre-existing WholeEntity route, not this one.
         if (allowWholeRootEntityLeaf
-            && IsSelectorParameter(leafExpression, outerParameter)
-            && leafExpression.Type == mongoQ.CollectionExpression.EntityType.ClrType)
+            && IsWholeRootEntityLeaf(mongoQ, leafExpression, outerParameter))
         {
             result = new MongoElementRefExpression(
                 MongoElementRefExpression.WholeRootDocumentPath, mongoQ.CollectionExpression.EntityType.ClrType);
@@ -967,6 +967,23 @@ internal static class NativeProjectionBinder
 
         return ReferenceEquals(current, outerParameter);
     }
+
+    /// <summary>
+    /// True when <paramref name="leafExpression"/> IS the selector's own root parameter (possibly wrapped in EF
+    /// auto-include layers, per <see cref="IsSelectorParameter"/>) typed as the query's own root entity CLR type
+    /// — i.e. "the whole entity, unchanged", with no server-side reshaping needed. Shared by two call sites that
+    /// must stay byte-identical: the ctor-only-DTO switch arm's sub-case 1 in
+    /// <see cref="TryPopulateNativeProjection"/> (which takes the pre-existing <c>NativeRoute.WholeEntity</c>
+    /// route for this shape rather than reaching this method) and this file's own whole-root-entity-leaf arm in
+    /// <see cref="TryTranslateLeaf"/> (which instead renders it as a <c>$$ROOT</c>
+    /// <see cref="MongoElementRefExpression"/>). The identity between the two conditions is exactly what makes
+    /// the <c>$ROOT</c>-as-<c>$project</c>-alias hazard documented at sub-case 1 unreachable from the
+    /// <see cref="TryTranslateLeaf"/> leg — extracting one predicate keeps that true even if either call site is
+    /// edited later.
+    /// </summary>
+    private static bool IsWholeRootEntityLeaf(MongoQueryExpression mongoQ, Expression leafExpression, ParameterExpression outerParameter)
+        => IsSelectorParameter(leafExpression, outerParameter)
+           && leafExpression.Type == mongoQ.CollectionExpression.EntityType.ClrType;
 
     /// <summary>
     /// The open generic definition of <c>Mql.Field&lt;TDocument, TField&gt;(TDocument, string, IBsonSerializer&lt;TField&gt;)</c>.

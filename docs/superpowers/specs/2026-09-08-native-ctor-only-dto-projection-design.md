@@ -93,8 +93,7 @@ entity," declines, and the whole query is marked `Select.Route = Fallback`.
   - the selector's own root parameter (the whole entity) — e.g. `new
     CustomerDtoWithEntityInCtor(x)`;
   - any other leaf `TryTranslateLeaf` already recognizes with `allowWholeRootEntityLeaf:
-    true` — a scalar/computed leaf (e.g. `new IdWrapper(x.CustomerID)`), an owned
-    single-reference navigation entity (e.g. `new AddressDto(x.Address)`), etc.
+    true` — a scalar/computed leaf (e.g. `new IdWrapper(x.CustomerID)`), etc.
 - **`GroupBy`/`SelectMany` result-selector projection** — a result-selector body that is a
   `NewExpression` with `Members == null` and **any number ≥ 1** of constructor arguments,
   each independently a shape `BindGroupMember`/`BindResultMember` already knows how to
@@ -122,6 +121,18 @@ supports full arity.
   Outer(new Inner(x))`) inside either family — no test drives it; the recognizers below
   should decline (not crash) rather than silently mishandle it, but building explicit
   support is separate work.
+- Owned single-reference nav-entity ctor-wrap in ordinary `Select`/`Join` (e.g. `new
+  AddressDto(x.Address)`). Originally scoped in-scope (above), this was descoped during
+  implementation: admitting it through sub-case 2's `TryBindAsBareProjection` path would
+  need to reuse `TryTranslateLeaf`'s owned-nav-entity-leaf arm, which is gated by an
+  `alias == ownedNavElementName` conjunct — but sub-case 2 hands that leaf a placeholder
+  alias, which never satisfies that gate. Reworking the shared gate to also admit a
+  ctor-wrap alias would risk the already-shipped EF-441 WRAPPED-path feature that gate
+  also serves, and deserves its own design review rather than folding into this ticket.
+  See the ledger at `.superpowers/sdd/2026-09-08-native-ctor-only-dto-projection/progress.md`
+  (Task 5 entries) for the full rationale. The shape falls through to `Route == Fallback`
+  exactly as it did before this ticket — throws under `NativeOnly`, falls back correctly
+  under the default `Native` mode. A follow-up ticket's work, not this one's.
 
 ## Design
 
@@ -153,10 +164,11 @@ bare-body (`default`) arms — matching `NewExpression { Members: null, Argument
   `bareProjectionAlias`/`bareProjectionTier` mechanism the true bare-body arm uses. This
   is the same alias-override convention `VisitNew`'s ambient/root-member read already
   resolves correctly (finding 3) — no new read-side code. `allowWholeRootEntityLeaf: true`
-  additionally admits the owned single-reference nav-entity leaf here (it declines for a
-  *true* bare body today, deliberately — see the existing comment at
-  `NativeProjectionBinder.cs:216-218` — but this is a distinct, explicit ctor-wrap case,
-  not a change to true bare-body behavior).
+  is passed here so this leaf is evaluated under the same conjuncts the WRAPPED case uses;
+  in practice this does NOT admit the owned single-reference nav-entity leaf for this
+  ctor-wrap shape — see "Out of scope" above for why (a placeholder alias never satisfies
+  that leaf's `alias == ownedNavElementName` gate), so `new AddressDto(x.Address)` still
+  declines here exactly as a true bare body does.
   - If `TryTranslateLeaf` declines, or neither alias tier derives one: decline the whole
     projection (`return false`), same as today — falls back, no behavior change for
     unsupported shapes.
@@ -234,9 +246,10 @@ just a different string flowing through the same `AddToProjection(value, alias)`
 
 - New unit tests (`UnitTests/Query/NativeTranslation/`) for family A: whole-entity
   ctor-wrap → `NativeRoute.WholeEntity`, no `$project` stage; scalar-argument ctor-wrap →
-  bare-alias `$project` entry; owned single-reference nav-entity ctor-wrap; 2-argument
-  ctor-only DTO still declines; a ctor-only DTO alongside a prior `Select` in the chain
-  still declines (existing re-entrancy guard).
+  bare-alias `$project` entry; owned single-reference nav-entity ctor-wrap declines (proves
+  the descope above — throws under `NativeOnly`, falls back correctly under `Native`);
+  2-argument ctor-only DTO still declines; a ctor-only DTO alongside a prior `Select` in
+  the chain still declines (existing re-entrancy guard).
 - New unit tests for family B: `GroupBy` result-selector with a 2-argument ctor-only DTO
   (`(Key, Count)`-shaped); `SelectMany` result-selector with a ctor-only DTO; confirm
   `allowPositionalConstructorArguments: false` (the 3 family-A call sites) is unaffected

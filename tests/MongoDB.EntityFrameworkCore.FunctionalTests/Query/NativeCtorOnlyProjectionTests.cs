@@ -30,7 +30,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 public class NativeCtorOnlyProjectionTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
 {
     private static SingleEntityDbContext<T> CreateContext<T>(
-        IMongoCollection<T> collection, MongoQueryMode mode, System.Action<ModelBuilder>? modelBuilderAction = null)
+        IMongoCollection<T> collection, MongoQueryMode mode, Action<ModelBuilder>? modelBuilderAction = null)
         where T : class
         => SingleEntityDbContext.Create(
             collection,
@@ -101,6 +101,22 @@ public class NativeCtorOnlyProjectionTests(TemporaryDatabaseFixture database) : 
         Assert.Contains(results, r => r.Id == "ANATR");
     }
 
+    [Fact]
+    public void Select_with_whole_entity_ctor_only_dto_composed_with_take_goes_native()
+    {
+        var collection = SeedCustomers(nameof(Select_with_whole_entity_ctor_only_dto_composed_with_take_goes_native));
+        using var db = CreateContext(collection, MongoQueryMode.NativeOnly);
+
+        // Guards finding #1 of the post-review fix wave: VisitProjectedQuery's WholeEntity branch must stay
+        // self-limiting even when a terminal operator (here Take, a $limit stage) is composed after the
+        // ctor-wrap Select — success under NativeOnly proves the composed query still goes native rather than
+        // silently mis-shaping or crashing.
+        var results = db.Entities.Select(x => new CustomerDtoWithEntityInCtor(x)).Take(1).ToList();
+
+        var dto = Assert.Single(results);
+        Assert.True(dto.Id is "ALFKI" or "ANATR");
+    }
+
     // ════════════════════════════════════════════════════════════════════════════════════════════
     //  Sub-case 2a: scalar ctor argument
     // ════════════════════════════════════════════════════════════════════════════════════════════
@@ -146,7 +162,7 @@ public class NativeCtorOnlyProjectionTests(TemporaryDatabaseFixture database) : 
         public AddressDto(Address address) => City = address.City;
     }
 
-    private static readonly System.Action<ModelBuilder> BlogModel = mb => mb.Entity<Blog>().OwnsOne(b => b.Address);
+    private static readonly Action<ModelBuilder> BlogModel = mb => mb.Entity<Blog>().OwnsOne(b => b.Address);
 
     private IMongoCollection<Blog> SeedBlogWithAddress(string name)
     {

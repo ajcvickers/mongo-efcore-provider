@@ -13,8 +13,12 @@
  * limitations under the License.
  */
 
+using System.IO;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using MongoDB.EntityFrameworkCore;
 using Xunit;
 
@@ -119,4 +123,60 @@ public class ExpressionExtensionMethodsTests
         Assert.False(result);
         Assert.Empty(members);
     }
+
+    // The whole safety story for family A (ordinary Select/Join projections) depends on exactly 3 call sites
+    // NEVER passing allowPositionalConstructorArguments: true — see TryGetProjectionMembers' own parameter doc.
+    // Passing true there would let a wrapped member's alias be a synthetic positional pseudo-name
+    // ("_ctorArg0", ...) that EF Core's ProjectionMember/MemberInfo-keyed read side (which those 3 call sites
+    // alone rely on) can never resolve, silently breaking projection reads. This is currently enforced only by
+    // that doc comment, so pin it with a cheap source-text check: every call site outside the
+    // known family-B/opt-in set must not pass true.
+    [Fact]
+    public void Family_A_call_sites_never_opt_in_to_allowPositionalConstructorArguments()
+    {
+        var repoRoot = RepoRoot();
+
+        // The 3 family-A call sites this ticket's design doc calls out as load-bearing: NativeProjectionBinder's
+        // WRAPPED arm, its document-construction leaf, and NativeJoinScopeProjectionBinder.TryBindProjection.
+        // Listed with their expected call count so a call site silently added or removed doesn't go unnoticed.
+        var familyASources = new (string RelativePath, int ExpectedCallCount)[]
+        {
+            ("src/MongoDB.EntityFrameworkCore/Query/NativeTranslation/NativeProjectionBinder.cs", 2),
+            ("src/MongoDB.EntityFrameworkCore/Query/NativeTranslation/NativeJoinScopeProjectionBinder.cs", 1),
+        };
+
+        foreach (var (relativePath, expectedCallCount) in familyASources)
+        {
+            var fullPath = Path.Combine(repoRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Assert.True(File.Exists(fullPath), $"Expected source file not found: {fullPath}");
+
+            var callSiteLines = File.ReadLines(fullPath)
+                .Where(line => line.Contains("TryGetProjectionMembers(") && !line.Contains("static bool TryGetProjectionMembers"))
+                .ToList();
+
+            Assert.True(
+                callSiteLines.Count == expectedCallCount,
+                $"{relativePath}: expected {expectedCallCount} TryGetProjectionMembers(...) call site(s), found "
+                + $"{callSiteLines.Count}. If a call site was added/removed, update this test's expectations "
+                + "(and confirm the new/removed site does not opt in to allowPositionalConstructorArguments).");
+
+            foreach (var line in callSiteLines)
+            {
+                Assert.False(
+                    Regex.IsMatch(line, @"allowPositionalConstructorArguments\s*:\s*true"),
+                    $"{relativePath}: a family-A call site must NOT pass allowPositionalConstructorArguments: "
+                    + $"true (line: '{line.Trim()}'). Doing so lets a wrapped member resolve to a synthetic "
+                    + "positional alias that this call site's ProjectionMember/MemberInfo-keyed read cannot "
+                    + "find — see TryGetProjectionMembers' parameter doc for who may pass true.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Walks up from this test file's own on-disk path (captured via <see cref="CallerFilePathAttribute"/>, so
+    /// this works regardless of the test runner's working directory or build output layout) to the repo root —
+    /// three levels up from <c>tests/MongoDB.EntityFrameworkCore.UnitTests/Query/</c>.
+    /// </summary>
+    private static string RepoRoot([CallerFilePath] string thisFilePath = "")
+        => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(thisFilePath)!, "..", "..", ".."));
 }
