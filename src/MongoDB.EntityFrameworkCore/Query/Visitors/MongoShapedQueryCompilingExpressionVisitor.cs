@@ -327,6 +327,24 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             // not be lowered/rendered. Continue below to the ordinary driver-LINQ push-down aggregate path.
         }
 
+        // Native whole-entity ctor-wrap (native-ctor-only-dto-projection ticket): a single-argument DTO
+        // constructor wrapping the whole entity (`x => new SomeDto(x)`) is left on NativeRoute.WholeEntity with
+        // no $project by NativeProjectionBinder's ctor-only-DTO recognizer — the identical native pipeline a
+        // plain entity query uses. It reaches THIS method (rather than the entity path just above, at line
+        // ~234) only because the shaper's outer CLR type is the DTO, not a registered entity type, so
+        // projectedEntityType was null. allowStreaming: false, matching the Projection branch above — the
+        // shaper here is also a NewExpression wrapping the entity shaper, not a bare entity shaper, so the
+        // same conservative choice applies (this can be revisited separately if streaming eligibility for this
+        // specific shape is ever measured and found safe).
+        if (queryMode != MongoQueryMode.DriverLinq
+            && mongoQueryExpression.Select.Route == NativeRoute.WholeEntity)
+        {
+            return CompileShapedQuery(shapedQueryExpression, mongoQueryExpression, rootEntityType,
+                (bsonDoc, behavior) => new MongoProjectionBindingRemovingExpressionVisitor(
+                    rootEntityType, mongoQueryExpression, bsonDoc, behavior),
+                allowStreaming: false);
+        }
+
         // A projected query (anonymous/scalar projection, scalar aggregate, or a mixed projection containing
         // entity references) is never shaped from a full native document — it runs through the driver-LINQ
         // push-down path or the mixed client-side shaper. The native pipeline only covers full-entity results,
