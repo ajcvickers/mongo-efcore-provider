@@ -2946,7 +2946,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     {
         // NativeSelectManyBinder.TryBind already validated this shape through the SAME reader, so a decline
         // here is unreachable in practice — thrown rather than allowed to silently mis-shape the result.
-        if (!projectionBody.TryGetProjectionMembers(out var members))
+        if (!projectionBody.TryGetProjectionMembers(out var members, allowPositionalConstructorArguments: true))
         {
             throw new InvalidOperationException(
                 $"Unexpected SelectMany projection shape '{projectionBody.GetType().Name}' after successful native binding.");
@@ -2957,7 +2957,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // alignment the previous per-spelling code assumed when it indexed foldedNew.Arguments/foldedMemberInit
         // .Bindings directly.
         IReadOnlyList<(string MemberName, Expression Value)>? foldedMembers = null;
-        if (foldedBody is not null && foldedBody.TryGetProjectionMembers(out var readFolded))
+        if (foldedBody is not null && foldedBody.TryGetProjectionMembers(out var readFolded, allowPositionalConstructorArguments: true))
         {
             foldedMembers = readFolded;
         }
