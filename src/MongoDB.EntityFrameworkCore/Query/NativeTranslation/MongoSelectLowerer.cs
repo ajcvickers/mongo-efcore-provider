@@ -235,7 +235,10 @@ internal sealed class MongoSelectLowerer
 
         // 6b. Keyed $group terminal (GroupBy(key).Select(aggregate)). A GroupBy-route query has only
         // $match + $group by construction — the binder rejects orderings/paging alongside a grouping —
-        // so no $sort/$skip/$limit precede it here. The $group is followed by a flattening $project
+        // so no $sort/$skip/$limit precede it here. (GroupOrderOp, below, is the one exception to "no
+        // $sort" — it is emitted immediately AFTER the $group/PostGroupPredicate and before the flatten
+        // $project, i.e. on the OUTPUT of $group, not before it, so it does not contradict this claim.)
+        // The $group is followed by a flattening $project
         // (Select.Projection) that lifts the grouped output — the _id (scalar key), each _id.<Name>
         // composite sub-key, and each accumulator output field — up to top-level result aliases the DOM
         // shaper reads by name (see NativeGroupByBinder / MongoQueryLanguageRenderer). Returning here is

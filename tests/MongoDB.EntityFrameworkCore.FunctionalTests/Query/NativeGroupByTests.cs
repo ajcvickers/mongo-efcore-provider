@@ -681,6 +681,46 @@ public class NativeGroupByTests(TemporaryDatabaseFixture database) : IClassFixtu
     }
 
     [Fact]
+    public void GroupBy_Skip_before_select_falls_back_under_native_only()
+    {
+        // Skip/Take composed DIRECTLY on the ungrouped GroupBy result (before the terminal Select) are
+        // explicitly out of this feature's scope — only OrderBy/ThenBy are supported there. Must decline
+        // cleanly, not crash or silently drop the paging.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_Skip_before_select_falls_back_under_native_only));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            db.Entities.GroupBy(o => o.Country)
+                .Skip(1)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .ToList());
+    }
+
+    [Fact]
+    public void GroupBy_OrderBy_replacing_prior_OrderBy_before_select_uses_only_the_second()
+    {
+        // A second OrderBy (not ThenBy) composed on the ungrouped GroupBy result REPLACES the first sort key
+        // entirely — matches ordinary (non-GroupBy) OrderBy.OrderBy semantics elsewhere in this provider.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_OrderBy_replacing_prior_OrderBy_before_select_uses_only_the_second));
+
+        var result = db.Entities
+            .GroupBy(o => o.Country)
+            .OrderBy(g => g.Key)       // would sort FR, UK, US if not replaced
+            .OrderBy(g => g.Count())   // REPLACES the above — sorts by Count instead
+            .ThenBy(g => g.Key)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToList();
+
+        // If the first OrderBy leaked through, FR/UK/US (Country-ascending) would come first regardless of
+        // Count. Correct (replaced) behavior sorts by Count first: FR(1), then UK(2)/US(2) tie-broken by
+        // Country.
+        Assert.Equal(
+            [("FR", 1), ("UK", 2), ("US", 2)],
+            result.Select(r => (r.Key, r.Count)).ToArray());
+    }
+
+    [Fact]
     public void GroupBy_OrderBy_computed_expression_before_select_matches_driver_linq_under_native()
     {
         var seed = SeedOrders();
