@@ -266,6 +266,15 @@ internal sealed class MongoSelectLowerer
                 stages.Add(new MongoMatchStage(postGroupPredicate));
             }
 
+            // OrderBy/ThenBy composed directly on the ungrouped GroupBy result (before the terminal Select) —
+            // resolved by NativeGroupByBinder.TryBindGroupProjection into GroupOrderOp. Must run BEFORE the
+            // flatten $project below: an ordering aggregate the Select doesn't project (e.g. orders by
+            // Count() but projects Sum()) would no longer be readable once the flatten $project drops it.
+            if (select.GroupOrderOp is { } groupOrderOp)
+            {
+                AppendSortStages(groupOrderOp, stages, sortFields);
+            }
+
             if (select.Projection.Count > 0)
             {
                 stages.Add(new MongoProjectStage(select.Projection));
