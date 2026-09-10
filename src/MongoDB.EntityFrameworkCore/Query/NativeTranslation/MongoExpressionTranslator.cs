@@ -1094,6 +1094,19 @@ internal sealed partial class MongoExpressionTranslator
             case ConstantExpression { Value: bool literalBool }:
                 return new MongoConstantExpression(literalBool, forSerialization: null);
 
+            // --- Bare boolean query-parameter predicate root (e.g. `data.Contains(p + "Const")` inside a
+            // `Where` whose lambda parameter it never references) ---
+            //
+            // EF Core's own parameter extraction hoists a predicate subtree that doesn't reference the query
+            // source out to a single query parameter BEFORE this translator ever sees it — so a predicate like
+            // `c => data.Contains(someVariable + "SomeConstant")` (no reference to `c`) arrives here as a bare
+            // bool-typed parameter node, not a MethodCallExpression. Must sit alongside the literal-bool case
+            // above rather than fall through to the bare-boolean-MEMBER default below (which only tries
+            // TryResolveMember and would decline a non-member node) — same query-dialect fate as a literal
+            // bool: RenderNode's catch-all wraps it as `{ $expr: <placeholder> }`.
+            case var parameterNode when node.Type == typeof(bool) && NativeQueryParameter.TryGetQueryParameterName(parameterNode, out var boolParamName):
+                return new MongoParameterExpression(boolParamName, forSerialization: null);
+
             // --- Bare boolean member access (c.Active) ---
 
             default:

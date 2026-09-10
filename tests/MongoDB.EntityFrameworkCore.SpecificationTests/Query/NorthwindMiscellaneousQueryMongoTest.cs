@@ -4501,7 +4501,7 @@ Customers.{ "$sort" : { "_id" : -1, "Country" : -1 } }, { "$project" : { "City" 
             """,
             //
             """
-            Orders.
+            Orders.{ "$match" : { "$expr" : true } }
             """);
     }
 
@@ -5340,7 +5340,7 @@ Orders.{ "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "forei
 
         AssertMql(
             """
-            Customers.
+            Customers.{ "$match" : { "$expr" : true } }
             """);
     }
 
