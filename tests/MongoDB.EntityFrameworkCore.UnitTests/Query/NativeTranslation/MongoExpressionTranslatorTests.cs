@@ -1117,7 +1117,8 @@ public class MongoExpressionTranslatorTests
 
         Assert.True(translator.TryTranslate(predicate.Body, out var result));
         var regex = Assert.IsType<MongoRegexExpression>(result);
-        Assert.Equal("Name", regex.Field.ElementName);
+        var field = Assert.IsType<MongoFieldExpression>(regex.Field);
+        Assert.Equal("Name", field.ElementName);
         Assert.Equal(MongoRegexKind.StartsWith, regex.Kind);
         Assert.False(regex.Negated);
         var constant = Assert.IsType<MongoConstantExpression>(regex.Term);
@@ -1200,7 +1201,8 @@ public class MongoExpressionTranslatorTests
 
         Assert.True(translator.TryTranslate(predicate.Body, out var result));
         var regex = Assert.IsType<MongoRegexExpression>(result);
-        Assert.Equal("Name", regex.Field.ElementName);
+        var field = Assert.IsType<MongoFieldExpression>(regex.Field);
+        Assert.Equal("Name", field.ElementName);
         Assert.Equal(MongoRegexKind.StartsWith, regex.Kind);
         Assert.False(regex.Negated);
         var term = Assert.IsType<MongoFieldExpression>(regex.Term);
