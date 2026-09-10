@@ -3066,7 +3066,7 @@ Employees.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
 
         AssertMql(
             """
-            Customers.{ "$project" : { "A" : { "$concat" : ["$_id", "$City"] }, "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$sort" : { "A" : 1 } }
+            Customers.{ "$group" : { "_id" : { "A" : { "$concat" : ["$_id", "$City"] } } } }, { "$project" : { "A" : "$_id.A", "_id" : 0 } }, { "$sort" : { "A" : 1 } }
             """);
     }
 
@@ -3145,7 +3145,7 @@ Customers.{ "$set" : { "__sort0" : { "$concat" : ["$_id", "$City"] } } }, { "$so
 
         AssertMql(
             """
-            Customers.{ "$project" : { "Property" : { "$concat" : ["$_id", "$City"] }, "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$sort" : { "Property" : 1 } }
+            Customers.{ "$group" : { "_id" : { "Property" : { "$concat" : ["$_id", "$City"] } } } }, { "$project" : { "Property" : "$_id.Property", "_id" : 0 } }, { "$sort" : { "Property" : 1 } }
             """);
     }
 

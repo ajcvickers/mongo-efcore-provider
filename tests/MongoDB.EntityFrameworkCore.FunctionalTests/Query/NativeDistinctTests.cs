@@ -158,6 +158,43 @@ public class NativeDistinctTests(TemporaryDatabaseFixture database) : IClassFixt
     }
 
     [Fact]
+    public void Anonymous_computed_projection_Distinct_then_OrderBy_on_member_goes_native()
+    {
+        // EF-322 gap: TryResolveDistinctOrderingKey only matched a key part whose FieldRef was a
+        // MongoFieldExpression, so an OrderBy composed after a Distinct over a COMPUTED projection member
+        // (A = o.Country + o.City, a concat — no backing IProperty) declined and fell back to driver-LINQ.
+        // Mirrors the Where-side fix (MongoExpressionTranslator.TryResolveDistinctAliasComputedField) by
+        // resolving the ordering key against the Distinct's own flattened alias via a MongoElementRefExpression
+        // instead of requiring an IProperty-backed field.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(Anonymous_computed_projection_Distinct_then_OrderBy_on_member_goes_native));
+
+        var result = db.Entities.Select(o => new { A = o.Country + o.City }).Distinct()
+            .OrderBy(n => n.A).ToList();
+
+        Assert.Equal(["FRParis", "UKLondon", "USNYC"], result.Select(r => r.A).ToArray());
+    }
+
+    [Fact]
+    public void Anonymous_computed_projection_Distinct_then_OrderBy_on_member_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(Anonymous_computed_projection_Distinct_then_OrderBy_on_member_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(Anonymous_computed_projection_Distinct_then_OrderBy_on_member_matches_driver_linq) + "D");
+
+        string[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities.Select(o => new { A = o.Country + o.City }).Distinct()
+                .OrderBy(n => n.A).AsEnumerable().Select(n => n.A).ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal(["FRParis", "UKLondon", "USNYC"], native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    [Fact]
     public void Whole_entity_Distinct_goes_native()
     {
         // EF-322: a whole-entity Distinct() (no preceding Select) now goes native too — a new MongoDistinctOp
