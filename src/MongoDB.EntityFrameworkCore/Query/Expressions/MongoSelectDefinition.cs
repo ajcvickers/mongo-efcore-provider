@@ -86,9 +86,10 @@ internal sealed class MongoSelectDefinition
     // A FOURTH ordered filter/sort/page list, emitted by the lowerer immediately after a projected Distinct's
     // $group + flattening $project. Targeted only for an OrderBy/ThenBy/Skip/Take composed after a projected
     // Distinct (IsDistinct, never a genuine IsGroupBy — see NativeSlotPopulator's post-terminal guard carve-
-    // out), whose key selector resolved against the Distinct's OWN flattened output alias via
-    // NativeGroupByBinder.TryResolveDistinctOrderingKey — never against the root entity, which could collide
-    // with a differently-sourced projection member of the same name.
+    // out), whose key selector resolved against the Distinct's OWN flattened output alias — via
+    // NativeGroupByBinder.TryResolveDistinctOrderingKey (identity/named-member) or, for a genuinely computed
+    // expression, MongoExpressionTranslator.DistinctAliasScope — never against the root entity, which could
+    // collide with a differently-sourced projection member of the same name.
     private readonly List<MongoSelectOp> _postGroupOps = [];
 
     /// <summary>

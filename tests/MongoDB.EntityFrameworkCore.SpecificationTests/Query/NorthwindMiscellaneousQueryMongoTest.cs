@@ -4018,7 +4018,7 @@ Customers.{ "$match" : { } }
 
         AssertMql(
             """
-            Customers.{ "$match" : { "$and" : [{ "_id" : { "$ne" : "VAFFE" } }, { "_id" : { "$ne" : "DRACD" } }] } }, { "$project" : { "_v" : "$City", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$project" : { "_id" : 0, "_document" : "$$ROOT", "_key1" : { "$indexOfCP" : ["$_v", "c"] } } }, { "$sort" : { "_key1" : 1, "_document._v" : 1 } }, { "$replaceRoot" : { "newRoot" : "$_document" } }, { "$limit" : 5 }
+            Customers.{ "$match" : { "$and" : [{ "_id" : { "$ne" : "VAFFE" } }, { "_id" : { "$ne" : "DRACD" } }] } }, { "$group" : { "_id" : { "City" : "$City" } } }, { "$project" : { "City" : "$_id.City", "_id" : 0 } }, { "$set" : { "__sort0" : { "$indexOfCP" : ["$City", "c"] } } }, { "$sort" : { "__sort0" : 1, "City" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 5 }
             """);
     }
 

@@ -808,9 +808,11 @@ internal static class NativeGroupByBinder
     /// <see cref="Microsoft.EntityFrameworkCore.Metadata.IProperty"/>) resolves against its own flattened
     /// output alias via a <see cref="MongoElementRefExpression"/> instead, mirroring
     /// <see cref="MongoExpressionTranslator.TryResolveDistinctAliasComputedField"/> on the Where side. Anything
-    /// else — a member not among the key parts — declines so the caller
-    /// (<c>NativeSlotPopulator.PopulateSortSlot</c>) marks the query non-native and falls back to driver-LINQ,
-    /// exactly as it already does for every other post-terminal shape it can't represent.
+    /// else — a member not among the key parts, or a genuinely COMPUTED expression over the key selector's own
+    /// parameter (e.g. EF-322 gap-3's <c>x.IndexOf(term)</c> over a bare-scalar Distinct) — declines so the
+    /// caller (<c>NativeSlotPopulator.PopulateSortSlot</c>) falls through to the general
+    /// <see cref="MongoExpressionTranslator.DistinctAliasScope"/>-scoped translator instead, which that gap-3
+    /// shape needs (a computed expression is not "a member naming a key part").
     /// </summary>
     internal static bool TryResolveDistinctOrderingKey(
         MongoGrouping grouping, ParameterExpression selfParam, Expression keySelectorBody,
