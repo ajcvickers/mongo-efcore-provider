@@ -752,6 +752,29 @@ internal sealed class MongoSelectDefinition
     /// </remarks>
     internal bool HasStringSequenceProjectionLeaf { get; set; }
 
+    /// <summary>
+    /// <see langword="true"/> when this select's <see cref="Route"/> resolved to <see cref="NativeRoute.WholeEntity"/>
+    /// not because the query is a genuinely bare entity fetch, but because <c>NativeProjectionBinder</c>
+    /// recognized a whole-entity-WRAP selector — a ctor-only DTO (<c>x =&gt; new Dto(x)</c>) or an opaque
+    /// client-method call (<c>x =&gt; context.ClientMethod(x)</c>) whose sole entity-referencing operand is the
+    /// selector's own parameter. In both cases nothing is added to <see cref="Projection"/>, so the route
+    /// resolves identically to a plain <c>Set&lt;T&gt;()</c> with no <c>Select</c> at all — but the SHAPER differs:
+    /// it wraps the raw entity in client-side code whose result is not the entity itself.
+    /// </summary>
+    /// <remarks>
+    /// Read by <c>MongoQueryableMethodTranslatingExpressionVisitor.IsPlainWholeEntitySelect</c> to keep such a
+    /// wrapped operand OUT of a native <c>$unionWith</c>/<c>$concat</c> combine: comparing/deduping RAW documents
+    /// at the pipeline level would be correct for a genuine whole-entity operand, but this operand's actual
+    /// result (after the client wrap runs) may not even be an entity of the same shape, and — measured via
+    /// <c>Client_eval_Union_FirstOrDefault</c> — a native <c>$unionWith</c> combined with an order-less
+    /// <c>FirstOrDefault()</c> returns a row Mongo's own (unordered) combine happens to surface first, which
+    /// need not match the order-sensitive in-memory baseline the spec suite compares against. Setting this flag
+    /// routes such a combination through the pre-existing graceful-decline path instead (falls back under
+    /// <c>Native</c>, throws under <c>NativeOnly</c>) — exactly the behavior this exact shape had before either
+    /// wrap arm existed.
+    /// </remarks>
+    internal bool HasClientWrappedWholeEntityShaper { get; set; }
+
     /// <summary>The native join scope chain recorded by <c>TranslateJoinCore</c>, or <see
     /// langword="null"/> if this select has no eligible native join.</summary>
     internal MongoJoinScope? JoinScope { get; set; }
