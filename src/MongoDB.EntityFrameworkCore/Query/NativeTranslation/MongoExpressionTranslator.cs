@@ -730,6 +730,12 @@ internal sealed partial class MongoExpressionTranslator
                 when TryTranslateEntityEquality(eq, out var entityEquality):
                 return entityEquality;
 
+            // `root.GetType() == typeof(T)` / `!=` against a non-hierarchy root entity — collapses to a
+            // compile-time constant true/false. See MongoExpressionTranslator.EntityType.cs.
+            case BinaryExpression { NodeType: ExpressionType.Equal or ExpressionType.NotEqual } getTypeEq
+                when TryTranslateGetTypeComparison(getTypeEq, out var getTypeComparison):
+                return getTypeComparison;
+
             // The `.Equals(...)` spelling of the same shape — the only spelling composite-key entity types
             // support, since C# doesn't synthesize a `==` operator for them. See TryTranslateEntityEqualityCall.
             case MethodCallExpression callEq when TryTranslateEntityEqualityCall(callEq, out var entityEqualityCall):

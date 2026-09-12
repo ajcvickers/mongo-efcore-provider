@@ -1683,7 +1683,7 @@ Customers.{ "$match" : { "$expr" : { "$eq" : [{ "$concat" : [{ "$toString" : 10 
 
         AssertMql(
             """
-            Customers.{ "$match" : { "_t" : null } }
+            Customers.{ "$match" : { } }
             """);
     }
 
@@ -1693,48 +1693,28 @@ Customers.{ "$match" : { "$expr" : { "$eq" : [{ "$concat" : [{ "$toString" : 10 
 
         AssertMql(
             """
-            Customers.{ "$match" : { "_t" : { "$ne" : null } } }
+            Customers.{ "$match" : { "_id" : { "$type" : -1 } } }
             """);
     }
 
     public override async Task GetType_on_non_hierarchy3(bool async)
     {
-        // Fails: Entity equality issue EF-202 (driver-LINQ mode, which executes and returns wrong data).
-        // Native-only mode rejects the shape outright.
-        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
-            () => base.GetType_on_non_hierarchy3(async), typeof(EqualException));
+        await base.GetType_on_non_hierarchy3(async);
 
-        if (MongoSpecTestHelpers.IsNativeOnly)
-        {
-            AssertMql();
-        }
-        else
-        {
-            AssertMql(
-                """
-                Customers.{ "$match" : { "_t" : null } }
-                """);
-        }
+        AssertMql(
+            """
+            Customers.{ "$match" : { "_id" : { "$type" : -1 } } }
+            """);
     }
 
     public override async Task GetType_on_non_hierarchy4(bool async)
     {
-        // Fails: Entity equality issue EF-202 (driver-LINQ mode, which executes and returns wrong data).
-        // Native-only mode rejects the shape outright.
-        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
-            () => base.GetType_on_non_hierarchy4(async), typeof(EqualException));
+        await base.GetType_on_non_hierarchy4(async);
 
-        if (MongoSpecTestHelpers.IsNativeOnly)
-        {
-            AssertMql();
-        }
-        else
-        {
-            AssertMql(
-                """
-                Customers.{ "$match" : { "_t" : { "$ne" : null } } }
-                """);
-        }
+        AssertMql(
+            """
+            Customers.{ "$match" : { } }
+            """);
     }
 
     public override async Task Case_block_simplification_works_correctly(bool async)
