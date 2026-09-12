@@ -482,7 +482,16 @@ internal sealed partial class MongoExpressionTranslator
 
         var propertyType = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
         var underlyingElementType = Nullable.GetUnderlyingType(elementType) ?? elementType;
-        if (underlyingElementType != propertyType)
+
+        // `object[]`/`List<object>` (an EF-boxed heterogeneously-typed collection, e.g.
+        // `orderIds.Contains(o.OrderID)` where `orderIds` is `object[]`) declares its element type as `object`
+        // rather than the property's own CLR type. There's no static mismatch to catch here — every element
+        // (constant or parameter-array) is coerced/serialized individually through the property's own
+        // serializer at render/build time (see `RenderInValues`'s per-item `MongoValueRenderer.RenderValue`
+        // call and `MongoPipelineFactory.SerializeParameter`'s `BsonValueSerializer.Coerce`), so a genuinely
+        // wrong-typed element still fails there, just later — the same place a same-shape mismatch inside a
+        // strongly-typed collection would also be caught.
+        if (underlyingElementType != propertyType && underlyingElementType != typeof(object))
             return null; // collection element type mismatches the property — not supported
 
         if (unwrapped is ConstantExpression { Value: System.Collections.IEnumerable } constant)
