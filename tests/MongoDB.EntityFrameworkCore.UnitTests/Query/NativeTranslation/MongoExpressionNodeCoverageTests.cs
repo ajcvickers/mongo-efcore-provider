@@ -153,6 +153,7 @@ public class MongoExpressionNodeCoverageTests
             new MongoSizeExpression("Tags", typeof(int)),
             new MongoFilteredSizeExpression("Tags", flagField, typeof(int)),
             new MongoInExpression(rankField, new MongoConstantExpression(new[] { 1, 2 }, rank), negated: false),
+            new MongoValueListExpression([new MongoParameterExpression("p0", rank), rankConstant]),
             new MongoComputedInExpression(
                 headingField, new MongoConstantExpression(new[] { "a", "b" }, heading), negated: false),
             new MongoArrayContainsExpression(
@@ -672,6 +673,20 @@ public class MongoExpressionNodeCoverageTests
         ["MongoUnaryExpression|Negator.TryNegate"] = "true",
         ["MongoUnaryExpression|PrefixRewriter.Rewrite"] = "rendered",
         ["MongoUnaryExpression|QL.IsQueryDialectRenderable"] = "true",
-        ["MongoUnaryExpression|QL.Render"] = "rendered"
+        ["MongoUnaryExpression|QL.Render"] = "rendered",
+
+        // EF-322: MongoValueListExpression is deliberately NOT a top-level-renderable node — it exists only
+        // as a shape MongoInExpression.Values (and MongoComputedInExpression.Values) can carry, dispatched
+        // by RenderInValues/CanRenderInValues, not by the top-level Render/CanRender switches. As a BARE node
+        // (never how it's actually used) it falls closed everywhere the same way an unrecognized node would,
+        // which is exactly right: nothing constructs one outside MongoInExpression.Values.
+        ["MongoValueListExpression|Agg.CanRender"] = "false",
+        ["MongoValueListExpression|Agg.Render"] = "declined",
+        ["MongoValueListExpression|AllFieldsDefaultSerialized"] = "true",
+        ["MongoValueListExpression|AllFieldsDefaultSerialized(converted)"] = "true",
+        ["MongoValueListExpression|Negator.TryNegate"] = "false",
+        ["MongoValueListExpression|PrefixRewriter.Rewrite"] = "rendered",
+        ["MongoValueListExpression|QL.IsQueryDialectRenderable"] = "false",
+        ["MongoValueListExpression|QL.Render"] = "declined"
     };
 }

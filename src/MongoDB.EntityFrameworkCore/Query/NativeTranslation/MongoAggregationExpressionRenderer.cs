@@ -230,7 +230,8 @@ internal static class MongoAggregationExpressionRenderer
         };
 
     private static bool CanRenderInValues(MongoExpression values)
-        => values is MongoConstantExpression { Value: System.Collections.IEnumerable } or MongoParameterExpression;
+        => values is MongoConstantExpression { Value: System.Collections.IEnumerable } or MongoParameterExpression
+            or MongoValueListExpression;
 
     // Exactly the operators RenderBinary's own switch maps below — every MongoBinaryOperator member, as it
     // happens (RenderBinary has no unmapped member today), but this must be re-checked against RenderBinary's
@@ -499,6 +500,13 @@ internal static class MongoAggregationExpressionRenderer
                     ? StringSerializer.Instance
                     : BsonSerializerFactory.GetPropertySerializationInfo(parameter.ForSerialization).Serializer;
                 return placeholders.CreateArrayPlaceholder(parameter.Name, elementSerializer);
+            }
+            case MongoValueListExpression list:
+            {
+                var array = new BsonArray();
+                foreach (var element in list.Elements)
+                    array.Add(MongoValueRenderer.RenderValue(element, placeholders));
+                return array;
             }
             default:
                 throw new NativeTranslationNotSupportedException(

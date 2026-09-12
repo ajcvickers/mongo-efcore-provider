@@ -272,6 +272,13 @@ internal sealed class MongoQueryLanguageRenderer
                 var info = BsonSerializerFactory.GetPropertySerializationInfo(parameter.ForSerialization!);
                 return placeholders.CreateArrayPlaceholder(parameter.Name, info.Serializer);
             }
+            case MongoValueListExpression list:
+            {
+                var array = new BsonArray();
+                foreach (var element in list.Elements)
+                    array.Add(MongoValueRenderer.RenderValue(element, placeholders));
+                return array;
+            }
             default:
                 throw new NativeTranslationNotSupportedException("Unsupported $in values node.");
         }
@@ -540,10 +547,12 @@ internal sealed class MongoQueryLanguageRenderer
             // catch-all, matching the style of MongoConditionalExpression/MongoDatePartExpression above.
             MongoOuterFieldExpression => false,
             MongoQuantifierExpression => false,
-            // RenderInValues throws for any values node other than a constant enumerable or a parameter.
+            // RenderInValues throws for any values node other than a constant enumerable, a parameter, or a
+            // value list of per-element constants/parameters.
             MongoInExpression inExpr
                 => inExpr.Values is MongoConstantExpression { Value: System.Collections.IEnumerable }
-                    or MongoParameterExpression,
+                    or MongoParameterExpression
+                    or MongoValueListExpression,
             // RenderArrayContains always has a query-dialect form ({ field: value } / { field: { $ne: value } });
             // MongoExpressionTranslator only ever constructs this node with a Value it has already resolved
             // and rendered, so there is no unrenderable sub-shape to exclude here (unlike MongoInExpression's

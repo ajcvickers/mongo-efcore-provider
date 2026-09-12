@@ -135,6 +135,12 @@ internal static class MongoFieldPrefixRewriter
             MongoConcatExpression concat => new MongoConcatExpression(
                 concat.Operands.Select(o => Rewrite(o, prefix)).ToList()),
             MongoConstantExpression or MongoParameterExpression => expr,
+            // Elements are each a MongoConstantExpression/MongoParameterExpression (see the node's own
+            // remarks), both of which pass through Rewrite unchanged above — recursing keeps this arm
+            // correct if a future element shape ever needs prefixing, matching MongoInExpression/
+            // MongoComputedInExpression's own consistency-over-necessity recursion into Values.
+            MongoValueListExpression list => new MongoValueListExpression(
+                list.Elements.Select(el => Rewrite(el, prefix)).ToList()),
             _ => throw new NativeTranslationNotSupportedException(
                 $"Cannot prefix-rewrite MongoExpression node '{expr.GetType().Name}'.")
         };

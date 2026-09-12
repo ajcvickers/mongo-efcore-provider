@@ -966,6 +966,53 @@ public class MongoExpressionTranslatorTests
     }
 
     // ------------------------------------------------------------------
+    // Test 18f (EF-322): `new[] { prm1, prm2 }.Contains(c.CustomerID)` where prm1/prm2 are two
+    // SEPARATELY closure-captured locals (as opposed to one array-typed local/parameter — Test 16 covers
+    // that). EF does not hoist the whole array as one query parameter here; each element survives as its
+    // own independently-named query-parameter node inside a NewArrayInit. → MongoInExpression whose Values
+    // is a MongoValueListExpression of per-element MongoParameterExpressions.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Contains_over_new_array_init_of_separate_query_parameters_translates_to_value_list()
+    {
+        var entityType = GetEntityType<Customer>();
+        var cParam = Expression.Parameter(typeof(Customer), "c");
+        var ageMember = Expression.MakeMemberAccess(cParam, typeof(Customer).GetProperty(nameof(Customer.Age))!);
+
+#if EF8 || EF9
+        const string paramName0 = QueryCompilationContext.QueryParameterPrefix + "prm1_0";
+        const string paramName1 = QueryCompilationContext.QueryParameterPrefix + "prm2_0";
+        Expression efParam0 = Expression.Parameter(typeof(int), paramName0);
+        Expression efParam1 = Expression.Parameter(typeof(int), paramName1);
+#else
+        const string paramName0 = "__prm1_0";
+        const string paramName1 = "__prm2_0";
+        Expression efParam0 = new QueryParameterExpression(paramName0, typeof(int));
+        Expression efParam1 = new QueryParameterExpression(paramName1, typeof(int));
+#endif
+        var arrayExpr = Expression.NewArrayInit(typeof(int), efParam0, efParam1);
+        var containsMethod = typeof(Enumerable).GetMethods()
+            .First(m => m.Name == nameof(Enumerable.Contains) && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(int));
+        var body = Expression.Call(containsMethod, arrayExpr, ageMember);
+
+        var translator = NewTranslator(entityType);
+        var translated = translator.TryTranslate(body, out var result);
+
+        Assert.True(translated);
+        var inExpr = Assert.IsType<MongoInExpression>(result);
+        Assert.False(inExpr.Negated);
+        Assert.Equal("Age", inExpr.Field.ElementName);
+        var list = Assert.IsType<MongoValueListExpression>(inExpr.Values);
+        Assert.Equal(2, list.Elements.Count);
+        var p0 = Assert.IsType<MongoParameterExpression>(list.Elements[0]);
+        var p1 = Assert.IsType<MongoParameterExpression>(list.Elements[1]);
+        Assert.Equal(paramName0, p0.Name);
+        Assert.Equal(paramName1, p1.Name);
+    }
+
+    // ------------------------------------------------------------------
     // Test 18g: Contains over a COMPUTED (string concatenation) item → MongoComputedInExpression, not a
     // decline. The needle has no bare field to key a query-dialect { field: { $in: [...] } } on, so it must
     // be a $expr array-form $in instead — the sibling of Test 18b/18c's plain-field MongoInExpression.
