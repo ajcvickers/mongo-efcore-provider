@@ -2194,7 +2194,7 @@ Customers.{ "$match" : { "$expr" : { "$eq" : ["$_id", { "$concat" : ["ALF", "KI"
 
         AssertMql(
             """
-            Customers.{ "$sort" : { "ContactTitle" : 1 } }, { "$limit" : 3 }, { "$project" : { "_v" : "$ContactTitle", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }
+            Customers.{ "$sort" : { "ContactTitle" : 1 } }, { "$limit" : 3 }, { "$group" : { "_id" : { "ContactTitle" : "$ContactTitle" } } }, { "$project" : { "ContactTitle" : "$_id.ContactTitle", "_id" : 0 } }
             """);
     }
 #endif

@@ -753,7 +753,13 @@ internal static class NativeGroupByBinder
         // IsDistinct is set nowhere but here, immediately below, alongside the flatten that re-adds the exact
         // same alias(es) the override describes, so the override is provably still valid whenever IsDistinct
         // is true. Pinned by NativeBareProjectionTests.
-        if (select.Projection.Count == 0 || select.Grouping != null || select.Cardinality != null || select.HasPaging
+        //
+        // EF-TBD: no longer declines on select.HasPaging. A source-side OrderBy/Skip/Take composed before the
+        // Distinct call is recorded in PipelineOps and is emitted by the lowerer before the $group unconditionally
+        // (see MongoSelectLowerer's "6b" comment), so paging still restricts the correct input row set and a
+        // pre-existing ordering is otherwise a no-op ahead of a dedup — mirrors the identical guard removal in
+        // NativeGroupByBinder.TryBindGroupKey.
+        if (select.Projection.Count == 0 || select.Grouping != null || select.Cardinality != null
             || select.UnwindSource != null || select.SetOperation is { OperandsProjected: true })
             return false;
 
