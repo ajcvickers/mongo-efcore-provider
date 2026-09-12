@@ -30,7 +30,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 /// <summary>
 /// EF-344 native <c>GroupBy(key).Select(aggregate)</c> → <c>$group</c>. Proves that a supported grouped
 /// projection (scalar or composite key + Count/Sum) executes as a native aggregation pipeline and
-/// materializes correct rows, and that unsupported shapes (computed key, computed operand, bare IGrouping)
+/// materializes correct rows, and that unsupported shapes (computed key, bare IGrouping)
 /// fall back to driver-LINQ under <see cref="MongoQueryMode.Native"/> yet throw
 /// <see cref="NativeTranslationNotSupportedException"/> under <see cref="MongoQueryMode.NativeOnly"/>.
 /// <see cref="MongoQueryMode.NativeOnly"/> is the "went native" signal (the emitted MQL is otherwise
@@ -144,20 +144,10 @@ public class NativeGroupByTests(TemporaryDatabaseFixture database) : IClassFixtu
     }
 
     [Fact]
-    public void GroupBy_computed_operand_falls_back_under_native_only()
+    public void GroupBy_computed_operand_goes_native()
     {
         using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
-            nameof(GroupBy_computed_operand_falls_back_under_native_only));
-
-        Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Entities.GroupBy(o => o.Country).Select(g => new { g.Key, T = g.Sum(o => o.Amount * 2) }).ToList());
-    }
-
-    [Fact]
-    public void GroupBy_computed_operand_runs_under_native()
-    {
-        using var db = CreateContext(SeedOrders(), MongoQueryMode.Native,
-            nameof(GroupBy_computed_operand_runs_under_native));
+            nameof(GroupBy_computed_operand_goes_native));
 
         var result = db.Entities
             .GroupBy(o => o.Country)
@@ -167,6 +157,64 @@ public class NativeGroupByTests(TemporaryDatabaseFixture database) : IClassFixtu
             .ToList();
 
         Assert.Equal([("FR", 600m), ("UK", 150m), ("US", 600m)], result.Select(r => (r.Key, r.T)).ToArray());
+    }
+
+    [Fact]
+    public void GroupBy_constant_operand_goes_native()
+    {
+        // g.Sum(o => 1) — a constant accumulator operand, mirroring EF Core's own GroupBy_Sum_constant.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_constant_operand_goes_native));
+
+        var result = db.Entities
+            .GroupBy(o => o.Country)
+            .Select(g => new { g.Key, Count = g.Sum(o => 1) })
+            .AsEnumerable()
+            .OrderBy(r => r.Key)
+            .ToList();
+
+        // FR: 1 order, UK: 2 orders, US: 2 orders.
+        Assert.Equal([("FR", 1), ("UK", 2), ("US", 2)], result.Select(r => (r.Key, r.Count)).ToArray());
+    }
+
+    [Fact]
+    public void GroupBy_accumulator_with_dollar_prefixed_string_constant_operand_goes_native()
+    {
+        // A bare string constant operand starting with "$" must be $literal-wrapped in the rendered $group
+        // accumulator — MongoDB otherwise reads an unwrapped leading-"$" string as a FIELD PATH, which would
+        // silently aggregate the wrong value instead of returning the literal string.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_accumulator_with_dollar_prefixed_string_constant_operand_goes_native));
+
+        var result = db.Entities
+            .GroupBy(o => o.Country)
+            .Select(g => new { g.Key, Marker = g.Max(o => "$CustomerID") })
+            .AsEnumerable()
+            .OrderBy(r => r.Key)
+            .ToList();
+
+        Assert.Equal(
+            [("FR", "$CustomerID"), ("UK", "$CustomerID"), ("US", "$CustomerID")],
+            result.Select(r => (r.Key, r.Marker)).ToArray());
+    }
+
+    [Fact]
+    public void GroupBy_cast_operand_goes_native()
+    {
+        // g.Sum(o => (long)o.Year) — a cast accumulator operand, mirroring EF Core's own
+        // GroupBy_Sum_constant_cast / GroupBy_with_cast_inside_grouping_aggregate.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_cast_operand_goes_native));
+
+        var result = db.Entities
+            .GroupBy(o => o.Country)
+            .Select(g => new { g.Key, YearSum = g.Sum(o => (long)o.Year) })
+            .AsEnumerable()
+            .OrderBy(r => r.Key)
+            .ToList();
+
+        // FR: 2021. UK: 2020 + 2020 = 4040. US: 2020 + 2021 = 4041.
+        Assert.Equal([("FR", 2021L), ("UK", 4040L), ("US", 4041L)], result.Select(r => (r.Key, r.YearSum)).ToArray());
     }
 
     [Fact]

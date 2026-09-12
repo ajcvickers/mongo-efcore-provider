@@ -174,6 +174,51 @@ public class NativeGroupByBinderTests
     }
 
     [Fact]
+    public void Sum_with_computed_selector_binds_computed_operand()
+    {
+        var mongoQ = BoundScalarKeyQuery();
+        Expression<Func<IGrouping<string, Order>, object>> proj =
+            g => new { Total = g.Sum(x => x.Amount * 2) };
+
+        Assert.True(NativeGroupByBinder.TryBindGroupProjection(mongoQ, proj, out _));
+
+        var acc = Assert.Single(mongoQ.Select.Grouping!.Accumulators);
+        Assert.Equal("Total", acc.OutputField);
+        Assert.Equal("$sum", acc.Operator);
+        Assert.IsType<MongoBinaryExpression>(acc.Operand);
+    }
+
+    [Fact]
+    public void Sum_with_constant_selector_binds_constant_operand()
+    {
+        var mongoQ = BoundScalarKeyQuery();
+        Expression<Func<IGrouping<string, Order>, object>> proj =
+            g => new { Total = g.Sum(x => 1) };
+
+        Assert.True(NativeGroupByBinder.TryBindGroupProjection(mongoQ, proj, out _));
+
+        var acc = Assert.Single(mongoQ.Select.Grouping!.Accumulators);
+        Assert.Equal("Total", acc.OutputField);
+        Assert.Equal("$sum", acc.Operator);
+        Assert.Equal(1, Assert.IsType<MongoConstantExpression>(acc.Operand).Value);
+    }
+
+    [Fact]
+    public void Sum_with_cast_selector_binds_cast_operand()
+    {
+        var mongoQ = BoundScalarKeyQuery();
+        Expression<Func<IGrouping<string, Order>, object>> proj =
+            g => new { Total = g.Sum(x => (long)x.Amount) };
+
+        Assert.True(NativeGroupByBinder.TryBindGroupProjection(mongoQ, proj, out _));
+
+        var acc = Assert.Single(mongoQ.Select.Grouping!.Accumulators);
+        Assert.Equal("Total", acc.OutputField);
+        Assert.Equal("$sum", acc.Operator);
+        Assert.IsType<MongoFieldExpression>(acc.Operand);
+    }
+
+    [Fact]
     public void Min_max_average_map_to_operators()
     {
         var mongoQ = BoundScalarKeyQuery();
@@ -218,14 +263,18 @@ public class NativeGroupByBinderTests
     }
 
     [Fact]
-    public void Computed_operand_returns_false()
+    public void Computed_operand_with_two_fields_binds_computed_operand()
     {
         var mongoQ = BoundScalarKeyQuery();
         Expression<Func<IGrouping<string, Order>, object>> proj =
             g => new { Total = g.Sum(x => x.Amount * x.Quantity) };
 
-        Assert.False(NativeGroupByBinder.TryBindGroupProjection(mongoQ, proj, out _));
-        Assert.Null(mongoQ.Select.Grouping);
+        Assert.True(NativeGroupByBinder.TryBindGroupProjection(mongoQ, proj, out _));
+
+        var acc = Assert.Single(mongoQ.Select.Grouping!.Accumulators);
+        Assert.Equal("Total", acc.OutputField);
+        Assert.Equal("$sum", acc.Operator);
+        Assert.IsType<MongoBinaryExpression>(acc.Operand);
     }
 
     [Fact]

@@ -114,7 +114,8 @@ internal static class NativeGroupByBinder
     /// member name at all, e.g. <c>g.Sum(...)</c> with no wrapping <c>new {}</c>) the bare body itself, must
     /// each be either a grouping-key access (<c>g.Key</c> / <c>g.Key.&lt;Sub&gt;</c>) or a supported aggregate
     /// over the grouping (<c>g.Count()</c>/<c>g.LongCount()</c> → <c>$sum:1</c>;
-    /// <c>g.Sum/Min/Max/Average(x =&gt; x.Field)</c> over a plain member selector). Returns
+    /// <c>g.Sum/Min/Max/Average(x =&gt; ...)</c> over any translatable value — a plain member, constant,
+    /// cast, or computed arithmetic expression). Returns
     /// <see langword="false"/> for any other shape, or when no accumulator is produced, so the caller falls
     /// back.
     /// </summary>
@@ -291,9 +292,10 @@ internal static class NativeGroupByBinder
 
     // Flatten a NewExpression (anonymous type) or MemberInitExpression (DTO) into (memberName, valueExpr) pairs.
 
-    // Match g.Count()/g.LongCount() → ("$sum", null); g.Sum/Average/Min/Max(x => x.Field) over a plain member
-    // selector → the matching operator + field-ref operand. Any other shape (computed operand, unknown method)
-    // returns false. The aggregate's SOURCE (call.Arguments[0]) must be the grouping parameter itself — an
+    // Match g.Count()/g.LongCount() → ("$sum", null); g.Sum/Average/Min/Max(x => ...) over any translatable
+    // value (member access, constant, cast, or computed arithmetic) → the matching operator + translated
+    // operand. An untranslatable operand (e.g. a correlated method call) or unknown method returns false. The
+    // aggregate's SOURCE (call.Arguments[0]) must be the grouping parameter itself — an
     // aggregate whose source is a DIFFERENT sequence (a correlated cross-collection subquery such as
     // Customers.Where(c => c.CustomerID == g.Key).Count(), a navigation, another collection) is NOT a grouped
     // accumulator and must NOT be bound to a $group accumulator (that would silently drop the real subquery
@@ -364,10 +366,21 @@ internal static class NativeGroupByBinder
         if (op is null || call.Arguments.Count != 2)
             return false;
 
-        // The selector is a bare lambda (Enumerable form) or a quoted lambda (Queryable form).
-        if (call.Arguments[1].UnwrapLambdaFromQuote() is not { Body: MemberExpression } selector
-            || !translator.TryTranslateField(selector.Body, out var operand))
-            return false; // computed / non-member selector — fall back
+        // The selector is a bare lambda (Enumerable form) or a quoted lambda (Queryable form). Any
+        // translatable value — a bare member access, a constant, a cast, or ordinary arithmetic — is
+        // accepted via TryTranslateValue, which resolves a bare member exactly as TryTranslateField did (same
+        // underlying TryResolveMember), so no previously-working shape returns different data. TryTranslateValue
+        // additionally requires AllFieldsDefaultSerialized, which TryTranslateField never checked, so a bare
+        // member over a value-converted/non-default-represented property now falls back to driver-LINQ instead
+        // of going native — arguably a correctness improvement, not a loss, since summing a raw converted or
+        // represented value natively could otherwise silently aggregate the wrong representation. EF Core's own
+        // query compiler inlines a two-arg GroupBy(key, elementSelector)'s element selector directly into this
+        // aggregate's lambda before our translator ever runs, so `g.Sum(e => e.OrderID + 1)` composed from
+        // `.GroupBy(o => o.CustomerID, o => new { o.OrderID })` arrives here as an ordinary computed
+        // selector over the root entity — no separate two-arg handling is needed.
+        if (call.Arguments[1].UnwrapLambdaFromQuote() is not { } selector
+            || !translator.TryTranslateValue(selector.Body, out var operand))
+            return false; // untranslatable selector shape (e.g. a correlated method call) — fall back
 
         accumulator = new MongoGroupAccumulator(outputField, op, operand);
         flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType);
