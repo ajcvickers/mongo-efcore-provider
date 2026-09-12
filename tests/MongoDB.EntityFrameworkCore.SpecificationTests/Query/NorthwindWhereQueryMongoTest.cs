@@ -921,7 +921,7 @@ Products.{ "$match" : { "$expr" : { "$eq" : [{ "$not" : [{ "$gt" : ["$_id", 50] 
 
         AssertMql(
             """
-            Products.{ "$match" : { "$expr" : { "$eq" : [{ "$not" : "$Discontinued" }, { "$gt" : ["$_id", 50] }] } } }
+            Products.{ "$match" : { "$expr" : { "$eq" : [{ "$not" : ["$Discontinued"] }, { "$gt" : ["$_id", 50] }] } } }
             """);
     }
 
@@ -941,7 +941,7 @@ Products.{ "$match" : { "$expr" : { "$eq" : [{ "$not" : [{ "$gt" : ["$_id", 50] 
 
         AssertMql(
             """
-            Products.{ "$match" : { "_id" : { "$not" : { "$gt" : 50 } } } }
+            Products.{ "$match" : { "$expr" : { "$ne" : [{ "$gt" : ["$_id", 50] }, true] } } }
             """);
     }
 

@@ -1834,14 +1834,26 @@ internal sealed partial class MongoExpressionTranslator
         // TranslateNode already has the predicate-position translation for both (including Contains' negated-$in
         // collapse for !list.Contains(...) — see its Not case); hand off directly rather than duplicating it.
         // Deliberately narrow: only these two node shapes are routed here, not every predicate TranslateNode
-        // admits (a comparison, AndAlso/OrElse, ElemMatch, …) — that stays a decline in value position, since
-        // widening it further is outside this ticket's scope (EF-413 is scoped to A6/A13 only). Whether the
-        // result is actually renderable in aggregation-expression position is decided downstream by
+        // admits (AndAlso/OrElse, ElemMatch, …) — that stays a decline in value position, since widening it
+        // further is outside this ticket's scope (EF-413 is scoped to A6/A13 only; a comparison is separately
+        // admitted below, EF-322). Whether the result is actually renderable in aggregation-expression position
+        // is decided downstream by
         // MongoAggregationExpressionRenderer.CanRender, not here.
         if (node is MethodCallExpression containsCall && TryMatchContainsMethod(containsCall, out _, out _))
             return TranslateNode(node);
 
         if (node is UnaryExpression { NodeType: ExpressionType.Not })
+            return TranslateNode(node);
+
+        // EF-322: a comparison (`==`/`!=`/relational) used as a VALUE operand — e.g. a boolean member compared
+        // against a nested comparison's result (`p.Discontinued == ((p.ProductID > 50) != prm)`). Boolean-typed
+        // but neither a field/arithmetic operand nor a bare constant/parameter, so without this it falls
+        // straight through to TranslateValue below and declines. TranslateNode already has the full
+        // predicate-position translation for a comparison (entity equality, GetType comparison, ordinary
+        // field/value or field-to-field); hand off directly rather than duplicating it. Whether the result is
+        // actually renderable in aggregation-expression position is decided downstream by
+        // MongoAggregationExpressionRenderer.CanRender, not here.
+        if (node is BinaryExpression comparisonOperand && IsComparison(comparisonOperand.NodeType))
             return TranslateNode(node);
 
         // A bare constant/parameter operand has no associated property for serialization context — these
