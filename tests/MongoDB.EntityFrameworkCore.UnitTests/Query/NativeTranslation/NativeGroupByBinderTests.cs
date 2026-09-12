@@ -111,24 +111,20 @@ public class NativeGroupByBinderTests
     }
 
     [Fact]
-    public void Paging_present_returns_false()
+    public void Scalar_key_binds_even_with_pre_existing_source_side_ordering_and_paging()
     {
         var mongoQ = TestQuery();
-        mongoQ.Select.AppendLimit(new MongoConstantExpression(10, null));
+        mongoQ.Select.StartOrReplaceSort(new MongoOrdering(
+            new MongoFieldExpression(property: null!, elementName: "Amount"), Ascending: true));
+        mongoQ.Select.AppendSkip(new MongoConstantExpression(1, forSerialization: null));
+        mongoQ.Select.AppendLimit(new MongoConstantExpression(10, forSerialization: null));
+
         Expression<Func<Order, string>> key = x => x.Country;
 
-        Assert.False(NativeGroupByBinder.TryBindGroupKey(mongoQ, key));
-        Assert.Null(mongoQ.Select.PendingGroupKey);
-    }
-
-    [Fact]
-    public void Orderings_present_returns_false()
-    {
-        var mongoQ = TestQuery();
-        mongoQ.Select.StartOrReplaceSort(new MongoOrdering(new MongoConstantExpression(0, null), true));
-        Expression<Func<Order, string>> key = x => x.Country;
-
-        Assert.False(NativeGroupByBinder.TryBindGroupKey(mongoQ, key));
+        Assert.True(NativeGroupByBinder.TryBindGroupKey(mongoQ, key));
+        Assert.NotNull(mongoQ.Select.PendingGroupKey);
+        // The pre-existing sort/skip/limit ops are untouched — they stay in PipelineOps ahead of the eventual $group.
+        Assert.Equal(3, mongoQ.Select.PipelineOps.Count);
     }
 
     // ── TryBindGroupProjection ─────────────────────────────────────────────────────

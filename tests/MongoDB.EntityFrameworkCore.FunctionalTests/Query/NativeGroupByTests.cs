@@ -742,6 +742,110 @@ public class NativeGroupByTests(TemporaryDatabaseFixture database) : IClassFixtu
     }
 
     [Fact]
+    public void GroupBy_after_source_side_OrderBy_goes_native()
+    {
+        // OrderBy composed on the SOURCE, before GroupBy — order doesn't affect a scalar aggregate's result,
+        // so this is a pure no-op ahead of the $group, but must still translate (not decline).
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_after_source_side_OrderBy_goes_native));
+
+        var result = db.Entities
+            .OrderBy(o => o.Amount)
+            .GroupBy(o => o.Country)
+            .Select(g => g.Sum(o => o.Amount))
+            .ToList();
+
+        // FR=300, UK=25+50=75, US=100+200=300.
+        Assert.Equal([75m, 300m, 300m], result.OrderBy(x => x).ToList());
+    }
+
+    [Fact]
+    public void GroupBy_after_source_side_OrderBy_Skip_goes_native()
+    {
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_after_source_side_OrderBy_Skip_goes_native));
+
+        var result = db.Entities
+            .OrderBy(o => o.Amount)
+            .Skip(1)
+            .GroupBy(o => o.Country)
+            .Select(g => g.Sum(o => o.Amount))
+            .ToList();
+
+        // Ascending by Amount: 25(UK), 50(UK), 100(US), 200(US), 300(FR). Skip(1) drops 25(UK).
+        // Remaining: UK=50, US=300, FR=300.
+        Assert.Equal([50m, 300m, 300m], result.OrderBy(x => x).ToList());
+    }
+
+    [Fact]
+    public void GroupBy_after_source_side_OrderBy_Take_goes_native()
+    {
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_after_source_side_OrderBy_Take_goes_native));
+
+        var result = db.Entities
+            .OrderBy(o => o.Amount)
+            .Take(3)
+            .GroupBy(o => o.Country)
+            .Select(g => g.Sum(o => o.Amount))
+            .ToList();
+
+        // Ascending by Amount: 25(UK), 50(UK), 100(US), 200(US), 300(FR). Take(3) keeps 25(UK), 50(UK), 100(US).
+        // FR has zero surviving rows, so it produces NO group at all (correct GroupBy semantics, not a bug).
+        Assert.Equal([75m, 100m], result.OrderBy(x => x).ToList());
+    }
+
+    [Fact]
+    public void GroupBy_after_source_side_OrderBy_reasserted_after_Skip_goes_native()
+    {
+        // Mirrors EF Core's own GroupBy_with_order_by_skip_and_another_order_by: an OrderBy/ThenBy, a Skip,
+        // then the SAME OrderBy/ThenBy re-asserted (a common EF Core pattern for stable pagination before
+        // further composition) — all still before the GroupBy.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_after_source_side_OrderBy_reasserted_after_Skip_goes_native));
+
+        var result = db.Entities
+            .OrderBy(o => o.Country)
+            .ThenBy(o => o.Amount)
+            .Skip(1)
+            .OrderBy(o => o.Country)
+            .ThenBy(o => o.Amount)
+            .GroupBy(o => o.Country)
+            .Select(g => g.Sum(o => o.Amount))
+            .ToList();
+
+        // Country then Amount ascending: FR/300, UK/25, UK/50, US/100, US/200. Skip(1) drops FR/300.
+        // Remaining: UK=75, US=300. FR has zero surviving rows — no group for it.
+        Assert.Equal([75m, 300m], result.OrderBy(x => x).ToList());
+    }
+
+    [Fact]
+    public void GroupBy_after_source_side_OrderBy_Skip_Take_matches_driver_linq()
+    {
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(GroupBy_after_source_side_OrderBy_Skip_Take_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(GroupBy_after_source_side_OrderBy_Skip_Take_matches_driver_linq) + "D");
+
+        (string Country, decimal Sum)[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities
+                .OrderBy(o => o.Amount)
+                .Skip(1)
+                .Take(2)
+                .GroupBy(o => o.Country)
+                .Select(g => new { g.Key, Sum = g.Sum(o => o.Amount) })
+                .AsEnumerable()
+                .Select(x => (x.Key, x.Sum)).ToArray();
+
+        var native = Run(nativeDb).OrderBy(x => x.Country).ToArray();
+        // Ascending by Amount: 25(UK), 50(UK), 100(US), 200(US), 300(FR). Skip(1).Take(2) keeps 50(UK), 100(US).
+        Assert.Equal([("UK", 50m), ("US", 100m)], native);
+        Assert.Equal(Run(driverDb).OrderBy(x => x.Country).ToArray(), native);
+    }
+
+    [Fact]
     public void GroupBy_results_match_driver_linq()
     {
         var seed = SeedOrders();

@@ -901,38 +901,42 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : "$_id" } } }, { "
 
     public override async Task OrderBy_GroupBy_Aggregate(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.OrderBy_GroupBy_Aggregate(async));
+        await base.OrderBy_GroupBy_Aggregate(async);
 
         AssertMql(
-        );
+            """
+            Orders.{ "$sort" : { "_id" : 1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+            """);
     }
 
     public override async Task OrderBy_Skip_GroupBy_Aggregate(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.OrderBy_Skip_GroupBy_Aggregate(async));
+        await base.OrderBy_Skip_GroupBy_Aggregate(async);
 
         AssertMql(
-        );
+            """
+            Orders.{ "$sort" : { "_id" : 1 } }, { "$skip" : 80 }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$avg" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+            """);
     }
 
     public override async Task OrderBy_Take_GroupBy_Aggregate(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.OrderBy_Take_GroupBy_Aggregate(async));
+        await base.OrderBy_Take_GroupBy_Aggregate(async);
 
         AssertMql(
-        );
+            """
+            Orders.{ "$sort" : { "_id" : 1 } }, { "$limit" : 500 }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$min" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+            """);
     }
 
     public override async Task OrderBy_Skip_Take_GroupBy_Aggregate(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.OrderBy_Skip_Take_GroupBy_Aggregate(async));
+        await base.OrderBy_Skip_Take_GroupBy_Aggregate(async);
 
         AssertMql(
-        );
+            """
+            Orders.{ "$sort" : { "_id" : 1 } }, { "$skip" : 80 }, { "$limit" : 500 }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$max" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+            """);
     }
 
     public override async Task Distinct_GroupBy_Aggregate(bool async)
@@ -2070,11 +2074,12 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "__agg0" : { "$sum" : 1 } } }, { "$
 
     public override async Task GroupBy_with_order_by_skip_and_another_order_by(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.GroupBy_with_order_by_skip_and_another_order_by(async));
+        await base.GroupBy_with_order_by_skip_and_another_order_by(async);
 
         AssertMql(
-        );
+            """
+            Orders.{ "$sort" : { "CustomerID" : 1, "_id" : 1 } }, { "$skip" : 80 }, { "$sort" : { "CustomerID" : 1, "_id" : 1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+            """);
     }
 
     public override async Task GroupBy_Property_Select_Count_with_predicate(bool async)
@@ -2181,7 +2186,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "__agg0" : { "$sum" : 1 } } }, { "$
 
         AssertMql(
             """
-            Orders.{ "$skip" : 0 }, { "$match" : { "_id" : { "$type" : -1 } } }, { "$group" : { "_id" : "$CustomerID", "__agg0" : { "$sum" : 1 } } }, { "$project" : { "Key" : "$_id", "Total" : "$__agg0", "_id" : 0 } }
+            Orders.{ "$skip" : 0 }, { "$match" : { "_id" : { "$type" : -1 } } }, { "$group" : { "_id" : "$CustomerID", "Total" : { "$sum" : 1 } } }, { "$project" : { "Key" : "$_id", "Total" : "$Total", "_id" : 0 } }
             """);
     }
 

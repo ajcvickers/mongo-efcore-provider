@@ -51,10 +51,6 @@ internal static class NativeGroupByBinder
     {
         var select = mongoQ.Select;
 
-        // Post-group paging / ordering on top of a pre-existing select is out of scope; fall back.
-        if (select.HasPaging || select.HasOrdering)
-            return false;
-
         var translator = new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType);
 
         // EF-322: a GroupBy composed directly on top of a projected Distinct (Select.PriorGrouping, set by
