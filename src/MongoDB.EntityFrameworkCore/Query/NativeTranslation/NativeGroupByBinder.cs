@@ -64,6 +64,16 @@ internal static class NativeGroupByBinder
 
         switch (keySelector.Body)
         {
+            // A zero-argument new{} key (GroupBy(o => new { })) groups every row into a single group. Matched
+            // on Arguments.Count, NOT Members: NewExpression.Members is null for EVERY non-anonymous-type
+            // constructor call (e.g. new OrderKey(o.Country, o.Year) also has Members == null), so matching on
+            // Members alone would ALSO bind a genuine multi-part constructor-based key as a zero-part one —
+            // silently collapsing every row into one group. Arguments.Count == 0 correctly admits only a
+            // true zero-member new{} (both presentations the compiler emits have zero constructor arguments)
+            // and excludes any real key, which always has one argument per key part.
+            case NewExpression { Arguments.Count: 0 }:
+                break;
+
             case NewExpression { Members: { Count: > 0 } members } newExpr:
                 for (var i = 0; i < newExpr.Arguments.Count; i++)
                 {
@@ -173,7 +183,7 @@ internal static class NativeGroupByBinder
         if (select.PriorGrouping is { } priorGrouping)
             translator.DistinctAliasScope = priorGrouping;
 
-        var isComposite = keyParts.Count > 1 || keyParts[0].Name != null;
+        var isComposite = keyParts.Count == 0 ? false : keyParts.Count > 1 || keyParts[0].Name != null;
 
         // Resolve any OrderBy/ThenBy composed directly on the ungrouped GroupBy result (recorded by
         // NativeSlotPopulator's pending-ordering carve-out) BEFORE processing the Select's own bindings below,
@@ -266,10 +276,11 @@ internal static class NativeGroupByBinder
         if (expr is not MemberExpression member)
             return false;
 
-        // g.Key — the whole key. Only flattenable when the key is scalar (single unnamed part).
+        // g.Key — the whole key. Only flattenable when the key is scalar (single unnamed part); a
+        // composite key or a zero-part (empty new{}) key has no single field to read it back from.
         if (member.Member.Name == "Key" && member.Expression == groupingParameter)
         {
-            path = isComposite ? null : "_id";
+            path = (isComposite || keyParts.Count == 0) ? null : "_id";
             return true;
         }
 

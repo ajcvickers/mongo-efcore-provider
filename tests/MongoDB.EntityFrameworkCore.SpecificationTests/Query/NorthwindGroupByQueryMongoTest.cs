@@ -886,11 +886,12 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : { "$add" : ["$_id
 
     public override async Task GroupBy_empty_key_Aggregate(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.GroupBy_empty_key_Aggregate(async));
+        await base.GroupBy_empty_key_Aggregate(async);
 
         AssertMql(
-        );
+            """
+            Orders.{ "$group" : { "_id" : { }, "_v" : { "$sum" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+            """);
     }
 
     public override async Task GroupBy_empty_key_Aggregate_Key(bool async)

@@ -1425,4 +1425,112 @@ public class NativeGroupByTests(TemporaryDatabaseFixture database) : IClassFixtu
                 .Select(g => new { g.Key, Count = g.Select(o => o.Year * 2).Distinct().Count() })
                 .ToList());
     }
+
+    [Fact]
+    public void GroupBy_empty_key_bare_aggregate_goes_native()
+    {
+        // GroupBy(o => new { }) groups every row into ONE group — a degenerate/zero-part key.
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_empty_key_bare_aggregate_goes_native));
+
+        var result = db.Entities
+            .GroupBy(o => new { })
+            .Select(g => g.Sum(o => o.Amount))
+            .ToList();
+
+        // 100 + 200 + 50 + 25 + 300 = 675, one group.
+        Assert.Equal([675m], result);
+    }
+
+    [Fact]
+    public void GroupBy_empty_key_with_Key_readback_matches_driver_linq()
+    {
+        // Reading g.Key back off a zero-part key needs serializer support this provider doesn't have yet —
+        // must keep falling back to driver-LINQ (never a hard crash), on both Native and NativeOnly... no,
+        // NativeOnly forbids fallback, so this must THROW under NativeOnly and MATCH driver-LINQ under Native.
+        var seed = SeedOrders();
+
+        using var nativeOnlyDb = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(GroupBy_empty_key_with_Key_readback_matches_driver_linq) + "NO");
+        Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            nativeOnlyDb.Entities
+                .GroupBy(o => new { })
+                .Select(g => new { g.Key, Sum = g.Sum(o => o.Amount) })
+                .ToList());
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(GroupBy_empty_key_with_Key_readback_matches_driver_linq) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(GroupBy_empty_key_with_Key_readback_matches_driver_linq) + "D");
+
+        decimal[] Run(SingleEntityDbContext<Order> db) =>
+            db.Entities
+                .GroupBy(o => new { })
+                .Select(g => new { g.Key, Sum = g.Sum(o => o.Amount) })
+                .AsEnumerable()
+                .Select(x => x.Sum).ToArray();
+
+        var native = Run(nativeDb);
+        Assert.Equal([675m], native);
+        Assert.Equal(Run(driverDb), native);
+    }
+
+    private class CountryYearKey
+    {
+        public string Country { get; }
+        public int Year { get; }
+        public CountryYearKey(string country, int year) { Country = country; Year = year; }
+        public override bool Equals(object? obj) => obj is CountryYearKey k && k.Country == Country && k.Year == Year;
+        public override int GetHashCode() => HashCode.Combine(Country, Year);
+    }
+
+    [Fact]
+    public void GroupBy_constructor_call_key_does_not_collapse_to_one_group()
+    {
+        // Regression guard for the final-review finding: a constructor-call key (Members == null, same as a
+        // zero-member new{}) must NOT be mistaken for a degenerate empty key. Differential test — asserts the
+        // native and driver-LINQ ROW COUNTS match, since a row-count-blind assertion wouldn't have caught this.
+        var seed = SeedOrders();
+
+        using var nativeDb = CreateContext(seed, MongoQueryMode.Native,
+            nameof(GroupBy_constructor_call_key_does_not_collapse_to_one_group) + "N");
+        using var driverDb = CreateContext(seed, MongoQueryMode.DriverLinq,
+            nameof(GroupBy_constructor_call_key_does_not_collapse_to_one_group) + "D");
+
+        int[] RunCounts(SingleEntityDbContext<Order> db) =>
+            db.Entities
+                .GroupBy(o => new CountryYearKey(o.Country, o.Year))
+                .Select(g => new { Count = g.Count() })
+                .AsEnumerable()
+                .Select(x => x.Count)
+                .OrderBy(c => c)
+                .ToArray();
+
+        var native = RunCounts(nativeDb);
+        // 5 rows, grouped by (Country, Year): (US,2020)=1, (US,2021)=1, (UK,2020)=2, (FR,2021)=1 → 4 groups.
+        Assert.Equal(4, native.Length);
+        Assert.Equal(RunCounts(driverDb), native);
+    }
+
+    [Fact]
+    public void GroupBy_empty_key_then_Count_goes_native()
+    {
+        using var db = CreateContext(SeedOrders(), MongoQueryMode.NativeOnly,
+            nameof(GroupBy_empty_key_then_Count_goes_native));
+
+        var result = db.Entities.GroupBy(o => new { }).Count();
+
+        Assert.Equal(1, result); // one group (the whole non-empty collection), so exactly one "group exists" row
+    }
+
+    [Fact]
+    public void GroupBy_empty_key_then_Count_over_empty_collection_goes_native()
+    {
+        using var db = CreateContext([], MongoQueryMode.NativeOnly,
+            nameof(GroupBy_empty_key_then_Count_over_empty_collection_goes_native));
+
+        var result = db.Entities.GroupBy(o => new { }).Count();
+
+        Assert.Equal(0, result); // no rows at all → no groups
+    }
 }
