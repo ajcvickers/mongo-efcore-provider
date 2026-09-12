@@ -103,6 +103,9 @@ internal static class MongoFieldPrefixRewriter
             MongoFilteredSizeExpression f => new MongoFilteredSizeExpression(prefix + "." + f.ArrayPath, f.ElementPredicate, f.Type),
             // The operand carries the field path; the conversion itself has nothing to prefix.
             MongoConvertExpression c => new MongoConvertExpression(Rewrite(c.Operand, prefix), c.Type),
+            // The tested field is a document path like any other field reference, so it prefixes the same way.
+            MongoNumericTypeBracketExpression b => new MongoNumericTypeBracketExpression(
+                (MongoFieldExpression)Rewrite(b.Field, prefix)),
             // This switch's default THROWS rather than declining gracefully (unlike every other gate in this
             // area — see the durable-invariants list in Query/AGENTS.md). A SelectMany result-selector
             // projection leaf that needs cross-scope field prefixing reaches here for any node kind

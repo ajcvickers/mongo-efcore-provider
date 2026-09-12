@@ -1371,7 +1371,7 @@ OrderDetails.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : 
 
         AssertMql(
             """
-Products.{ "$match" : { "UnitPrice" : { "$gt" : 100.0 } } }
+Products.{ "$match" : { "$and" : [{ "UnitPrice" : { "$type" : "number" } }, { "$expr" : { "$gt" : [{ "$toDouble" : "$UnitPrice" }, 100.0] } }] } }
 """);
     }
 

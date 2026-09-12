@@ -146,6 +146,7 @@ public class MongoExpressionNodeCoverageTests
             new MongoOuterFieldExpression(rank, "Rank"),
             new MongoElementRefExpression("Total", typeof(int)),
             new MongoLookupNullCheckExpression("_lookup_Manager", isNotNull: false),
+            new MongoNumericTypeBracketExpression(rankField),
             rankConstant,
             new MongoParameterExpression("p0", rank),
             new MongoBinaryExpression(MongoBinaryOperator.Equal, rankField, rankConstant),
@@ -608,6 +609,21 @@ public class MongoExpressionNodeCoverageTests
         ["MongoLookupNullCheckExpression|PrefixRewriter.Rewrite"] = "declined",
         ["MongoLookupNullCheckExpression|QL.IsQueryDialectRenderable"] = "false",
         ["MongoLookupNullCheckExpression|QL.Render"] = "rendered",
+
+        // Query-dialect-only by design (see the node's own remarks): produced only as the Left conjunct of an
+        // AndAlso the translator itself builds, beside an un-renderable $expr sibling under the SAME AndAlso —
+        // it is never negated, never prefix-rewritten in practice (though a rule exists for completeness), and
+        // never asked to render inside $expr. AllFieldsDefaultSerialized falls open to the catch-all's "true":
+        // this node is only ever constructed once CanFallThroughToExpr has already confirmed the field is
+        // default-serialized, so there is nothing left for that check to catch here.
+        ["MongoNumericTypeBracketExpression|Agg.CanRender"] = "false",
+        ["MongoNumericTypeBracketExpression|Agg.Render"] = "declined",
+        ["MongoNumericTypeBracketExpression|AllFieldsDefaultSerialized"] = "true",
+        ["MongoNumericTypeBracketExpression|AllFieldsDefaultSerialized(converted)"] = "true",
+        ["MongoNumericTypeBracketExpression|Negator.TryNegate"] = "false",
+        ["MongoNumericTypeBracketExpression|PrefixRewriter.Rewrite"] = "rendered",
+        ["MongoNumericTypeBracketExpression|QL.IsQueryDialectRenderable"] = "true",
+        ["MongoNumericTypeBracketExpression|QL.Render"] = "rendered",
 
         ["MongoOuterFieldExpression|Agg.CanRender"] = "true",
         ["MongoOuterFieldExpression|Agg.Render"] = "rendered",
