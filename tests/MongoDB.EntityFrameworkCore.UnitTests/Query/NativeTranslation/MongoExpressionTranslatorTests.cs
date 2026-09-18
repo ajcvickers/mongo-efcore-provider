@@ -597,20 +597,22 @@ public class MongoExpressionTranslatorTests
     // implicit conversion to int, so the compiler can only satisfy the call via Equals(object), BOXING the
     // ulong argument. This is a genuinely different overload with different semantics — Int32.Equals(object)
     // returns false whenever the boxed argument isn't itself a boxed int, regardless of numeric value — so it
-    // must NOT be admitted here: doing so would mean unwrapping the boxing Convert down to a raw ulong
-    // constant and emitting a native $eq that MongoDB WOULD match (BSON compares numeric subtypes by value),
-    // silently returning the OPPOSITE of what plain C# returns. This shape has no native form yet and must
-    // keep falling back to the driver-LINQ bridge, which already special-cases it correctly.
+    // must NOT be admitted to TranslateComparisonCore here: doing so would mean unwrapping the boxing Convert
+    // down to a raw ulong constant and emitting a native $eq that MongoDB WOULD match (BSON compares numeric
+    // subtypes by value), silently returning the OPPOSITE of what plain C# returns. Instead this folds to a
+    // constant `false` (mirroring the driver-LINQ bridge's own IsAlwaysFalseAcrossTypeMismatch) — the correct
+    // answer for every row, translated rather than declined.
     [Fact]
-    public void Equals_method_call_using_object_overload_reports_not_translatable()
+    public void Equals_method_call_using_object_overload_reports_constant_false()
     {
         var translator = NewTranslator(GetEntityType<Customer>());
         Expression<Func<Customer, bool>> predicate = c => c.Age.Equals((ulong)21);
 
         var translated = translator.TryTranslate(predicate.Body, out var result);
 
-        Assert.False(translated);
-        Assert.Null(result);
+        Assert.True(translated);
+        var constant = Assert.IsType<MongoConstantExpression>(result);
+        Assert.Equal(false, constant.Value);
     }
 
     // EF-322 follow-up: a NULLABLE receiver's Equals(...) call. Nullable<T> has no IEquatable<T>.Equals(T) of
@@ -663,18 +665,20 @@ public class MongoExpressionTranslatorTests
     }
 
     // The mismatched-type guard: c.Age is boxed from Int32, the second argument from Int64 — genuinely
-    // different unboxed types, exactly like Equals_method_call_using_object_overload_reports_not_translatable
-    // above but reached via the static two-arg overload instead of the instance one.
+    // different unboxed types, exactly like Equals_method_call_using_object_overload_reports_constant_false
+    // above but reached via the static two-arg overload instead of the instance one. Folds to constant
+    // `false` rather than declining, for the same reason.
     [Fact]
-    public void Static_object_equals_with_mismatched_types_reports_not_translatable()
+    public void Static_object_equals_with_mismatched_types_reports_constant_false()
     {
         var translator = NewTranslator(GetEntityType<Customer>());
         Expression<Func<Customer, bool>> predicate = c => object.Equals(c.Age, (long)21);
 
         var translated = translator.TryTranslate(predicate.Body, out var result);
 
-        Assert.False(translated);
-        Assert.Null(result);
+        Assert.True(translated);
+        var constant = Assert.IsType<MongoConstantExpression>(result);
+        Assert.Equal(false, constant.Value);
     }
 
     // ------------------------------------------------------------------
