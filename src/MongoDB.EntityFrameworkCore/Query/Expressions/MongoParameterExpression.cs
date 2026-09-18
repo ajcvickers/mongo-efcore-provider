@@ -44,13 +44,16 @@ internal sealed class MongoParameterExpression : MongoExpression
     /// </param>
     /// <param name="arrayElementIndex">See <see cref="ArrayElementIndex"/>. Mutually exclusive with
     /// <paramref name="extractFromEntityValue"/> — no node needs both.</param>
+    /// <param name="rawElementType">See <see cref="RawElementType"/>.</param>
     public MongoParameterExpression(
-        string name, IProperty? forSerialization, bool extractFromEntityValue = false, int? arrayElementIndex = null)
+        string name, IProperty? forSerialization, bool extractFromEntityValue = false, int? arrayElementIndex = null,
+        Type? rawElementType = null)
     {
         Name = name;
         ForSerialization = forSerialization;
         ExtractFromEntityValue = extractFromEntityValue;
         ArrayElementIndex = arrayElementIndex;
+        RawElementType = rawElementType;
     }
 
     /// <summary>The parameter name.</summary>
@@ -74,6 +77,14 @@ internal sealed class MongoParameterExpression : MongoExpression
     /// <see cref="NativeTranslation.NativeQueryParameter.TryGetParameterArrayElementIndex"/>.
     /// </summary>
     public int? ArrayElementIndex { get; }
+
+    /// <summary>
+    /// When <see cref="ForSerialization"/> is <see langword="null"/> (a property-less, COMPUTED-needle
+    /// <c>Contains</c> collection — see <c>MongoExpressionTranslator.TranslateInValuesRaw</c>), the CLR type of
+    /// the collection's elements, used by the renderer to pick a default (representation-less) element
+    /// serializer instead of assuming <see cref="string"/>.
+    /// </summary>
+    public Type? RawElementType { get; }
 
     /// <inheritdoc />
     public override Type Type

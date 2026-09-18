@@ -952,18 +952,18 @@ internal sealed partial class MongoExpressionTranslator
                 }
 
                 // The item isn't a bare field — try a COMPUTED needle (e.g. string concatenation of a
-                // column with a constant/other column: `data.Contains(c.CustomerID + "SomeConstant")`).
-                // A computed needle has no query-dialect form at all (only a bare field can key
-                // { field: { $in: [...] } }), so it can only be tested via $expr's array-form $in — hence
-                // MongoComputedInExpression, not MongoInExpression. Scoped to a STRING-typed needle (the
-                // only computed shape TranslateValue produces that TranslateInValuesRaw can serialize
-                // without a backing IProperty) and gated by CanRender so a needle shape the aggregation
-                // renderer can't express declines here rather than throwing at render time.
+                // column with a constant/other column: `data.Contains(c.CustomerID + "SomeConstant")`, or a
+                // date-part chain: `dates.Contains(o.OrderDate!.Value.Date)`). A computed needle has no
+                // query-dialect form at all (only a bare field can key { field: { $in: [...] } }), so it can
+                // only be tested via $expr's array-form $in — hence MongoComputedInExpression, not
+                // MongoInExpression. Scoped to the shapes TranslateInValuesRaw can serialize without a backing
+                // IProperty (string and DateTime today) and gated by CanRender so a needle shape the
+                // aggregation renderer can't express declines here rather than throwing at render time.
                 if (TryTranslateValue(itemExpr, out var needleNode)
-                    && needleNode.Type == typeof(string)
+                    && (needleNode.Type == typeof(string) || needleNode.Type == typeof(DateTime))
                     && MongoAggregationExpressionRenderer.CanRender(needleNode))
                 {
-                    var rawValuesNode = TranslateInValuesRaw(collectionExpr, typeof(string));
+                    var rawValuesNode = TranslateInValuesRaw(collectionExpr, needleNode.Type);
                     if (rawValuesNode is null)
                         return null;
 

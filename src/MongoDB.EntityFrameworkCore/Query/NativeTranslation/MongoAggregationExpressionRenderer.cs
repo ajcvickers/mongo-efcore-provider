@@ -501,13 +501,15 @@ internal static class MongoAggregationExpressionRenderer
             case MongoParameterExpression parameter:
             {
                 // A null ForSerialization means there is no backing IProperty — reached only via a
-                // COMPUTED needle's values (TranslateInValuesRaw), which today is scoped to a string-typed
-                // needle exclusively (MongoExpressionTranslator's collection-membership case), so a plain
-                // string element serializer is always correct here. An ordinary bare-field MongoInExpression
-                // never reaches this null branch — TranslateInValues always supplies a real property.
-                var elementSerializer = parameter.ForSerialization is null
-                    ? StringSerializer.Instance
-                    : BsonSerializerFactory.GetPropertySerializationInfo(parameter.ForSerialization).Serializer;
+                // COMPUTED needle's values (TranslateInValuesRaw), so RawElementType carries the needle's CLR
+                // type instead; pick a default (representation-less) serializer for it. An ordinary bare-field
+                // MongoInExpression never reaches this null branch — TranslateInValues always supplies a real
+                // property.
+                var elementSerializer = parameter.ForSerialization is not null
+                    ? BsonSerializerFactory.GetPropertySerializationInfo(parameter.ForSerialization).Serializer
+                    : parameter.RawElementType is not null
+                        ? BsonSerializerFactory.CreateTypeSerializer(parameter.RawElementType)
+                        : StringSerializer.Instance;
                 return placeholders.CreateArrayPlaceholder(parameter.Name, elementSerializer);
             }
             case MongoValueListExpression list:
