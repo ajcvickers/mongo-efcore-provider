@@ -564,7 +564,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "Sum" : { "$sum" : "$EmployeeID" } 
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : 2, "__agg0" : { "$sum" : "$_id" }, "__agg1" : { "$min" : "$_id" }, "__agg2" : { "$max" : "$_id" }, "__agg3" : { "$avg" : "$_id" } } }, { "$project" : { "Sum" : "$__agg0", "Min" : "$__agg1", "Key" : "$_id", "Max" : "$__agg2", "Avg" : "$__agg3", "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : 2, "Sum" : { "$sum" : "$_id" }, "Min" : { "$min" : "$_id" }, "Max" : { "$max" : "$_id" }, "Avg" : { "$avg" : "$_id" } } }, { "$project" : { "Sum" : "$Sum", "Min" : "$Min", "Key" : "$_id", "Max" : "$Max", "Avg" : "$Avg", "_id" : 0 } }
             """);
     }
 
@@ -574,7 +574,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "Sum" : { "$sum" : "$EmployeeID" } 
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : 2, "__agg0" : { "$sum" : "$_id" } } }, { "$project" : { "Sum" : "$__agg0", "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : 2, "Sum" : { "$sum" : "$_id" } } }, { "$project" : { "Sum" : "$Sum", "_id" : 0 } }
             """);
     }
 
@@ -584,7 +584,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "Sum" : { "$sum" : "$EmployeeID" } 
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : 2, "__agg0" : { "$sum" : "$_id" } } }, { "$project" : { "Sum" : "$__agg0", "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : 2, "Sum" : { "$sum" : "$_id" } } }, { "$project" : { "Sum" : "$Sum", "_id" : 0 } }
             """);
     }
 
@@ -594,7 +594,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "Sum" : { "$sum" : "$EmployeeID" } 
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : 2, "__agg0" : { "$sum" : "$_id" } } }, { "$project" : { "Sum" : "$__agg0", "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : 2, "Sum" : { "$sum" : "$_id" } } }, { "$project" : { "Sum" : "$Sum", "_id" : 0 } }
             """);
     }
 
@@ -604,7 +604,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "Sum" : { "$sum" : "$EmployeeID" } 
 
         AssertMql(
             """
-            Orders.{ "$match" : { "_id" : { "$gt" : 10500 } } }, { "$group" : { "_id" : 2, "__agg0" : { "$sum" : "$_id" }, "__agg1" : { "$min" : "$_id" }, "__agg2" : { "$max" : "$_id" }, "__agg3" : { "$avg" : "$_id" } } }, { "$project" : { "Sum" : "$__agg0", "Min" : "$__agg1", "Random" : "$_id", "Max" : "$__agg2", "Avg" : "$__agg3", "_id" : 0 } }
+            Orders.{ "$match" : { "_id" : { "$gt" : 10500 } } }, { "$group" : { "_id" : 2, "Sum" : { "$sum" : "$_id" }, "Min" : { "$min" : "$_id" }, "Max" : { "$max" : "$_id" }, "Avg" : { "$avg" : "$_id" } } }, { "$project" : { "Sum" : "$Sum", "Min" : "$Min", "Random" : "$_id", "Max" : "$Max", "Avg" : "$Avg", "_id" : 0 } }
             """);
     }
 
@@ -1939,7 +1939,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "__agg0" : { "$sum" : 1 } } }, { "$
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : "$CustomerID", "__agg0" : { "$sum" : 1 }, "__agg1" : { "$max" : "$_id" } } }, { "$project" : { "Key" : "$_id", "Count" : "$__agg0", "LastOrder" : "$__agg1", "_id" : 0 } }, { "$group" : { "_id" : 1, "__agg0" : { "$sum" : 1 }, "__agg1" : { "$max" : "$_id" }, "__agg2" : { "$sum" : "$Count" } } }, { "$project" : { "Key" : "$_id", "Count" : "$__agg2", "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : "$CustomerID", "Count" : { "$sum" : 1 }, "LastOrder" : { "$max" : "$_id" } } }, { "$project" : { "Key" : "$_id", "Count" : "$Count", "LastOrder" : "$LastOrder", "_id" : 0 } }, { "$group" : { "_id" : 1, "Count" : { "$sum" : "$Count" } } }, { "$project" : { "Key" : "$_id", "Count" : "$Count", "_id" : 0 } }
             """);
     }
 

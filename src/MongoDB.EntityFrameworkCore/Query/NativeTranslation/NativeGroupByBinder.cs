@@ -53,9 +53,10 @@ internal static class NativeGroupByBinder
 
         var translator = new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType);
 
-        // EF-322: a GroupBy composed directly on top of a projected Distinct (Select.PriorGrouping, set by
-        // SnapshotDistinctGroupingForNestedGroupBy just before this call) resolves its key selector against
-        // the Distinct's own flattened output alias, never the entity — same rationale and mechanism as
+        // EF-322/EF-TBD: a GroupBy composed directly on top of an already-finalized prior grouping — a
+        // projected Distinct, or an ordinary prior GroupBy(key).Select(aggregate) (Select.PriorGrouping, set by
+        // SnapshotPriorGroupingForNestedGroupBy just before this call) — resolves its key selector against
+        // that prior stage's own flattened output alias, never the entity — same rationale and mechanism as
         // NativeSlotPopulator's Where arm (MongoExpressionTranslator.DistinctAliasScope's own remarks).
         if (select.PriorGrouping is { } priorGrouping)
             translator.DistinctAliasScope = priorGrouping;
@@ -91,6 +92,14 @@ internal static class NativeGroupByBinder
                     || !HasDefaultKeySerialization(scalarField.Property))
                     return false;
                 parts.Add(new MongoGroupingKeyPart(null, scalarField));
+                break;
+
+            // A literal-constant key (GroupBy(o => 2)) groups every row into a single group, identically to
+            // the zero-member new{} case above, EXCEPT the group's _id must be the literal itself (e.g. `2`),
+            // not `{}` — e.g. a GroupBy(e => 1) nested on a prior GroupBy's aggregate result (there is no
+            // property to check for default serialization; a raw literal is inherently safe to read back).
+            case ConstantExpression constant:
+                parts.Add(new MongoGroupingKeyPart(null, new MongoConstantExpression(constant.Value, forSerialization: null)));
                 break;
 
             default:
@@ -179,9 +188,10 @@ internal static class NativeGroupByBinder
 
         var translator = new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType);
 
-        // EF-322: an accumulator's operand selector (g.Sum(x => x.Field) etc.) over a GroupBy nested on a
-        // projected Distinct resolves against the Distinct's own flattened alias, never the entity — see
-        // TryBindGroupKey's own carve-out above for the identical rationale.
+        // EF-322/EF-TBD: an accumulator's operand selector (g.Sum(x => x.Field) etc.) over a GroupBy nested on
+        // an already-finalized prior grouping — a projected Distinct or an ordinary prior GroupBy — resolves
+        // against that prior stage's own flattened alias, never the entity — see TryBindGroupKey's own
+        // carve-out above for the identical rationale.
         if (select.PriorGrouping is { } priorGrouping)
             translator.DistinctAliasScope = priorGrouping;
 
