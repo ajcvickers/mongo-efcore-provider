@@ -204,7 +204,13 @@ internal static class NativeGroupByBinder
                 var groupParam = keySelector.Parameters[0];
                 var body = keySelector.Body;
 
-                if (TryGetKeyMemberPath(body, groupParam, keyParts, isComposite, out var keyPath))
+                // allowWholeKeyRead: false — ordering by the WHOLE composite key still declines, unlike the
+                // Select-projection flatten below. A composite key's CLR type is a compiler-generated
+                // anonymous type with no IComparable/IComparer, so `.OrderBy(g => g.Key)` over one is not a
+                // shape the in-memory LINQ oracle can even execute (Comparer<T>.Default throws for it) — this
+                // stays declined rather than emitting a $sort on the raw "_id" sub-document, which would give
+                // a different (BSON field-order) comparison with no oracle to match against.
+                if (TryGetKeyMemberPath(body, groupParam, keyParts, isComposite, out var keyPath, allowWholeKeyRead: false))
                 {
                     if (keyPath == null)
                         return false; // bare g.Key over a composite key — no single field to sort by
@@ -271,15 +277,17 @@ internal static class NativeGroupByBinder
     }
 
     // Classifies a result-member value as a grouping-key access and, if so, yields the group-output element
-    // path it reads from. Returns true for a key access; `path` is null only for the unsupported bare-g.Key
-    // over a composite key (whole anonymous key object — cannot flatten to one field). Returns false when the
-    // value is not a key access (i.e. it is an accumulator).
+    // path it reads from. Returns true for a key access; `path` is null for a bare g.Key that cannot resolve
+    // to one field — always for a zero-part (empty new{}) key, and additionally for a composite key when
+    // `allowWholeKeyRead` is false. Returns false when the value is not a key access (i.e. it is an
+    // accumulator).
     private static bool TryGetKeyMemberPath(
         Expression expr,
         ParameterExpression groupingParameter,
         IReadOnlyList<MongoGroupingKeyPart> keyParts,
         bool isComposite,
-        out string? path)
+        out string? path,
+        bool allowWholeKeyRead = true)
     {
         path = null;
         expr = Unwrap(expr);
@@ -287,11 +295,16 @@ internal static class NativeGroupByBinder
         if (expr is not MemberExpression member)
             return false;
 
-        // g.Key — the whole key. Only flattenable when the key is scalar (single unnamed part); a
-        // composite key or a zero-part (empty new{}) key has no single field to read it back from.
+        // g.Key — the whole key. For the Select-projection flatten (allowWholeKeyRead: true), flattenable for
+        // any non-empty key (scalar or composite) by reading the group's own "_id" back wholesale — for a
+        // composite key that is a sub-document whose fields already match the composite key type's member
+        // names (the exact shape TryBindGroupKey wrote them in), so the same generic CLR-type readback that
+        // already handles a scalar key materializes the composite type from it too. Only a zero-part (empty
+        // new{}) key has no single field to read it back from. The ordering call site passes
+        // allowWholeKeyRead: false — see its own call-site remarks.
         if (member.Member.Name == "Key" && member.Expression == groupingParameter)
         {
-            path = (isComposite || keyParts.Count == 0) ? null : "_id";
+            path = keyParts.Count == 0 || (isComposite && !allowWholeKeyRead) ? null : "_id";
             return true;
         }
 
