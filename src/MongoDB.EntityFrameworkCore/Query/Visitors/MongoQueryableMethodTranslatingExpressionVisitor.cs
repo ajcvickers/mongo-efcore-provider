@@ -2323,7 +2323,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 mongoQueryExpression.ClearReadProjectionForNestedGroupBy();
             }
 
-            if (elementSelector != null || resultSelector != null
+            if (resultSelector != null
                 || !NativeGroupByBinder.TryBindGroupKey(mongoQueryExpression, keySelector))
             {
                 mongoQueryExpression.Select.MarkNotNativelyRepresentable();

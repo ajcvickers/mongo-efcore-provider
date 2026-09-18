@@ -614,7 +614,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "Sum" : { "$sum" : "$EmployeeID" } 
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : 2, "__agg0" : { "$sum" : "$_id" } } }, { "$project" : { "Sum" : "$__agg0", "Key" : "$_id", "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : 2, "Sum" : { "$sum" : "$_id" } } }, { "$project" : { "Sum" : "$Sum", "Key" : "$_id", "_id" : 0 } }
             """);
     }
 
@@ -690,11 +690,12 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "Sum" : { "$sum" : "$EmployeeID" } 
 
     public override async Task GroupBy_Property_scalar_element_selector_Average(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.GroupBy_Property_scalar_element_selector_Average(async));
+        await base.GroupBy_Property_scalar_element_selector_Average(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$avg" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Property_scalar_element_selector_Count(bool async)
@@ -719,29 +720,32 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : 1 } } }, { "$proj
 
     public override async Task GroupBy_Property_scalar_element_selector_Max(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.GroupBy_Property_scalar_element_selector_Max(async));
+        await base.GroupBy_Property_scalar_element_selector_Max(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$max" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Property_scalar_element_selector_Min(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.GroupBy_Property_scalar_element_selector_Min(async));
+        await base.GroupBy_Property_scalar_element_selector_Min(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$min" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Property_scalar_element_selector_Sum(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.GroupBy_Property_scalar_element_selector_Sum(async));
+        await base.GroupBy_Property_scalar_element_selector_Sum(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : "$_id" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Property_scalar_element_selector_Sum_Min_Max_Avg(bool async)
@@ -750,8 +754,8 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : 1 } } }, { "$proj
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : "$CustomerID", "__agg0" : { "$sum" : "$_id" }, "__agg1" : { "$min" : "$_id" }, "__agg2" : { "$max" : "$_id" }, "__agg3" : { "$avg" : "$_id" } } }, { "$project" : { "Sum" : "$__agg0", "Min" : "$__agg1", "Max" : "$__agg2", "Avg" : "$__agg3", "_id" : 0 } }
-            """);
+Orders.{ "$group" : { "_id" : "$CustomerID", "Sum" : { "$sum" : "$_id" }, "Min" : { "$min" : "$_id" }, "Max" : { "$max" : "$_id" }, "Avg" : { "$avg" : "$_id" } } }, { "$project" : { "Sum" : "$Sum", "Min" : "$Min", "Max" : "$Max", "Avg" : "$Avg", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Property_anonymous_element_selector_Average(bool async)
@@ -1600,8 +1604,8 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$sum" : { "$literal" : 1 
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : { "CustomerID" : "$CustomerID" }, "__agg0" : { "$sum" : { "$cond" : { "if" : { "$lt" : ["$_id", 11000] }, "then" : "$_id", "else" : 0 } } }, "__agg1" : { "$sum" : { "$cond" : { "if" : { "$gte" : ["$_id", 11000] }, "then" : "$_id", "else" : 0 } } } } }, { "$project" : { "Key" : "$_id", "TenK" : "$__agg0", "EleventK" : "$__agg1", "_id" : 0 } }
-            """);
+Orders.{ "$group" : { "_id" : { "CustomerID" : "$CustomerID" }, "TenK" : { "$sum" : { "$cond" : { "if" : { "$lt" : ["$_id", 11000] }, "then" : "$_id", "else" : 0 } } }, "EleventK" : { "$sum" : { "$cond" : { "if" : { "$gte" : ["$_id", 11000] }, "then" : "$_id", "else" : 0 } } } } }, { "$project" : { "Key" : "$_id", "TenK" : "$TenK", "EleventK" : "$EleventK", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Key_as_part_of_element_selector(bool async)

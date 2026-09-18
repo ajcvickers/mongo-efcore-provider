@@ -378,6 +378,16 @@ internal static class NativeGroupByBinder
         if (TryBindDistinctAccumulator(call, outputField, groupingParameter, translator, out accumulator, out flattenRead))
             return true;
 
+        // EF-TBD: a SELECTOR-LESS aggregate (g.Sum()/Average()/Min()/Max(), no lambda) over a GroupBy composed
+        // with a two-arg key+elementSelector overload arrives here as `g.Select(elementSelector).Sum()` —
+        // EF Core's normalizer re-expresses the parameterless aggregate as an ordinary Queryable.Select
+        // wrapping the grouping parameter, rather than inlining the element selector into a same-shaped
+        // aggregate lambda the way it does for a SELECTOR-carrying aggregate (see this method's own remarks
+        // on g.Sum(e => e.Field) above). Bind it the SAME way as the distinct form just above minus the
+        // dedup semantics — an ordinary $sum/$avg/$min/$max over the selected field, not $addToSet.
+        if (TryBindElementSelectedAccumulator(call, outputField, groupingParameter, translator, out accumulator, out flattenRead))
+            return true;
+
         if (call.Arguments.Count == 0 || !IsGroupingSource(call.Arguments[0], groupingParameter))
             return false;
 
@@ -497,6 +507,62 @@ internal static class NativeGroupByBinder
         flattenRead = isSize
             ? new MongoSizeExpression(outputField, call.Method.ReturnType)
             : new MongoArrayReduceExpression(reduceOp!, outputField, call.Method.ReturnType);
+        return true;
+    }
+
+    /// <summary>
+    /// A SELECTOR-LESS <c>Sum()</c>/<c>Average()</c>/<c>Min()</c>/<c>Max()</c> over a <c>GroupBy(key,
+    /// elementSelector)</c>'s element sequence — e.g. <c>.GroupBy(o =&gt; 2, o =&gt; o.OrderID).Select(g =&gt;
+    /// g.Sum())</c>. Unlike a selector-carrying aggregate (<c>g.Sum(x =&gt; x.Field)</c>, whose element
+    /// selector composition is inlined directly into the aggregate's own lambda before this translator ever
+    /// runs — see <see cref="TryBindAccumulator"/>'s own remarks), a parameterless aggregate has no lambda for
+    /// EF to inline into, so its normalizer instead re-expresses it as an ordinary
+    /// <c>g.AsQueryable().Select(elementSelector).Sum()</c> — the SAME shape <see cref="TryBindDistinctAccumulator"/>
+    /// recognizes, minus the trailing <c>Distinct()</c>. Binds an ordinary <c>$sum</c>/<c>$avg</c>/<c>$min</c>/
+    /// <c>$max</c> accumulator directly over the selected field (no <c>$addToSet</c>/dedup — every element
+    /// contributes, not just distinct ones).
+    /// </summary>
+    private static bool TryBindElementSelectedAccumulator(
+        MethodCallExpression call,
+        string outputField,
+        ParameterExpression groupingParameter,
+        MongoExpressionTranslator translator,
+        [NotNullWhen(true)] out MongoGroupAccumulator? accumulator,
+        [NotNullWhen(true)] out MongoExpression? flattenRead)
+    {
+        accumulator = null;
+        flattenRead = null;
+
+        if (call.Arguments.Count != 1)
+            return false;
+
+        // Min/Max are true open generics (<TSource>); Average/Sum's without-selector overloads are NOT
+        // generic — same asymmetry TryBindDistinctAccumulator's own remarks explain. Count/LongCount are
+        // deliberately excluded: a bare Count doesn't need the element's value at all, so EF has no reason to
+        // wrap it in a Select the way it does for a reducing aggregate.
+        var reduceOp = QueryableMethods.IsAverageWithoutSelector(call.Method) ? "$avg"
+            : call.Method.IsGenericMethod && call.Method.GetGenericMethodDefinition() == QueryableMethods.MinWithoutSelector ? "$min"
+            : call.Method.IsGenericMethod && call.Method.GetGenericMethodDefinition() == QueryableMethods.MaxWithoutSelector ? "$max"
+            : QueryableMethods.IsSumWithoutSelector(call.Method) ? "$sum"
+            : null;
+
+        if (reduceOp is null)
+            return false;
+
+        // The source must be g.Select(elementSelector) directly (never wrapped in a further Distinct() — that
+        // shape is TryBindDistinctAccumulator's, tried first by the caller).
+        if (Unwrap(call.Arguments[0]) is not MethodCallExpression { Method.IsGenericMethod: true } selectCall
+            || selectCall.Method.GetGenericMethodDefinition() != QueryableMethods.Select
+            || selectCall.Arguments.Count != 2
+            || !IsGroupingSource(selectCall.Arguments[0], groupingParameter))
+            return false;
+
+        if (selectCall.Arguments[1].UnwrapLambdaFromQuote() is not { } selector
+            || !translator.TryTranslateValue(selector.Body, out var operand))
+            return false;
+
+        accumulator = new MongoGroupAccumulator(outputField, reduceOp, operand);
+        flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType);
         return true;
     }
 
