@@ -1761,6 +1761,16 @@ internal sealed partial class MongoExpressionTranslator
                 : new MongoFieldExpression(property, fieldPath!);
         }
 
+        // EF-322: a member access naming a post-Distinct COMPUTED alias (no backing IProperty, so
+        // TryResolveMember above declines it) resolves to its flattened output path instead — the same
+        // primitive the StartsWith/EndsWith/Contains regex arm already uses (see
+        // TryResolveDistinctAliasComputedField's own remarks). This widens every operator that bottoms out in
+        // TranslateOperand — equality/relational comparisons via TranslateComparisonCore's general $expr
+        // fall-through, arithmetic, etc. — to accept a computed Distinct alias, not just the regex-only shape
+        // that previously special-cased it.
+        if (TryResolveDistinctAliasComputedField(node, out var aliasFieldRef))
+            return aliasFieldRef;
+
         // An OWNED-collection element count — b.Posts.Count / .Count() / .LongCount(). The renderer decides the
         // dialect: a comparison against an admissible integer constant becomes an array-index existence test,
         // anything else routes to $expr with a null-safe $size (see MongoQueryLanguageRenderer).
