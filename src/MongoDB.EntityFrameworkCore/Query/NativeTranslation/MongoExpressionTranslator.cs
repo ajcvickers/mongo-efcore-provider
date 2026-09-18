@@ -797,24 +797,23 @@ internal sealed partial class MongoExpressionTranslator
                 return TranslateComparisonCore(
                     nullableEqualsCall.Object!, nullableEqualsCall.Arguments[0].RemoveObjectConvert(), ExpressionType.Equal);
 
-            // --- Equals(object) call between known-different simple types, e.g. `c.NullableAge.Equals(uintValue)` ---
+            // --- Nullable-receiver Equals(object) call across a genuinely mismatched underlying type: e.g.
+            // `nullableLongPrm.Equals(e.ReportsTo)` (ulong? vs int?) ---
             //
-            // The previous case's type-match guard just failed, so this is the "mismatched-type" shape its
-            // own comment describes: plain C#'s Equals(object) checks the runtime type first (Int32.Equals
-            // does `obj is int`), so it's guaranteed false whenever the two sides are different EXACT-equality
-            // simple types — same restricted set the driver-LINQ bridge folds
-            // (ExpressionExtensionMethods.AreMismatchedExactEqualityTypes), scoped there rather than any
-            // mismatched types since an arbitrary type's Equals(object) override could compare across types.
-            // Folding to a constant here (instead of declining to the fallback) is what makes this shape go
-            // native at all.
+            // The case above admits a MATCHING underlying type; this one is the sibling for a mismatched one.
+            // Plain C# always returns false here (Nullable<T>.Equals(object) checks the argument's runtime type
+            // against T before comparing), so this is a compile-time-known constant, not a query — mirrors the
+            // driver-LINQ bridge's own fold for the identical shape (see
+            // ExpressionExtensionMethods.IsAlwaysFalseAcrossTypeMismatch). Scoped to
+            // ExactTypeEqualityTypes/AreMismatchedExactEqualityTypes, same as that bridge: an arbitrary type's
+            // Equals(object) override could legitimately compare across types, so only the known-exact-match
+            // primitives are safe to fold. Anything outside that set still falls through and stays declined.
             case MethodCallExpression
                 {
                     Method.Name: nameof(object.Equals), Object: not null, Arguments.Count: 1
                 } mismatchedEqualsCall
-                when ExpressionExtensionMethods.AreMismatchedExactEqualityTypes(
-                    Nullable.GetUnderlyingType(mismatchedEqualsCall.Object!.Type) ?? mismatchedEqualsCall.Object.Type,
-                    Nullable.GetUnderlyingType(mismatchedEqualsCall.Arguments[0].RemoveObjectConvert().Type)
-                        ?? mismatchedEqualsCall.Arguments[0].RemoveObjectConvert().Type):
+                when ExpressionExtensionMethods.IsAlwaysFalseAcrossTypeMismatch(
+                    mismatchedEqualsCall.Object!, mismatchedEqualsCall.Arguments[0]):
                 return new MongoConstantExpression(false, forSerialization: null);
 
             // --- Static object.Equals(a, b) method call ---
@@ -826,10 +825,11 @@ internal sealed partial class MongoExpressionTranslator
             // static-Equals case): peel exactly one boxing layer off each argument
             // (ExpressionExtensionMethods.RemoveObjectConvert — unlike Unwrap, this strips ONLY a single
             // Convert-to-object layer, leaving any numeric/widening conversion underneath intact) and require
-            // the UNBOXED types to match. A mismatch folds to a constant false when the two (nullable-stripped)
-            // types are known-different EXACT-equality simple types (mirrors the instance-call fold above via
-            // the same shared AreMismatchedExactEqualityTypes gate); any other mismatch declines rather than
-            // mistranslate — same correctness reasoning as the instance-call case above.
+            // the UNBOXED types to match. A genuinely mismatched EXACT-equality-type pair (e.g.
+            // object.Equals(intField, (long)21)) folds to a compile-time-known `false` constant instead —
+            // same fold and same ExactTypeEqualityTypes scoping as the instance-call case above, mirroring
+            // MongoEFToLinqTranslatingExpressionVisitor's static-Equals case. Anything else (mismatched types
+            // outside that set) declines rather than mistranslate.
             case MethodCallExpression
                 {
                     Method.Name: nameof(object.Equals), Object: null, Arguments.Count: 2
@@ -837,14 +837,16 @@ internal sealed partial class MongoExpressionTranslator
             {
                 var leftArg = staticEqualsCall.Arguments[0].RemoveObjectConvert();
                 var rightArg = staticEqualsCall.Arguments[1].RemoveObjectConvert();
-                if (leftArg.Type == rightArg.Type)
-                    return TranslateComparisonCore(leftArg, rightArg, ExpressionType.Equal);
+                if (leftArg.Type != rightArg.Type)
+                {
+                    return ExpressionExtensionMethods.AreMismatchedExactEqualityTypes(
+                        Nullable.GetUnderlyingType(leftArg.Type) ?? leftArg.Type,
+                        Nullable.GetUnderlyingType(rightArg.Type) ?? rightArg.Type)
+                        ? new MongoConstantExpression(false, forSerialization: null)
+                        : null;
+                }
 
-                return ExpressionExtensionMethods.AreMismatchedExactEqualityTypes(
-                    Nullable.GetUnderlyingType(leftArg.Type) ?? leftArg.Type,
-                    Nullable.GetUnderlyingType(rightArg.Type) ?? rightArg.Type)
-                    ? new MongoConstantExpression(false, forSerialization: null)
-                    : null;
+                return TranslateComparisonCore(leftArg, rightArg, ExpressionType.Equal);
             }
 
             // --- Negation of a boolean field ---
