@@ -934,6 +934,13 @@ internal sealed partial class MongoExpressionTranslator
                 return new MongoArrayContainsExpression(arrayFieldExpr, itemNode, negated: false);
             }
 
+            // --- Entity-list membership: customers.Contains(c) — the root entity itself is the item.
+            // Must run BEFORE the general collection-membership arm below: TryResolveMember(item) there
+            // requires a member-access item, which a bare whole-entity item never is, so it would decline.
+            // See MongoExpressionTranslator.EntityEquality.cs's TryTranslateEntityListContains.
+            case MethodCallExpression entityContainsCall when TryTranslateEntityListContains(entityContainsCall, out var entityListContains):
+                return entityListContains;
+
             // --- Collection membership: Enumerable.Contains / List<T>.Contains / ICollection<T>.Contains ---
 
             case MethodCallExpression call when TryMatchContainsMethod(call, out var collectionExpr, out var itemExpr):

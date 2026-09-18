@@ -1785,7 +1785,7 @@ Orders.{ "$match" : { "CustomerID" : "VINET" } }, { "$match" : { "_id" : 10248 }
 
         AssertMql(
             """
-            Customers.{ "$match" : { "$or" : [{ "_id" : "ALFKI" }, { "_id" : "ANATR" }] } }
+            Customers.{ "$match" : { "_id" : { "$in" : ["ALFKI", "ANATR"] } } }
             """);
     }
 
@@ -1795,7 +1795,7 @@ Orders.{ "$match" : { "CustomerID" : "VINET" } }, { "$match" : { "_id" : 10248 }
 
         AssertMql(
             """
-            Customers.{ "$match" : { "$or" : [{ "_id" : "ALFKI" }, { "_id" : "ANATR" }] } }
+            Customers.{ "$match" : { "_id" : { "$in" : ["ALFKI", "ANATR"] } } }
             """);
     }
 
@@ -1805,7 +1805,7 @@ Orders.{ "$match" : { "CustomerID" : "VINET" } }, { "$match" : { "_id" : 10248 }
 
         AssertMql(
             """
-Orders.{ "$match" : { "$or" : [{ "_id" : 10248 }, { "_id" : 10249 }] } }
+Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
 """);
     }
 
@@ -1815,7 +1815,7 @@ Orders.{ "$match" : { "$or" : [{ "_id" : 10248 }, { "_id" : 10249 }] } }
 
         AssertMql(
             """
-Orders.{ "$match" : { "$or" : [{ "_id" : 10248 }, { "_id" : 10249 }] } }
+Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
 """);
     }
 

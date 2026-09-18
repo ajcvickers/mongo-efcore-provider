@@ -3926,7 +3926,7 @@ OrderDetails.{ "$group" : { "_id" : null, "v" : { "$max" : "$Quantity" } } }
 
         AssertMql(
             """
-            Customers.{ "$match" : { "$or" : [{ "$expr" : { "$eq" : ["$$ROOT", null] } }, { "_id" : "ALFKI" }] } }
+            Customers.{ "$match" : { "_id" : { "$in" : [null, "ALFKI"] } } }
             """);
     }
 

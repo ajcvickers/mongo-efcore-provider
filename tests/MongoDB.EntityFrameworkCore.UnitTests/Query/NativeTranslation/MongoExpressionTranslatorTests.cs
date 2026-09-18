@@ -958,6 +958,65 @@ public class MongoExpressionTranslatorTests
     }
 
     // ------------------------------------------------------------------
+    // Test 17b: Contains over a query-parameter ENTITY list, item is the root entity itself
+    // (`customers.Contains(c)`) → MongoInExpression over the PRIMARY KEY, values extracted per-element
+    // from the runtime list via MongoParameterExpression.ExtractEntityKeyFromArrayElements.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Contains_over_entity_list_query_parameter_translates_to_key_in()
+    {
+        var entityType = GetEntityType<Customer>();
+        var cParam = Expression.Parameter(typeof(Customer), "c");
+
+#if EF8 || EF9
+        const string paramName = QueryCompilationContext.QueryParameterPrefix + "customers_0";
+        Expression efParam = Expression.Parameter(typeof(List<Customer>), paramName);
+#else
+        const string paramName = "__customers_0";
+        Expression efParam = new QueryParameterExpression(paramName, typeof(List<Customer>));
+#endif
+        var containsMethod = typeof(List<Customer>).GetMethod(nameof(List<Customer>.Contains), [typeof(Customer)])!;
+        var body = Expression.Call(efParam, containsMethod, cParam);
+
+        var translator = NewTranslator(entityType);
+        translator.SelfParam = cParam;
+        var translated = translator.TryTranslate(body, out var result);
+
+        Assert.True(translated);
+        var inExpr = Assert.IsType<MongoInExpression>(result);
+        Assert.False(inExpr.Negated);
+        Assert.Equal("_id", inExpr.Field.ElementName);
+        var parameter = Assert.IsType<MongoParameterExpression>(inExpr.Values);
+        Assert.Equal(paramName, parameter.Name);
+        Assert.True(parameter.ExtractEntityKeyFromArrayElements);
+    }
+
+    [Fact]
+    public void Contains_over_entity_list_constant_translates_to_key_in_with_null_elements_preserved()
+    {
+        var entityType = GetEntityType<Customer>();
+        var cParam = Expression.Parameter(typeof(Customer), "c");
+
+        var other = new Customer { Id = ObjectId.GenerateNewId() };
+        var customers = new List<Customer?> { null, other };
+        var containsMethod = typeof(List<Customer?>).GetMethod(nameof(List<Customer?>.Contains), [typeof(Customer)])!;
+        var body = Expression.Call(Expression.Constant(customers), containsMethod, cParam);
+
+        var translator = NewTranslator(entityType);
+        translator.SelfParam = cParam;
+        var translated = translator.TryTranslate(body, out var result);
+
+        Assert.True(translated);
+        var inExpr = Assert.IsType<MongoInExpression>(result);
+        Assert.False(inExpr.Negated);
+        Assert.Equal("_id", inExpr.Field.ElementName);
+        var constant = Assert.IsType<MongoConstantExpression>(inExpr.Values);
+        var keys = Assert.IsType<List<object?>>(constant.Value);
+        Assert.Equal([null, other.Id], keys);
+    }
+
+    // ------------------------------------------------------------------
     // Test 18: Contains with a non-field item argument → falls back (null)
     // ------------------------------------------------------------------
 

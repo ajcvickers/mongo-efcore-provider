@@ -510,7 +510,9 @@ internal static class MongoAggregationExpressionRenderer
                     : parameter.RawElementType is not null
                         ? BsonSerializerFactory.CreateTypeSerializer(parameter.RawElementType)
                         : StringSerializer.Instance;
-                return placeholders.CreateArrayPlaceholder(parameter.Name, elementSerializer);
+                return parameter.ExtractEntityKeyFromArrayElements
+                    ? placeholders.CreateEntityKeyArrayPlaceholder(parameter.Name, parameter.ForSerialization!, elementSerializer)
+                    : placeholders.CreateArrayPlaceholder(parameter.Name, elementSerializer);
             }
             case MongoValueListExpression list:
             {
