@@ -910,10 +910,12 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // mongoQ.Joins[i].Lookup is null (it only conditionally calls AddLookup, but always confirms) — so a
         // last-only Lookup check here would let a chain with a null-Lookup EARLIER level through this gate,
         // producing a pipeline missing that level's own $lookup stage while the projection still expects to
-        // read from its alias. Not known-reachable today (eligibility requires a resolved Navigation, and
-        // Lookup is built whenever a navigation resolves), but this is the exact "check only the last join"
-        // pattern that was already a real Critical bug elsewhere in this same plan's fix round — close it
-        // structurally here too, rather than relying on it never coming up.
+        // read from its alias. Not known-reachable today because `JoinLookupImplementsKeySelectors` already
+        // requires every eligible join's `Lookup` to be non-null before `IsNativelyEligible` can be true —
+        // navigation is no longer a precondition for that, see the navigation-less join eligibility widening —
+        // but this is the exact "check only the last join" pattern that was already a real Critical bug
+        // elsewhere in this same plan's fix round — close it structurally here too, rather than relying on it
+        // never coming up.
         foreach (var chainJoin in mongoQueryExpression.Joins)
         {
             if (chainJoin.Lookup is null)
@@ -2441,8 +2443,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // Component 2 — this builds ONLY the JoinScope metadata; confirming the join ($lookup registration,
         // Route) stays deferred to the consuming Select arm (Task 6), exactly as depth-1 already works today.
         joinInfo.IsNativelyEligible =
-            joinInfo.Navigation is { } eligibleNavigation
-            && innerQueryExpression.Select.IsBareCollectionScan
+            innerQueryExpression.Select.IsBareCollectionScan
             && !outerQueryExpression.Select.IsGroupBy && !innerQueryExpression.Select.IsGroupBy
             && !outerQueryExpression.Select.IsDistinct && !innerQueryExpression.Select.IsDistinct
             && JoinLookupImplementsKeySelectors(joinInfo, outerQueryExpression, outerKeySelector, innerKeySelector);
@@ -2513,6 +2514,16 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (outerKeyName == null || innerKeyName == null)
         {
             return false;
+        }
+
+        if (joinInfo.Navigation == null)
+        {
+            // No navigation to re-derive an anchor entity type from. joinInfo.Lookup (checked above) was
+            // already built DIRECTLY from these same outerKeySelector/innerKeySelector property names by
+            // RebindInnerShaperToOuterQuery's EF-377 raw-key branch, so — unlike the navigation branch below,
+            // which guards against a navigation resolved to the WRONG target — there is nothing to
+            // re-verify: the Lookup already implements exactly what the selectors say by construction.
+            return true;
         }
 
         // The outer property's OWNING entity type is the join's own resolved navigation's declaring type,

@@ -315,7 +315,7 @@ Customers.
 
         AssertMql(
             """
-Orders.{ "$match" : { "CustomerID" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer.CustomerID", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+Orders.{ "$match" : { "CustomerID" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$lookup" : { "from" : "Orders", "localField" : "CustomerID", "foreignField" : "CustomerID", "as" : "_lookup_Order" } }, { "$unwind" : { "path" : "$_lookup_Order", "preserveNullAndEmptyArrays" : false } }, { "$project" : { "_" : "$$ROOT", "_lookup_Order" : "$_lookup_Order", "_id" : 0 } }
 """);
     }
 
@@ -859,7 +859,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
         await base.GroupJoin_customers_employees_shadow(async);
         AssertMql(
             """
-Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Employees", "localField" : "_outer.City", "foreignField" : "City", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$project" : { "Title" : "$Inner.Title", "_id" : "$Inner._id" } }
+Customers.{ "$lookup" : { "from" : "Employees", "localField" : "City", "foreignField" : "City", "as" : "_lookup_Employee" } }, { "$unwind" : { "path" : "$_lookup_Employee", "preserveNullAndEmptyArrays" : false } }, { "$project" : { "Title" : "$_lookup_Employee.Title", "Id" : "$_lookup_Employee._id", "_id" : 0 } }
 """);
     }
 

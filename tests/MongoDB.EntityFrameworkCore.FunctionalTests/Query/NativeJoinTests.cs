@@ -841,6 +841,109 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     }
 
     [Fact]
+    public void Genuinely_navigation_less_key_equality_join_goes_native_under_NativeOnly()
+    {
+        // Unlike Navigation_less_key_equality_join_still_declines_cleanly_in_NativeOnly above (which pins a
+        // WRONGLY-resolved navigation between two types that DO have one), Owner and OrderLine have NO
+        // navigation connecting them at all — this is the genuinely-navigation-less case.
+        var seed = SeedOwnersOrdersAndLines();
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Genuinely_navigation_less_key_equality_join_goes_native_under_NativeOnly));
+
+        var results =
+            db.Owners
+                .Join(db.OrderLines, o => o.Region, ol => ol.Sku, (o, ol) => new { o, ol })
+                .ToList();
+
+        Assert.Empty(results); // No seeded Region/Sku values match — this only proves the query TRANSLATES
+                                // and EXECUTES natively (no NativeTranslationNotSupportedException), not a
+                                // row-count claim. Row-shape correctness is Task 2's job.
+    }
+
+    [Theory]
+    [InlineData(MongoQueryMode.Native)]
+    [InlineData(MongoQueryMode.DriverLinq)]
+    [InlineData(MongoQueryMode.NativeOnly)]
+    public void Genuinely_navigation_less_join_matches_in_memory_oracle_including_unmatched_rows(MongoQueryMode mode)
+    {
+        var owners = new[]
+        {
+            new Owner { Id = ObjectId.GenerateNewId(), Name = "Alice", Region = "MATCH" },
+            new Owner { Id = ObjectId.GenerateNewId(), Name = "Bob", Region = "NOMATCH" },
+        };
+        var orderLines = new[]
+        {
+            new OrderLine { Id = ObjectId.GenerateNewId(), OrderId = ObjectId.GenerateNewId(), Sku = "MATCH", Quantity = 1 },
+        };
+        var seed = new Seed(owners, [], orderLines);
+
+        using var db = CreateContext(seed, mode,
+            nameof(Genuinely_navigation_less_join_matches_in_memory_oracle_including_unmatched_rows) + mode);
+
+        var actual = db.Owners
+            .Join(db.OrderLines, o => o.Region, ol => ol.Sku, (o, ol) => new { OwnerName = o.Name, ol.Sku })
+            .ToList();
+
+        var expected = owners
+            .Join(orderLines, o => o.Region, ol => ol.Sku, (o, ol) => new { OwnerName = o.Name, ol.Sku })
+            .ToList();
+
+        Assert.Equal(expected.Count, actual.Count);
+        Assert.Equal(
+            expected.Select(e => (e.OwnerName, e.Sku)).OrderBy(x => x.OwnerName),
+            actual.Select(a => (a.OwnerName, a.Sku)).OrderBy(x => x.OwnerName));
+    }
+
+#if !EF8 && !EF9
+    [Fact]
+    public void Genuinely_navigation_less_LeftJoin_goes_native_and_preserves_unmatched_rows_under_NativeOnly()
+    {
+        // Final-review fix: this is the plan's own headline shape — a navigation-less LEFT-OUTER join (the
+        // original motivating test, NorthwindKeylessEntitiesQueryMongoTest.Entity_mapped_to_view_on_right_side_of_join,
+        // is itself a navigation-less LEFT-OUTER join) — but every other new test in this file uses an inner
+        // Join, so this pins the left-outer shape directly: a navigation-less LeftJoin goes native under
+        // NativeOnly (proving nativeness — succeeding under NativeOnly IS the "went native" signal, see
+        // Query/AGENTS.md), AND an unmatched outer row survives with a null inner side rather than being
+        // silently dropped (the actual left-outer-preservation hazard a wrong-data bug would break).
+        var owners = new[]
+        {
+            new Owner { Id = ObjectId.GenerateNewId(), Name = "Alice", Region = "MATCH" },
+            new Owner { Id = ObjectId.GenerateNewId(), Name = "Bob", Region = "NOMATCH" },
+        };
+        var orderLines = new[]
+        {
+            new OrderLine { Id = ObjectId.GenerateNewId(), OrderId = ObjectId.GenerateNewId(), Sku = "MATCH", Quantity = 1 },
+        };
+        var seed = new Seed(owners, [], orderLines);
+
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Genuinely_navigation_less_LeftJoin_goes_native_and_preserves_unmatched_rows_under_NativeOnly));
+
+        var actual = db.Owners
+            .LeftJoin(db.OrderLines, o => o.Region, ol => ol.Sku, (o, ol) => new { OwnerName = o.Name, ol!.Sku })
+            .ToList();
+
+        var expected = owners
+            .LeftJoin(orderLines, o => o.Region, ol => ol.Sku, (o, ol) => new { OwnerName = o.Name, ol?.Sku })
+            .ToList();
+
+        // (a) executed without throwing NativeTranslationNotSupportedException — proves it went native.
+        Assert.Equal(expected.Count, actual.Count);
+        Assert.Equal(
+            expected.Select(e => (e.OwnerName, Sku: (string?)e.Sku)).OrderBy(x => x.OwnerName),
+            actual.Select(a => (a.OwnerName, Sku: (string?)a.Sku)).OrderBy(x => x.OwnerName));
+
+        // (b) the matched owner's row has a non-null inner side with the correct joined value.
+        var matched = actual.Single(x => x.OwnerName == "Alice");
+        Assert.Equal("MATCH", matched.Sku);
+
+        // (c) the unmatched owner still APPEARS in the results with a null inner side.
+        var unmatched = actual.Single(x => x.OwnerName == "Bob");
+        Assert.Null(unmatched.Sku);
+    }
+#endif
+
+    [Fact]
     public void Where_after_join_still_declines_under_NativeOnly_pending_the_Select_side_binder()
     {
         // NOTE (review-round honesty fix): this test's name and the exception it asserts CANNOT distinguish
@@ -1807,7 +1910,8 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
         var linesName = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + "OrderLines" + suffix;
 
         database.MongoDatabase.GetCollection<Owner>(ownersName).InsertMany(seed.Owners);
-        database.MongoDatabase.GetCollection<Order>(ordersName).InsertMany(seed.Orders);
+        if (seed.Orders.Length > 0)
+            database.MongoDatabase.GetCollection<Order>(ordersName).InsertMany(seed.Orders);
         if (seed.OrderLines.Length > 0)
             database.MongoDatabase.GetCollection<OrderLine>(linesName).InsertMany(seed.OrderLines);
 
