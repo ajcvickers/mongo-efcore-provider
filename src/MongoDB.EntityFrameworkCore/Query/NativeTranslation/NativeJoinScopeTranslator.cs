@@ -201,9 +201,11 @@ internal static class NativeJoinScopeTranslator
         return true;
     }
 
-    /// <summary>Backs <see cref="TryTranslateRootScopeOnly"/>'s parity guard (M2) — true if <paramref name="rootParam"/>
-    /// still appears anywhere in <paramref name="rewritten"/> after <see cref="MongoTransparentScopeResolver.ScopeRerootingVisitor"/>
-    /// has run, i.e. some reference to it was not resolved as part of the Outer*/Inner? hop chain.</summary>
+    /// <summary>Backs both <see cref="TryTranslateRootScopeOnly"/>'s and <see cref="TryTranslateSingleScope"/>'s
+    /// parity guard (M2), via the shared <see cref="TryRerootToSingleScope"/> helper — true if <paramref
+    /// name="rootParam"/> still appears anywhere in <paramref name="rewritten"/> after <see
+    /// cref="MongoTransparentScopeResolver.ScopeRerootingVisitor"/> has run, i.e. some reference to it was not
+    /// resolved as part of the Outer*/Inner? hop chain.</summary>
     private static bool ReferencesParameterOutsideHopChain(Expression rewritten, ParameterExpression rootParam)
     {
         var found = false;

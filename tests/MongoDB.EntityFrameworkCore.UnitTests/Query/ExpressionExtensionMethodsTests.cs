@@ -124,10 +124,10 @@ public class ExpressionExtensionMethodsTests
         Assert.Empty(members);
     }
 
-    // The whole safety story for family A (ordinary Select/Join projections) depends on exactly 4 call sites
+    // The whole safety story for family A (ordinary Select/Join projections) depends on exactly 5 call sites
     // NEVER passing allowPositionalConstructorArguments: true — see TryGetProjectionMembers' own parameter doc.
     // Passing true there would let a wrapped member's alias be a synthetic positional pseudo-name
-    // ("_ctorArg0", ...) that EF Core's ProjectionMember/MemberInfo-keyed read side (which those 4 call sites
+    // ("_ctorArg0", ...) that EF Core's ProjectionMember/MemberInfo-keyed read side (which those 5 call sites
     // alone rely on) can never resolve, silently breaking projection reads. This is currently enforced only by
     // that doc comment, so pin it with a cheap source-text check: every call site outside the
     // known family-B/opt-in set must not pass true.

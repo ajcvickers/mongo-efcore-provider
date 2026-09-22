@@ -94,18 +94,11 @@ failure.
   property name (`Item.Name` vs `Owner.Name`) is the standing regression test. The shared primitive is
   `MongoExpressionTranslator.TryBeginOwnedHopWalk`; don't reintroduce a per-resolver copy.
 - **A trailing `Select` over a `Joins.Count >= 2` join chain can go native for a whole-entity leaf at any level,
-  and (native-chained-join-scalar-projection plan, see
-  `docs/superpowers/specs/2026-09-18-native-chained-join-scalar-projection-design.md`) also for a
-  scalar/computed leaf that resolves to exactly ONE scope in the chain, via
-  `NativeJoinScopeTranslator.TryTranslateSingleScope`. A leaf spanning MORE than one chain scope (e.g.
-  `e.r.Total + l.Id`), or a nested wrapped leaf (`X = new { Id = ... }`) over such a chain, still declines the
-  whole projection; `Skip`/`Take`/`Where`/`OrderBy` composed after such a projection's `Select` also still fall
-  back (`NativeSlotPopulator`'s post-CONFIRMED-JOIN guard). A prior fix-round found that the ordinary/computed
-  leaf arm calling `TryTranslateSingleScope` must itself exclude a nested-projection-shaped `leafBody` first —
-  otherwise it silently round-trips through `MongoExpressionTranslator`'s own generic
-  `NewExpression`→`MongoDocumentConstructionExpression` handling (built for an unrelated consumer) and wrongly
-  admits a shape the design doc calls out of scope; see
-  `NativeJoinScopeProjectionBinderTests.Declines_a_nested_wrapped_leaf_over_a_two_level_chain`.
+  or for a scalar/computed leaf that resolves to exactly ONE scope in the chain.** A leaf spanning more than one
+  chain scope, a nested wrapped leaf (`X = new { Id = ... }`) over such a chain, or `Skip`/`Take`/`Where`/
+  `OrderBy` composed after such a projection's `Select`, still decline the whole projection. The
+  ordinary/computed leaf arm must exclude a nested-projection-shaped `leafBody` BEFORE calling
+  `TryTranslateSingleScope`, or the translator's generic `NewExpression` handling silently admits it.
 - **Structural classification beats metadata/depth/CLR-type shortcuts.** A TPH-inherited or EF10-named query
   filter isn't visible through `GetQueryFilter()`; join-hop depth doesn't distinguish a root hop from a
   transitive one; a self-referencing entity type defeats a CLR-type check. Walk the actual tree. These
