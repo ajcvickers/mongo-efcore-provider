@@ -352,6 +352,33 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     }
 
     [Fact]
+    public void Chained_join_scalar_leaf_projection_with_trailing_paging_still_declines_under_NativeOnly()
+    {
+        // The exact shape NorthwindMiscellaneousQueryMongoTest.Join_Customers_Orders_Orders_Skip_Take_Same_
+        // Properties has, minus Northwind's specific entities: a chain-scalar projection (this plan's own
+        // feature) followed by Skip/Take. This plan does NOT touch NativeSlotPopulator's post-confirmed-join
+        // guard, so paging after the newly-native projection must still decline — this is the gap a SEPARATE,
+        // follow-up plan closes. If this test starts PASSING (i.e. Skip/Take goes native) without that follow-up
+        // plan having landed, something in Tasks 2-4 leaked past the intended scope — stop and investigate via
+        // superpowers:systematic-debugging rather than accepting the unexpected win.
+        var seed = SeedOwnersOrdersAndLines();
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Chained_join_scalar_leaf_projection_with_trailing_paging_still_declines_under_NativeOnly));
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() =>
+            db.Owners
+                .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Join(db.OrderLines, e => e.r.Id, l => l.OrderId, (e, l) => new
+                {
+                    OwnerName = e.o.Name,
+                    OrderTotal = e.r.Total,
+                    LineSku = l.Sku
+                })
+                .Skip(1).Take(1)
+                .ToList());
+    }
+
+    [Fact]
     public void Chained_join_onto_the_same_target_entity_type_disambiguates_lookup_aliases_under_NativeOnly()
     {
         // Final-review fix (M9b). The final whole-branch review verified the "two joins onto the same target
