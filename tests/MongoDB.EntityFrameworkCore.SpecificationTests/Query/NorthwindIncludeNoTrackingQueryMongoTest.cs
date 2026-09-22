@@ -1031,7 +1031,7 @@ Customers.{ "$skip" : 10 }, { "$lookup" : { "from" : "Orders", "localField" : "_
         await base.Include_where_skip_take_projection(async);
         AssertMql(
             """
-OrderDetails.{ "$match" : { "Quantity" : 10 } }, { "$sort" : { "_id.OrderID" : 1, "_id.ProductID" : 1 } }, { "$skip" : 1 }, { "$limit" : 2 }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id.OrderID", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$project" : { "CustomerID" : "$Inner.CustomerID", "_id" : 0 } }
+OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "foreignField" : "_id", "as" : "_lookup_Order" } }, { "$unwind" : { "path" : "$_lookup_Order", "preserveNullAndEmptyArrays" : false } }, { "$match" : { "Quantity" : 10 } }, { "$sort" : { "_id.OrderID" : 1, "_id.ProductID" : 1 } }, { "$skip" : 1 }, { "$limit" : 2 }, { "$project" : { "CustomerID" : "$_lookup_Order.CustomerID", "_id" : 0 } }
 """);
     }
 

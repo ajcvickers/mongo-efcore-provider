@@ -104,6 +104,14 @@ internal sealed class MongoSelectLowerer
             // trailing $limit) must land HERE, after the $lookup/$unwind, rather than in PipelineOps above.
             // Empty (a no-op append) for every query that never took that path.
             AppendSelectOpStages(select.PostJoinOps, stages, sortFields);
+            // Native-post-join-paging plan: Skip/Take (and anything hoisted alongside it) deferred past a
+            // confirmed join whose $unwind isn't guaranteed row-count-preserving — see
+            // MongoSelectDefinition.PostLookupPagingOps. Safe to emit unconditionally inside this
+            // `select.SetOperation == null` block: a confirmed join only ever reaches
+            // IsSingleEligibleNativeJoinScope (the sole writer of PostLookupPagingOps), and both
+            // IsPlainWholeEntitySelect and IsPlainProjectedSelect (the gates that admit a select as a set-op
+            // operand) exclude join queries — so a set op and a confirmed join can never co-occur here.
+            AppendSelectOpStages(select.PostLookupPagingOps, stages, sortFields);
         }
 
         // Set operation terminal ($unionWith [+ dedup] or a set-difference shape for Intersect/Except).

@@ -82,8 +82,38 @@ internal sealed class MongoSelectDefinition
     /// </summary>
     public IReadOnlyList<MongoSelectOp> PostJoinOps => _postJoinOps;
 
+    // ── Post-lookup paging ops (paging hoisted ahead of a confirmed join by EF Core) ────
+    // A list populated exactly once, by DeferPipelineOpsPastConfirmedJoin, when
+    // MongoQueryableMethodTranslatingExpressionVisitor.IsSingleEligibleNativeJoinScope finds Select.HasPaging
+    // true at confirmation time (EF Core hoists a trailing Skip/Take — and anything composed before it in the
+    // same batch — ahead of a join's pending result selector) and the join is NOT already in the narrow
+    // pre-lookup-safe (left-outer, non-collection navigation) set. See
+    // docs/superpowers/specs/2026-09-22-native-post-join-paging-design.md for why moving the WHOLE PipelineOps
+    // snapshot (not just the paging ops) here is safe.
+    private readonly List<MongoSelectOp> _postLookupPagingOps = [];
+
+    /// <summary>
+    /// The ordered filter/sort/page operations moved out of <see cref="PipelineOps"/> by
+    /// <see cref="DeferPipelineOpsPastConfirmedJoin"/>. The lowerer emits these verbatim immediately after the
+    /// confirmed join's own <c>$lookup</c>/<c>$unwind</c> block(s), before any <c>$project</c>. Empty for every
+    /// query that never took this path.
+    /// </summary>
+    public IReadOnlyList<MongoSelectOp> PostLookupPagingOps => _postLookupPagingOps;
+
+    /// <summary>
+    /// Moves the ENTIRE current <see cref="PipelineOps"/> snapshot into <see cref="PostLookupPagingOps"/>, in
+    /// order, and clears <see cref="PipelineOps"/>. Called exactly once, by
+    /// <c>IsSingleEligibleNativeJoinScope</c>, at the moment it decides a join with recorded pre-confirmation
+    /// paging is eligible only because the paging is being relocated.
+    /// </summary>
+    internal void DeferPipelineOpsPastConfirmedJoin()
+    {
+        _postLookupPagingOps.AddRange(_pipelineOps);
+        _pipelineOps.Clear();
+    }
+
     // ── Post-group ops (post-Distinct ordering/paging) ─────────────────────────────
-    // A FOURTH ordered filter/sort/page list, emitted by the lowerer immediately after a projected Distinct's
+    // A FIFTH ordered filter/sort/page list, emitted by the lowerer immediately after a projected Distinct's
     // $group + flattening $project. Targeted only for an OrderBy/ThenBy/Skip/Take composed after a projected
     // Distinct (IsDistinct, never a genuine IsGroupBy — see NativeSlotPopulator's post-terminal guard carve-
     // out), whose key selector resolved against the Distinct's OWN flattened output alias — via

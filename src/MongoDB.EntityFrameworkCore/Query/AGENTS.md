@@ -95,9 +95,12 @@ failure.
   `MongoExpressionTranslator.TryBeginOwnedHopWalk`; don't reintroduce a per-resolver copy.
 - **A trailing `Select` over a `Joins.Count >= 2` join chain can go native for a whole-entity leaf at any level,
   or for a scalar/computed leaf that resolves to exactly ONE scope in the chain.** A leaf spanning more than one
-  chain scope, a nested wrapped leaf (`X = new { Id = ... }`) over such a chain, or `Skip`/`Take`/`Where`/
-  `OrderBy` composed after such a projection's `Select`, still decline the whole projection. The
-  ordinary/computed leaf arm must exclude a nested-projection-shaped `leafBody` BEFORE calling
+  chain scope, or a nested wrapped leaf (`X = new { Id = ... }`) over such a chain, still declines the whole
+  projection. A `Skip`/`Take`/`Where`/`OrderBy` written AFTER such a projection's `Select` in LINQ source is, in
+  the common case, HOISTED by EF Core ahead of the join's pending result selector — see the bullet just below
+  for what that now does. Only a slot operator that genuinely reaches this gate AFTER the `Select` has already
+  confirmed the join (not hoisted ahead of it — a shape measured to have zero reachability today) still
+  declines. The ordinary/computed leaf arm must exclude a nested-projection-shaped `leafBody` BEFORE calling
   `TryTranslateSingleScope`, or the translator's generic `NewExpression` handling silently admits it.
 - **Native join-scope eligibility does not require a resolved navigation.** A bare key-equality
   `Join`/`LeftJoin`/`GroupJoin` with no model navigation connecting the two sides is native-eligible exactly
@@ -114,6 +117,15 @@ failure.
   `IsCollection` and so still decline a navigation-less join; and EF8/EF9's nav-expansion doesn't even flatten
   every `GroupJoin`+`SelectMany(DefaultIfEmpty)` shape onto a recognizable join call in the first place (see
   `NorthwindKeylessEntitiesQueryMongoTest.cs`'s `#if EF8 || EF9` branch for a concrete instance).
+- **`Skip`/`Take` (and any `Where`/`OrderBy`/`ThenBy` hoisted alongside them) ahead of a join's confirming
+  `Select`** — the common case, since EF Core hoists them there — now also goes native when the join isn't
+  already in the left-outer-reference-navigation "safe to page before `$lookup`" set: the whole recorded
+  `PipelineOps` snapshot is deferred to run after the join instead of declining. A reducer (`First`/etc.) in
+  the same hoisted position still declines the whole chain, and a slot operator genuinely composed *after*
+  the confirming `Select` (not hoisted) still falls back. A genuine 1:N collection-navigation join is the one
+  exception: if paging was recorded before ANY join existed on the select, it's declined instead of deferred
+  — deferring would page the joined (multiplied) result instead of the outer sequence the paging actually
+  targeted.
 - **Structural classification beats metadata/depth/CLR-type shortcuts.** A TPH-inherited or EF10-named query
   filter isn't visible through `GetQueryFilter()`; join-hop depth doesn't distinguish a root hop from a
   transitive one; a self-referencing entity type defeats a CLR-type check. Walk the actual tree. These

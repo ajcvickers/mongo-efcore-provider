@@ -953,18 +953,37 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // natively by NorthwindMiscellaneousQueryMongoTest.Projection_take_projection /
         // .Projection_skip_projection / .Projection_skip_take_projection — all three regress to the driver-LINQ
         // fallback (an MQL-baseline failure, results unchanged) if this is widened to every join.
-        // Everything else declines: a COLLECTION navigation is 1:N regardless of preserveNullAndEmptyArrays —
-        // a LeftJoin/GroupJoin over one can still multiply a row across several matches, it only stops
-        // DROPPING the zero-match case — and an INNER join over a reference navigation (preserve: false,
-        // so an unmatched FK drops the row and the count is not preserved either).
+        // Everything else — a COLLECTION navigation (1:N regardless of preserveNullAndEmptyArrays: a
+        // LeftJoin/GroupJoin over one can still multiply a row across several matches, it only stops DROPPING
+        // the zero-match case), and an INNER join over a reference navigation (preserve: false, so an
+        // unmatched FK drops the row and the count is not preserved either) — is NOT 1:1-safe. For the
+        // REDUCER branch (Cardinality?.Reducer != null) that still means an outright decline of the whole
+        // chain, unchanged. For the PAGING branch (native-post-join-paging plan), it no longer means a
+        // decline: instead the whole recorded PipelineOps snapshot is DEFERRED past the $lookup/$unwind
+        // block(s) (MongoSelectDefinition.DeferPipelineOpsPastConfirmedJoin), and the join confirms normally.
+        // See the "Native-post-join-paging plan" paragraph below for the paging branch's own up-to-date
+        // description — this paragraph is otherwise historical (EF-392) and describes the REDUCER branch's
+        // still-current behavior.
         // Widened to a CHAIN (fix round 1, Finding 1): the paging/reducing hazard above is not specific to
         // the LAST join — a $skip/$limit recorded ahead of the WHOLE $lookup block is emitted ahead of EVERY
         // level's $unwind, so ALL of them must individually be 1:1-safe, not just Joins[^1]. Checking only
         // the last level is unsound for depth > 1: a chain whose EARLIER level is a 1:N collection-nav join
         // (whose $unwind is NOT 1:1) but whose LAST level happens to be a left-outer reference join (which IS
         // 1:1) would pass a last-only check while the earlier level still mis-pages. Loop over every join.
-        if (mongoQueryExpression.Select.HasPaging || mongoQueryExpression.Select.Cardinality?.Reducer != null)
+        //
+        // Native-post-join-paging plan: the REDUCER branch (Cardinality?.Reducer != null) is unchanged — still
+        // declines the whole chain unless every join is already 1:1-safe (out of scope for this plan; see that
+        // plan's own spec for why). The PAGING branch NO LONGER declines outright when a join isn't 1:1-safe:
+        // instead it DEFERS the whole recorded PipelineOps snapshot (via
+        // MongoSelectDefinition.DeferPipelineOpsPastConfirmedJoin) to run AFTER the $lookup/$unwind block(s),
+        // which MongoSelectLowerer now emits immediately following PostJoinOps. Every join already in the
+        // 1:1-safe set keeps paging exactly where it was (preserving today's MQL baseline for
+        // Projection_take_projection/Projection_skip_projection/Projection_skip_take_projection unchanged).
+        if (mongoQueryExpression.Select.Cardinality?.Reducer != null)
         {
+            // Reducer case (First/FirstOrDefault/Single/...): unchanged — out of scope for the native-post-join-
+            // paging plan. See that plan's own spec for why this branch is NOT folded into the deferred-ops
+            // mechanism below.
             foreach (var level in mongoQueryExpression.Joins)
             {
                 if (level.Lookup is not { } levelLookup
@@ -972,6 +991,56 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 {
                     return false;
                 }
+            }
+        }
+        else if (mongoQueryExpression.Select.HasPaging)
+        {
+            // Final review, Critical 1: PostJoinOps and PostLookupPagingOps are NOT mutually exclusive.
+            // NativeSlotPopulator's general inner-predicate Where arm (the one whose own comment says "unlike
+            // the null-check arm, no IsLeftOuter requirement") can call MarkJoinInnerAccessConfirmedFromWhere()
+            // — populating PostJoinOps with its own $match — for a REQUIRED (non-left-outer) reference
+            // navigation, which is exactly the "not 1:1-safe" category this paging branch also targets. If a
+            // Skip/Take was ALSO recorded before that Where-flip (still sitting in PipelineOps) and this branch
+            // then defers it into PostLookupPagingOps, MongoSelectLowerer emits PostJoinOps (the $match) THEN
+            // PostLookupPagingOps (the $skip/$limit) — filter-then-page — even though the user composed
+            // page-then-filter (e.g. `Skip(1).Take(2).Where(od => od.Order.CustomerID != "ALFKI")`). That
+            // returns WRONG ROWS for referentially-intact data, not just a dangling-FK edge case. Decline
+            // outright for this narrow, currently-untested combination instead — a pure safety restoration of
+            // today's behavior for this shape, not a loss of any currently-passing coverage (confirmed by
+            // searching the test suite before making this change).
+            if (mongoQueryExpression.Select.JoinInnerAccessConfirmedFromWhere)
+            {
+                return false;
+            }
+
+            var everyJoinPreLookupSafe = true;
+            foreach (var level in mongoQueryExpression.Joins)
+            {
+                if (level.Lookup is not { } levelLookup
+                    || !(level.IsLeftOuter && levelLookup.Navigation is { IsCollection: false }))
+                {
+                    everyJoinPreLookupSafe = false;
+                    break;
+                }
+            }
+
+            // Every join already safe for the existing before-$lookup placement (native-post-join-paging plan):
+            // keep it there, unchanged — preserves today's MQL baseline for Projection_take_projection/
+            // Projection_skip_projection/Projection_skip_take_projection exactly. Otherwise, defer the whole
+            // recorded PipelineOps snapshot to run after $lookup/$unwind instead of declining the join outright.
+            //
+            // Deliberate, accepted semantic choice (final review, Important 2): for a shape where a Skip/Take
+            // (and anything hoisted alongside it) was recorded before a plain navigation dereference — not a
+            // Join operator, but a required reference-navigation access in a projection — this now pages the
+            // FULLY-DEREFERENCED/joined result rather than the outer one. For referentially-intact data this is
+            // a no-op (a 1:1 $unwind either way); for a DANGLING reference, this changes which row(s) a page
+            // boundary lands on relative to the pre-fix fallback behavior. This is intentional and consistent
+            // with how a genuine Join operator's paging is now handled by this same mechanism — see
+            // Paging_after_a_dangling_required_reference_dereference_pages_the_joined_result_under_NativeOnly
+            // in NativeJoinTests.cs for a proof of the current (post-fix) behavior.
+            if (!everyJoinPreLookupSafe)
+            {
+                mongoQueryExpression.Select.DeferPipelineOpsPastConfirmedJoin();
             }
         }
 
