@@ -406,9 +406,18 @@ internal static class NativeJoinScopeProjectionBinder
             MongoExpression? computedLeaf;
             if (scope.Levels.Count > 1)
             {
-                if (!NativeJoinScopeTranslator.TryTranslateSingleScope(scope, rootParam, leafBody, valueMode: true, out computedLeaf))
+                // A nested wrapped leaf (`Nested = new { Value = l.Sku }`) trailing a CHAIN is explicitly out of
+                // scope (native-chained-join-scalar-projection plan design doc) — the depth-1-only nested-leaf
+                // arm above is a careful, hand-rolled recognizer that hard-requires each nested member to
+                // resolve to a MongoFieldExpression (the read side casts to it); TryTranslateSingleScope's
+                // underlying MongoExpressionTranslator.TranslateOperand has its OWN, generic NewExpression→
+                // MongoDocumentConstructionExpression handling (built for NativeProjectionBinder's structural-
+                // equality lowering) that carries no such guarantee for a join-scope leaf, so a nested leaf
+                // reaching here must decline, not be silently admitted through that unrelated generic path.
+                if (leafBody.TryGetProjectionMembers(out _)
+                    || !NativeJoinScopeTranslator.TryTranslateSingleScope(scope, rootParam, leafBody, valueMode: true, out computedLeaf))
                 {
-                    return false; // one untranslatable/cross-scope leaf declines the whole projection — no partial commit
+                    return false; // one untranslatable/cross-scope/nested leaf declines the whole projection — no partial commit
                 }
             }
             else if (!NativeJoinScopeTranslator.TryTranslateValue(scope, rootParam, leafBody, out computedLeaf))

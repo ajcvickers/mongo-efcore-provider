@@ -611,4 +611,25 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.Equal(2, mongoQ.Lookups.Count);
         Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
     }
+
+    [Fact]
+    public void Declines_a_nested_wrapped_leaf_over_a_two_level_chain()
+    {
+        // `Nested = new { Value = l.Sku }` trailing a genuine 2-level chain (scope.Levels.Count == 2) is
+        // explicitly out of scope for the native-chained-join-scalar-projection plan (design doc's Scope/Out
+        // section: "a nested wrapped leaf ... over a chain — already separately gated to Levels.Count == 1").
+        // Regression pin: the ordinary (scalar/computed) leaf arm's `TryTranslateSingleScope` call must exclude
+        // a nested-projection-shaped leafBody before calling it, or the leaf's inner NewExpression round-trips
+        // through MongoExpressionTranslator's own generic NewExpression→MongoDocumentConstructionExpression
+        // handling and gets wrongly admitted. Must decline the WHOLE projection, not partially commit the
+        // sibling scalar leaf either.
+        var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Join(lines, e => e.r.Id, l => l.OrderId, (e, l) => new { e.o.Name, Nested = new { Value = l.Sku } }));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
+        Assert.Empty(mongoQ.Select.Projection);
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
+    }
 }
