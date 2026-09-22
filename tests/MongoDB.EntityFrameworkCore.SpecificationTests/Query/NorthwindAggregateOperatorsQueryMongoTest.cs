@@ -158,7 +158,7 @@ public class NorthwindAggregateOperatorsQueryMongoTest
 
         AssertMql(
             """
-            Orders.{ "$match" : { "_id" : 10248 } }, { "$group" : { "_id" : null, "_v" : { "$avg" : { "$subtract" : ["$_id", 10248] } } } }, { "$project" : { "_id" : 0 } }
+            Orders.{ "$match" : { "_id" : 10248 } }, { "$group" : { "_id" : null, "v" : { "$avg" : { "$subtract" : ["$_id", 10248] } } } }
             """);
     }
 
@@ -168,7 +168,7 @@ public class NorthwindAggregateOperatorsQueryMongoTest
 
         AssertMql(
             """
-            Orders.{ "$match" : { "_id" : 10248 } }, { "$group" : { "_id" : null, "_max" : { "$max" : { "_v" : { "$subtract" : ["$_id", 10248] } } } } }, { "$replaceRoot" : { "newRoot" : "$_max" } }
+            Orders.{ "$match" : { "_id" : 10248 } }, { "$group" : { "_id" : null, "v" : { "$max" : { "$subtract" : ["$_id", 10248] } } } }
             """);
     }
 
@@ -178,7 +178,7 @@ public class NorthwindAggregateOperatorsQueryMongoTest
 
         AssertMql(
             """
-            Orders.{ "$match" : { "_id" : 10248 } }, { "$group" : { "_id" : null, "_min" : { "$min" : { "_v" : { "$subtract" : ["$_id", 10248] } } } } }, { "$replaceRoot" : { "newRoot" : "$_min" } }
+            Orders.{ "$match" : { "_id" : 10248 } }, { "$group" : { "_id" : null, "v" : { "$min" : { "$subtract" : ["$_id", 10248] } } } }
             """);
     }
 
@@ -338,7 +338,7 @@ public class NorthwindAggregateOperatorsQueryMongoTest
 
         AssertMql(
             """
-            Orders.{ "$match" : { "_id" : -1 } }, { "$group" : { "_id" : null, "_v" : { "$avg" : "$_id" } } }, { "$project" : { "_id" : 0 } }
+            Orders.{ "$match" : { "_id" : -1 } }, { "$group" : { "_id" : null, "v" : { "$avg" : "$_id" } } }
             """);
     }
 
@@ -676,7 +676,7 @@ Employees.{ "$set" : { "__sort0" : { "$literal" : 42 } } }, { "$sort" : { "__sor
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : null, "_v" : { "$sum" : { "$add" : ["$_id", "$_id"] } } } }, { "$project" : { "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$add" : ["$_id", "$_id"] } } } }
             """);
     }
 
@@ -686,7 +686,7 @@ Employees.{ "$set" : { "__sort0" : { "$literal" : 42 } } }, { "$sort" : { "__sor
 
         AssertMql(
             """
-            OrderDetails.{ "$group" : { "_id" : null, "_v" : { "$sum" : { "$divide" : ["$Quantity", { "$numberDecimal" : "2.09" }] } } } }, { "$project" : { "_id" : 0 } }
+            OrderDetails.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$divide" : ["$Quantity", { "$numberDecimal" : "2.09" }] } } } }
             """);
     }
 
@@ -696,7 +696,7 @@ Employees.{ "$set" : { "__sort0" : { "$literal" : 42 } } }, { "$sort" : { "__sor
 
         AssertMql(
             """
-            OrderDetails.{ "$group" : { "_id" : null, "_v" : { "$sum" : { "$divide" : ["$Quantity", { "$numberDecimal" : "2" }] } } } }, { "$project" : { "_id" : 0 } }
+            OrderDetails.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$divide" : ["$Quantity", { "$numberDecimal" : "2" }] } } } }
             """);
     }
 
@@ -706,7 +706,7 @@ Employees.{ "$set" : { "__sort0" : { "$literal" : 42 } } }, { "$sort" : { "__sor
 
         AssertMql(
             """
-            Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$group" : { "_id" : null, "_v" : { "$sum" : { "$ifNull" : ["$UnitPrice", { "$numberDecimal" : "0" }] } } } }, { "$project" : { "_id" : 0 } }
+            Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$group" : { "_id" : null, "v" : { "$sum" : { "$ifNull" : ["$UnitPrice", { "$numberDecimal" : "0" }] } } } }
             """);
     }
 
@@ -817,7 +817,7 @@ OrderDetails.{ "$match" : { "_id.ProductID" : 1 } }, { "$group" : { "_id" : null
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : null, "_v" : { "$avg" : { "$add" : ["$_id", "$_id"] } } } }, { "$project" : { "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : null, "v" : { "$avg" : { "$add" : ["$_id", "$_id"] } } } }
             """);
     }
 
@@ -827,7 +827,7 @@ OrderDetails.{ "$match" : { "_id.ProductID" : 1 } }, { "$group" : { "_id" : null
 
         AssertMql(
             """
-            OrderDetails.{ "$group" : { "_id" : null, "_v" : { "$avg" : { "$divide" : ["$Quantity", { "$numberDecimal" : "2.09" }] } } } }, { "$project" : { "_id" : 0 } }
+            OrderDetails.{ "$group" : { "_id" : null, "v" : { "$avg" : { "$divide" : ["$Quantity", { "$numberDecimal" : "2.09" }] } } } }
             """);
     }
 
@@ -837,7 +837,7 @@ OrderDetails.{ "$match" : { "_id.ProductID" : 1 } }, { "$group" : { "_id" : null
 
         AssertMql(
             """
-            OrderDetails.{ "$group" : { "_id" : null, "_v" : { "$avg" : { "$divide" : ["$Quantity", { "$numberDecimal" : "2" }] } } } }, { "$project" : { "_id" : 0 } }
+            OrderDetails.{ "$group" : { "_id" : null, "v" : { "$avg" : { "$divide" : ["$Quantity", { "$numberDecimal" : "2" }] } } } }
             """);
     }
 
@@ -847,7 +847,7 @@ OrderDetails.{ "$match" : { "_id.ProductID" : 1 } }, { "$group" : { "_id" : null
 
         AssertMql(
             """
-            Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$group" : { "_id" : null, "_v" : { "$avg" : { "$ifNull" : ["$UnitPrice", { "$numberDecimal" : "0" }] } } } }, { "$project" : { "_id" : 0 } }
+            Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$group" : { "_id" : null, "v" : { "$avg" : { "$ifNull" : ["$UnitPrice", { "$numberDecimal" : "0" }] } } } }
             """);
     }
 
@@ -942,7 +942,7 @@ OrderDetails.{ "$match" : { "_id.ProductID" : 1 } }, { "$group" : { "_id" : null
 
         AssertMql(
             """
-            Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$group" : { "_id" : null, "_min" : { "$min" : { "_v" : { "$ifNull" : ["$UnitPrice", { "$numberDecimal" : "0" }] } } } } }, { "$replaceRoot" : { "newRoot" : "$_min" } }
+            Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$group" : { "_id" : null, "v" : { "$min" : { "$ifNull" : ["$UnitPrice", { "$numberDecimal" : "0" }] } } } }
             """);
     }
 
@@ -1007,7 +1007,7 @@ OrderDetails.{ "$match" : { "_id.ProductID" : 1 } }, { "$group" : { "_id" : null
 
         AssertMql(
             """
-            Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$group" : { "_id" : null, "_max" : { "$max" : { "_v" : { "$ifNull" : ["$UnitPrice", { "$numberDecimal" : "0" }] } } } } }, { "$replaceRoot" : { "newRoot" : "$_max" } }
+            Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$group" : { "_id" : null, "v" : { "$max" : { "$ifNull" : ["$UnitPrice", { "$numberDecimal" : "0" }] } } } }
             """);
     }
 
@@ -2038,7 +2038,7 @@ Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
 
         AssertMql(
             """
-            Employees.{ "$group" : { "_id" : null, "_v" : { "$sum" : 1 } } }, { "$project" : { "_id" : 0 } }
+            Employees.{ "$group" : { "_id" : null, "v" : { "$sum" : 1 } } }
             """);
     }
 
@@ -2166,7 +2166,7 @@ Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
 
         AssertMql(
             """
-            Orders.{ "$group" : { "_id" : null, "_v" : { "$sum" : { "$toLong" : "$_id" } } } }, { "$project" : { "_id" : 0 } }
+            Orders.{ "$group" : { "_id" : null, "v" : { "$sum" : "$_id" } } }
             """);
     }
 
@@ -2234,7 +2234,7 @@ Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
 
         AssertMql(
             """
-            Customers.{ "$group" : { "_id" : null, "_v" : { "$avg" : { "$cond" : { "if" : { "$in" : ["$City", ["London", "Berlin"]] }, "then" : 1.0, "else" : 0.0 } } } } }, { "$project" : { "_id" : 0 } }
+            Customers.{ "$group" : { "_id" : null, "v" : { "$avg" : { "$cond" : { "if" : { "$in" : ["$City", ["London", "Berlin"]] }, "then" : 1.0, "else" : 0.0 } } } } }
             """);
     }
 
@@ -2244,7 +2244,7 @@ Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
 
         AssertMql(
             """
-            Customers.{ "$group" : { "_id" : null, "_v" : { "$sum" : { "$cond" : { "if" : { "$in" : ["$City", ["London", "Berlin"]] }, "then" : 1, "else" : 0 } } } } }, { "$project" : { "_id" : 0 } }
+            Customers.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$cond" : { "if" : { "$in" : ["$City", ["London", "Berlin"]] }, "then" : 1, "else" : 0 } } } } }
             """);
     }
 
@@ -2274,7 +2274,7 @@ Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
 
         AssertMql(
             """
-            Customers.{ "$group" : { "_id" : null, "_max" : { "$max" : { "_v" : { "$cond" : { "if" : { "$in" : ["$City", ["London", "Berlin"]] }, "then" : 1, "else" : 0 } } } } } }, { "$replaceRoot" : { "newRoot" : "$_max" } }
+            Customers.{ "$group" : { "_id" : null, "v" : { "$max" : { "$cond" : { "if" : { "$in" : ["$City", ["London", "Berlin"]] }, "then" : 1, "else" : 0 } } } } }
             """);
     }
 
@@ -2284,7 +2284,7 @@ Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
 
         AssertMql(
             """
-            Customers.{ "$group" : { "_id" : null, "_min" : { "$min" : { "_v" : { "$cond" : { "if" : { "$in" : ["$City", ["London", "Berlin"]] }, "then" : 1, "else" : 0 } } } } } }, { "$replaceRoot" : { "newRoot" : "$_min" } }
+            Customers.{ "$group" : { "_id" : null, "v" : { "$min" : { "$cond" : { "if" : { "$in" : ["$City", ["London", "Berlin"]] }, "then" : 1, "else" : 0 } } } } }
             """);
     }
 
@@ -2374,7 +2374,7 @@ Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
         {
             AssertMql(
                 """
-                OrderDetails.{ "$group" : { "_id" : null, "_v" : { "$sum" : { "$toDecimal" : "$Discount" } } } }, { "$project" : { "_id" : 0 } }
+                OrderDetails.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$toDecimal" : "$Discount" } } } }
                 """);
         }
     }
