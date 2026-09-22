@@ -215,21 +215,37 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     }
 
     [Fact]
-    public void Chained_second_join_still_declines_cleanly_in_NativeOnly()
+    public void Chained_join_scalar_leaf_shapes_resolve_correctly_under_NativeOnly()
     {
+        // Native-chained-join-scalar-projection plan (2026-09-18), Task 4. This shape (a genuine three-source
+        // chain, Owners -> Orders -> OrderLines, with single-scope scalar leaves x.o.Name/l.Sku) used to
+        // decline outright under the OLDER native-chained-join-scope plan's blanket "chain admits only
+        // whole-entity leaves" restriction. This plan's own Task 1 test
+        // (Chained_join_scalar_leaf_projection_goes_native_under_NativeOnly) is the motivating proof that it
+        // should now go native instead; this method's Part 1 is updated accordingly to assert success and
+        // correct data rather than a throw.
         var seed = SeedOwnersOrdersAndLines();
         using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
-            nameof(Chained_second_join_still_declines_cleanly_in_NativeOnly));
+            nameof(Chained_join_scalar_leaf_shapes_resolve_correctly_under_NativeOnly));
 
-        Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Owners
-                .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
-                .Join(db.OrderLines, x => x.r.Id, l => l.OrderId, (x, l) => new { x.o.Name, l.Sku })
-                .AsEnumerable()
-                .ToList());
+        var chainResult = db.Owners
+            .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+            .Join(db.OrderLines, x => x.r.Id, l => l.OrderId, (x, l) => new { x.o.Name, l.Sku })
+            .AsEnumerable()
+            .OrderBy(x => x.Name).ThenBy(x => x.Sku)
+            .ToList();
 
-        // Final-review finding 4: the routing assertion above (and its unit-test twin,
-        // NativeJoinScopeProjectionBinderTests.Declines_a_second_chained_join_rather_than_reusing_the_first_joins_scope)
+        var expectedChainResult = seed.Owners
+            .Join(seed.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+            .Join(seed.OrderLines, x => x.r.Id, l => l.OrderId, (x, l) => new { x.o.Name, l.Sku })
+            .OrderBy(x => x.Name).ThenBy(x => x.Sku)
+            .ToList();
+
+        Assert.NotEmpty(chainResult);
+        Assert.Equal(expectedChainResult, chainResult);
+
+        // Final-review finding 4: the assertion above (and its unit-test twin,
+        // NativeJoinScopeProjectionBinderTests.Binds_a_second_chained_join_reusing_the_first_joins_target_type_at_the_correct_alias)
         // is not enough on its own for the INTERMEDIATE-Select spelling below. There, the intermediate
         // `Select(x => x.o)` hits the bare-whole-entity-leaf confirm arm while Joins.Count is still 1 — so
         // AddLookup FIRES and MongoQueryExpression.UsesDriverJoinFields flips — and only THEN does the second
@@ -237,7 +253,7 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
         // wrong-DATA failure elsewhere on this plan (NorthwindJoinQueryMongoTest.GroupJoin_Where), so the
         // driver-LINQ fallback for this shape needs a RESULT check, not just a route check.
         using var dbNative = CreateContext(seed, MongoQueryMode.Native,
-            nameof(Chained_second_join_still_declines_cleanly_in_NativeOnly) + "_fallback");
+            nameof(Chained_join_scalar_leaf_shapes_resolve_correctly_under_NativeOnly) + "_fallback");
 
         var result = dbNative.Owners
             .Join(dbNative.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
