@@ -824,16 +824,18 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     /// resurrect the gap, because the leaf is resolved correctly rather than merely refused.
     /// </para>
     /// <para>
-    /// <b>The left-outer conjunct is a lowerer constraint, not a scope statement.</b>
-    /// <c>MongoSelectLowerer.AppendLookupStages</c> emits a join whose navigation is a COLLECTION navigation
-    /// (the principal-side spelling, e.g. <c>Owners.Join(Orders, o =&gt; o.Id, r =&gt; r.OwnerId, …)</c>, which
-    /// resolves to <c>Owner.Orders</c>) through its <c>ForceUnwind</c> arm, which hard-codes
-    /// <c>preserveNullAndEmptyArrays: false</c> and so ignores <see cref="JoinInfo.IsLeftOuter"/>. That is
-    /// exactly right for an inner <c>Join</c> and silently WRONG for a <c>LeftJoin</c>/<c>GroupJoin</c> (rows
-    /// with no match would be dropped instead of kept with nulls). The dependent-side spelling resolves to a
-    /// REFERENCE navigation and takes the arm that threads <c>PreserveNullAndEmptyArrays</c> through properly,
-    /// so it is admitted for either join kind. Declining the one broken combination here keeps it on the
-    /// (correct) driver-LINQ fallback; widening it means fixing that lowerer arm first.
+    /// <b>A left-outer join over a COLLECTION navigation is admitted, not declined.</b>
+    /// <c>MongoSelectLowerer.AppendLookupStages</c>'s <c>ForceUnwind</c> arm (the principal-side spelling, e.g.
+    /// <c>Owners.Join(Orders, o =&gt; o.Id, r =&gt; r.OwnerId, …)</c>, which resolves to <c>Owner.Orders</c>)
+    /// reads the registered <see cref="LookupExpression.PreserveNullAndEmptyArrays"/> — set from
+    /// <see cref="JoinInfo.IsLeftOuter"/> at registration (this method, below) — instead of hard-coding
+    /// <c>false</c>, so a plain <c>Join</c> still drops an unmatched principal (inner) while a
+    /// <c>LeftJoin</c>/<c>GroupJoin</c> keeps it with an empty/null navigation (left-outer), exactly like the
+    /// dependent-side (REFERENCE navigation) spelling already did. A cross-collection reference
+    /// <c>SelectMany</c> flatten uses the same <c>ForceUnwind</c> arm but is unconditionally inner-join
+    /// semantics regardless of any LINQ join operator — <see cref="NativeSelectManyBinder"/> sets
+    /// <c>PreserveNullAndEmptyArrays = false</c> explicitly at its own two registration sites for exactly this
+    /// reason.
     /// </para>
     /// <para>
     /// <b><c>HasUnsupportedOperator</c> is a wrong-data guard, MEASURED, not defensive tidiness.</b> Confirming
@@ -949,8 +951,9 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // natively by NorthwindMiscellaneousQueryMongoTest.Projection_take_projection /
         // .Projection_skip_projection / .Projection_skip_take_projection — all three regress to the driver-LINQ
         // fallback (an MQL-baseline failure, results unchanged) if this is widened to every join.
-        // Everything else declines: a COLLECTION navigation (1:N, and its ForceUnwind arm hard-codes
-        // preserveNullAndEmptyArrays: false), and an INNER join over a reference navigation (preserve: false,
+        // Everything else declines: a COLLECTION navigation is 1:N regardless of preserveNullAndEmptyArrays —
+        // a LeftJoin/GroupJoin over one can still multiply a row across several matches, it only stops
+        // DROPPING the zero-match case — and an INNER join over a reference navigation (preserve: false,
         // so an unmatched FK drops the row and the count is not preserved either).
         // Widened to a CHAIN (fix round 1, Finding 1): the paging/reducing hazard above is not specific to
         // the LAST join — a $skip/$limit recorded ahead of the WHOLE $lookup block is emitted ahead of EVERY
@@ -2442,7 +2445,6 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             && innerQueryExpression.Select.IsBareCollectionScan
             && !outerQueryExpression.Select.IsGroupBy && !innerQueryExpression.Select.IsGroupBy
             && !outerQueryExpression.Select.IsDistinct && !innerQueryExpression.Select.IsDistinct
-            && !(joinInfo.IsLeftOuter && eligibleNavigation.IsCollection)
             && JoinLookupImplementsKeySelectors(joinInfo, outerQueryExpression, outerKeySelector, innerKeySelector);
 
         // Rebuild the chain from scratch each time: it covers exactly the LEADING run of eligible joins, so the

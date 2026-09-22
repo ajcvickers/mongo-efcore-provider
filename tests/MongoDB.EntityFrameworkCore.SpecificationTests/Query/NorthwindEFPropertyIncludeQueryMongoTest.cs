@@ -275,13 +275,25 @@ Customers.{ "$match" : { "_id" : "ALFKI ?" } }, { "$limit" : 2 }, { "$lookup" : 
 
     public override async Task Include_collection_with_left_join_clause_with_filter(bool async)
     {
-        // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.Include_collection_with_left_join_clause_with_filter(async);
 
+#if EF8 || EF9
+        // NativeSlotPopulator's candidate-join arm only matches QueryableMethods.{Join,GroupJoin} plus (EF10-only)
+        // QueryableMethods.LeftJoin — EF8/EF9's GroupJoin+DefaultIfEmpty flattens onto EF's own internal LeftJoin
+        // shim instead (MongoQueryableMethodTranslatingExpressionVisitor.Ef8Ef9LeftJoinMethod), which isn't
+        // recognized there, so the query is marked non-native before any join-scope binder runs. Pre-existing,
+        // version-generic gap (see NativeJoinScopeProjectionBinder's remarks), unrelated to this shape's own
+        // left-outer/collection-navigation eligibility, which EF-TBD fixed on EF10.
         AssertMql(
             """
 Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_outer._id" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_outer._lookup_Orders" } }
 """);
+#else
+        AssertMql(
+            """
+Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders_join" } }, { "$unwind" : { "path" : "$_lookup_Orders_join", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }
+""");
+#endif
     }
 
     public override async Task Include_duplicate_collection(bool async)

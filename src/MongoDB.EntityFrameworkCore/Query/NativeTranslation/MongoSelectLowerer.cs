@@ -517,12 +517,15 @@ internal sealed class MongoSelectLowerer
             }
             else if (lookup.Navigation is { IsCollection: true } && lookup.ForceUnwind)
             {
-                // A cross-collection reference SelectMany flatten: $lookup the referenced collection, then
-                // $unwind to one row per child with inner-join semantics (preserve:false) — a principal with
-                // no children drops out. (Include's reference $unwind uses preserve:true / left-join; this
-                // is the opposite.)
+                // A collection-navigation Join/LeftJoin/GroupJoin, or a cross-collection reference SelectMany
+                // flatten: $lookup the referenced collection, then $unwind with the join-registration site's
+                // own PreserveNullAndEmptyArrays verdict — false (inner-join semantics; a principal with no
+                // children/matches drops out) for a plain Join or a SelectMany flatten, true (left-outer; the
+                // principal survives with a null/empty navigation) for a LeftJoin/GroupJoin. (Include's own
+                // reference $unwind, handled by the arm above, threads the same property for the identical
+                // reason.)
                 stages.Add(new MongoLookupStage(lookup));
-                stages.Add(new MongoUnwindStage(lookup, preserveNullAndEmptyArrays: false));
+                stages.Add(new MongoUnwindStage(lookup, lookup.PreserveNullAndEmptyArrays));
             }
             else if (lookup.PipelineKind == LookupPipelineKind.CorrelatedReducer)
             {

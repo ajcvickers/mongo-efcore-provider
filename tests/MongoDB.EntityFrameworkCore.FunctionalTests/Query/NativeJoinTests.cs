@@ -766,8 +766,9 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
         //
         // Driven from the DEPENDENT side (Orders → Owners) deliberately: that resolves Order.Owner, a REFERENCE
         // navigation, which is the arm that threads requiredness through properly. The principal-side spelling
-        // resolves a COLLECTION navigation and is declined outright by the left-outer conjunct — see
-        // LeftJoin_over_a_collection_navigation_still_declines_under_NativeOnly.
+        // resolves a COLLECTION navigation, which also goes native (see
+        // LeftJoin_over_a_collection_navigation_now_goes_native_under_NativeOnly) but was historically declined
+        // and is kept as a separate pin rather than merged into this test.
         //
         // The seed has no dangling FK, so every Order has an Owner and `x.o.Name` is never a null dereference;
         // left-outer ROW PRESERVATION is pinned by that other test, not this one — what this pins is the
@@ -1463,52 +1464,39 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
 
 #if !EF8 && !EF9
     [Fact]
-    public void LeftJoin_over_a_collection_navigation_still_declines_under_NativeOnly()
+    public void LeftJoin_over_a_collection_navigation_now_goes_native_under_NativeOnly()
     {
-        // Pins the left-outer conjunct of IsSingleEligibleNativeJoinScope. Driving the join from the PRINCIPAL
-        // side (Owners → Orders) resolves Owner.Orders, a COLLECTION navigation, and MongoSelectLowerer's
-        // collection-ForceUnwind arm hard-codes preserveNullAndEmptyArrays: false — correct for an inner Join,
-        // silently wrong for a LeftJoin (an Owner with no Order is DROPPED instead of kept with nulls).
+        // Was LeftJoin_over_a_collection_navigation_still_declines_under_NativeOnly (EF-TBD: native
+        // left-join-over-collection-Include support). Driving the join from the PRINCIPAL side
+        // (Owners → Orders) resolves Owner.Orders, a COLLECTION navigation. IsNativelyEligible's
+        // left-outer/collection conjunct used to decline this outright, because MongoSelectLowerer's
+        // collection-ForceUnwind arm hard-coded preserveNullAndEmptyArrays: false — correct for an inner
+        // Join, silently wrong for a LeftJoin (an Owner with no Order would be DROPPED instead of kept with
+        // nulls). The lowerer now reads LookupExpression.PreserveNullAndEmptyArrays (threaded from
+        // JoinInfo.IsLeftOuter at registration) instead, so the conjunct was removed and this shape is
+        // admitted with correct left-outer semantics.
         //
         // FUTURE EDITORS — the projection body here is load-bearing and must stay ALL-OUTER and fully
         // translatable. An earlier version of this test used `Total = r == null ? (decimal?)null : r.Total`,
         // whose ConditionalExpression MongoExpressionTranslator has no support for at all — so
-        // TryBindProjection declined on the LEAF, for a reason entirely unrelated to left-outer-ness, and the
-        // conjunct under test was never reached. That version stayed green with the conjunct deleted, i.e. it
-        // pinned nothing (the same dead-guard failure mode this feature has hit before — see
-        // NativeJoinScopeTranslator's field-vs-property note). `new { o.Name }` translates cleanly and
-        // therefore reaches, and is stopped by, the left-outer conjunct itself.
-        //
-        // Verified by mutation (2026-08-27), disabling ONLY that conjunct: the NativeOnly assertion below fails
-        // with "No exception was thrown", and the Native assertion fails with ["Alice"] instead of
-        // ["Alice", "Bob"] — i.e. the mutation reproduces the hazard live, it is not merely theorized.
+        // TryBindProjection declined on the LEAF, for a reason entirely unrelated to left-outer-ness. `new
+        // { o.Name }` translates cleanly and so isolates the left-outer/collection behavior on its own.
         var seed = SeedOwnersAndOrdersWithUnmatchedRows();
         using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
-            nameof(LeftJoin_over_a_collection_navigation_still_declines_under_NativeOnly));
+            nameof(LeftJoin_over_a_collection_navigation_now_goes_native_under_NativeOnly));
 
-        Assert.Throws<NativeTranslationNotSupportedException>(() =>
-            db.Owners
-                .LeftJoin(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o.Name })
-                .AsEnumerable()
-                .ToList());
-
-        // The second half is what makes this a WRONG-DATA pin rather than a routing pin: the seed has an Owner
-        // with no Order at all, so a correct LeftJoin returns BOTH owners. Were the conjunct removed, this
-        // would go native, the collection-ForceUnwind arm would emit preserveNullAndEmptyArrays: false, and
-        // the Order-less owner would silently vanish — one row instead of two.
-        using var dbNative = CreateContext(seed, MongoQueryMode.Native,
-            nameof(LeftJoin_over_a_collection_navigation_still_declines_under_NativeOnly) + "_fallback");
-
-        var result = dbNative.Owners
-            .LeftJoin(dbNative.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o.Name })
+        // Succeeding under NativeOnly is itself the "went native" signal (Query/AGENTS.md) — a fallback shape
+        // would throw NativeTranslationNotSupportedException, not silently return wrong or partial data.
+        var result = db.Owners
+            .LeftJoin(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o.Name })
             .AsEnumerable()
             .Select(x => x.Name)
             .OrderBy(x => x)
             .ToList();
 
         // Spelled out rather than computed from an in-memory LINQ oracle: SeedOwnersAndOrdersWithUnmatchedRows
-        // gives Alice exactly one Order and Bob none, so a correct LeftJoin is exactly one row each. Writing
-        // it literally keeps the "Bob must survive" point visible instead of hiding it behind a mirror query.
+        // gives Alice exactly one Order and Bob none, so a correct LeftJoin is exactly one row each — the
+        // Order-less owner (Bob) must survive with a null/absent navigation, not be silently dropped.
         Assert.Equal(["Alice", "Bob"], result);
     }
 
@@ -1517,17 +1505,16 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     {
         // EF-444 Task 3 (Task 0 spike, "Step 7"). Driven from the DEPENDENT side — Order.LeftJoin(Owner, ...) —
         // so the join resolves Order.Owner, a REFERENCE navigation. That is deliberately the mirror of
-        // LeftJoin_over_a_collection_navigation_still_declines_under_NativeOnly above, which drives from the
+        // LeftJoin_over_a_collection_navigation_now_goes_native_under_NativeOnly above, which drives from the
         // PRINCIPAL side (Owner.LeftJoin(Order, ...)) and resolves the COLLECTION navigation Owner.Orders —
-        // that spelling is, and remains, correctly declined by EF-392's left-outer/collection-navigation
-        // conjunct; it is unchanged and out of scope here.
+        // both spellings now go native with correct left-outer semantics, kept as separate pins.
         //
         // No new production code exists for this case — see the code comment at
         // MongoProjectionBindingRemovingExpressionVisitor's cross-collection arm (fieldRequired = false) for
         // the mechanism. In short: the cross-collection read arm already treats the joined field as NOT
         // required, and MongoSelectLowerer already emits preserveNullAndEmptyArrays: true for a left-outer
-        // REFERENCE navigation (as opposed to the hard-coded false for a left-outer COLLECTION navigation the
-        // sibling test above pins). Together, a dangling-FK Order's Owner leaf reads as a plain null reference
+        // REFERENCE navigation — the same property the sibling test above pins for a left-outer COLLECTION
+        // navigation. Together, a dangling-FK Order's Owner leaf reads as a plain null reference
         // — EF Core's own null-reference-navigation convention — with no exception and no partial entity. This
         // test pins that behavior permanently so a future editor doesn't add unnecessary null-handling code
         // believing it's missing.
@@ -1583,16 +1570,17 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
         // Core-version limitation, not a Mongo provider gap, so this case is compiled out rather than run
         // and expected to fail on EF8/EF9.
         //
-        // This case's projection leaf is `Total = r == null ? (decimal?)null : r.Total` — a ConditionalExpression,
-        // which MongoExpressionTranslator has no support for at all (confirmed during Task 5's review). So this
-        // case still declines under NativeOnly, correctly, and `goesNativeUnderNativeOnly` is false: it is
-        // verified via the graceful-decline + Native-mode-fallback-correctness path, not native success.
+        // This case's projection leaf is `Total = r == null ? (decimal?)null : r.Total` over Owner.Orders, a
+        // COLLECTION navigation reached via LeftJoin — now natively eligible (EF-TBD: native
+        // left-join-over-collection-Include support widened IsNativelyEligible to admit a left-outer
+        // collection-navigation join, since MongoSelectLowerer now threads
+        // LookupExpression.PreserveNullAndEmptyArrays through instead of hard-coding false).
         yield return
         [
             (Func<IQueryable<Owner>, IQueryable<Order>, IQueryable<object>>)((owners, orders) =>
                 owners.LeftJoin(orders, o => o.Id, r => r.OwnerId,
                     (o, r) => new { o.Name, Total = r == null ? (decimal?)null : r.Total })),
-            false
+            true
         ];
 #endif
     }
@@ -1606,14 +1594,14 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
         // case), and an Order whose OwnerId matches nothing (dangling FK, dropped by inner Join).
         //
         // EF-392 Task 6 update: the stale premise here — "Do NOT use MongoQueryMode.NativeOnly, it would
-        // always throw for this shape, by design" — no longer holds for every case in JoinOracleCases. After
-        // Task 5, the plain Join case DOES go native under NativeOnly; only the LeftJoin case (a conditional
-        // projection leaf MongoExpressionTranslator can't translate at all) still declines. So this test now
-        // asserts the oracle match under the default Native mode UNCONDITIONALLY (proving whichever path
-        // Native picks - fallback or native - is correct), and ADDITIONALLY, under NativeOnly, either the
-        // oracle match again (when goesNativeUnderNativeOnly, proving native itself, since NativeOnly can only
-        // succeed by translating natively - there is no silent fallback in that mode) or the expected clean
-        // decline (when not).
+        // always throw for this shape, by design" — no longer holds for any case in JoinOracleCases (EF-TBD
+        // widened native eligibility to left-outer collection-navigation joins too, so both cases now go
+        // native). So this test now asserts the oracle match under the default Native mode UNCONDITIONALLY
+        // (proving whichever path Native picks - fallback or native - is correct), and ADDITIONALLY, under
+        // NativeOnly, either the oracle match again (when goesNativeUnderNativeOnly, proving native itself,
+        // since NativeOnly can only succeed by translating natively - there is no silent fallback in that
+        // mode) or the expected clean decline (when not — kept as a `bool` per-case rather than assumed, so a
+        // future case that genuinely can't go native still has somewhere to say so).
         var seed = SeedOwnersAndOrdersWithUnmatchedRows();
 
         // dynamic is used below (rather than a typed lambda) because this method's result shape is erased to
@@ -1739,9 +1727,9 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     // same safe left-outer shape LeftJoin_unmatched_row_reads_a_dotted_scalar_leaf_through_the_whole_document_path
     // pins at depth 1) — SeedOwnersAndOrdersWithUnmatchedRows only has two joinable collections, and
     // SeedOwnersOrdersAndLines has no dangling FK at all. Driving the equivalent chain over Owner.Orders (a
-    // COLLECTION navigation) instead would hit the UNRELATED, already-declined
-    // LeftJoin_over_a_collection_navigation_still_declines_under_NativeOnly guard rather than the shape this
-    // plan admits — deliberately avoided here.
+    // COLLECTION navigation) instead would exercise the UNRELATED single-join shape
+    // LeftJoin_over_a_collection_navigation_now_goes_native_under_NativeOnly already pins, rather than the
+    // chained shape this plan admits — deliberately avoided here.
     private static Seed SeedLinesOrdersAndOwnersWithADanglingOwnerId()
     {
         var owner = new Owner { Id = ObjectId.GenerateNewId(), Name = "Alice", Region = "North", Rank = 7 };
