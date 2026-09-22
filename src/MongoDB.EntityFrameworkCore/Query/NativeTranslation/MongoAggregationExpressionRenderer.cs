@@ -216,6 +216,11 @@ internal static class MongoAggregationExpressionRenderer
             // on.
             MongoRegexExpression { Term: MongoFieldExpression } regex => CanRender(regex.Field) && CanRender(regex.Term),
             MongoTupleExpression tuple => tuple.Elements.All(CanRender),
+            // EF-322 follow-up: a constructed nested sub-document leaf (mirrors Render's own arm above).
+            // Previously missing — Render already had an arm for it, so this used to be a "renderer wider
+            // than classifier" gap; closing it lets a computed-needle Contains whose item is a composite
+            // anonymous-type tuple (`ids.Contains(new { Id1 = ..., Id2 = ... })`) go native.
+            MongoDocumentConstructionExpression construction => construction.Members.All(m => CanRender(m.Value)),
             _ => false
         };
 

@@ -959,15 +959,21 @@ internal sealed partial class MongoExpressionTranslator
                 }
 
                 // The item isn't a bare field — try a COMPUTED needle (e.g. string concatenation of a
-                // column with a constant/other column: `data.Contains(c.CustomerID + "SomeConstant")`, or a
-                // date-part chain: `dates.Contains(o.OrderDate!.Value.Date)`). A computed needle has no
-                // query-dialect form at all (only a bare field can key { field: { $in: [...] } }), so it can
-                // only be tested via $expr's array-form $in — hence MongoComputedInExpression, not
-                // MongoInExpression. Scoped to the shapes TranslateInValuesRaw can serialize without a backing
-                // IProperty (string and DateTime today) and gated by CanRender so a needle shape the
-                // aggregation renderer can't express declines here rather than throwing at render time.
+                // column with a constant/other column: `data.Contains(c.CustomerID + "SomeConstant")`, a
+                // date-part chain: `dates.Contains(o.OrderDate!.Value.Date)`), or a composite-key-style
+                // anonymous-type tuple built from entity fields (`ids.Contains(new { Id1 = o.OrderID, Id2 =
+                // o.ProductID })`, EF's Northwind `Contains_with_local_anonymous_type_array_closure`) — the
+                // latter reaches here as a MongoDocumentConstructionExpression via TranslateOperand's own
+                // NewExpression/anonymous-type arm. A computed needle has no query-dialect form at all (only
+                // a bare field can key { field: { $in: [...] } }), so it can only be tested via $expr's
+                // array-form $in — hence MongoComputedInExpression, not MongoInExpression. Scoped to the
+                // shapes TranslateInValuesRaw can serialize without a backing IProperty (string, DateTime, or
+                // an anonymous-type tuple whose array element type matches the needle's own type) and gated
+                // by CanRender so a needle shape the aggregation renderer can't express declines here rather
+                // than throwing at render time.
                 if (TryTranslateValue(itemExpr, out var needleNode)
-                    && (needleNode.Type == typeof(string) || needleNode.Type == typeof(DateTime))
+                    && (needleNode.Type == typeof(string) || needleNode.Type == typeof(DateTime)
+                        || needleNode is MongoDocumentConstructionExpression)
                     && MongoAggregationExpressionRenderer.CanRender(needleNode))
                 {
                     var rawValuesNode = TranslateInValuesRaw(collectionExpr, needleNode.Type);
