@@ -93,6 +93,51 @@ internal static class NativeJoinScopeTranslator
     }
 
     /// <summary>
+    /// Resolves a scalar/computed leaf rooted at ANY SINGLE scope in a chained join — the root, or any one
+    /// join's Inner side — never a leaf that spans more than one scope (see <see cref="TryRerootToSingleScope"/>'s
+    /// <c>CrossScope</c> rejection). Used by <see cref="NativeJoinScopeProjectionBinder"/>'s ordinary-leaf arm
+    /// once <c>scope.Levels.Count &gt; 1</c>, in place of the flat, type-comparing depth-1 entry points
+    /// (<see cref="TryTranslateValue"/>/<see cref="TryTranslatePredicate"/>), whose own documented RESIDUAL GAP is
+    /// specifically about chains. This method never falls into that gap: resolution is by the ACTUAL member-name
+    /// hop chain (<see cref="MongoTransparentScopeResolver"/>), never by comparing a scope's recorded CLR type
+    /// against some OTHER level's type. See
+    /// docs/superpowers/specs/2026-09-18-native-chained-join-scalar-projection-design.md.
+    /// </summary>
+    public static bool TryTranslateSingleScope(
+        MongoJoinScope scope, ParameterExpression rootParam, Expression body, bool valueMode,
+        [NotNullWhen(true)] out MongoExpression? result)
+    {
+        result = null;
+        if (!TryRerootToSingleScope(scope, rootParam, body, out var scopeIndex, out var rewritten))
+        {
+            return false;
+        }
+
+        MongoExpressionTranslator translator;
+        if (scopeIndex == 0)
+        {
+            translator = new MongoExpressionTranslator(scope.OuterEntityType);
+        }
+        else
+        {
+            var level = scope.Levels[scopeIndex - 1];
+
+            // Reuse the two-scope MongoExpressionTranslator constructor with a THROWAWAY outer parameter that
+            // never appears in `rewritten` (TryRerootToSingleScope already proved the whole body resolves to
+            // scopeIndex, never scope 0) — so every member in `rewritten` resolves via the "not outer" branch:
+            // scope.Levels[k-1].InnerEntityType, prefixed with scope.Levels[k-1].InnerPrefix. See this method's
+            // own design doc for why this is safe, not a hack.
+            var unusedOuterParam = Expression.Parameter(scope.OuterEntityType.ClrType, "unusedOuterScope");
+            translator = new MongoExpressionTranslator(
+                level.InnerEntityType, unusedOuterParam, scope.OuterEntityType, level.InnerPrefix);
+        }
+
+        return valueMode
+            ? translator.TryTranslateValue(rewritten, out result)
+            : translator.TryTranslate(rewritten, out result);
+    }
+
+    /// <summary>
     /// Rewrites <paramref name="body"/>'s <c>Outer</c>/<c>Inner</c> hop chain (rooted at <paramref
     /// name="rootParam"/>) onto one synthetic parameter per <paramref name="scope"/> level, exactly as <see
     /// cref="MongoTransparentScopeResolver.ScopeRerootingVisitor"/> does for <c>SelectMany</c>'s own chained
