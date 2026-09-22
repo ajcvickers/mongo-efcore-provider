@@ -901,6 +901,31 @@ internal sealed class MongoSelectDefinition
     internal void MarkJoinLookupConfirmed()
         => _hasConfirmedJoinLookup = true;
 
+    private bool _hasPagingRecordedBeforeAnyJoin;
+
+    /// <summary>
+    /// <see langword="true"/> once a <c>Skip</c>/<c>Take</c> was recorded into <see cref="PipelineOps"/> while
+    /// <c>MongoQueryExpression.Joins</c> was still empty — i.e. the op is genuinely positioned BEFORE any join
+    /// in the query (e.g. <c>Customers.Take(1).GroupJoin(Orders, ...).SelectMany(g => g.DefaultIfEmpty())</c>,
+    /// where <c>Take(1)</c> is meant to page the OUTER Customers sequence), not hoisted forward by EF Core
+    /// from after a LATER join's confirming <c>Select</c> (the shape
+    /// <c>IsSingleEligibleNativeJoinScope</c>'s "measured" comment documents, e.g.
+    /// <c>Join(...).Select(...).Skip(n).Take(m)</c>). Deferring an op recorded under THIS flag past a later
+    /// join's <c>$lookup</c>/<c>$unwind</c> would change which rows it keeps — it was never meant to page the
+    /// joined result, only the pre-join outer one. Discovered as a real regression when a rebase combined
+    /// this flag's own consuming check with independently-landed native left-outer collection-navigation join
+    /// support — both were individually correct; only their combination exposed the ambiguity two
+    /// structurally-identical-looking "paging present before confirmation" signals can hide. Set by
+    /// <c>NativeSlotPopulator</c>'s <c>Skip</c>/<c>Take</c> arms; read by
+    /// <c>MongoQueryableMethodTranslatingExpressionVisitor.IsSingleEligibleNativeJoinScope</c>'s paging branch,
+    /// which declines (rather than defers) when this is set.
+    /// </summary>
+    internal bool HasPagingRecordedBeforeAnyJoin => _hasPagingRecordedBeforeAnyJoin;
+
+    /// <summary>Records that a <c>Skip</c>/<c>Take</c> was recorded while no join yet existed on this select.
+    /// See <see cref="HasPagingRecordedBeforeAnyJoin"/>.</summary>
+    internal void MarkPagingRecordedBeforeAnyJoin() => _hasPagingRecordedBeforeAnyJoin = true;
+
     private readonly List<MongoUnwindSource> _unwindSources = [];
 
     /// <summary>

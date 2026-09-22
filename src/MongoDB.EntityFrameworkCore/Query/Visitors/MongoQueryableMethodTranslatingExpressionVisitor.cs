@@ -1040,6 +1040,34 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             // in NativeJoinTests.cs for a proof of the current (post-fix) behavior.
             if (!everyJoinPreLookupSafe)
             {
+                // Discovered during a later rebase (EF-322) that combined this branch with independently
+                // -landed native left-outer collection-navigation join support: a Skip/Take recorded while NO
+                // join yet existed on this select (e.g. `Customers.Take(1).GroupJoin(Orders,
+                // ...).SelectMany(g => g.DefaultIfEmpty())`) is genuinely positioned BEFORE the join — it
+                // pages the OUTER sequence, not the joined result — and must never be deferred past a LATER
+                // join's $lookup/$unwind the way EF's hoisted-forward `Join(...).Select(...).Skip()/Take()`
+                // shape safely is.
+                //
+                // MEASURED (do not re-derive without re-checking): "Skip/Take recorded before any join"
+                // (MongoSelectDefinition.HasPagingRecordedBeforeAnyJoin) is IDENTICAL — Joins.Count == 0 at
+                // record time — for BOTH the GroupJoin/collection-nav hazard above AND the already-accepted
+                // Important-2 shape (a Skip/Take before a plain REFERENCE-nav dereference in a projection,
+                // e.g. `Orders.Skip().Take().Select(o => o.Customer.City)` — no explicit Join()/GroupJoin()
+                // call at all, the join is synthesized when the projection is processed, just as late as
+                // GroupJoin's is). "Before any join" alone cannot tell these apart. The actual hazard is
+                // narrower: a genuine 1:N COLLECTION navigation whose row-multiplying $unwind was meant to
+                // apply AFTER paging (the reference-nav case is at most 0:1 — dropping a row at a page
+                // boundary is the already-documented Important-2 caveat, not a count-multiplying one).
+                // Decline only when BOTH signals hold — paging predates every join AND at least one join in
+                // the chain is a genuine collection navigation; a reference-nav-only chain still defers,
+                // preserving Important-2's own shape and its pinning test
+                // (Paging_after_a_dangling_required_reference_dereference_pages_the_joined_result_under_NativeOnly).
+                if (mongoQueryExpression.Select.HasPagingRecordedBeforeAnyJoin
+                    && mongoQueryExpression.Joins.Any(j => j.Lookup?.Navigation is { IsCollection: true }))
+                {
+                    return false;
+                }
+
                 mongoQueryExpression.Select.DeferPipelineOpsPastConfirmedJoin();
             }
         }
