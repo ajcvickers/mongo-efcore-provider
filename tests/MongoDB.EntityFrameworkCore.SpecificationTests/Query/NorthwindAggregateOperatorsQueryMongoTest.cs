@@ -2360,23 +2360,19 @@ Orders.{ "$match" : { "_id" : { "$in" : [10248, 10249] } } }
     public override async Task Type_casting_inside_sum(bool async)
     {
         // Fails: Truncation data loss issue EF-228
-        // Returns 121.04000180587159838 instead of 121.040 because of conversion errors (driver-LINQ mode,
-        // which executes the query and returns wrong data); native-only mode rejects the shape outright as
-        // NativeTranslationNotSupportedException, before it ever executes.
+        // Returns 121.04000180587159838 instead of 121.040 because of conversion errors. This now executes
+        // and returns wrong data in EVERY mode: the selector is a bare Convert-to-decimal over a member, which
+        // NativeCardinalityBinder.TryBindAggregate admits (via TryTranslateValue, since the go-native-for-
+        // computed-selector change) exactly like the driver-LINQ push-down already did, so native and
+        // driver-LINQ now render and execute the identical $toDecimal pipeline and hit the identical
+        // precision bug — native-only no longer rejects this shape outright at compile time.
         await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
             () => base.Type_casting_inside_sum(async), typeof(EqualException));
 
-        if (MongoSpecTestHelpers.IsNativeOnly)
-        {
-            AssertMql();
-        }
-        else
-        {
-            AssertMql(
-                """
-                OrderDetails.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$toDecimal" : "$Discount" } } } }
-                """);
-        }
+        AssertMql(
+            """
+            OrderDetails.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$toDecimal" : "$Discount" } } } }
+            """);
     }
 
 #endif

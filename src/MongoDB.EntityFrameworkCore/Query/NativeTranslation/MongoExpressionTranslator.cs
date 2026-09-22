@@ -389,6 +389,20 @@ internal sealed partial class MongoExpressionTranslator
             return false; // the subtree throws when evaluated (e.g. an invalid DateTime) — decline, don't crash translation
         }
 
+        // A DateTime literal like `new DateTime(1900, 1, 1)` has Kind Unspecified, exactly like the value the
+        // in-memory LINQ comparison computes against (no conversion at all — .AddMinutes is pure tick
+        // arithmetic). BsonValue.Create(DateTime), reached with ForSerialization null below, calls the
+        // driver's BsonUtils.ToUniversalTime, which for a non-Utc Kind calls DateTime.ToUniversalTime() and
+        // therefore depends on the MACHINE'S LOCAL TIME ZONE — for a pre-1916 date on a host whose zone has a
+        // historical non-whole-minute LMT offset (e.g. Europe/Dublin's -00:25 before 1916), that silently skews
+        // the rendered $date by the offset (MEASURED: 1900-01-01 renders as 00:25 UTC, not 00:00, causing
+        // Add_minutes_on_constant_value to be off by exactly that skew). SpecifyKind (a relabel, not a
+        // conversion — the ticks are untouched) makes it Utc, which BsonUtils.ToUniversalTime treats as a
+        // no-op, so the rendered literal matches the tick value the in-memory comparison uses regardless of
+        // the host's time zone.
+        if (value is DateTime { Kind: not DateTimeKind.Utc } dateTimeValue)
+            value = DateTime.SpecifyKind(dateTimeValue, DateTimeKind.Utc);
+
         result = new MongoConstantExpression(value, forSerialization: null);
         return true;
     }
