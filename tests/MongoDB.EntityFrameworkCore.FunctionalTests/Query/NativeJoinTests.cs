@@ -310,6 +310,32 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
     }
 
     [Fact]
+    public void Chained_join_scalar_leaf_projection_goes_native_under_NativeOnly()
+    {
+        // Native-chained-join-scalar-projection plan (2026-09-18). Every leaf here is a scalar value rooted at
+        // exactly one scope in the chain: e.o.Name is the root (scope 0), e.r.Total is join #1's Inner (scope
+        // 1), l.Sku is join #2's Inner (scope 2). No Skip/Take after the Select — that is a SEPARATE,
+        // still-open gap (NativeSlotPopulator's post-confirmed-join guard), not part of this plan.
+        var seed = SeedOwnersOrdersAndLines();
+        using var db = CreateContext(seed, MongoQueryMode.NativeOnly,
+            nameof(Chained_join_scalar_leaf_projection_goes_native_under_NativeOnly));
+
+        var results = db.Owners
+            .Join(db.Orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+            .Join(db.OrderLines, e => e.r.Id, l => l.OrderId, (e, l) => new
+            {
+                OwnerName = e.o.Name,
+                OrderTotal = e.r.Total,
+                LineSku = l.Sku
+            })
+            .Where(x => x.OwnerName == seed.Owners[0].Name)
+            .ToList();
+
+        Assert.NotEmpty(results);
+        Assert.All(results, r => Assert.Equal(seed.Owners[0].Name, r.OwnerName));
+    }
+
+    [Fact]
     public void Chained_join_onto_the_same_target_entity_type_disambiguates_lookup_aliases_under_NativeOnly()
     {
         // Final-review fix (M9b). The final whole-branch review verified the "two joins onto the same target
