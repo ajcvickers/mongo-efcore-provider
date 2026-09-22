@@ -195,6 +195,11 @@ internal sealed class MongoPipelineFactory
             // RenderUnionWith already emits for Union's own dedup, just via a dedicated marker stage instead
             // of a MongoGrouping (which models a NAMED key plus accumulators, neither of which apply here).
             MongoGroupByRootStage => new BsonDocument("$group", new BsonDocument("_id", "$$ROOT")),
+            // EF-322: the first half of the Last()/LastOrDefault()-with-no-explicit-order reducer pattern —
+            // mirrors the literal BSON MongoGroupByRootStage emits just above, just keying an accumulator
+            // field ("_last") off "$$ROOT" instead of grouping by it.
+            MongoLastRowStage => new BsonDocument("$group",
+                new BsonDocument { { "_id", BsonNull.Value }, { "_last", new BsonDocument("$last", "$$ROOT") } }),
             _ => throw new NativeTranslationNotSupportedException(
                 $"MongoPipelineFactory does not support stage type '{stage.GetType().Name}'.")
         };

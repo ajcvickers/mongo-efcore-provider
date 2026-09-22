@@ -292,8 +292,13 @@ internal sealed class MongoSelectDefinition
     /// existing ascending-sort machinery for the descending case (MQL has no "reverse row order" stage).
     /// Targets <see cref="ActiveOps"/> so a set-op-terminal reducer/Reverse flips the TRAILING sort, matching
     /// where a trailing OrderBy would have been recorded. Returns <see langword="false"/> (no mutation) when
-    /// the tail op is not a sort — an unordered source has no defined row order to complement, so the caller
-    /// should decline rather than invent an unreliable natural-order sort.
+    /// the tail op is not a sort — an unordered source has no defined row order to complement. Reverse still
+    /// declines outright in that case (there is no cheap MQL "reverse the whole sequence" stage). EF-322:
+    /// Last/LastOrDefault no longer decline here — <c>NativeCardinalityBinder.TryBindReducer</c> instead sets
+    /// <see cref="MongoCardinality.UnorderedLastRow"/>, which <c>MongoSelectLowerer</c> lowers to a
+    /// <c>$group{_id:null,_last:{$last:"$$ROOT"}}</c> + <c>$replaceRoot</c> pair AFTER any <c>$lookup</c> (a
+    /// single "last row", unlike a full reversed sequence, has a cheap MQL form, and the driver-LINQ fallback
+    /// it would otherwise land on relies on that exact same natural-order semantics anyway).
     /// </summary>
     internal bool TryFlipTrailingSortDirection()
     {

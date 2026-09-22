@@ -353,6 +353,18 @@ internal sealed class MongoSelectLowerer
             });
         }
 
+        // EF-322: a Last()/LastOrDefault() reducer with no explicit prior sort (NativeCardinalityBinder set
+        // MongoCardinality.UnorderedLastRow instead of the ordinary sort-flip + $limit). Emitted HERE —
+        // after $lookup/$unwind and any $project above — rather than in PipelineOps like the ordinary
+        // $limit-based reducer: this pattern collapses the WHOLE input into one document via $group, so an
+        // Included collection (or a projected field) must already be present in the "$$ROOT"/document it
+        // captures, not joined/projected afterward.
+        if (cardinality?.Reducer is not null && cardinality.UnorderedLastRow)
+        {
+            stages.Add(new MongoLastRowStage());
+            stages.Add(new MongoReplaceRootStage("_last", mergeOwnerKeySentinels: false));
+        }
+
         return stages;
     }
 

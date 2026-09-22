@@ -1171,4 +1171,27 @@ public class MongoSelectLowererTests
         var trailingName = Assert.Single(trailingAddFields.Fields).Alias;
         Assert.NotEqual(outerName, trailingName);
     }
+
+    // EF-322: Last()/LastOrDefault() with no explicit OrderBy has no MQL "take the last row" form via a sort
+    // flip (there is no sort to flip), but it's still natively representable via the same
+    // $group{_id:null,_last:{$last:"$$ROOT"}} + $replaceRoot pattern the driver-LINQ fallback already relies
+    // on for this exact shape (its own baseline MQL, captured under NorthwindIncludeQueryMongoTest
+    // .Include_collection_with_last_no_orderby).
+    [Fact]
+    public void Last_with_no_explicit_order_binds_natively_via_group_last_and_replace_root()
+    {
+        var query = TestSelect();
+
+        var bound = NativeCardinalityBinder.TryBindReducer(query, MongoReducerKind.Last, typeof(StubEntity));
+
+        Assert.True(bound);
+
+        var stages = new MongoSelectLowerer().Lower(query);
+
+        var lastRow = Assert.IsType<MongoLastRowStage>(Assert.Single(stages, s => s is MongoLastRowStage));
+        var replaceRoot = Assert.IsType<MongoReplaceRootStage>(Assert.Single(stages, s => s is MongoReplaceRootStage));
+        Assert.Equal("_last", replaceRoot.NewRoot);
+        Assert.False(replaceRoot.MergeOwnerKeySentinels);
+        Assert.True(Array.IndexOf(stages.ToArray(), lastRow) < Array.IndexOf(stages.ToArray(), replaceRoot));
+    }
 }
