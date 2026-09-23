@@ -20,6 +20,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
+using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using MongoDB.EntityFrameworkCore.UnitTests.TestUtilities;
 
 namespace MongoDB.EntityFrameworkCore.UnitTests.Query.NativeTranslation;
@@ -80,6 +81,86 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.NotNull(result);
         var shaped = Assert.IsAssignableFrom<ShapedQueryExpression>(result);
         return Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
+    }
+
+    private static MongoQueryExpression TranslateLeftJoinQuery(
+        Func<IQueryable<Owner>, IQueryable<Order>, IQueryable> buildQuery)
+    {
+        using var db = SingleEntityDbContext.Create<Owner>(mb => mb.Entity<Order>());
+
+        var query = buildQuery(db.Set<Owner>(), db.Set<Order>());
+
+        var ccFactory = db.GetService<IQueryCompilationContextFactory>();
+        var compilationContext = ccFactory.Create(async: false);
+
+        var preprocessor = db.GetService<IQueryTranslationPreprocessorFactory>().Create(compilationContext);
+        var preprocessed = preprocessor.Process(query.Expression);
+
+        var visitor = db.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>().Create(compilationContext);
+        var result = visitor.Visit(preprocessed);
+
+        Assert.NotNull(result);
+        var shaped = Assert.IsAssignableFrom<ShapedQueryExpression>(result);
+        return Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
+    }
+
+    [Fact]
+    public void Binds_a_bare_nav_null_check_ternary_over_a_left_join()
+    {
+        // `(r, o) => o != null ? o.Name : ""` after a LeftJoin — mirrors Manual_expression_tree_typed_null_equality's
+        // nav-expanded shape (`ti.Inner != null ? ti.Inner.City : null`), using a plain string default instead of
+        // a typed null so the test doesn't depend on Task 1-5's null-branch handling specifically —
+        // TranslateOperand's generic ConstantExpression fall-through already handles either.
+        //
+        // DELIBERATELY Order-outer/Owner-inner (not the other way around): RebindInnerShaperToOuterQuery resolves
+        // a join's Navigation by searching the OUTER entity's own navigation set first for one matching the outer
+        // key selector's FK property AND IsOnDependent — i.e. it only ever finds a REFERENCE nav when the OUTER
+        // side is the dependent (FK-holding) entity. Owner-outer/Order-inner (the "natural" reading order) resolves
+        // to Owner.Orders — a COLLECTION nav — which the degenerate-check guard below correctly declines (a
+        // collection has no single "is it null" answer); this is unrelated to IsLeftOuter and reproduces on a plain
+        // Join too. Order-outer/Owner-inner resolves to Order.Owner — a REFERENCE nav — the shape this feature
+        // targets, matching Manual_expression_tree_typed_null_equality's own Order-outer/Customer-inner shape.
+        var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+            orders.GroupJoin(owners, r => r.OwnerId, o => o.Id, (r, os) => new { r, os })
+                .SelectMany(x => x.os.DefaultIfEmpty(), (x, o) => new { x.r, o })
+                .Select(x => x.o != null ? x.o.Name : ""));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.True(mongoQ.Select.JoinScope!.Levels[0].IsLeftOuter);
+        Assert.Equal(
+            [NativeProjectionBinder.SyntheticBareProjectionAlias],
+            mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+
+        var leaf = Assert.IsType<MongoConditionalExpression>(mongoQ.Select.Projection[0].Expression);
+        var test = Assert.IsType<MongoLookupNullCheckExpression>(leaf.Test);
+        Assert.True(test.IsNotNull);
+        Assert.Equal(mongoQ.Select.JoinScope!.Levels[0].InnerPrefix, test.LookupAlias);
+
+        Assert.Single(mongoQ.Lookups);
+        Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+    }
+
+    [Fact]
+    public void Declines_when_the_checked_level_is_an_inner_not_left_outer_join()
+    {
+        // A plain Join never produces a null Inner (an unmatched row is DROPPED, not unwound-as-null), so the
+        // null check is degenerate there — must decline, not silently admit an always-true/always-false test.
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Select(x => x.r != null ? x.r.Total : 0m));
+
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
+    }
+
+    [Fact]
+    public void Declines_a_conditional_whose_test_is_not_a_scope_null_check()
+    {
+        var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+            owners.GroupJoin(orders, o => o.Id, r => r.OwnerId, (o, rs) => new { o, rs })
+                .SelectMany(x => x.rs.DefaultIfEmpty(), (x, r) => new { x.o, r })
+                .Select(x => x.o.Name == "Alice" ? 1m : 0m));
+
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
     }
 
     // Deliberately SEPARATE fixture types for the chained (Task 6) test below, rather than adding a "Lines"

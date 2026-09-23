@@ -536,8 +536,14 @@ public class MongoAggregationExpressionRendererTests
 
         var rendered = MongoAggregationExpressionRenderer.Render(node, placeholders);
 
+        // Wrapped in $ifNull (not a bare field ref) — see the render site's own remarks: after
+        // $lookup+$unwind(preserveNullAndEmptyArrays: true), an unmatched row's alias field is genuinely
+        // MISSING, and the aggregation-expression dialect's $ne does NOT treat missing and null alike the
+        // way the query dialect does, so a bare comparison would wrongly answer "not null" for an unmatched
+        // row. MEASURED against a real server (not merely asserted here).
         Assert.Equal(
-            new BsonDocument("$ne", new BsonArray { "$_lookup_Manager", BsonNull.Value }),
+            new BsonDocument("$ne",
+                new BsonArray { new BsonDocument("$ifNull", new BsonArray { "$_lookup_Manager", BsonNull.Value }), BsonNull.Value }),
             rendered);
     }
 
@@ -549,8 +555,10 @@ public class MongoAggregationExpressionRendererTests
 
         var rendered = MongoAggregationExpressionRenderer.Render(node, placeholders);
 
+        // Same $ifNull-wrapping as the $ne case above, and for the same reason.
         Assert.Equal(
-            new BsonDocument("$eq", new BsonArray { "$_lookup_Manager", BsonNull.Value }),
+            new BsonDocument("$eq",
+                new BsonArray { new BsonDocument("$ifNull", new BsonArray { "$_lookup_Manager", BsonNull.Value }), BsonNull.Value }),
             rendered);
     }
 

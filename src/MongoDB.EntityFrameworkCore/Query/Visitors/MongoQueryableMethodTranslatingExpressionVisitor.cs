@@ -617,6 +617,23 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             return source.UpdateShaperExpression(
                 BuildSelectManyResultShaper(mongoQueryExpression, selector.Body, foldedJoinBody));
         }
+        // A BARE (non-wrapped) `Select` body that is exactly a ternary null-checking a join scope's Inner side and
+        // dereferencing it — `ti => ti.Inner != null ? ti.Inner.City : null` (EF-322, native join-scope
+        // nav-null-check conditional projection). Sibling to the wrapped-projection arm above, structurally disjoint
+        // from it (a bare ConditionalExpression is never a NewExpression/MemberInit) and from the bare-leaf
+        // whole-entity arm above it (that recognizer matches only an UNADORNED `x.Outer`/`x.Inner` member access, a
+        // ConditionalExpression is neither). No fold/BuildSelectManyResultShaper needed: the staged leaf is a single
+        // bare scalar/computed value, not a wrapped anonymous/DTO construction, so it is bound exactly the way the
+        // GroupBy/SelectMany bare-leaf branches above bind their own single reserved alias — BindSelectManyMember,
+        // which registers the RAW selector.Body under the SAME "_v" alias TryBindConditionalProjection just staged
+        // into the native IR, and returns a ProjectionBindingExpression the DOM shaper reads by index.
+        else if (IsSingleEligibleNativeJoinScope(mongoQueryExpression, out var conditionalLeafJoin)
+                 && NativeJoinScopeProjectionBinder.TryBindConditionalProjection(mongoQueryExpression, selector, conditionalLeafJoin))
+        {
+            var boundBareLeaf = BindSelectManyMember(
+                mongoQueryExpression, NativeProjectionBinder.SyntheticBareProjectionAlias, selector.Body);
+            return source.UpdateShaperExpression(boundBareLeaf);
+        }
         else if (!IsTransparentIdentifierSelector(selector) && !IsSingleLevelCollectionIncludeSelector(selector)
                  && !IsTransparentIdentifierMemberAccessSelector(selector)
                  && !IsOwnedEmbeddedIncludeSelector(selector))
