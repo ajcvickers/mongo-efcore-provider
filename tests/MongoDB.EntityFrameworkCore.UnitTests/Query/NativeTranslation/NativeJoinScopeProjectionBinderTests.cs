@@ -104,6 +104,12 @@ public class NativeJoinScopeProjectionBinderTests
         return Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
     }
 
+#if !EF8 && !EF9
+    // EF8/EF9-ONLY IN PRACTICE, and not because of anything in this file: on EF8/EF9 an optional reference
+    // navigation lowers onto EF's own internal LeftJoin shim (Ef8Ef9LeftJoinMethod), which
+    // NativeSlotPopulator.PopulateNativeSlots' candidate-join arm never recognizes pre-EF10 — the whole join
+    // declines before any Select-side binder runs. See NativeJoinScopeProjectionBinder.cs (~line 290) for the
+    // full explanation; this test asserts the native (EF10-only) outcome.
     [Fact]
     public void Binds_a_bare_nav_null_check_ternary_over_a_left_join()
     {
@@ -139,6 +145,7 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.Single(mongoQ.Lookups);
         Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
     }
+#endif
 
     [Fact]
     public void Declines_when_the_checked_level_is_an_inner_not_left_outer_join()
@@ -714,6 +721,10 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
     }
 
+#if !EF8 && !EF9
+    // EF8/EF9-ONLY IN PRACTICE: see the comment on Binds_a_bare_nav_null_check_ternary_over_a_left_join above —
+    // the LeftJoin shape here never becomes a candidate join pre-EF10, so the join (and this bare scalar leaf)
+    // declines before any Select-side binder runs. This test asserts the native (EF10-only) outcome.
     [Fact]
     public void Bare_scalar_leaf_over_a_left_join_goes_native()
     {
@@ -728,7 +739,12 @@ public class NativeJoinScopeProjectionBinderTests
             mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
         Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
     }
+#endif
 
+#if !EF8 && !EF9
+    // EF8/EF9-ONLY IN PRACTICE: see the comment on Binds_a_bare_nav_null_check_ternary_over_a_left_join above —
+    // the LeftJoin shape here never becomes a candidate join pre-EF10, so the join (and this bare scalar leaf)
+    // declines before any Select-side binder runs. This test asserts the native (EF10-only) outcome.
     [Fact]
     public void Bare_scalar_leaf_matching_the_real_nav_expanded_shape_goes_native()
     {
@@ -744,4 +760,5 @@ public class NativeJoinScopeProjectionBinderTests
             [NativeProjectionBinder.SyntheticBareProjectionAlias],
             mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
     }
+#endif
 }

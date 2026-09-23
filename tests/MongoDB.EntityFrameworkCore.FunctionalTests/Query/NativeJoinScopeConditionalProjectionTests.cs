@@ -23,6 +23,7 @@ using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 using MongoDB.EntityFrameworkCore.Infrastructure;
+using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 
@@ -116,6 +117,24 @@ public class NativeJoinScopeConditionalProjectionTests(TemporaryDatabaseFixture 
 
         using var db = new JoinScopeDbContext(database, ordersName, customersName, regionsName, mode);
 
+#if EF8 || EF9
+        // On EF8/EF9 this shape never reaches the native binder at all — see the class remarks and
+        // NativeJoinScopeProjectionBinder.cs (~line 290): an optional reference navigation lowers onto EF's
+        // internal LeftJoin shim, which NativeSlotPopulator's candidate-join arm doesn't recognize pre-EF10, so
+        // the whole join declines before any Select-side binder runs. MongoQueryMode.NativeOnly correctly
+        // forbids the driver-LINQ fallback this shape still needs there, so it must throw rather than execute;
+        // MongoQueryMode.Native (which allows the fallback) is unaffected and is exercised below like on EF10.
+        if (mode == MongoQueryMode.NativeOnly)
+        {
+            Assert.Throws<NativeTranslationNotSupportedException>(() =>
+                db.Set<Order>()
+                    .OrderBy(o => o.OrderNo)
+                    .Select(o => o.Customer != null ? o.Customer.Name : NoneSentinel)
+                    .ToList());
+            return;
+        }
+#endif
+
         var actual = db.Set<Order>()
             .OrderBy(o => o.OrderNo)
             .Select(o => o.Customer != null ? o.Customer.Name : NoneSentinel)
@@ -175,14 +194,30 @@ public class NativeJoinScopeConditionalProjectionTests(TemporaryDatabaseFixture 
         // A genuine TWO-level join chain: level 1 (Order -> Customer) is a plain (required) Join, level 2
         // (Customer -> Region) is a LeftJoin (via GroupJoin/SelectMany(DefaultIfEmpty)) — the null check under
         // test targets the SECOND level's Inner side, not the first's.
-        var query = db.Set<Order>()
+        Func<System.Collections.Generic.List<string?>> runQuery = () => db.Set<Order>()
             .Join(db.Set<Customer>(), o => o.CustomerId, c => c.Id, (o, c) => new { o, c })
             .GroupJoin(db.Set<Region>(), x => x.c.RegionId, r => r.Id, (x, rs) => new { x.o, x.c, rs })
             .SelectMany(x => x.rs.DefaultIfEmpty(), (x, r) => new { x.o, x.c, r })
             .OrderBy(x => x.o.OrderNo)
-            .Select(x => x.r != null ? x.r.Name : NoneSentinel);
+            .Select(x => x.r != null ? x.r.Name : NoneSentinel)
+            .ToList();
 
-        var actual = query.ToList();
+#if EF8 || EF9
+        // On EF8/EF9 this shape never reaches the native binder at all — see the class remarks and
+        // NativeJoinScopeProjectionBinder.cs (~line 290): the second level's LeftJoin lowers onto EF's internal
+        // LeftJoin shim, which NativeSlotPopulator's candidate-join arm doesn't recognize pre-EF10, so the whole
+        // join declines before any Select-side binder runs. MongoQueryMode.NativeOnly correctly forbids the
+        // driver-LINQ fallback this shape still needs there, so it must throw rather than execute. This ONLY
+        // guards the NativeOnly case — the separate MongoQueryMode.Native-mode data-correctness gap on EF8/EF9
+        // for this two-level-chain shape is tracked independently and is deliberately NOT touched here.
+        if (mode == MongoQueryMode.NativeOnly)
+        {
+            Assert.Throws<NativeTranslationNotSupportedException>(() => runQuery());
+            return;
+        }
+#endif
+
+        var actual = runQuery();
 
         // Independent in-memory oracle over the same seeded rows, sharing no code with the provider.
         var orderSeeds = new[]
