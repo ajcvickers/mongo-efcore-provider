@@ -671,7 +671,7 @@ internal sealed partial class MongoExpressionTranslator
     // copy of ExpressionExtensionMethods.RemoveConvert. The local name is kept because it is the vocabulary the
     // ~20 call sites in this file read in, and because the SIBLING peelers here are deliberately NOT the same
     // thing (see UnwrapOrderPreserving's remarks below for why they must not be collapsed into this one).
-    private static Expression Unwrap(Expression e)
+    internal static Expression Unwrap(Expression e)
         => e.RemoveConvert();
 
     /// <summary>
