@@ -997,8 +997,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         {
             // Final review, Critical 1: PostJoinOps and PostLookupPagingOps are NOT mutually exclusive.
             // NativeSlotPopulator's general inner-predicate Where arm (the one whose own comment says "unlike
-            // the null-check arm, no IsLeftOuter requirement") can call MarkJoinInnerAccessConfirmedFromWhere()
-            // — populating PostJoinOps with its own $match — for a REQUIRED (non-left-outer) reference
+            // the null-check arm, no IsLeftOuter requirement") can call MarkJoinInnerAccessConfirmed() —
+            // populating PostJoinOps with its own $match — for a REQUIRED (non-left-outer) reference
             // navigation, which is exactly the "not 1:1-safe" category this paging branch also targets. If a
             // Skip/Take was ALSO recorded before that Where-flip (still sitting in PipelineOps) and this branch
             // then defers it into PostLookupPagingOps, MongoSelectLowerer emits PostJoinOps (the $match) THEN
@@ -1008,7 +1008,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             // outright for this narrow, currently-untested combination instead — a pure safety restoration of
             // today's behavior for this shape, not a loss of any currently-passing coverage (confirmed by
             // searching the test suite before making this change).
-            if (mongoQueryExpression.Select.JoinInnerAccessConfirmedFromWhere)
+            if (mongoQueryExpression.Select.JoinInnerAccessConfirmed)
             {
                 return false;
             }
