@@ -221,7 +221,8 @@ public class NativeJoinScopeConditionalProjectionTests(TemporaryDatabaseFixture 
         // native-vs-fallback gap above, and confirmed to predate this whole feature branch). No JIRA ticket
         // exists yet for either follow-up item this feature surfaced -- (1) the pre-existing chain-paging-
         // deferral gap in DeferPipelineOpsPastConfirmedJoin/ConfirmEntireChain (a SEPARATE, narrower hazard that
-        // does not apply to this binder -- see TryBindConditionalProjection's own remarks), and (2) this
+        // does not apply to this binder -- see the bare-scalar-leaf arm's comment in
+        // MongoQueryableMethodTranslatingExpressionVisitor.cs for the gap's own description), and (2) this
         // driver-LINQ fallback bug for the two-level-chain shape below -- they are DIFFERENT bugs and should be
         // filed as separate tickets rather than one. Once this shape falls back to driver-LINQ
         // (MongoQueryMode.Native, on EF8/EF9 only), the second level's unmatched LeftJoin row comes back as a

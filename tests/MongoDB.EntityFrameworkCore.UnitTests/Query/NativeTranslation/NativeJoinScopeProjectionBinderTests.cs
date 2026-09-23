@@ -185,7 +185,6 @@ public class NativeJoinScopeProjectionBinderTests
         public string Sku { get; set; } = "";
     }
 
-
     /// <summary>
     /// Three-source variant of <see cref="TranslateJoinQuery"/>, for the chained (depth-2) projection-binder
     /// test below — same pipeline/rationale, just with a second <c>Join</c> source added, over the dedicated
@@ -756,6 +755,10 @@ public class NativeJoinScopeProjectionBinderTests
         public string Name { get; set; } = "";
     }
 
+#if !EF8 && !EF9
+    // EF10-ONLY IN PRACTICE: see the comment on Binds_a_bare_nav_null_check_ternary_over_a_left_join above —
+    // the LeftJoin shape here never becomes a candidate join pre-EF10, so the join (and this bare scalar leaf)
+    // declines before any Select-side binder runs. This test asserts the native (EF10-only) outcome.
     [Fact]
     public void Binds_a_bare_nav_null_check_ternary_over_a_two_level_chain()
     {
@@ -797,6 +800,7 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.Single(mongoQ.Select.Projection);
         Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
     }
+#endif
 
 #if !EF8 && !EF9
     // EF10-ONLY IN PRACTICE: see the comment on Binds_a_bare_nav_null_check_ternary_over_a_left_join above —
