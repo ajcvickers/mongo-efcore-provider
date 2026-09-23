@@ -814,16 +814,21 @@ internal sealed class MongoPipelineFactory
             rawValue = entityMemberProperty.GetGetter().GetClrValue(rawValue);
 
         // `args[0]`-shaped access into a query-parameter ARRAY (a compiled query's own array-typed lambda
-        // parameter, see NativeQueryParameter.TryGetParameterArrayElementIndex): the raw parameter value is the
-        // WHOLE ARRAY, not the element to compare — extract that element now, per execution, since its value
-        // (and even whether the index is in range) can't be known until the array's runtime value is known.
+        // parameter, see NativeQueryParameter.TryGetParameterArrayElementIndex), OR a funcletized
+        // `Tuple.Create(...)` operand (see MongoExpressionTranslator.TupleEquality.cs's TryDecomposeTupleOperand):
+        // either way the raw parameter value is the WHOLE array/list or tuple, not the element to compare —
+        // extract that element now, per execution, since its value (and, for an array, even whether the index
+        // is in range) can't be known until the runtime value is known.
         if (arrayElementIndex is int elementIndex)
         {
-            rawValue = rawValue is System.Collections.IList list
-                ? list[elementIndex]
-                : throw new InvalidOperationException(
+            rawValue = rawValue switch
+            {
+                System.Collections.IList list => list[elementIndex],
+                System.Runtime.CompilerServices.ITuple tuple => tuple[elementIndex],
+                _ => throw new InvalidOperationException(
                     $"MongoPipelineFactory.Build: parameter '{name}' (placeholder index {index}) "
-                    + $"was expected to be an array/list but was '{rawValue?.GetType().Name ?? "null"}'.");
+                    + $"was expected to be an array/list or tuple but was '{rawValue?.GetType().Name ?? "null"}'.")
+            };
         }
 
         // A parameterized string.StartsWith/EndsWith/Contains term: the escape+anchor transform can only
