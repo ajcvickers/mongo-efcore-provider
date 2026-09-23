@@ -3379,7 +3379,26 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // instead (a correctness guard, not just an optimization: the dedup / source-tagging compare whole
         // projected documents by value, so mismatched alias sets would mis-compare). EF Core rejects
         // incompatible operand shapes upstream, so a mismatch is defense-in-depth.
-        if ((IsPlainProjectedSelect(mongo1) || IsPlainDistinctSelect(mongo1))
+        // source1 (mongo1) is the query MongoSelectLowerer.Lower is ultimately invoked on, so ITS OWN
+        // pending lookups (an InjectAfterRoot projected collection-navigation Count, e.g.
+        // Orders.Select(o => o.OrderDetails.Count())) are safe to admit here: the lowerer emits them
+        // ahead of source1's own $project when OperandsProjected is set (see MongoSelectLowerer.Lower's
+        // setOp.OperandsProjected branch), so they run before both source1's own $size read AND the
+        // $unionWith combine -- unlike source2, whose MongoSetOperation.OperandSelect carries no lookup
+        // plumbing at all, so source2 must still decline outright if it carries one.
+        // mongo1 (source1) is also the SHAPER source for the whole combined result -- this method always
+        // returns source1, so its own shaper is reused unmodified for every row of the $unionWith-ed stream,
+        // including rows physically contributed by mongo2's collection/pipeline. A bare constant/parameter
+        // LEAF anywhere in mongo1's projection (top-level, or nested in an anonymous/DTO member) is embedded
+        // by MongoProjectionBindingExpressionVisitor.Visit as a compile-time literal / QueryContext parameter
+        // read -- NOT a per-document field read (see its `case ConstantExpression: return expression;` arm and
+        // the parallel parameter arms) -- which is correct for a standalone query (every row of THAT query
+        // really does share the value) but wrong once shared across rows from a different operand: every
+        // combined row then reads back mongo1's baked-in value instead of its own actual "_v". Measured: the
+        // server-side pipeline is unaffected (each operand's own $project is correct BSON), only the CLIENT
+        // shaper is wrong. mongo2 needs no equivalent guard -- its own shaper is always discarded here.
+        if ((IsPlainProjectedSelect(mongo1, allowPreCombineLookups: true) || IsPlainDistinctSelect(mongo1, allowPreCombineLookups: true))
+            && !HasShaperUnsafeConstantLeaf(mongo1)
             && (IsPlainProjectedSelect(mongo2) || IsPlainDistinctSelect(mongo2))
             && ProjectionShapesMatch(mongo1.Select.Projection, mongo2.Select.Projection))
         {
@@ -3507,7 +3526,13 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     // $$ROOT means. This also means Intersect/Except (no driver-LINQ baseline at all) now answer correctly
     // for a bare operand instead of hard-failing, which is a strict improvement for those two: there was
     // never a working fallback to preserve. Pinned by NativeBareProjectionTests.
-    private static bool IsPlainProjectedSelect(MongoQueryExpression mongo)
+    // allowPreCombineLookups: only ever passed true for source1 (see TryTranslateSetOperation) — a lookup
+    // there is source1's OWN InjectAfterRoot projected-Count lookup, which the lowerer moves ahead of
+    // source1's $project when it's a set-op operand. Any other lookup shape (Include, a join, ...) still
+    // declines: it either lacks InjectAfterRoot or was never reachable here in the first place (Include
+    // is hoisted past the set op entirely — see EF-397 — and a join query is excluded by !mongo.IsJoinQuery
+    // above regardless of this flag).
+    private static bool IsPlainProjectedSelect(MongoQueryExpression mongo, bool allowPreCombineLookups = false)
         => mongo.Select.Route == NativeRoute.Projection
            && mongo.Select.Projection.Count > 0
            && !mongo.Select.HasArrayProjectionLeaf
@@ -3517,7 +3542,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
            && mongo.Select.Cardinality == null
            && mongo.Select.UnwindSource == null
            && !mongo.IsJoinQuery
-           && mongo.Lookups.Count == 0
+           && (allowPreCombineLookups ? mongo.Lookups.All(l => l.InjectAfterRoot) : mongo.Lookups.Count == 0)
            && !mongo.CapturedExpression.ContainsVectorSearch();
 
     // EF-322: a plain PROJECTED Distinct() (Select(new {...}).Distinct(), route == GroupBy via
@@ -3532,7 +3557,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     // not a Distinct-shaped operand at all here. A whole-entity Distinct (MongoDistinctOp in PipelineOps,
     // Grouping stays null) is UNAFFECTED by this predicate — it is already covered by IsPlainWholeEntitySelect,
     // no different from any other ordinary op in PipelineOps.
-    private static bool IsPlainDistinctSelect(MongoQueryExpression mongo)
+    private static bool IsPlainDistinctSelect(MongoQueryExpression mongo, bool allowPreCombineLookups = false)
         => mongo.Select.Route == NativeRoute.GroupBy
            && mongo.Select.IsDistinct
            && !mongo.Select.IsGroupBy
@@ -3541,8 +3566,18 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
            && mongo.Select.Cardinality == null
            && mongo.Select.UnwindSource == null
            && !mongo.IsJoinQuery
-           && mongo.Lookups.Count == 0
+           && (allowPreCombineLookups ? mongo.Lookups.All(l => l.InjectAfterRoot) : mongo.Lookups.Count == 0)
            && !mongo.CapturedExpression.ContainsVectorSearch();
+
+    // See TryTranslateSetOperation's call-site remarks: mongo1's projection reaching a bare
+    // MongoConstantExpression/MongoParameterExpression leaf (top-level or nested in an anonymous/DTO member)
+    // means its shaper never reads the document for that member at all -- unsafe ONLY because
+    // TryTranslateSetOperation reuses mongo1's shaper across the whole combined set-op stream. Not a general
+    // projection-safety predicate: a standalone query with this exact shape is fully correct and native (see
+    // NativeComputedBareProjectionTests / NativeCastTests), so this is deliberately NOT folded into
+    // IsPlainProjectedSelect/IsPlainDistinctSelect themselves.
+    private static bool HasShaperUnsafeConstantLeaf(MongoQueryExpression mongo)
+        => mongo.Select.Projection.Any(p => p.Expression is MongoConstantExpression or MongoParameterExpression);
 
     // The two operands' projected shapes must have identical top-level alias SETS (same count, same alias names).
     // The output documents' fields are exactly these aliases, and Union dedup / Intersect-Except source-tagging

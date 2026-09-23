@@ -360,7 +360,19 @@ internal sealed class MongoPipelineFactory
         var body = new BsonDocument();
         foreach (var projection in stage.Projections)
         {
-            body.Add(projection.Alias, MongoAggregationExpressionRenderer.Render(projection.Expression, placeholders));
+            var rendered = MongoAggregationExpressionRenderer.Render(projection.Expression, placeholders);
+
+            // Unlike RenderAddFields, a bare constant/parameter CAN be this stage's whole projected value
+            // (a bare Select(x => 8), or one leaf of an anonymous projection admitted by
+            // NativeProjectionBinder's TryTranslateLeaf gate) — $project reads a bare value as an
+            // inclusion(1)/exclusion(0) flag rather than a literal, so it must be $literal-wrapped exactly
+            // like RenderAddFields already does, or a 0/false constant aborts the whole aggregate.
+            if (projection.Expression is MongoConstantExpression or MongoParameterExpression)
+            {
+                rendered = new BsonDocument("$literal", rendered);
+            }
+
+            body.Add(projection.Alias, rendered);
         }
 
         // Suppress the default _id unless the projection deliberately emits an "_id" output field.
@@ -380,9 +392,9 @@ internal sealed class MongoPipelineFactory
     // MongoAggregationExpressionRenderer.Render emits it unwrapped, and MongoDB reads an unwrapped string
     // value starting with '$' as a FIELD PATH rather than a literal — so OrderBy(x => "$Label") (or a
     // captured string parameter whose runtime value happens to start with '$') would otherwise silently sort
-    // by the named field instead of tying every row on the literal string. The wrap is scoped to
-    // RenderAddFields only: RenderProject and the predicate ($expr) path share the same renderer but a bare
-    // constant is never their whole body.
+    // by the named field instead of tying every row on the literal string. RenderProject wraps the same way
+    // for the same inclusion/exclusion-flag reason (see its own comment); the predicate ($expr) path shares
+    // this renderer too, but a bare constant is never a predicate's whole body.
     //
     // Substitution survives the wrap: SubstituteValue tests every BsonValue for a placeholder sentinel before
     // recursing into it as a document, so a parameter sentinel nested inside { "$literal": <sentinel> } is

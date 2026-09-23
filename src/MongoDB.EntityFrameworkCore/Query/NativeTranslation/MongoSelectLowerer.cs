@@ -134,6 +134,15 @@ internal sealed class MongoSelectLowerer
             // Distinct-shaped, the other a plain projected Select).
             if (setOp.OperandsProjected)
             {
+                // source1 (query) may carry its OWN pending lookup here (an InjectAfterRoot projected
+                // collection-navigation Count — see IsPlainProjectedSelect/IsPlainDistinctSelect's
+                // allowPreCombineLookups). Unlike the hoisted-Include case below (EF-397's deferred
+                // AppendLookupStages call, which runs over the COMBINED result), this lookup is source1's
+                // alone: it must run before source1's OWN $project reads it via $size, and before the
+                // combine so it never applies to the other operand's rows. Emitted here instead of the
+                // deferred call at the bottom of this method, which is skipped for this branch.
+                AppendLookupStages(query, stages);
+
                 if (select.Grouping is { } outerGrouping)
                     stages.Add(new MongoGroupStage(outerGrouping));
                 stages.Add(new MongoProjectStage(select.Projection));
@@ -157,15 +166,18 @@ internal sealed class MongoSelectLowerer
             // also required for correctness of the SET operation itself: those compare whole documents by
             // value, so a joined array present at that point would join the comparison key and dedup by
             // "entity + its children" rather than by entity.
-            // FUTURE EDITORS: this deferred-emission mechanism ASSUMES a PROJECTED set-op operand never
-            // carries a $lookup of its own. If one ever did, the pre-combine $project emitted above (the
-            // OperandsProjected branch) would run BEFORE this block and read a joined field that does not
-            // exist yet — silently projecting a missing value, and dropping the lookup array from the
-            // combined stream. Currently unreachable: an operand only reaches here through
-            // MongoQueryableMethodTranslatingExpressionVisitor.IsPlainProjectedSelect, which requires
-            // Lookups.Count == 0 && !IsJoinQuery (and IsPlainWholeEntitySelect requires the same for the
-            // whole-entity form). Weaken either of those and this ordering must be revisited.
-            AppendLookupStages(query, stages);
+            // Skipped when OperandsProjected: source1's own lookup (if any) was already emitted ahead of
+            // its $project above, and re-running AppendLookupStages here would duplicate those stages.
+            // FUTURE EDITORS: source2 (setOp.OperandSelect) still has NO lookup plumbing at all — it is a
+            // bare MongoSelectDefinition, not a MongoQueryExpression — so a projected operand carrying its
+            // OWN lookup on the SECOND (right-hand) side remains unreachable/unsupported; only source1's
+            // (left-hand) lookup is handled. IsPlainWholeEntitySelect requires Lookups.Count == 0
+            // unconditionally, so a whole-entity operand carrying its own lookup still declines here too —
+            // untouched by this widening.
+            if (!setOp.OperandsProjected)
+            {
+                AppendLookupStages(query, stages);
+            }
             // NB: no early return — control continues to the Cardinality block.
         }
 

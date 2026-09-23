@@ -656,7 +656,7 @@ internal static class NativeSlotPopulator
     /// reject a <see cref="MongoParameterExpression"/> under its reference-type allowlist even though the
     /// value underneath boxes cleanly.
     /// </summary>
-    private static Type UnwrapBoxingToObjectType(Expression e)
+    internal static Type UnwrapBoxingToObjectType(Expression e)
     {
         while (e is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Type: var t } u
                && t == typeof(object))
@@ -680,7 +680,7 @@ internal static class NativeSlotPopulator
     /// no property serializer, so both paths reach <c>BsonValue.Create</c>, whose admission decision is keyed
     /// on the CLR type rather than the value.
     /// </remarks>
-    private static bool TryProbeBareValueRenders(MongoExpression translated, Type declaredType)
+    internal static bool TryProbeBareValueRenders(MongoExpression translated, Type declaredType)
     {
         switch (translated)
         {

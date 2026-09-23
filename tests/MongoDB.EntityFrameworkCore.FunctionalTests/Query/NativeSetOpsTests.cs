@@ -929,6 +929,64 @@ public class NativeSetOpsTests(TemporaryDatabaseFixture database) : IClassFixtur
         Assert.Single(result[1].Details);
     }
 
+    [Fact]
+    public void Projected_operand_union_over_collection_navigation_count_goes_native()
+    {
+        // EF-322 (Union_over_scalarsubquery_constant): the LEFT operand's own projection is a collection-
+        // navigation Count (i.Details.Count), which registers its own InjectAfterRoot $lookup on THAT
+        // operand's MongoQueryExpression before Union is even translated -- unlike EF-397's hoisted-Include
+        // case, this lookup belongs solely to source1's own pre-combine pipeline and must run BEFORE
+        // source1's own $project (which reads it via $size) and BEFORE the $unionWith combine (the RIGHT
+        // operand's rows have no Details at all to join against).
+        var (itemsName, detailsName) = SeedLinked(nameof(Projected_operand_union_over_collection_navigation_count_goes_native));
+
+        List<int> Run(MongoQueryMode mode)
+        {
+            using var db = new LinkedItemDbContext(database, itemsName, detailsName, mode);
+            return db.Items.Select(i => i.Details.Count())
+                .Union(db.Items.Select(i => 8))
+                .ToList();
+        }
+
+        var native = Run(MongoQueryMode.NativeOnly); // NativeOnly succeeding is the "went native" signal
+
+        Assert.Equal([0, 1, 2, 8], native.Order());
+
+        // Driver-LINQ oracle: Union HAS a working fallback, so the native answer is checked against it too.
+        var driver = Run(MongoQueryMode.DriverLinq);
+        Assert.Equal(driver.Order(), native.Order());
+    }
+
+    [Fact]
+    public void Constant_projected_operand_as_source1_still_declines_to_protect_the_shared_shaper()
+    {
+        // The mirror image of Projected_operand_union_over_collection_navigation_count_goes_native: here the
+        // CONSTANT leaf (`Select(i => 8)`) is on the LEFT/source1 side. TryTranslateSetOperation always reuses
+        // source1's own shaper for the WHOLE combined ($unionWith-ed, deduped) stream -- and
+        // MongoProjectionBindingExpressionVisitor embeds a bare constant/parameter leaf as a compile-time
+        // literal, never a per-document field read (see HasShaperUnsafeConstantLeaf's remarks). Admitting this
+        // shape natively measured as silently WRONG DATA: every combined row read back as the literal 8,
+        // including rows that came from the arithmetic operand and have a genuinely different "_v" in their
+        // actual BSON document (confirmed via a raw driver run of the identical pipeline, which returns the
+        // correct varying values). So this must keep falling back gracefully -- throws under NativeOnly,
+        // correct via the driver-LINQ fallback under Native.
+        var collection = SeedCollection(
+            nameof(Constant_projected_operand_as_source1_still_declines_to_protect_the_shared_shaper));
+
+        using (var nativeOnlyDb = Make(collection, MongoQueryMode.NativeOnly))
+        {
+            Assert.Throws<NativeTranslationNotSupportedException>(() =>
+                nativeOnlyDb.Entities.Select(i => 8).Union(nativeOnlyDb.Entities.Select(i => i.Value + 1)).ToList());
+        }
+
+        using var nativeDb = Make(collection, MongoQueryMode.Native);
+        var result = nativeDb.Entities.Select(i => 8).Union(nativeDb.Entities.Select(i => i.Value + 1))
+            .ToList().Order().ToList();
+
+        // {1..5} -> right operand {2,3,4,5,6}; left operand is 8 for every row, deduped to one; Union of the two.
+        Assert.Equal([2, 3, 4, 5, 6, 8], result);
+    }
+
     // ── Composition-seam regression tests (EF-347 Task 5, updated by slice B Task 3): a set operation is
     // TERMINAL-ONLY, so every operator applied AFTER a Union/Concat must either go native correctly or
     // fall back gracefully -- throw under NativeOnly for a genuinely-deferred shape (the "went native"
