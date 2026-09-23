@@ -688,6 +688,154 @@ git commit -m "EF-322: go native for join-scope nav-null-check conditional proje
 
 ---
 
+### Task 3b: Bare scalar/computed leaf over a join scope (added mid-execution — see ledger ruling)
+
+**Why this task exists:** Task 3 assumed `Manual_expression_tree_typed_null_equality`'s ternary survives EF
+Core's nav-expansion as a `ConditionalExpression`. Verified empirically (running the exact hand-built
+expression tree through `IQueryTranslationPreprocessorFactory` against a Northwind-faithful model): EF Core's
+own null-check-removal preprocessing collapses it BEFORE QMTEV ever sees it, into a plain
+`LeftJoin(...).Select(o => o.Inner.City)` — a bare (non-wrapped) scalar member access, no conditional at all.
+Task 3's new binder is real, correct, reviewed work for the shape it targets, but is structurally unreachable
+for this query. Nothing existing handles a bare, non-wrapped, non-whole-entity scalar/computed leaf over a
+join scope: `IsTransparentIdentifierMemberAccessSelector` (`MongoQueryableMethodTranslatingExpressionVisitor.cs:1147`)
+matches only a VERBATIM `x.Inner`/`x.Outer` (zero further hops); `NativeJoinScopeProjectionBinder.TryBindProjection`
+requires `selector.Body.TryGetProjectionMembers` to succeed (wrapped `new{}`/`MemberInit` only); the generic
+`NativeProjectionBinder` fallback is join-scope-unaware (rooted at the plain entity type).
+
+**Files:**
+- Modify: `src/MongoDB.EntityFrameworkCore/Query/Visitors/MongoQueryableMethodTranslatingExpressionVisitor.cs`
+- Test: `tests/MongoDB.EntityFrameworkCore.UnitTests/Query/NativeTranslation/NativeJoinScopeProjectionBinderTests.cs`
+
+**Interfaces:**
+- Consumes: `NativeJoinScopeTranslator.TryTranslateValue(MongoJoinScope, ParameterExpression, Expression, out
+  MongoExpression?)` (existing, depth-1) and `TryTranslateSingleScope(..., valueMode: true, ...)` (existing,
+  any depth) — both already exist, unchanged by this task. `IsSingleEligibleNativeJoinScope`,
+  `BindSelectManyMember`, `NativeProjectionBinder.SyntheticBareProjectionAlias` (all existing, already used by
+  Task 3's own wiring — same pattern, reused verbatim).
+- Produces: `Manual_expression_tree_typed_null_equality`'s ACTUAL nav-expanded shape
+  (`ti => ti.Inner.City`, bare, no conditional) now routes natively.
+
+**Design:** Add a new `else if` arm in `TranslateSelect`, sibling to (and positioned AFTER, so it doesn't
+shadow) the Task 3 bare-Conditional arm and the existing bare-whole-entity arm (`IsTransparentIdentifierMemberAccessSelector`
++ `Levels.Count: 1`), and BEFORE the generic projected-Select branch. Gate: `IsSingleEligibleNativeJoinScope(mongoQueryExpression,
+out var bareValueJoin)` AND the selector body is NOT itself a bare whole-entity access (already handled above)
+AND NOT a `ConditionalExpression` (Task 3's arm already tried and would have returned above on success — this
+arm only runs if that one declined) AND `selector.Body.TryGetProjectionMembers(...)` fails (not wrapped — that's
+`NativeJoinScopeProjectionBinder.TryBindProjection`'s job, tried in an earlier arm). Then:
+
+```csharp
+// A bare (non-wrapped, non-whole-entity, non-conditional) scalar/computed Select body over an eligible join
+// scope — e.g. `ti => ti.Inner.City` (EF Core's own null-check-removal preprocessing produces exactly this
+// shape for `nav != null ? nav.Member : null` once nav-expansion runs, collapsing the conditional away
+// entirely — see docs/superpowers/specs/2026-09-23-native-join-scope-nav-null-conditional-projection-design.md's
+// Task 3b addendum). Reuses the depth-1/chain value translators unchanged; the only new work is routing and
+// staging under the same "_v" bare alias the generic (join-scope-unaware) bare-leaf path already uses.
+else if (IsSingleEligibleNativeJoinScope(mongoQueryExpression, out var bareValueJoin)
+         && mongoQueryExpression.Select.Projection.Count == 0
+         && selector.Body is not ConditionalExpression
+         && !selector.Body.TryGetProjectionMembers(out _)
+         && (mongoQueryExpression.Select.JoinScope!.Levels.Count > 1
+                ? NativeJoinScopeTranslator.TryTranslateSingleScope(
+                    mongoQueryExpression.Select.JoinScope, selector.Parameters[0], selector.Body, valueMode: true, out var bareValueLeaf)
+                : NativeJoinScopeTranslator.TryTranslateValue(
+                    mongoQueryExpression.Select.JoinScope, selector.Parameters[0], selector.Body, out bareValueLeaf)))
+{
+    mongoQueryExpression.Select.AddProjection(
+        new MongoProjection(NativeProjectionBinder.SyntheticBareProjectionAlias, bareValueLeaf!));
+    NativeJoinScopeProjectionBinder.ConfirmEntireChain(mongoQueryExpression, mongoQueryExpression.Select.JoinScope!);
+
+    var boundBareLeaf = BindSelectManyMember(
+        mongoQueryExpression, NativeProjectionBinder.SyntheticBareProjectionAlias, selector.Body);
+    return source.UpdateShaperExpression(boundBareLeaf);
+}
+```
+
+(`bareValueLeaf` must be declared as an `out MongoExpression?` pattern variable usable across both branches of
+the ternary-in-a-condition above — if C#'s pattern-variable scoping makes that awkward inline, restructure as
+an if/else assigning to a local `MongoExpression? bareValueLeaf` declared just before the `else if`, whichever
+compiles cleanly; the LOGIC above is the requirement, not the exact C# syntax shape.)
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `NativeJoinScopeProjectionBinderTests.cs`:
+
+```csharp
+[Fact]
+public void Bare_scalar_leaf_over_a_left_join_goes_native()
+{
+    var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+        owners.GroupJoin(orders, o => o.Id, r => r.OwnerId, (o, rs) => new { o, rs })
+            .SelectMany(x => x.rs.DefaultIfEmpty(), (x, r) => new { x.o, r })
+            .Select(x => x.r.Total));
+
+    Assert.NotNull(mongoQ.Select.JoinScope);
+    Assert.Equal(
+        [NativeProjectionBinder.SyntheticBareProjectionAlias],
+        mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+    Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+}
+
+[Fact]
+public void Bare_scalar_leaf_matching_the_real_nav_expanded_shape_goes_native()
+{
+    // The ACTUAL shape EF Core's null-check-removal preprocessing produces for
+    // `o.Owner != null ? o.Owner.Name : null` once nav-expansion runs — a plain LeftJoin + bare `x.Inner.Name`.
+    var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+        orders.GroupJoin(owners, r => r.OwnerId, o => o.Id, (r, os) => new { r, os })
+            .SelectMany(x => x.os.DefaultIfEmpty(), (x, o) => new { x.r, o })
+            .Select(x => x.o.Name));
+
+    Assert.NotNull(mongoQ.Select.JoinScope);
+    Assert.Equal(
+        [NativeProjectionBinder.SyntheticBareProjectionAlias],
+        mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+}
+```
+
+Both use `TranslateLeftJoinQuery` (added in Task 3 — already in this file, do not re-add).
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `dotnet test MongoDB.EFCoreProvider.sln -c "Debug EF10" --filter "FullyQualifiedName~Bare_scalar_leaf_over_a_left_join_goes_native|FullyQualifiedName~Bare_scalar_leaf_matching_the_real_nav_expanded_shape_goes_native"`
+Expected: FAIL — `mongoQ.Select.Projection` is empty (falls through to the generic, join-scope-unaware path,
+which declines and marks non-native).
+
+- [ ] **Step 3: Implement the new `TranslateSelect` arm**
+
+As designed above. Verify the exact insertion point relative to Task 3's own new arm (must not shadow it —
+Task 3's `ConditionalExpression`-checking arm must run FIRST, since this arm explicitly excludes
+`ConditionalExpression` bodies to avoid double-handling) and relative to the existing bare-whole-entity arm
+(`IsTransparentIdentifierMemberAccessSelector`, which must also still run first — this arm's `!TryGetProjectionMembers`
+check doesn't exclude a bare whole-entity leaf on its own, so ordering is what prevents the overlap; do not
+remove or weaken the existing arm's own guard).
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run the same filter as Step 2. Expected: both PASS.
+
+- [ ] **Step 5: Prove the REAL spec-test shape goes native under `NativeOnly`**
+
+Run: `MONGODB_EF_NATIVE_ONLY=1 dotnet test MongoDB.EFCoreProvider.sln -c "Debug EF10" --filter "FullyQualifiedName~Manual_expression_tree_typed_null_equality"`
+Expected: PASS for both async variants (this is the actual proof the plan's Goal is met — do not proceed to
+Task 4 without this passing).
+
+- [ ] **Step 6: Run the full Query unit + functional suites for regressions**
+
+Run: `dotnet test MongoDB.EFCoreProvider.sln -c "Debug EF10" --no-build --filter "FullyQualifiedName~Query"`
+Expected: PASS, no regressions. As with Task 3, an existing test's `Route` assertion flipping from `Fallback`
+to a native route because it happens to match this new, broader bare-leaf arm is an expected, in-scope
+consequence of this task — verify any such change is genuinely this shape before accepting it.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/MongoDB.EntityFrameworkCore/Query/Visitors/MongoQueryableMethodTranslatingExpressionVisitor.cs \
+        tests/MongoDB.EntityFrameworkCore.UnitTests/Query/NativeTranslation/NativeJoinScopeProjectionBinderTests.cs
+git commit -m "EF-322: go native for bare scalar/computed Select leaves over a join scope"
+```
+
+---
+
 ### Task 4: Flip `Manual_expression_tree_typed_null_equality` and regenerate its baseline
 
 **Files:**
