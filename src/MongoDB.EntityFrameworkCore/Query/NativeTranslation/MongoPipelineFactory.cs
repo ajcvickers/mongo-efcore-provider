@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -138,6 +138,37 @@ internal sealed class MongoPipelineFactory
         }
 
         return new MongoPipelineFactory(template, placeholders);
+    }
+
+    // Renders an operand sub-pipeline's stages. Mostly one document per stage, but a RIGHT-NESTED set-op
+    // operand (A.Concat(B.Union(C))) puts a MongoUnionWithStage INSIDE another one's operand stages, and
+    // that expands to two documents for a Union link ($unionWith + the dedup pair). RenderStage returns a
+    // single document and has no case for the set-op stages, so nested ones must be expanded here —
+    // routing them through RenderStage instead would hit its switch default. Everything else delegates
+    // unchanged, which keeps a deferred stage (only $vectorSearch, which a set-op operand can never carry)
+    // failing closed rather than being silently rendered without its placeholder.
+    private static IEnumerable<BsonDocument> RenderOperandStages(
+        IEnumerable<MongoPipelineStage> stages,
+        MongoQueryLanguageRenderer renderer,
+        PlaceholderTable placeholders)
+    {
+        foreach (var stage in stages)
+        {
+            if (stage is MongoUnionWithStage nestedUnion)
+            {
+                foreach (var rendered in RenderUnionWith(nestedUnion, renderer, placeholders))
+                    yield return rendered;
+            }
+            else if (stage is MongoSetDifferenceStage nestedSetDiff)
+            {
+                foreach (var rendered in RenderSetDifference(nestedSetDiff, renderer, placeholders))
+                    yield return rendered;
+            }
+            else
+            {
+                yield return RenderStage(stage, renderer, placeholders);
+            }
+        }
     }
 
     private static BsonDocument RenderStage(
@@ -470,8 +501,8 @@ internal sealed class MongoPipelineFactory
         PlaceholderTable placeholders)
     {
         var innerPipeline = new BsonArray();
-        foreach (var operandStage in stage.OperandStages)
-            innerPipeline.Add(RenderStage(operandStage, renderer, placeholders));   // shared placeholders
+        foreach (var rendered in RenderOperandStages(stage.OperandStages, renderer, placeholders))
+            innerPipeline.Add(rendered);   // shared placeholders
 
         yield return new BsonDocument("$unionWith", new BsonDocument
         {

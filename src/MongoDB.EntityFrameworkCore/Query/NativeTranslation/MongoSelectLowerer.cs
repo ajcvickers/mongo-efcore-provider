@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -139,24 +139,7 @@ internal sealed class MongoSelectLowerer
                 stages.Add(new MongoProjectStage(select.Projection));
             }
 
-            var operandStages = new List<MongoPipelineStage>();
-            AppendSelectOpStages(setOp.OperandSelect.PipelineOps, operandStages, sortFields);
-            if (setOp.OperandsProjected)
-            {
-                if (setOp.OperandSelect.Grouping is { } operandGrouping)
-                    operandStages.Add(new MongoGroupStage(operandGrouping));
-                operandStages.Add(new MongoProjectStage(setOp.OperandSelect.Projection));
-            }
-
-            if (setOp.Kind is MongoSetOperationKind.Intersect or MongoSetOperationKind.Except)
-            {
-                stages.Add(new MongoSetDifferenceStage(setOp.Kind, operandStages, setOp.OperandCollectionName));
-            }
-            else
-            {
-                stages.Add(new MongoUnionWithStage(
-                    operandStages, setOp.OperandCollectionName, dedup: setOp.Kind == MongoSetOperationKind.Union));
-            }
+            AppendSetOpChainStages(select, stages, sortFields);
 
             // Post-set-op composition: trailing $match/$sort/$skip/$limit emit after the set-op stage (they
             // operate on the combined result), then fall through to the Projection block (a trailing
@@ -375,6 +358,69 @@ internal sealed class MongoSelectLowerer
     /// (<see cref="MongoSetOperation.OperandSelect"/>, a plain whole-entity select), and the outer query's
     /// post-set-op <see cref="MongoSelectDefinition.TrailingOps"/>.
     /// </summary>
+    // One stage per set-op link, in LINQ source order. Ordinarily a single link; a LEFT-nested
+    // whole-entity chain (A.Concat(B).Concat(C)) has several. Each Union link renders its OWN dedup inline
+    // right after its own $unionWith, which is what keeps a MIXED chain correct — Concat(Union(A,B),C) must
+    // dedup A,B before C joins the stream, and hoisting the dedup to run once after the whole chain would
+    // silently drop a row. Mutually recursive with AppendSetOpOperandStages, which is how a RIGHT-nested
+    // operand (A.Concat(B.Union(C))) becomes a $unionWith nested inside the outer one's pipeline.
+    private static void AppendSetOpChainStages(
+        MongoSelectDefinition select,
+        List<MongoPipelineStage> stages,
+        SyntheticSortFieldAllocator sortFields)
+    {
+        foreach (var link in select.SetOperations)
+        {
+            // Ops recorded between the PREVIOUS link and this one (A.Union(B).OrderBy(..).Take(1).Union(C)).
+            // They operate on the result combined so far, so they emit BEFORE this link's stage. Empty for
+            // the first link and for every single-link set op.
+            AppendSelectOpStages(link.PrecedingOps, stages, sortFields);
+
+            var operandStages = AppendSetOpOperandStages(link, sortFields);
+
+            if (link.Kind is MongoSetOperationKind.Intersect or MongoSetOperationKind.Except)
+            {
+                stages.Add(new MongoSetDifferenceStage(link.Kind, operandStages, link.OperandCollectionName));
+            }
+            else
+            {
+                stages.Add(new MongoUnionWithStage(
+                    operandStages, link.OperandCollectionName, dedup: link.Kind == MongoSetOperationKind.Union));
+            }
+        }
+    }
+
+    // The operand's own self-contained sub-pipeline: its filter/sort/page ops, then EITHER its pre-combine
+    // $group/$project (a PROJECTED operand — always a single top-level link, never nested) OR its own set-op
+    // chain (a RIGHT-nested whole-entity operand). The two are mutually exclusive by construction: the QMTEV
+    // admits a nested operand only through IsWholeEntitySetOpOperandSelect, which requires Projection empty
+    // and every link !OperandsProjected. A plain operand has neither and lowers to its ops alone, exactly as
+    // before.
+    private static List<MongoPipelineStage> AppendSetOpOperandStages(
+        MongoSetOperation link,
+        SyntheticSortFieldAllocator sortFields)
+    {
+        var operandStages = new List<MongoPipelineStage>();
+        AppendSelectOpStages(link.OperandSelect.PipelineOps, operandStages, sortFields);
+
+        if (link.OperandsProjected)
+        {
+            if (link.OperandSelect.Grouping is { } operandGrouping)
+                operandStages.Add(new MongoGroupStage(operandGrouping));
+            operandStages.Add(new MongoProjectStage(link.OperandSelect.Projection));
+        }
+        else
+        {
+            AppendSetOpChainStages(link.OperandSelect, operandStages, sortFields);
+
+            // The operand's own post-combine ops (B.Union(C).Take(1) as an operand) close out ITS
+            // sub-pipeline, mirroring where the outer select's TrailingOps land in the outer pipeline.
+            AppendSelectOpStages(link.OperandSelect.TrailingOps, operandStages, sortFields);
+        }
+
+        return operandStages;
+    }
+
     private static void AppendSelectOpStages(
         IReadOnlyList<MongoSelectOp> ops,
         List<MongoPipelineStage> stages,
@@ -627,10 +673,21 @@ internal sealed class MongoSelectLowerer
         var names = new HashSet<string>(StringComparer.Ordinal);
         AddTopLevelElementNames(query.CollectionExpression.EntityType, names);
 
-        if (query.Select.SetOperation is { } setOp)
-            AddTopLevelElementNames(setOp.OperandEntityType, names);
+        AddSetOpOperandElementNames(query.Select, names);
 
         return names;
+    }
+
+    // Every set-op operand's entity type, walked RECURSIVELY: a right-nested operand carries its own chain,
+    // and each level's ops lower through the SAME synthetic-sort-field allocator into a more deeply nested
+    // $unionWith pipeline, so every level's element names must be reserved (EF-408 gap 1, one level down).
+    private static void AddSetOpOperandElementNames(MongoSelectDefinition select, HashSet<string> names)
+    {
+        foreach (var link in select.SetOperations)
+        {
+            AddTopLevelElementNames(link.OperandEntityType, names);
+            AddSetOpOperandElementNames(link.OperandSelect, names);
+        }
     }
 
     // Top-level element names of an entity type: every mapped property, plus the containing element name of
