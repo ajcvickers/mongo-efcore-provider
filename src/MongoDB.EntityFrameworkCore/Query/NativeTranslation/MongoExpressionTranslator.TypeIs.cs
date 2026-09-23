@@ -48,6 +48,12 @@ internal sealed partial class MongoExpressionTranslator
         if (!ReferenceEquals(Unwrap(typeBinary.Expression), SelfParam))
             return false;
 
+        // SelfParam can be a projected/accumulator value in a Distinct or GroupBy-aggregate scope, not the
+        // root entity (e.g. a Where after Select(...).Distinct()) — _entityType.ClrType is only meaningful
+        // when SelfParam genuinely denotes the root, so decline otherwise.
+        if (SelfParam.Type != _entityType.ClrType)
+            return false;
+
         // Hierarchy types need a real discriminator predicate, not a compile-time constant — decline and let
         // this keep falling back to driver-LINQ (see the type's own remarks).
         if (_entityType.BaseType is not null || _entityType.GetDirectlyDerivedTypes().Any())
