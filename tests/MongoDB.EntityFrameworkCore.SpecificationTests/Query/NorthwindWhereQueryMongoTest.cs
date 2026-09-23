@@ -1162,8 +1162,8 @@ Orders.{ "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "forei
 
         AssertMql(
             """
-            Products.{ "$match" : { "UnitsInStock" : { "$gte" : 20 } } }
-            """);
+Products.{ "$match" : { "$expr" : { "$not" : [{ "$cond" : { "if" : { "$gte" : ["$UnitsInStock", 20] }, "then" : false, "else" : true } }] } } }
+""");
     }
 #endif
 
