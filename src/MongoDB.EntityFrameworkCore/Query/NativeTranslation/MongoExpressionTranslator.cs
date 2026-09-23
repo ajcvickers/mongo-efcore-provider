@@ -917,6 +917,41 @@ internal sealed partial class MongoExpressionTranslator
                 return new MongoUnaryExpression(MongoUnaryOperator.Not, operand);
             }
 
+            // --- Boolean-typed ternary used as a predicate: test ? ifTrue : ifFalse ---
+            //
+            // EF-322 (Where_ternary_boolean_condition_negated): TranslateOperand already translates a ternary
+            // as a VALUE (computed sort keys, projections, arithmetic operands); this admits the identical
+            // shape as a PREDICATE ROOT (Where's own body, an &&/|| operand, or — via the Not case above — the
+            // operand of a negation). Test is translated via TryTranslate, the same ordinary predicate
+            // translator TranslateOperand's own ternary arm uses for its Test. Both BRANCHES, unlike
+            // TranslateOperand's, recurse through THIS method rather than TranslateOperand: a boolean-typed
+            // branch here is itself a predicate (e.g. a nested comparison or another ternary), not a computed
+            // value. A branch that resolves to a bare non-default-serialized bool field is declined
+            // (IsUnsafeTruthinessRoot) — the built MongoConditionalExpression always renders through the
+            // aggregation-expression $cond, which evaluates by BSON truthiness, the same hazard RenderUnary's
+            // own Not-over-$expr fallback already guards against.
+            //
+            // MongoConditionalExpression has no query-dialect form (see its own remarks and
+            // IsQueryDialectRenderable's `MongoConditionalExpression => false` arm), so the result always
+            // renders through the $expr catch-all — safe at a top-level $match conjunct or as a Not operand,
+            // and IsQueryDialectRenderable's existing `false` answer already keeps it out of any $elemMatch,
+            // where $expr is a hard server error.
+            case ConditionalExpression conditional when conditional.Type == typeof(bool):
+            {
+                if (!TryTranslate(conditional.Test, out var test))
+                    return null;
+
+                var ifTrue = TranslateNode(Unwrap(conditional.IfTrue));
+                if (ifTrue is null || IsUnsafeTruthinessRoot(ifTrue, out _))
+                    return null;
+
+                var ifFalse = TranslateNode(Unwrap(conditional.IfFalse));
+                if (ifFalse is null || IsUnsafeTruthinessRoot(ifFalse, out _))
+                    return null;
+
+                return new MongoConditionalExpression(test, ifTrue, ifFalse);
+            }
+
             // --- Array field contains value: arrayField.Contains(constant) → { field: value } ---
             //
             // The mirror image of the $in arm immediately below: there the ITEM resolves to a field and the

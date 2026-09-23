@@ -46,7 +46,7 @@ public class NorthwindWhereQueryMongoTest : NorthwindWhereQueryTestBase<Northwin
 
         AssertMql(
             """
-Products.{ "$match" : { "UnitsInStock" : { "$gte" : 20 } } }
+Products.{ "$match" : { "$expr" : { "$not" : [{ "$cond" : { "if" : { "$gte" : ["$UnitsInStock", 20] }, "then" : false, "else" : true } }] } } }
 """);
     }
 
