@@ -311,22 +311,14 @@ internal static class NativeJoinScopeTranslator
         return true;
     }
 
-    // Reroots `node` via TryRerootToSingleScope and additionally requires the REWRITTEN expression to be the
-    // bare synthetic scope parameter itself — no further member access — i.e. `node` was exactly
-    // `rootParam.Outer*.Inner?` with no trailing `.Something`.
+    // Resolves bare scope leaves (e.g., `x.Inner` or `x.Outer.Inner` chains with no trailing member access).
+    // Uses MongoTransparentScopeResolver.TryResolveScopeDepth directly — the same safe, member-name-chain-based
+    // mechanism (never CLR-type/ReferenceEquals) that NativeJoinScopeProjectionBinder's existing whole-entity-leaf
+    // arm already uses for recognizing a bare Outer/Inner hop-chain terminus.
     private static bool TryRerootToBareScope(
         MongoJoinScope scope, ParameterExpression rootParam, Expression node, out int scopeIndex)
-    {
-        scopeIndex = -1;
-        if (!TryRerootToSingleScope(scope, rootParam, node, out var index, out var rewritten)
-            || rewritten is not ParameterExpression)
-        {
-            return false;
-        }
-
-        scopeIndex = index;
-        return true;
-    }
+        => MongoTransparentScopeResolver.TryResolveScopeDepth(
+            node, rootParam, hopNames: ["Outer", "Inner"], sourceCount: scope.Levels.Count, out scopeIndex);
 
     private static bool IsBareInnerAccess(ParameterExpression rootParam, Expression node)
         => node is MemberExpression { Member.Name: "Inner" } member
