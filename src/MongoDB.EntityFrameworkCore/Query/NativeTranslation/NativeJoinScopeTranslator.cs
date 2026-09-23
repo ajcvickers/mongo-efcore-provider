@@ -269,8 +269,9 @@ internal static class NativeJoinScopeTranslator
     /// Depth-agnostic generalization of <see cref="TryMatchInnerNullCheck"/>: recognizes
     /// <c>rootParam.«Outer/Inner hop chain» == null</c> / <c>!= null</c> (either operand order) for ANY single
     /// scope level (never the root — only an Inner side can be missing after a left-outer <c>$lookup</c>).
-    /// Resolves the null-checked operand via <see cref="TryRerootToSingleScope"/> — the same safe,
-    /// member-name-chain-based mechanism <see cref="TryTranslateSingleScope"/> uses — never by CLR-type or
+    /// Resolves the null-checked operand via <see cref="TryRerootToBareScope"/>, which calls
+    /// <see cref="MongoTransparentScopeResolver.TryResolveScopeDepth"/> — the same safe, member-name-chain-based
+    /// mechanism <see cref="NativeJoinScopeProjectionBinder"/>'s whole-entity-leaf arm uses — never by CLR-type or
     /// <c>ReferenceEquals</c> comparison the way <see cref="TryMatchInnerNullCheck"/>'s flat, depth-1-only
     /// <see cref="IsBareInnerAccess"/> does. Structural recognition only: callers must separately verify the
     /// resolved level's <c>IsLeftOuter</c>/non-collection eligibility (a plain inner <c>Join</c> or a collection
