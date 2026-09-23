@@ -204,37 +204,68 @@ public class NativeJoinScopeConditionalProjectionTests(TemporaryDatabaseFixture 
             .Select(x => x.r != null ? x.r.Name : NoneSentinel)
             .ToList();
 
-        // This shape never reaches the native binder, on ANY EF version. On EF8/EF9 the second level's LeftJoin
+#if EF8 || EF9
+        // On EF8/EF9 this shape never reaches the native binder at all -- a genuinely different, pre-existing,
+        // unrelated limitation to TryBindConditionalProjection's own depth handling: the second level's LeftJoin
         // lowers onto EF's internal LeftJoin shim, which NativeSlotPopulator's candidate-join arm doesn't
-        // recognize pre-EF10, so the whole join declines before any Select-side binder runs. On EF10 (final-
-        // review fix, I2), NativeJoinScopeProjectionBinder.TryBindConditionalProjection is now deliberately
-        // restricted to a DEPTH-1 join scope (see that method's own guard comment) -- the same chain-paging-
-        // deferral hazard the sibling bare-scalar-leaf arm in
-        // MongoQueryableMethodTranslatingExpressionVisitor.TranslateSelect was already narrowed to avoid -- so
-        // this genuine two-level chain now declines there too. MongoQueryMode.NativeOnly correctly forbids the
-        // driver-LINQ fallback this shape needs on every version, so it must throw rather than execute.
+        // recognize pre-EF10, so the whole join declines before any Select-side binder runs, regardless of chain
+        // depth. MongoQueryMode.NativeOnly correctly forbids the driver-LINQ fallback this shape still needs
+        // there, so it must throw rather than execute.
         if (mode == MongoQueryMode.NativeOnly)
         {
             Assert.Throws<NativeTranslationNotSupportedException>(() => runQuery());
             return;
         }
 
-        // GENUINE, SEPARATE data-correctness bug in the driver-LINQ fallback bridge (NOT the native-vs-fallback
-        // gap above, and NOT touched/fixed by this plan). No JIRA ticket exists yet for either follow-up item
-        // this feature surfaced -- (1) the pre-existing chain-paging-deferral gap in
-        // DeferPipelineOpsPastConfirmedJoin/ConfirmEntireChain, and (2) this driver-LINQ fallback bug for the
-        // two-level-chain shape below -- they are DIFFERENT bugs and should be filed as separate tickets rather
-        // than one. Once this shape falls back to
-        // driver-LINQ (MongoQueryMode.Native, on every EF version now that EF10 also declines above), the
-        // second level's unmatched LeftJoin row comes back as a bare `null` instead of running the ternary's
-        // ELSE branch (`NoneSentinel`, i.e. "<none>"). Pinned explicitly here -- asserting the CURRENT,
-        // KNOWN-WRONG value -- so this goes loudly green-then-red (not silently skipped) the moment the
-        // underlying bridge bug is fixed or changes shape, per this repo's existing "pin the known deviation"
-        // convention (see NativeOwnedCollectionFilteredCountTests' own Assert.NotEqual(linqOracle, nativeOnly)
-        // pin).
+        // GENUINE, SEPARATE data-correctness bug in the EF8/EF9 driver-LINQ fallback bridge (NOT the
+        // native-vs-fallback gap above, and confirmed to predate this whole feature branch). No JIRA ticket
+        // exists yet for either follow-up item this feature surfaced -- (1) the pre-existing chain-paging-
+        // deferral gap in DeferPipelineOpsPastConfirmedJoin/ConfirmEntireChain (a SEPARATE, narrower hazard that
+        // does not apply to this binder -- see TryBindConditionalProjection's own remarks), and (2) this
+        // driver-LINQ fallback bug for the two-level-chain shape below -- they are DIFFERENT bugs and should be
+        // filed as separate tickets rather than one. Once this shape falls back to driver-LINQ
+        // (MongoQueryMode.Native, on EF8/EF9 only), the second level's unmatched LeftJoin row comes back as a
+        // bare `null` instead of running the ternary's ELSE branch (`NoneSentinel`, i.e. "<none>"). Pinned
+        // explicitly here -- asserting the CURRENT, KNOWN-WRONG value -- so this goes loudly green-then-red (not
+        // silently skipped) the moment the underlying bridge bug is fixed or changes shape, per this repo's
+        // existing "pin the known deviation" convention (see NativeOwnedCollectionFilteredCountTests' own
+        // Assert.NotEqual(linqOracle, nativeOnly) pin).
         var buggyActual = runQuery();
         Assert.Equal(["Western Europe", null], buggyActual);
         Assert.NotEqual(NoneSentinel, buggyActual[1]);
+#else
+        // On EF10+, NativeJoinScopeProjectionBinder.TryBindConditionalProjection is depth-agnostic (works for
+        // any scope.Levels.Count, exactly like TryBindProjection's own scalar/computed leaf arm for a chain) --
+        // this genuine two-level chain goes native in BOTH modes and produces the CORRECT oracle-matching
+        // result, the second level's null check firing for the dangling-region row.
+        var actual = runQuery();
+
+        // Independent in-memory oracle over the same seeded rows, sharing no code with the provider.
+        var orderSeeds = new[]
+        {
+            new { OrderNo = 1, CustomerId = matchedCustomerId },
+            new { OrderNo = 2, CustomerId = unmatchedCustomerId }
+        };
+        var customerSeeds = new[]
+        {
+            new { Id = matchedCustomerId, RegionId = (ObjectId?)matchedRegionId },
+            new { Id = unmatchedCustomerId, RegionId = (ObjectId?)danglingRegionId }
+        };
+        var regionSeeds = new[] { new { Id = matchedRegionId, Name = "Western Europe" } };
+
+        var oracle = orderSeeds
+            .Join(customerSeeds, o => o.CustomerId, c => c.Id, (o, c) => new { o, c })
+            .GroupJoin(regionSeeds, x => x.c.RegionId, r => (ObjectId?)r.Id, (x, rs) => new { x.o, x.c, rs })
+            .SelectMany(x => x.rs.DefaultIfEmpty(), (x, r) => new { x.o, r })
+            .OrderBy(x => x.o.OrderNo)
+            .Select(x => x.r != null ? x.r.Name : NoneSentinel)
+            .ToList();
+
+        Assert.Equal(oracle, actual);
+        Assert.Equal(2, actual.Count);
+        Assert.Equal("Western Europe", actual[0]);
+        Assert.Equal(NoneSentinel, actual[1]);
+#endif
     }
 
     private static (string Orders, string Customers, string Regions) CreateCollectionNames(string testName)

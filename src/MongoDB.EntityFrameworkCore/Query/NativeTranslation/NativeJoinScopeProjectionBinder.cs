@@ -478,13 +478,15 @@ internal static class NativeJoinScopeProjectionBinder
     /// <summary>
     /// Attempts to populate the native <c>$project</c> slot for a BARE (non-wrapped) <c>Select</c> body that is
     /// exactly a ternary null-checking a join scope's Inner side and dereferencing it —
-    /// <c>ti =&gt; ti.Inner != null ? ti.Inner.City : null</c>. Restricted to a DEPTH-1 scope
-    /// (<c>scope.Levels.Count == 1</c>) — see the guard at the top of this method (final-review fix, I2) for why
-    /// a chain deliberately declines here rather than translating each branch per-level. Sibling to
-    /// <see cref="TryBindProjection"/> (which only ever handles a wrapped <c>new {}</c>/<c>MemberInit</c>
-    /// body — <c>selector.Body.TryGetProjectionMembers</c> never recognizes a bare <see cref="ConditionalExpression"/>,
-    /// so that method is never reached for this shape). See
-    /// docs/superpowers/specs/2026-09-23-native-join-scope-nav-null-conditional-projection-design.md.
+    /// <c>ti =&gt; ti.Inner != null ? ti.Inner.City : null</c>. Works at ANY chain depth
+    /// (<c>scope.Levels.Count</c> unrestricted) — each branch is translated via
+    /// <see cref="TryTranslateConditionalBranch"/>, which resolves against whichever single scope in the chain
+    /// the branch's member-name chain actually names (<see cref="NativeJoinScopeTranslator.TryTranslateSingleScope"/>),
+    /// the same safe, identity/name-chain-based resolution the ordinary scalar/computed leaf arm in
+    /// <see cref="TryBindProjection"/> uses for a chain. Sibling to <see cref="TryBindProjection"/> (which only
+    /// ever handles a wrapped <c>new {}</c>/<c>MemberInit</c> body — <c>selector.Body.TryGetProjectionMembers</c>
+    /// never recognizes a bare <see cref="ConditionalExpression"/>, so that method is never reached for this
+    /// shape). See docs/superpowers/specs/2026-09-23-native-join-scope-nav-null-conditional-projection-design.md.
     /// </summary>
     internal static bool TryBindConditionalProjection(
         MongoQueryExpression mongoQ, LambdaExpression selector, JoinInfo joinInfo)
@@ -494,24 +496,6 @@ internal static class NativeJoinScopeProjectionBinder
             || mongoQ.Select.Projection.Count > 0
             || selector.Parameters.Count != 1
             || selector.Body is not ConditionalExpression conditional)
-        {
-            return false;
-        }
-
-        // Deliberately restricted to Levels.Count == 1 (final-review fix, I2 — measured, not a simplification
-        // left for later): widening this to a multi-level chain (branches translated via
-        // NativeJoinScopeTranslator.TryTranslateSingleScope, exactly as the sibling bare-scalar-leaf arm in
-        // MongoQueryableMethodTranslatingExpressionVisitor.TranslateSelect does) hits the SAME pre-existing gap
-        // that arm's own comment documents in IsSingleEligibleNativeJoinScope/ConfirmEntireChain's chain-paging-
-        // deferral handling: a Skip/Take/OrderBy interleaved BETWEEN two plain (non-left-outer) joins in a
-        // 2-level chain gets deferred as ONE snapshot past BOTH joins' $lookup/$unwind blocks together
-        // (DeferPipelineOpsPastConfirmedJoin + ConfirmEntireChain's single confirming call), so paging lands on
-        // the fully-joined (doubly-filtered) result instead of between the two joins as written — silently
-        // wrong rows, not a decline. This bare-conditional arm doesn't need the chain case to meet its own goal
-        // (a nav-null-check ternary over a single LeftJoin), so staying narrow avoids newly exposing that
-        // pre-existing gap through a shape (a chain confirmed via a bare conditional leaf) nothing could reach
-        // natively before this task. Fixing the chain-paging gap itself is out of scope here.
-        if (scope.Levels.Count != 1)
         {
             return false;
         }

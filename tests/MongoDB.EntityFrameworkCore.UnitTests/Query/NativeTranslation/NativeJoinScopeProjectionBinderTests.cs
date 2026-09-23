@@ -185,6 +185,7 @@ public class NativeJoinScopeProjectionBinderTests
         public string Sku { get; set; } = "";
     }
 
+
     /// <summary>
     /// Three-source variant of <see cref="TranslateJoinQuery"/>, for the chained (depth-2) projection-binder
     /// test below — same pipeline/rationale, just with a second <c>Join</c> source added, over the dedicated
@@ -701,15 +702,17 @@ public class NativeJoinScopeProjectionBinderTests
     }
 
     [Fact]
-    public void Declines_a_bare_nav_null_check_ternary_over_a_two_level_chain()
+    public void Declines_a_bare_nav_null_check_ternary_over_a_two_level_chain_whose_second_level_is_not_left_outer()
     {
-        // Regression pin for final-review fix I2: TryBindConditionalProjection's `scope.Levels.Count != 1`
-        // guard must decline a bare ternary null-check reaching a genuine 2-level chain, exactly as the
-        // sibling wrapped/nested-leaf tests above already pin for TryBindProjection. `x.l != null ? x.l.Sku :
-        // ""` is a bare ConditionalExpression whose Test resolves (via TryMatchScopeNullCheck) to the SECOND
-        // join's own Inner side (scope index 2) — before this fix, that would have gone on to translate both
-        // branches per-level; now it must decline at the Levels.Count gate before ever reaching
-        // TryMatchScopeNullCheck, so the whole projection routes to fallback.
+        // `x.l != null ? x.l.Sku : ""` is a bare ConditionalExpression whose Test resolves (via
+        // TryMatchScopeNullCheck) to the SECOND join's own Inner side (scope index 2) — but that second join
+        // here is a plain (required) `Join`, not a `LeftJoin`/GroupJoin+SelectMany(DefaultIfEmpty). A plain Join
+        // drops an unmatched row entirely rather than unwinding it as an explicit null, so "Inner != null" is
+        // unconditionally true there — not a real check. TryBindConditionalProjection's `!level.IsLeftOuter`
+        // guard declines for exactly this reason (see that method's own comment); it is NOT about chain depth —
+        // TryBindConditionalProjection works at any depth (this is a genuine 2-level chain, scope.Levels.Count
+        // == 2) — see Binds_a_bare_nav_null_check_ternary_over_a_two_level_chain below for the positive case
+        // with a genuine LeftJoin at the second level.
         var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
             owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
                 .Join(lines, e => e.r.Id, l => l.OrderId, (e, l) => new { e, l })
@@ -721,28 +724,78 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
     }
 
-    [Fact]
-    public void Declines_a_bare_conditional_null_check_leaf_over_a_two_level_chain()
+    // Dedicated, fully self-contained fixture for the LeftJoin-at-level-2 test below — deliberately NOT
+    // reusing ChainOwner/ChainOrder/ChainOrderLine (or adding a field to them): a genuine FK from the second
+    // level's OUTER side (mirroring NativeJoinScopeConditionalProjectionTests' functional-test
+    // Customer.RegionId -> Region.Id relationship, the "outer holds the FK" shape RebindInnerShaperToOuterQuery
+    // needs to resolve a REFERENCE, not COLLECTION, navigation) needs its own target entity; grafting one onto
+    // ChainOrder was tried and MEASURED to break three already-passing whole-entity-leaf chain tests above
+    // (Binds_a_two_level_chain_projection_naming_every_scope_as_a_whole_entity et al.) — those go through
+    // TranslateThreeSourceJoinQuery's OWN model, which never registers the new target type, so conventions
+    // treat the added navigation as an owned/undiscovered reference and silently change unrelated shapes. Local
+    // types scoped to this one test side-step that entirely.
+    private class RegionChainOwner
     {
-        // Final-review fix (I2): TryBindConditionalProjection is now deliberately restricted to a DEPTH-1 join
-        // scope, mirroring the sibling bare-scalar-leaf arm's own Levels.Count == 1 restriction in
-        // MongoQueryableMethodTranslatingExpressionVisitor.TranslateSelect (both exist to avoid newly exposing
-        // the SAME pre-existing chain-paging-deferral hazard in IsSingleEligibleNativeJoinScope/
-        // ConfirmEntireChain — see that arm's own comment). This is the executable proof the narrowing works:
-        // a genuine two-level chain (level 1: Owner->Order, a plain Join; level 2: Order->Line, a LeftJoin) with
-        // a bare nav-null-check ternary targeting the SECOND level's Inner side — exactly the shape
-        // Binds_a_bare_nav_null_check_ternary_over_a_left_join pins at depth 1 — must now DECLINE (routing to
-        // NativeRoute.Fallback) rather than bind natively, since scope.Levels.Count is 2, not 1.
-        var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
-            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
-                .GroupJoin(lines, e => e.r.Id, l => l.OrderId, (e, ls) => new { e.o, e.r, ls })
-                .SelectMany(x => x.ls.DefaultIfEmpty(), (x, l) => new { x.o, x.r, l })
-                .Select(x => x.l != null ? x.l.Sku : "none"));
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public List<RegionChainOrder> Orders { get; set; } = [];
+    }
+
+    private class RegionChainOrder
+    {
+        public int Id { get; set; }
+        public int OwnerId { get; set; }
+        public RegionChainOwner? Owner { get; set; }
+        public int? RegionId { get; set; }
+        public RegionChainRegion? Region { get; set; }
+    }
+
+    private class RegionChainRegion
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    [Fact]
+    public void Binds_a_bare_nav_null_check_ternary_over_a_two_level_chain()
+    {
+        // TryBindConditionalProjection is depth-agnostic (works for any scope.Levels.Count), exactly like
+        // TryBindProjection's own scalar/computed leaf arm for a chain — there is no Levels.Count restriction on
+        // this method. A genuine two-level chain (level 1: Owner->Order, a plain Join; level 2: Order->Region, a
+        // genuine LeftJoin via GroupJoin/SelectMany(DefaultIfEmpty), with OUTER (Order) holding the FK
+        // (RegionId) — see the fixture's own remarks for why that FK direction matters here) with a bare
+        // nav-null-check ternary targeting the SECOND level's Inner side — the same shape
+        // Binds_a_bare_nav_null_check_ternary_over_a_left_join pins at depth 1 — binds NATIVELY here too, each
+        // branch translated via NativeJoinScopeTranslator.TryTranslateSingleScope re-rooted onto the second
+        // level.
+        using var db = SingleEntityDbContext.Create<RegionChainOwner>(mb =>
+        {
+            mb.Entity<RegionChainOrder>();
+            mb.Entity<RegionChainRegion>();
+        });
+
+        var query = db.Set<RegionChainOwner>().Join(db.Set<RegionChainOrder>(), o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+            .GroupJoin(db.Set<RegionChainRegion>(), e => e.r.RegionId, g => g.Id, (e, gs) => new { e.o, e.r, gs })
+            .SelectMany(x => x.gs.DefaultIfEmpty(), (x, g) => new { x.o, x.r, g })
+            .Select(x => x.g != null ? x.g.Name : "none");
+
+        var ccFactory = db.GetService<IQueryCompilationContextFactory>();
+        var compilationContext = ccFactory.Create(async: false);
+
+        var preprocessor = db.GetService<IQueryTranslationPreprocessorFactory>().Create(compilationContext);
+        var preprocessed = preprocessor.Process(query.Expression);
+
+        var visitor = db.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>().Create(compilationContext);
+        var result = visitor.Visit(preprocessed);
+
+        Assert.NotNull(result);
+        var shaped = Assert.IsAssignableFrom<ShapedQueryExpression>(result);
+        var mongoQ = Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
 
         Assert.NotNull(mongoQ.Select.JoinScope);
         Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
-        Assert.Empty(mongoQ.Select.Projection);
-        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
+        Assert.Single(mongoQ.Select.Projection);
+        Assert.Equal(NativeRoute.Projection, mongoQ.Select.Route);
     }
 
 #if !EF8 && !EF9
