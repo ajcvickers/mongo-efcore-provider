@@ -80,11 +80,14 @@ internal static class MongoAggregationExpressionRenderer
             // then drops from the output entirely rather than emitting the intended IfFalse value — silently
             // wrong data, not a translation failure. $ifNull(missing, null) => null and $ifNull(<doc>, null) =>
             // <doc>, so the wrapped comparison is correct for both the matched and unmatched cases.
+            // Always at document root, REGARDLESS of elementVariable — a $lookup alias is always a ROOT-level
+            // field by construction (this node is never produced/read inside a $filter/$map element scope),
+            // exactly like the MongoOuterFieldExpression arm above (final-review fix, M4).
             MongoLookupNullCheckExpression lookupNullCheck
                 => new BsonDocument(lookupNullCheck.IsNotNull ? "$ne" : "$eq",
                     new BsonArray
                     {
-                        new BsonDocument("$ifNull", new BsonArray { FieldRef(lookupNullCheck.LookupAlias, elementVariable), BsonNull.Value }),
+                        new BsonDocument("$ifNull", new BsonArray { FieldRef(lookupNullCheck.LookupAlias, elementVariable: null), BsonNull.Value }),
                         BsonNull.Value
                     }),
             MongoConstantExpression or MongoParameterExpression => MongoValueRenderer.RenderValue(node, placeholders),

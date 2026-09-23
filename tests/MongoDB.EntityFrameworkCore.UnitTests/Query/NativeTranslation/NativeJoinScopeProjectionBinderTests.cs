@@ -83,29 +83,8 @@ public class NativeJoinScopeProjectionBinderTests
         return Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
     }
 
-    private static MongoQueryExpression TranslateLeftJoinQuery(
-        Func<IQueryable<Owner>, IQueryable<Order>, IQueryable> buildQuery)
-    {
-        using var db = SingleEntityDbContext.Create<Owner>(mb => mb.Entity<Order>());
-
-        var query = buildQuery(db.Set<Owner>(), db.Set<Order>());
-
-        var ccFactory = db.GetService<IQueryCompilationContextFactory>();
-        var compilationContext = ccFactory.Create(async: false);
-
-        var preprocessor = db.GetService<IQueryTranslationPreprocessorFactory>().Create(compilationContext);
-        var preprocessed = preprocessor.Process(query.Expression);
-
-        var visitor = db.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>().Create(compilationContext);
-        var result = visitor.Visit(preprocessed);
-
-        Assert.NotNull(result);
-        var shaped = Assert.IsAssignableFrom<ShapedQueryExpression>(result);
-        return Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
-    }
-
 #if !EF8 && !EF9
-    // EF8/EF9-ONLY IN PRACTICE, and not because of anything in this file: on EF8/EF9 an optional reference
+    // EF10-ONLY IN PRACTICE, and not because of anything in this file: on EF8/EF9 an optional reference
     // navigation lowers onto EF's own internal LeftJoin shim (Ef8Ef9LeftJoinMethod), which
     // NativeSlotPopulator.PopulateNativeSlots' candidate-join arm never recognizes pre-EF10 — the whole join
     // declines before any Select-side binder runs. See NativeJoinScopeProjectionBinder.cs (~line 290) for the
@@ -126,7 +105,7 @@ public class NativeJoinScopeProjectionBinderTests
         // collection has no single "is it null" answer); this is unrelated to IsLeftOuter and reproduces on a plain
         // Join too. Order-outer/Owner-inner resolves to Order.Owner — a REFERENCE nav — the shape this feature
         // targets, matching Manual_expression_tree_typed_null_equality's own Order-outer/Customer-inner shape.
-        var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
             orders.GroupJoin(owners, r => r.OwnerId, o => o.Id, (r, os) => new { r, os })
                 .SelectMany(x => x.os.DefaultIfEmpty(), (x, o) => new { x.r, o })
                 .Select(x => x.o != null ? x.o.Name : ""));
@@ -162,7 +141,7 @@ public class NativeJoinScopeProjectionBinderTests
     [Fact]
     public void Declines_a_conditional_whose_test_is_not_a_scope_null_check()
     {
-        var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
             owners.GroupJoin(orders, o => o.Id, r => r.OwnerId, (o, rs) => new { o, rs })
                 .SelectMany(x => x.rs.DefaultIfEmpty(), (x, r) => new { x.o, r })
                 .Select(x => x.o.Name == "Alice" ? 1m : 0m));
@@ -721,14 +700,59 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
     }
 
+    [Fact]
+    public void Declines_a_bare_nav_null_check_ternary_over_a_two_level_chain()
+    {
+        // Regression pin for final-review fix I2: TryBindConditionalProjection's `scope.Levels.Count != 1`
+        // guard must decline a bare ternary null-check reaching a genuine 2-level chain, exactly as the
+        // sibling wrapped/nested-leaf tests above already pin for TryBindProjection. `x.l != null ? x.l.Sku :
+        // ""` is a bare ConditionalExpression whose Test resolves (via TryMatchScopeNullCheck) to the SECOND
+        // join's own Inner side (scope index 2) — before this fix, that would have gone on to translate both
+        // branches per-level; now it must decline at the Levels.Count gate before ever reaching
+        // TryMatchScopeNullCheck, so the whole projection routes to fallback.
+        var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .Join(lines, e => e.r.Id, l => l.OrderId, (e, l) => new { e, l })
+                .Select(x => x.l != null ? x.l.Sku : ""));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
+        Assert.Empty(mongoQ.Select.Projection);
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
+    }
+
+    [Fact]
+    public void Declines_a_bare_conditional_null_check_leaf_over_a_two_level_chain()
+    {
+        // Final-review fix (I2): TryBindConditionalProjection is now deliberately restricted to a DEPTH-1 join
+        // scope, mirroring the sibling bare-scalar-leaf arm's own Levels.Count == 1 restriction in
+        // MongoQueryableMethodTranslatingExpressionVisitor.TranslateSelect (both exist to avoid newly exposing
+        // the SAME pre-existing chain-paging-deferral hazard in IsSingleEligibleNativeJoinScope/
+        // ConfirmEntireChain — see that arm's own comment). This is the executable proof the narrowing works:
+        // a genuine two-level chain (level 1: Owner->Order, a plain Join; level 2: Order->Line, a LeftJoin) with
+        // a bare nav-null-check ternary targeting the SECOND level's Inner side — exactly the shape
+        // Binds_a_bare_nav_null_check_ternary_over_a_left_join pins at depth 1 — must now DECLINE (routing to
+        // NativeRoute.Fallback) rather than bind natively, since scope.Levels.Count is 2, not 1.
+        var mongoQ = TranslateThreeSourceJoinQuery((owners, orders, lines) =>
+            owners.Join(orders, o => o.Id, r => r.OwnerId, (o, r) => new { o, r })
+                .GroupJoin(lines, e => e.r.Id, l => l.OrderId, (e, ls) => new { e.o, e.r, ls })
+                .SelectMany(x => x.ls.DefaultIfEmpty(), (x, l) => new { x.o, x.r, l })
+                .Select(x => x.l != null ? x.l.Sku : "none"));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(2, mongoQ.Select.JoinScope!.Levels.Count);
+        Assert.Empty(mongoQ.Select.Projection);
+        Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
+    }
+
 #if !EF8 && !EF9
-    // EF8/EF9-ONLY IN PRACTICE: see the comment on Binds_a_bare_nav_null_check_ternary_over_a_left_join above —
+    // EF10-ONLY IN PRACTICE: see the comment on Binds_a_bare_nav_null_check_ternary_over_a_left_join above —
     // the LeftJoin shape here never becomes a candidate join pre-EF10, so the join (and this bare scalar leaf)
     // declines before any Select-side binder runs. This test asserts the native (EF10-only) outcome.
     [Fact]
     public void Bare_scalar_leaf_over_a_left_join_goes_native()
     {
-        var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
             owners.GroupJoin(orders, o => o.Id, r => r.OwnerId, (o, rs) => new { o, rs })
                 .SelectMany(x => x.rs.DefaultIfEmpty(), (x, r) => new { x.o, r })
                 .Select(x => x.r.Total));
@@ -742,7 +766,7 @@ public class NativeJoinScopeProjectionBinderTests
 #endif
 
 #if !EF8 && !EF9
-    // EF8/EF9-ONLY IN PRACTICE: see the comment on Binds_a_bare_nav_null_check_ternary_over_a_left_join above —
+    // EF10-ONLY IN PRACTICE: see the comment on Binds_a_bare_nav_null_check_ternary_over_a_left_join above —
     // the LeftJoin shape here never becomes a candidate join pre-EF10, so the join (and this bare scalar leaf)
     // declines before any Select-side binder runs. This test asserts the native (EF10-only) outcome.
     [Fact]
@@ -750,7 +774,7 @@ public class NativeJoinScopeProjectionBinderTests
     {
         // The ACTUAL shape EF Core's null-check-removal preprocessing produces for
         // `o.Owner != null ? o.Owner.Name : null` once nav-expansion runs — a plain LeftJoin + bare `x.Inner.Name`.
-        var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+        var mongoQ = TranslateJoinQuery((owners, orders) =>
             orders.GroupJoin(owners, r => r.OwnerId, o => o.Id, (r, os) => new { r, os })
                 .SelectMany(x => x.os.DefaultIfEmpty(), (x, o) => new { x.r, o })
                 .Select(x => x.o.Name));

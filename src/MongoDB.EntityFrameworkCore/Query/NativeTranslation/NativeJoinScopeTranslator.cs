@@ -318,8 +318,20 @@ internal static class NativeJoinScopeTranslator
     // arm already uses for recognizing a bare Outer/Inner hop-chain terminus.
     private static bool TryRerootToBareScope(
         MongoJoinScope scope, ParameterExpression rootParam, Expression node, out int scopeIndex)
-        => MongoTransparentScopeResolver.TryResolveScopeDepth(
+    {
+        // Same guard as TryRerootToSingleScope's own "Final-review fix (M2)" (final-review fix, M5 — defense
+        // in depth, practically unreachable today given real call sites): rootParam.Type must actually be a
+        // TransparentIdentifier before delegating to TryResolveScopeDepth, so a body reached from some other
+        // call site whose parameter merely happens to expose members named "Outer"/"Inner" can't be mis-walked.
+        if (!rootParam.Type.IsTransparentIdentifierType())
+        {
+            scopeIndex = -1;
+            return false;
+        }
+
+        return MongoTransparentScopeResolver.TryResolveScopeDepth(
             node, rootParam, hopNames: ["Outer", "Inner"], sourceCount: scope.Levels.Count, out scopeIndex);
+    }
 
     private static bool IsBareInnerAccess(ParameterExpression rootParam, Expression node)
         => node is MemberExpression { Member.Name: "Inner" } member

@@ -548,10 +548,10 @@ Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "
         // Failed: Throws ExpressionNotSupportedException (query not translated)
         await base.GroupJoin_DefaultIfEmpty_Project(async);
 #if EF8 || EF9
-        // Fails (MQL shape only, not results): this LeftJoin (GroupJoin+SelectMany(DefaultIfEmpty)) shape never
-        // goes native on EF8/EF9 — see NativeJoinScopeProjectionBinder.cs remarks / NorthwindMiscellaneousQueryMongoTest's
-        // Manual_expression_tree_typed_null_equality EF8/EF9 branch for the family-wide gap. Falls back to
-        // driver-LINQ automatically.
+        // EF8/EF9: falls back to driver-LINQ — different MQL, same results. This LeftJoin
+        // (GroupJoin+SelectMany(DefaultIfEmpty)) shape never goes native on EF8/EF9 — see
+        // NativeJoinScopeProjectionBinder.cs remarks / NorthwindMiscellaneousQueryMongoTest's
+        // Manual_expression_tree_typed_null_equality EF8/EF9 branch for the family-wide gap.
         AssertMql(
             """
 Customers.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Orders", "localField" : "_outer._id", "foreignField" : "CustomerID", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner._id", "_id" : 0 } }

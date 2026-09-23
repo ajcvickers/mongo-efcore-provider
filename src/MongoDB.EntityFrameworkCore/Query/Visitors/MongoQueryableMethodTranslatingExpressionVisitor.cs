@@ -637,10 +637,9 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // A bare (non-wrapped, non-whole-entity, non-conditional) scalar/computed Select body over an eligible,
         // SINGLE-LEVEL join scope — e.g. `ti => ti.Inner.City` (EF Core's own null-check-removal preprocessing
         // produces exactly this shape for `nav != null ? nav.Member : null` once nav-expansion runs, collapsing
-        // the conditional away entirely — see
-        // docs/superpowers/specs/2026-09-23-native-join-scope-nav-null-conditional-projection-design.md's Task 3b
-        // addendum). Sibling to (and deliberately AFTER) the bare-whole-entity arm and Task 3's own
-        // bare-Conditional arm above — both are tried and declined first, so this arm never shadows either.
+        // the conditional away entirely). Sibling to (and deliberately AFTER) the bare-whole-entity arm and
+        // Task 3's own bare-Conditional arm above — both are tried and declined first, so this arm never shadows
+        // either.
         // Reuses the depth-1 value translator unchanged; the only new work is routing and staging under the same
         // "_v" bare alias the generic (join-scope-unaware) bare-leaf path already uses.
         //

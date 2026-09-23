@@ -16,6 +16,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 
@@ -477,8 +478,10 @@ internal static class NativeJoinScopeProjectionBinder
     /// <summary>
     /// Attempts to populate the native <c>$project</c> slot for a BARE (non-wrapped) <c>Select</c> body that is
     /// exactly a ternary null-checking a join scope's Inner side and dereferencing it —
-    /// <c>ti =&gt; ti.Inner != null ? ti.Inner.City : null</c>, at any depth of a (possibly chained) join scope.
-    /// Sibling to <see cref="TryBindProjection"/> (which only ever handles a wrapped <c>new {}</c>/<c>MemberInit</c>
+    /// <c>ti =&gt; ti.Inner != null ? ti.Inner.City : null</c>. Restricted to a DEPTH-1 scope
+    /// (<c>scope.Levels.Count == 1</c>) — see the guard at the top of this method (final-review fix, I2) for why
+    /// a chain deliberately declines here rather than translating each branch per-level. Sibling to
+    /// <see cref="TryBindProjection"/> (which only ever handles a wrapped <c>new {}</c>/<c>MemberInit</c>
     /// body — <c>selector.Body.TryGetProjectionMembers</c> never recognizes a bare <see cref="ConditionalExpression"/>,
     /// so that method is never reached for this shape). See
     /// docs/superpowers/specs/2026-09-23-native-join-scope-nav-null-conditional-projection-design.md.
@@ -491,6 +494,24 @@ internal static class NativeJoinScopeProjectionBinder
             || mongoQ.Select.Projection.Count > 0
             || selector.Parameters.Count != 1
             || selector.Body is not ConditionalExpression conditional)
+        {
+            return false;
+        }
+
+        // Deliberately restricted to Levels.Count == 1 (final-review fix, I2 — measured, not a simplification
+        // left for later): widening this to a multi-level chain (branches translated via
+        // NativeJoinScopeTranslator.TryTranslateSingleScope, exactly as the sibling bare-scalar-leaf arm in
+        // MongoQueryableMethodTranslatingExpressionVisitor.TranslateSelect does) hits the SAME pre-existing gap
+        // that arm's own comment documents in IsSingleEligibleNativeJoinScope/ConfirmEntireChain's chain-paging-
+        // deferral handling: a Skip/Take/OrderBy interleaved BETWEEN two plain (non-left-outer) joins in a
+        // 2-level chain gets deferred as ONE snapshot past BOTH joins' $lookup/$unwind blocks together
+        // (DeferPipelineOpsPastConfirmedJoin + ConfirmEntireChain's single confirming call), so paging lands on
+        // the fully-joined (doubly-filtered) result instead of between the two joins as written — silently
+        // wrong rows, not a decline. This bare-conditional arm doesn't need the chain case to meet its own goal
+        // (a nav-null-check ternary over a single LeftJoin), so staying narrow avoids newly exposing that
+        // pre-existing gap through a shape (a chain confirmed via a bare conditional leaf) nothing could reach
+        // natively before this task. Fixing the chain-paging gap itself is out of scope here.
+        if (scope.Levels.Count != 1)
         {
             return false;
         }
@@ -549,8 +570,19 @@ internal static class NativeJoinScopeProjectionBinder
     /// somewhere that HAS already resolved a scope (e.g. a wrapped projection's computed leaf); this helper
     /// exists because a BARE ternary branch can reach here with no such context to inherit.
     /// </summary>
+    /// <remarks>
+    /// Deliberately NOT the same helper as (nor delegating to) the pre-existing, similarly-named
+    /// <c>MongoExpressionTranslator.TranslateConditionalBranch</c> (final-review fix, M6 — noted so a future
+    /// reader doesn't assume parity). That method ALSO special-cases a boxed
+    /// <c>Convert(Constant(null, typeof(object)), typeof(T?))</c> null branch (the shape a <c>(T?)null</c>
+    /// literal compiles to) before falling through to its own <c>TranslateOperand</c>. This helper has no such
+    /// case: a boxed typed-null branch reaching here simply fails to match either arm below and declines via
+    /// <c>TryTranslateSingleScope</c>'s own generic handling — fails SAFE (a decline, not a wrong translation),
+    /// not a bug, but a real capability gap between the two same-purpose methods.
+    /// </remarks>
     private static bool TryTranslateConditionalBranch(
-        MongoJoinScope scope, ParameterExpression rootParam, Expression branch, out MongoExpression? result)
+        MongoJoinScope scope, ParameterExpression rootParam, Expression branch,
+        [NotNullWhen(true)] out MongoExpression? result)
     {
         if (branch is ConstantExpression constant)
         {
