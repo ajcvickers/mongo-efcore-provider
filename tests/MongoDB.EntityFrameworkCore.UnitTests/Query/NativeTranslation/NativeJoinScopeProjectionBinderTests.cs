@@ -713,4 +713,35 @@ public class NativeJoinScopeProjectionBinderTests
         Assert.Empty(mongoQ.Select.Projection);
         Assert.Equal(NativeRoute.Fallback, mongoQ.Select.Route);
     }
+
+    [Fact]
+    public void Bare_scalar_leaf_over_a_left_join_goes_native()
+    {
+        var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+            owners.GroupJoin(orders, o => o.Id, r => r.OwnerId, (o, rs) => new { o, rs })
+                .SelectMany(x => x.rs.DefaultIfEmpty(), (x, r) => new { x.o, r })
+                .Select(x => x.r.Total));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(
+            [NativeProjectionBinder.SyntheticBareProjectionAlias],
+            mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+        Assert.False(mongoQ.Select.HasUnconfirmedCandidateJoin);
+    }
+
+    [Fact]
+    public void Bare_scalar_leaf_matching_the_real_nav_expanded_shape_goes_native()
+    {
+        // The ACTUAL shape EF Core's null-check-removal preprocessing produces for
+        // `o.Owner != null ? o.Owner.Name : null` once nav-expansion runs — a plain LeftJoin + bare `x.Inner.Name`.
+        var mongoQ = TranslateLeftJoinQuery((owners, orders) =>
+            orders.GroupJoin(owners, r => r.OwnerId, o => o.Id, (r, os) => new { r, os })
+                .SelectMany(x => x.os.DefaultIfEmpty(), (x, o) => new { x.r, o })
+                .Select(x => x.o.Name));
+
+        Assert.NotNull(mongoQ.Select.JoinScope);
+        Assert.Equal(
+            [NativeProjectionBinder.SyntheticBareProjectionAlias],
+            mongoQ.Select.Projection.Select(p => p.Alias).ToArray());
+    }
 }
