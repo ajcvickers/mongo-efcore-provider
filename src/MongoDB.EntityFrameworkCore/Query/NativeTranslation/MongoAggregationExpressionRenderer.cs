@@ -64,6 +64,13 @@ internal static class MongoAggregationExpressionRenderer
             MongoElementRefExpression elementRef => FieldRef(elementRef.Path, elementVariable),
             // Always at document root, REGARDLESS of elementVariable — see the node's own remarks.
             MongoOuterFieldExpression outer => FieldRef(outer.ElementName, elementVariable: null),
+            // EF-322: the ONLY consumer today is a Select-side join-scope null-check ternary
+            // (`ti.Inner != null ? ti.Inner.City : null`) whose Test is rendered here as the MongoConditionalExpression's
+            // "if" — see NativeJoinScopeProjectionBinder.TryBindConditionalProjection. LookupAlias is a plain top-level
+            // field name (the $lookup's own "as"), so it renders through the same FieldRef helper as any other field.
+            MongoLookupNullCheckExpression lookupNullCheck
+                => new BsonDocument(lookupNullCheck.IsNotNull ? "$ne" : "$eq",
+                    new BsonArray { FieldRef(lookupNullCheck.LookupAlias, elementVariable), BsonNull.Value }),
             MongoConstantExpression or MongoParameterExpression => MongoValueRenderer.RenderValue(node, placeholders),
             MongoBinaryExpression binary => RenderBinary(binary, placeholders, elementVariable),
             MongoSizeExpression size => RenderSize(size, elementVariable),
@@ -174,7 +181,7 @@ internal static class MongoAggregationExpressionRenderer
     public static bool CanRender(MongoExpression node)
         => node switch
         {
-            MongoFieldExpression or MongoElementRefExpression or MongoOuterFieldExpression => true,
+            MongoFieldExpression or MongoElementRefExpression or MongoOuterFieldExpression or MongoLookupNullCheckExpression => true,
             MongoConstantExpression or MongoParameterExpression => true,
             // EF-396 (review fix): $and/$or evaluate a BARE operand by TRUTHINESS, not by CLR boolean value —
             // the same hazard the Not arm below already guards against for its own bare-field operand. Without

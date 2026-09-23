@@ -529,6 +529,39 @@ public class MongoAggregationExpressionRendererTests
     }
 
     [Fact]
+    public void Renders_not_equal_null_lookup_check_as_ne_against_the_alias_field()
+    {
+        var node = new MongoLookupNullCheckExpression("_lookup_Manager", isNotNull: true);
+        var placeholders = new PlaceholderTable();
+
+        var rendered = MongoAggregationExpressionRenderer.Render(node, placeholders);
+
+        Assert.Equal(
+            new BsonDocument("$ne", new BsonArray { "$_lookup_Manager", BsonNull.Value }),
+            rendered);
+    }
+
+    [Fact]
+    public void Renders_equal_null_lookup_check_as_eq_against_the_alias_field()
+    {
+        var node = new MongoLookupNullCheckExpression("_lookup_Manager", isNotNull: false);
+        var placeholders = new PlaceholderTable();
+
+        var rendered = MongoAggregationExpressionRenderer.Render(node, placeholders);
+
+        Assert.Equal(
+            new BsonDocument("$eq", new BsonArray { "$_lookup_Manager", BsonNull.Value }),
+            rendered);
+    }
+
+    [Fact]
+    public void CanRender_reports_true_for_a_lookup_null_check()
+    {
+        Assert.True(MongoAggregationExpressionRenderer.CanRender(
+            new MongoLookupNullCheckExpression("_lookup_Manager", isNotNull: true)));
+    }
+
+    [Fact]
     public void MongoQuantifierExpression_Any_renders_as_anyElementTrue_over_map()
     {
         var elementPredicate = new MongoBinaryExpression(
