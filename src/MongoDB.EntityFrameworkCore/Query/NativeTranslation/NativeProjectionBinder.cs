@@ -1291,7 +1291,7 @@ internal static class NativeProjectionBinder
     /// (conditional, binary/string-concat, unary/cast, member-access chain, and a nested opaque call). Any
     /// other node shape declines conservatively — same "no regression" reasoning as
     /// <see cref="TryGetSoleWholeRootEntityOperand"/>'s own decline: falling through to
-    /// <see cref="TryBindAsBareProjection"/>'s existing failure is what happened before this method existed.
+    /// <c>TryBindAsBareProjection</c>'s existing failure is what happened before this method existed.
     /// A nested <see cref="MethodCallExpression"/> reuses <see cref="TryGetSoleWholeRootEntityOperand"/>
     /// unchanged, so the same "at most one whole-entity operand" cap applies at every opaque call in the tree.
     /// </remarks>
