@@ -26,7 +26,8 @@ internal enum MongoRegexKind
 
     /// <summary>
     /// <c>EF.Functions.Like(matchExpression, pattern)</c> against a compile-time-constant SQL LIKE pattern
-    /// (<c>%</c>/<c>_</c> wildcards) — see <see cref="MongoRegexPatternBuilder.BuildPattern"/>'s <c>Like</c>
+    /// (<c>%</c>/<c>_</c> wildcards) — see
+    /// <see cref="NativeTranslation.MongoRegexPatternBuilder.BuildPattern"/>'s <c>Like</c>
     /// arm. Scoped to the query ($match) dialect only: <c>MongoAggregationExpressionRenderer.CanRender</c>
     /// declines a <c>Like</c>-kind regex rather than admitting it into the $expr dialect, since there is no
     /// $expr rendering for it (a Like pattern needs wildcard-to-regex conversion, not a literal substring

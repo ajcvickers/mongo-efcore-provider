@@ -2082,6 +2082,12 @@ internal static class NativeProjectionBinder
                 when IsArrayFreeComputedSubtree(leaf):
                 break;
 
+            // Gate 1c2 — a Math/MathF top node (`Select(b => Math.Round(b.Double))`). Same subtree-safety
+            // story as gate 1b/1c: an operand could itself contain a nested size node (`Math.Abs(b.Posts.Count)`),
+            // so this arm gets the same IsArrayFreeComputedSubtree protection.
+            case MongoMathExpression when IsArrayFreeComputedSubtree(leaf):
+                break;
+
             // Gate 1d — a coalesce (`??`) top node, rendered as $ifNull. Same subtree-safety story as gates 1b/
             // 1c: either operand of a chained coalesce (`a ?? b ?? c` nests on the right — see
             // MongoCoalesceExpression's own remarks) could itself contain a nested size node, so
@@ -2241,6 +2247,7 @@ internal static class NativeProjectionBinder
                 => IsArrayFreeComputedSubtree(coalesce.Left) && IsArrayFreeComputedSubtree(coalesce.Right),
             MongoDatePartExpression datePart => IsArrayFreeComputedSubtree(datePart.Operand),
             MongoDateTimeOffsetLocalExpression local => IsArrayFreeComputedSubtree(local.Operand),
+            MongoMathExpression math => math.Operands.All(IsArrayFreeComputedSubtree),
             MongoFieldExpression or MongoConstantExpression or MongoParameterExpression => true,
             // Everything else, including MongoSizeExpression and MongoFilteredSizeExpression — see the remarks:
             // the size kinds are excluded by this catch-all rather than by an arm of their own, deliberately.

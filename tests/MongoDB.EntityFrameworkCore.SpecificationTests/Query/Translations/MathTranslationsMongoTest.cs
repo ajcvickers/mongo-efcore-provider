@@ -200,28 +200,16 @@ public class MathTranslationsMongoTest : MathTranslationsTestBase<MongoBasicType
 
     public override async Task Round_float()
     {
-        // Same permanent driver limitation as Truncate_float (Task 3): the AssertQueryScalar half always
-        // shapes via driver-LINQ push-down, and the driver has no MathF.Round translation.
-        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(() => base.Round_float());
+        await base.Round_float();
 
-        if (MongoSpecTestHelpers.IsNativeOnly)
-        {
-            AssertMql(
-                """
-                BasicTypesEntities.{ "$match" : { "$expr" : { "$eq" : [{ "$round" : "$Float" }, 9.0] } } }
-                """);
-        }
-        else
-        {
-            AssertMql(
-                """
-                BasicTypesEntities.{ "$match" : { "$expr" : { "$eq" : [{ "$round" : "$Float" }, 9.0] } } }
-                """,
-                //
-                """
-                BasicTypesEntities.
-                """);
-        }
+        AssertMql(
+            """
+            BasicTypesEntities.{ "$match" : { "$expr" : { "$eq" : [{ "$round" : "$Float" }, 9.0] } } }
+            """,
+            //
+            """
+            BasicTypesEntities.{ "$project" : { "_v" : { "$round" : "$Float" }, "_id" : 0 } }
+            """);
     }
 
     public override async Task Round_with_digits_decimal()
@@ -283,34 +271,16 @@ public class MathTranslationsMongoTest : MathTranslationsTestBase<MongoBasicType
 
     public override async Task Truncate_float()
     {
-        // The Where half already goes native correctly (MathF.Truncate is in UnaryFunctionsByName same as
-        // Math.Truncate), but the AssertQueryScalar half's projected-query result always shapes via the
-        // driver-LINQ push-down path (MongoShapedQueryCompilingExpressionVisitor.VisitProjectedQuery — no
-        // native pipeline ever shapes a scalar/projected result itself, confirmed not float-specific:
-        // Truncate_decimal/_double's own AssertQueryScalar halves also throw under NativeOnly for the
-        // identical reason), and the driver's own LINQ v3 provider has no MathF.Truncate translation at all
-        // (the same MathF-vs-driver gap as EF-237 in the EF8/9-only NorthwindFunctionsQueryMongoTest.cs) — so
-        // the whole test throws before ever reaching AssertMql, in every mode, permanently.
-        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(() => base.Truncate_float());
+        await base.Truncate_float();
 
-        if (MongoSpecTestHelpers.IsNativeOnly)
-        {
-            AssertMql(
-                """
-                BasicTypesEntities.{ "$match" : { "$expr" : { "$eq" : [{ "$trunc" : "$Float" }, 8.0] } } }
-                """);
-        }
-        else
-        {
-            AssertMql(
-                """
-                BasicTypesEntities.{ "$match" : { "$expr" : { "$eq" : [{ "$trunc" : "$Float" }, 8.0] } } }
-                """,
-                //
-                """
-                BasicTypesEntities.
-                """);
-        }
+        AssertMql(
+            """
+            BasicTypesEntities.{ "$match" : { "$expr" : { "$eq" : [{ "$trunc" : "$Float" }, 8.0] } } }
+            """,
+            //
+            """
+            BasicTypesEntities.{ "$project" : { "_v" : { "$trunc" : "$Float" }, "_id" : 0 } }
+            """);
     }
     public override async Task Truncate_project_and_order_by_it_twice()
     {
