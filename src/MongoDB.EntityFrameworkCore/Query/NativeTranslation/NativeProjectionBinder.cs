@@ -1033,6 +1033,7 @@ internal static class NativeProjectionBinder
             && (value is MongoSizeExpression or MongoFilteredSizeExpression or MongoConvertExpression
                     or MongoConditionalExpression or MongoDatePartExpression or MongoDateTimeOffsetLocalExpression
                     or MongoElementRefExpression or MongoDateAddExpression or MongoCoalesceExpression
+                    or MongoMathExpression
                 || (value is MongoConstantExpression or MongoParameterExpression
                     && NativeSlotPopulator.TryProbeBareValueRenders(
                         value, NativeSlotPopulator.UnwrapBoxingToObjectType(leafExpression)))
