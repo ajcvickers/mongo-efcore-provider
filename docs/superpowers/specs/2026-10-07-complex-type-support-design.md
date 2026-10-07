@@ -13,6 +13,16 @@ In scope, per EF version (the exact matrix is confirmed by the Phase 0 probe, se
 - Complex properties of class and struct type, nested to any depth, with `HasElementName` / `[BsonElement]` /
   `[BsonIgnore]` / `[BsonRequired]` / `[Column]` honored.
 - Optional (nullable) complex properties and complex collections, where the EF version supports them (EF10).
+
+Measured per-version matrix (Phase 0 probe, `ComplexTypeFeatureMatrixTests`, provider convention set; Debug EF8/EF9/EF10):
+
+| Feature | EF8 | EF9 | EF10 |
+|---|---|---|---|
+| Class complex property | builds | builds | builds |
+| Struct complex property | builds | builds | builds |
+| Nested complex property | builds | builds | builds |
+| Optional (nullable reference) complex property | rejected (`InvalidOperationException`: optional not supported, call `IsRequired()`) | rejected (same) | builds |
+| Complex collection (`ComplexCollection`) | API absent (does not compile) | API absent (does not compile) | builds |
 - Reading (whole-type and leaf projection, predicates, ordering, grouping, aggregates, set operations,
   `Include`-adjacent shapes where the complex type sits on an entity), and writing.
 - `ExecuteUpdate` / `ExecuteDelete` involving complex properties, **on the existing driver-LINQ bridge**
@@ -37,7 +47,7 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
 |---|---|
 | Metadata conventions | `BsonIgnore` and `BsonRequired` conventions already handle complex properties. `GetContainingElementName` exists only for `IEntityType`. |
 | Element-name lookup | Duplicated read of `Mongo:ElementName` ?? CLR name: `MongoQueryableMethodTranslatingExpressionVisitor.GetComplexPropertyElementName` and `MongoSelectLowerer.GetComplexPropertyElementName`. |
-| Write path | `MongoUpdate.WriteEntity` writes keys, scalar properties and owned navigations only. Complex properties are never written. |
+| Write path | `MongoUpdate.WriteEntity` writes keys, scalar properties and owned navigations only. Complex properties are never written. Measured (EF8, EF9, EF10): `SaveChanges` of a `CustomerWithAddress` stores only `{ _id, Name }`; the complex value is silently not written, and a later `Find` throws `InvalidOperationException: Document element is missing for required non-nullable property 'City'`. |
 | Serializers | `EntitySerializer.TryGetMemberSerializationInfo` resolves properties and navigations only; `BsonSerializerFactory` has no complex-type serializer. |
 | Native query | Path resolution (`TryBeginOwnedHopWalk`, `TryWalkEmbeddedReferenceHops`) is typed on `IEntityType` and walks embedded *navigations*. `TranslateOfType` throws for complex types. |
 | Materialization | Shapers and streaming rewriter materialize entity types; no complex-type step. |
