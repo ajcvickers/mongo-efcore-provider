@@ -176,6 +176,51 @@ public class NativeBareDottedLeafTests(TemporaryDatabaseFixture database) : ICla
         NativeModeAssert.NativeAndExpected(m => Run(m, q => q.Select(l => l.CustomerId).Distinct().ToList().Order()), [10, 20]);
     }
 
+
+
+    // ── EF.Property spellings of hop leaves (formerly silent NULL ROWS) ───────────────────────────────────────
+
+    // Before the fix the anonymous spellings ran native and returned null rows: MongoProjectionBindingExpressionVisitor's
+    // EF.Property arm bound navigations only, and Translate folded its null to default(T). The bare spellings were
+    // read as null once gate 1f made them native.
+    public static readonly Dictionary<string, (Func<IQueryable<Blog>, IEnumerable<string>> Run, string[] Expected)> HopSpellings = new()
+    {
+        ["anon_member_receiver"] = (q => q.OrderBy(b => b.Title).Select(b => new { C = EF.Property<string>(b.Home, "City") }).ToList().Select(x => x.C),
+            ["Bristol", "Cardiff", "Bristol"]),
+        ["anon_nested"] = (q => q.OrderBy(b => b.Title).Select(b => new { C = EF.Property<string>(EF.Property<Home>(b, "Home"), "City") }).ToList().Select(x => x.C),
+            ["Bristol", "Cardiff", "Bristol"]),
+        ["bare_member_receiver"] = (q => q.OrderBy(b => b.Title).Select(b => EF.Property<string>(b.Home, "City")), ["Bristol", "Cardiff", "Bristol"]),
+        ["bare_nested"] = (q => q.OrderBy(b => b.Title).Select(b => EF.Property<string>(EF.Property<Home>(b, "Home"), "City")), ["Bristol", "Cardiff", "Bristol"]),
+        ["anon_multi_hop_nested"] = (q => q.OrderBy(b => b.Title)
+            .Select(b => new { G = EF.Property<string>(EF.Property<Geo>(EF.Property<Home>(b, "Home"), "Geo"), "Country") }).ToList().Select(x => x.G),
+            ["UK", "Wales", "UK"]),
+        ["anon_cast_wrapped"] = (q => q.OrderBy(b => b.Title)
+            .Select(b => new { F = (long)EF.Property<int>(EF.Property<Home>(b, "Home"), "Floor") }).ToList().Select(x => x.F.ToString()),
+            ["3", "1", "2"]),
+    };
+
+    public static TheoryData<string> HopSpellingNames => [.. HopSpellings.Keys];
+
+    [Theory]
+    [MemberData(nameof(HopSpellingNames))]
+    public void EF_Property_hop_spelling_reads_the_leaf(string shape)
+    {
+        var collection = SeedBlogs(nameof(EF_Property_hop_spelling_reads_the_leaf) + shape);
+        var (run, expected) = HopSpellings[shape];
+        NativeModeAssert.NativeAndExpected(m => RunBlogs(collection, m, run), [.. expected]);
+    }
+
+    [Fact]
+    public void Entity_beside_an_EF_Property_owned_hop_leaf()
+    {
+        // Mixed shaper (whole entity + hop leaf). Before the fix: native null rows, driver-LINQ FormatException (the
+        // shared shaper misbound the leaf).
+        var collection = SeedBlogs(nameof(Entity_beside_an_EF_Property_owned_hop_leaf));
+        NativeModeAssert.NativeAndExpected(m => RunBlogs(collection, m, q => q.OrderBy(b => b.Title)
+                .Select(b => new { b, C = EF.Property<string>(EF.Property<Home>(b, "Home"), "City") }).ToList().Select(x => x.b.Title + ":" + x.C)),
+            ["a:Bristol", "b:Cardiff", "c:Bristol"]);
+    }
+
     private static string Unique(string name)
         => TemporaryDatabaseFixtureBase.CreateCollectionName(name) + Guid.NewGuid().ToString("N")[..8];
 }

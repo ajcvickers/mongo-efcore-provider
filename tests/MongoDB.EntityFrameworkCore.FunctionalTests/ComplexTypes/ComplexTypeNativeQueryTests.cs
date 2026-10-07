@@ -759,9 +759,22 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
 
         NativeModeAssert.NativeAndExpected(m => Optional(collection, m, run), [.. expected]);
     }
-
 #endif
 
+    [Fact]
+    public void Entity_beside_an_EF_Property_complex_leaf_fails_loudly_until_entity_materialization()
+    {
+        // S2: whole-entity materialization of a complex-typed entity is Task 10, so this throws on every path, exactly as
+        // the member spelling does; it must never return null rows.
+        var collection = SeedRich();
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            var ex = Assert.Throws<InvalidOperationException>(() => Rich(collection, mode, q => q.OrderBy(c => c.Name)
+                .Select(c => new { c, City = EF.Property<string>(EF.Property<RichAddress>(c, "Address"), "City") }).ToList()
+                .Select(x => x.c.Name + ":" + x.City)));
+            Assert.Contains("missing for required non-nullable property", ex.Message);
+        }
+    }
 
     private static string UniqueName(string name)
         => TemporaryDatabaseFixtureBase.CreateCollectionName(name) + Guid.NewGuid().ToString("N")[..8];

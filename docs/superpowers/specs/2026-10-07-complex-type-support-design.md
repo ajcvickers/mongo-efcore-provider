@@ -36,8 +36,8 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
 - (a) A bare projection of a dotted stored field (`Select(b => b.Home.City)`, multi-hop owned, composite-key component)
   now goes native under the driver's own bare alias `_v`, replacing the EF-362 decline: the decline existed only because
   a dotted alias can't round-trip, which `_v` avoids, and the shared read path is what complex leaves need.
-- (b) A projected `Distinct` over a required `string` field whose element is MISSING reads `null`, as main did, instead
-  of throwing: the same `$group` missing-marker fix that optional complex parents need. It changes the MQL baselines of
+- (b) A projected `Distinct` over a required reference-typed scalar (`string`, `byte[]`, primitive collection) whose
+  element is MISSING reads `null`, as main did, instead of throwing: the same `$group` missing-marker fix that optional complex parents need. It changes the MQL baselines of
   `NorthwindSetOperationsQueryMongoTest.Union_on_distinct`, `Intersect_on_distinct` and `Except_on_distinct`
   (`CompanyName__isMissing`).
 
