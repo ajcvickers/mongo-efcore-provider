@@ -67,6 +67,17 @@ public static class ComplexTypeFeatureMatrixTests
         Assert.NotNull(property);
         Assert.True(property.IsNullable);
     }
+#else
+    [Fact]
+    public static void Optional_complex_property_is_rejected()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var db = new MatrixContext<OptionalHolder>(mb => mb.Entity<OptionalHolder>().ComplexProperty(e => e.Address));
+            _ = db.Model;
+        });
+        Assert.Contains("IsRequired", exception.Message);
+    }
 #endif
 
 #if !EF8 && !EF9
@@ -116,13 +127,11 @@ public static class ComplexTypeFeatureMatrixTests
         public Addr2 Address { get; set; }
     }
 
-#if !EF8 && !EF9
     class OptionalHolder
     {
         public int Id { get; set; }
         public Addr? Address { get; set; }
     }
-#endif
 
 #if !EF8 && !EF9
     class CollectionHolder
