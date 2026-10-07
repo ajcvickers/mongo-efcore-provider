@@ -66,6 +66,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         Expression expression)
     {
         _queryExpression = queryExpression;
+        TranslationFailed = false;
         _projectionMembers.Push(new ProjectionMember());
         _translatedRootExpression = expression;
         _aliasedConstructionMembers.Clear();
@@ -579,6 +580,14 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             _ => false
         };
 
+    private static bool IsEntityShaperSource(Expression source)
+        => source.RemoveConvert() is StructuralTypeShaperExpression;
+
+    // The structural type `source` denotes when it is a hop chain (embedded owned references and single complex
+    // properties, member or EF.Property spelling) over an entity shaper; null otherwise.
+    private static ITypeBase? ResolveHopType(Expression source)
+        => (ITypeBase?)ResolveReadSource(source) ?? ResolveComplexHopType(source);
+
     // The complex type `source` denotes when it is a chain of single complex-property hops (member or EF.Property
     // spelling, through embedded owned references) over an entity shaper; null otherwise.
     private static IComplexType? ResolveComplexHopType(Expression source)
@@ -943,11 +952,15 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
         if (methodCallExpression.TryGetEFPropertyArguments(out var source, out var memberName))
         {
-            // `EF.Property<T>(c.Address, "City")` / `EF.Property<T>(EF.Property<A>(c, "Address"), "City")`: a scalar of a
-            // complex type is a whole leaf, as its member spelling (`c.Address.City`) is in Visit. The navigation-only arm
-            // below would return null, which Translate folds to default(T) and silently yields null rows.
-            if (_queryExpression.Select.Route == NativeRoute.Projection
-                && ResolveComplexHopType(source)?.FindProperty(memberName) != null)
+            // A scalar read through a hop: `EF.Property<T>(c.Address, "City")`, `EF.Property<T>(EF.Property<A>(c,
+            // "Address"), "City")`, over a complex property or an embedded owned reference. It is a whole leaf, as its
+            // member spelling (`c.Address.City`) is in Visit; the navigation-only arm below can't bind a scalar. Only a
+            // hop: a root scalar (`EF.Property(x, "Name")`) keeps its existing arms. Gated exactly like the member arm:
+            // every route except a client-wrapped whole-entity body, whose member reads come off the materialized entity.
+            if (!(_queryExpression.Select.Route == NativeRoute.WholeEntity
+                  && _queryExpression.Select.HasClientWrappedWholeEntityShaper)
+                && !IsEntityShaperSource(source)
+                && ResolveHopType(source)?.FindProperty(memberName) != null)
             {
                 return BindWholeLeaf(methodCallExpression);
             }
@@ -1736,14 +1749,31 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         return false;
     }
 
-    private static Expression MatchTypes(
+    // A null `expression` is always a failed visit of a non-null node (every caller passes Visit(node) for a node that
+    // exists; the static-call receiver is guarded at the call site), never a legitimately-null value: a null constant
+    // or parameter visits to itself. So it is recorded as a failure (TranslationFailed) and the caller declines; the
+    // Default stand-in keeps the tree well-typed but is never executed as a native read.
+    private Expression MatchTypes(
         Expression expression,
         Type targetType)
-        => expression == null
-            ? Expression.Default(targetType)
-            : targetType != expression.Type && targetType.TryGetItemType() == null
-                ? Expression.Convert(expression, targetType)
-                : expression;
+    {
+        if (expression == null)
+        {
+            TranslationFailed = true;
+            return Expression.Default(targetType);
+        }
+
+        return targetType != expression.Type && targetType.TryGetItemType() == null
+            ? Expression.Convert(expression, targetType)
+            : expression;
+    }
+
+    /// <summary>
+    /// Set by the last <see cref="Translate"/> when some node of the selector could not be bound (a binder arm returned
+    /// <see langword="null"/>) and was replaced by a <c>default(T)</c> stand-in. The caller must decline the native
+    /// route: executing that shaper natively would silently read <c>default</c> (null rows).
+    /// </summary>
+    internal bool TranslationFailed { get; private set; }
 
     /// <summary>
     /// The bare (predicate-less) Queryable element operators the Queryable switch rebuilds against a materialized

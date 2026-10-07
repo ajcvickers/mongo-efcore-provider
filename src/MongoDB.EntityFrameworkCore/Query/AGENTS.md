@@ -219,7 +219,7 @@ Rendering (null/missing/dialect semantics):
   nested) can't recur: `_v` is never dotted and is what the driver's un-stripped fallback writes. Converted dotted
   fields stay declined (gate 1f checks `HasDefaultKeySerialization`).
   A field under an optional complex parent is MISSING whenever the parent is null/absent: ordinary data, so a projected
-  `Distinct` key over a required reference-typed field is marked (`NativeGroupByBinder.IsRequiredReferenceFieldKey`).
+  `Distinct` key over a required reference-typed scalar (`string`, `byte[]`, primitive collection) is marked (`NativeGroupByBinder.IsRequiredReferenceTypedFieldKey`).
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

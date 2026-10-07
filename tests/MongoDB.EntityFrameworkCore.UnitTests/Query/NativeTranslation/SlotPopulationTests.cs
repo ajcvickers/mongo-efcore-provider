@@ -728,4 +728,33 @@ public class SlotPopulationTests
         Assert.IsNotType<NativeComputedLeafExpression>(other);
         Assert.Equal(nameof(string.Substring), Assert.IsAssignableFrom<MethodCallExpression>(other).Method.Name);
     }
+
+    // A selector node the binding visitor can't bind (its arm returns null) is recorded as a failure, never silently
+    // replaced by a default(T) read: TranslateSelect declines on it (MarkNotNativelyRepresentable). Before, the null was
+    // folded to default and a native query returned null rows.
+    [Fact]
+    public void Unbindable_selector_node_is_reported_as_a_translation_failure()
+    {
+        var shaped = TranslateToShapedQuery<Customer>(q => q.Select(c => c.Name));
+        var mongoQuery = Assert.IsType<MongoQueryExpression>(shaped.QueryExpression);
+        Assert.Equal(NativeRoute.Projection, mongoQuery.Select.Route);
+        var root = TranslateToShapedQuery<Customer>(q => q).ShaperExpression;
+
+        // EF.Property over an unknown navigation of the root shaper: the navigation-only arm returns null.
+        var unknownHop = Expression.Call(
+            typeof(EF).GetMethod(nameof(EF.Property))!.MakeGenericMethod(typeof(string)),
+            Expression.Call(typeof(EF).GetMethod(nameof(EF.Property))!.MakeGenericMethod(typeof(object)), root, Expression.Constant("Nope")),
+            Expression.Constant("X"));
+        var anon = new { V = "" };
+        var body = Expression.New(anon.GetType().GetConstructors().Single(), [unknownHop], anon.GetType().GetProperty("V")!);
+
+        var visitor = new MongoProjectionBindingExpressionVisitor();
+        var translated = visitor.Translate(mongoQuery, body);
+        Assert.True(visitor.TranslationFailed);
+        Assert.IsType<DefaultExpression>(translated);
+
+        // A bindable selector resets the flag.
+        visitor.Translate(mongoQuery, Expression.Constant("k"));
+        Assert.False(visitor.TranslationFailed);
+    }
 }

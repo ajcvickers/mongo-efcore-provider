@@ -744,6 +744,13 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
 
         var newShaper = _projectionBindingExpressionVisitor.Translate(mongoQueryExpression, newSelectorBody);
 
+        // A selector node the binder couldn't bind became a default(T) stand-in; running that natively would silently
+        // read default (null rows). Decline so the query takes the driver-LINQ path (NativeOnly throws).
+        if (_projectionBindingExpressionVisitor.TranslationFailed)
+        {
+            mongoQueryExpression.Select.MarkNotNativelyRepresentable();
+        }
+
         return source.UpdateShaperExpression(newShaper);
     }
 

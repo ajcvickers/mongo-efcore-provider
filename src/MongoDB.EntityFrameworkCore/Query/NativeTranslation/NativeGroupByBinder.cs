@@ -1680,7 +1680,7 @@ internal static class NativeGroupByBinder
                         projection.Source?.Type ?? projection.Expression.Type, projection.Expression)
                     : MongoAggregationExpressionRenderer.ClassifyNonNullableValueRead(projection.Expression.Type, projection.Expression);
             var marksMissing = malformedRead == NonNullableValueRead.DefaultOnMalformedMissing || projection.DefaultsOnMalformedMissing
-                               || IsRequiredReferenceFieldKey(projection.Expression);
+                               || IsRequiredReferenceTypedFieldKey(projection.Expression);
 
             // ThrowsOnNull carries over to both: the deduped value is the same possibly-null value, read back from
             // "_id.<alias>" by the flatten, and by operators over the Distinct through the key part (DistinctAliasScope).
@@ -1711,9 +1711,10 @@ internal static class NativeGroupByBinder
     }
 
     /// <summary>
-    /// Whether a projected <c>Distinct()</c> key is a bare stored field of a required (non-nullable) <c>string</c>
-    /// property. Its key part is marked, so a MISSING value stays MISSING through the
-    /// flatten instead of becoming the lone <c>$group</c> sub-key's null.
+    /// Whether a projected <c>Distinct()</c> key is a bare stored field of a required (non-nullable) reference-typed
+    /// scalar property (<c>string</c>, <c>byte[]</c>, a primitive collection such as <c>List&lt;string&gt;</c>). Its key
+    /// part is marked, so a MISSING value stays MISSING through the flatten instead of becoming the lone <c>$group</c>
+    /// sub-key's null.
     /// </summary>
     /// <remarks>
     /// The flatten is read through the property (D-F10): a MISSING element reads <see langword="null"/>, as for a bare
@@ -1722,14 +1723,13 @@ internal static class NativeGroupByBinder
     /// property is MISSING whenever the property is null or absent, which is ordinary data, not a malformed document.
     /// Value types get the marker through <see cref="MongoAggregationExpressionRenderer.ClassifyMalformedFieldRead"/>;
     /// nullable properties read null either way and stay unmarked (missing and null merge, see
-    /// <c>NativeMalformedAggregateAndDistinctTests</c>). A root primary key is never missing.
+    /// <c>NativeMalformedAggregateAndDistinctTests</c>). A root primary key is never missing. Pinned per CLR shape:
+    /// <c>Distinct_over_a_missing_required_string_reads_null_as_main_did</c> and
+    /// <c>Distinct_over_a_required_byte_array_or_string_list_matches_main</c>.
     /// </remarks>
-    // Narrowed to string: the only reference-typed scalar this was designed and pinned for. A byte[] or primitive
-    // collection key has its own BSON shape (binary / array) whose marked flatten read is unaudited, so it keeps the
-    // previous (unmarked) behavior.
-    private static bool IsRequiredReferenceFieldKey(MongoExpression keyExpression)
+    private static bool IsRequiredReferenceTypedFieldKey(MongoExpression keyExpression)
         => keyExpression is MongoFieldExpression { Property: { IsNullable: false } property }
-           && property.ClrType == typeof(string)
+           && !property.ClrType.IsValueType
            && !property.IsPrimaryKey()
            && HasDefaultKeySerialization(property);
 

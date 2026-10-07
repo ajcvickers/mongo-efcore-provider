@@ -286,9 +286,9 @@ public class NativeMalformedAggregateAndDistinctTests(TemporaryDatabaseFixture d
     }
 
     /// <summary>
-    /// A projected <c>Distinct</c> over a required <i>reference-typed</i> stored field (<c>string</c>) whose element is
+    /// A projected <c>Distinct</c> over a required <c>string</c> stored field whose element is
     /// MISSING reads <see langword="null"/>, as a bare projection of it does (D-F10) and as main did. Its key part is
-    /// marked (<c>NativeGroupByBinder.IsRequiredReferenceFieldKey</c>); unmarked, the lone <c>$group</c> sub-key turned
+    /// marked (<c>NativeGroupByBinder.IsRequiredReferenceTypedFieldKey</c>); unmarked, the lone <c>$group</c> sub-key turned
     /// MISSING into an explicit null, which the property read rejects. An explicit null still throws natively.
     /// </summary>
     [Fact]
@@ -331,6 +331,56 @@ public class NativeMalformedAggregateAndDistinctTests(TemporaryDatabaseFixture d
                 var ex = Assert.Throws<InvalidOperationException>(() => Run(mode, includeNull: true, wrapped));
                 Assert.Contains("is null for required non-nullable property 'Label'", ex.Message);
             }
+        }
+    }
+
+    public class Blobbed
+    {
+        public ObjectId Id { get; set; }
+        public byte[] Blob { get; set; } = null!;
+        public List<string> Tags { get; set; } = null!;
+        public int Rank { get; set; }
+    }
+
+    /// <summary>
+    /// A projected <c>Distinct</c> over a required <c>byte[]</c> or primitive-collection (<c>List&lt;string&gt;</c>) field
+    /// whose element is MISSING reads <see langword="null"/>, as main did (marked key part,
+    /// <c>NativeGroupByBinder.IsRequiredReferenceTypedFieldKey</c>); unmarked it threw. Present values dedup as usual.
+    /// </summary>
+    [Fact]
+    public void Distinct_over_a_required_byte_array_or_string_list_matches_main()
+    {
+        var raw = database.MongoDatabase.GetCollection<BsonDocument>(
+            TemporaryDatabaseFixtureBase.CreateCollectionName(nameof(Distinct_over_a_required_byte_array_or_string_list_matches_main))
+            + Guid.NewGuid().ToString("N")[..8]);
+        raw.InsertMany(
+        [
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Blob", new BsonBinaryData([1, 2]) }, { "Tags", new BsonArray { "a", "b" } }, { "Rank", 1 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Blob", new BsonBinaryData([1, 2]) }, { "Tags", new BsonArray { "a", "b" } }, { "Rank", 2 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Blob", new BsonBinaryData([3]) }, { "Tags", new BsonArray { "c" } }, { "Rank", 3 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Rank", 4 } },
+        ]);
+        var collection = database.MongoDatabase.GetCollection<Blobbed>(raw.CollectionNamespace.CollectionName);
+
+        List<string> Run(MongoQueryMode mode, bool includeMissing, bool tags)
+        {
+            using var db = SingleEntityDbContext.Create(collection, optionsBuilderAction: b =>
+            {
+                b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+                new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
+            });
+            var rows = db.Entities.AsNoTracking().Where(x => includeMissing || x.Rank < 4);
+            var values = tags
+                ? rows.Select(x => x.Tags).Distinct().AsEnumerable().Select(t => t == null ? "<null>" : string.Join("|", t))
+                : rows.Select(x => x.Blob).Distinct().AsEnumerable().Select(v => v == null ? "<null>" : Convert.ToHexString(v));
+            return values.Order(StringComparer.Ordinal).ToList();
+        }
+
+        foreach (var tags in new[] { false, true })
+        {
+            Assert.Equal(tags ? ["a|b", "c"] : ["0102", "03"], NativeModeAssert.NativeAndParity(m => Run(m, includeMissing: false, tags)));
+            Assert.Equal(tags ? ["<null>", "a|b", "c"] : ["0102", "03", "<null>"],
+                NativeModeAssert.NativeAndParity(m => Run(m, includeMissing: true, tags)));
         }
     }
 
