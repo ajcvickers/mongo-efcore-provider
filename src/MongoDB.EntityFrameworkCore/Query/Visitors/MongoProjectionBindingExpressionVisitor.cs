@@ -579,6 +579,28 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             _ => false
         };
 
+    // The complex type `source` denotes when it is a chain of single complex-property hops (member or EF.Property
+    // spelling, through embedded owned references) over an entity shaper; null otherwise.
+    private static IComplexType? ResolveComplexHopType(Expression source)
+    {
+        source = source.RemoveConvert();
+        var (owner, name) = source switch
+        {
+            MemberExpression { Expression: { } memberOwner } member => (memberOwner, member.Member.Name),
+            MethodCallExpression call when call.TryGetEFPropertyArguments(out var callOwner, out var callName) => (callOwner, callName),
+            _ => (null, null)
+        };
+        if (owner == null)
+        {
+            return null;
+        }
+
+        ITypeBase? ownerType = (ITypeBase?)ResolveReadSource(owner) ?? ResolveComplexHopType(owner);
+        return ownerType?.FindComplexProperty(name!) is { IsCollection: false } complexProperty
+            ? complexProperty.ComplexType
+            : null;
+    }
+
     private static IEntityType ResolveReadSource(Expression source)
     {
         source = source.RemoveConvert();
@@ -921,6 +943,15 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
         if (methodCallExpression.TryGetEFPropertyArguments(out var source, out var memberName))
         {
+            // `EF.Property<T>(c.Address, "City")` / `EF.Property<T>(EF.Property<A>(c, "Address"), "City")`: a scalar of a
+            // complex type is a whole leaf, as its member spelling (`c.Address.City`) is in Visit. The navigation-only arm
+            // below would return null, which Translate folds to default(T) and silently yields null rows.
+            if (_queryExpression.Select.Route == NativeRoute.Projection
+                && ResolveComplexHopType(source)?.FindProperty(memberName) != null)
+            {
+                return BindWholeLeaf(methodCallExpression);
+            }
+
             var visitedSource = Visit(source);
 
             StructuralTypeShaperExpression shaperExpression;

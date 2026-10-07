@@ -1922,8 +1922,10 @@ internal static class NativeProjectionBinder
             // dotted alias is read back as a literal key but rendered nested), but `_v` is exactly the driver's own bare
             // alias, so an un-stripped fallback push-down writes the element the shaper reads. The shaper resolves the
             // leaf to its IProperty (TryResolveFieldAccess walks the hops), so D-F10 and the serializer apply. A
-            // non-default-serialized dotted leaf never gets here: TryTranslateLeaf declines it first.
-            case MongoFieldExpression field when field.ElementName.Contains('.'):
+            // non-default-serialized dotted leaf is excluded here as well as by TryTranslateLeaf (order-independent): the
+            // `_v` read must not depend on which arm declined a converter first.
+            case MongoFieldExpression field
+                when field.ElementName.Contains('.') && NativeGroupByBinder.HasDefaultKeySerialization(field.Property):
                 break;
 
             default:

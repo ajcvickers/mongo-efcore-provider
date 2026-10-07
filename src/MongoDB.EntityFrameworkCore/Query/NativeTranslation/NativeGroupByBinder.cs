@@ -1711,8 +1711,8 @@ internal static class NativeGroupByBinder
     }
 
     /// <summary>
-    /// Whether a projected <c>Distinct()</c> key is a bare stored field of a required (non-nullable) reference-typed
-    /// property, such as a required <c>string</c>. Its key part is marked, so a MISSING value stays MISSING through the
+    /// Whether a projected <c>Distinct()</c> key is a bare stored field of a required (non-nullable) <c>string</c>
+    /// property. Its key part is marked, so a MISSING value stays MISSING through the
     /// flatten instead of becoming the lone <c>$group</c> sub-key's null.
     /// </summary>
     /// <remarks>
@@ -1724,9 +1724,12 @@ internal static class NativeGroupByBinder
     /// nullable properties read null either way and stay unmarked (missing and null merge, see
     /// <c>NativeMalformedAggregateAndDistinctTests</c>). A root primary key is never missing.
     /// </remarks>
+    // Narrowed to string: the only reference-typed scalar this was designed and pinned for. A byte[] or primitive
+    // collection key has its own BSON shape (binary / array) whose marked flatten read is unaudited, so it keeps the
+    // previous (unmarked) behavior.
     private static bool IsRequiredReferenceFieldKey(MongoExpression keyExpression)
         => keyExpression is MongoFieldExpression { Property: { IsNullable: false } property }
-           && !property.ClrType.IsValueType
+           && property.ClrType == typeof(string)
            && !property.IsPrimaryKey()
            && HasDefaultKeySerialization(property);
 

@@ -214,7 +214,10 @@ Rendering (null/missing/dialect semantics):
 - **Complex-property leaves are stored scalars at a dotted path** (`StructuralPath`). The read side resolves the same
   hops (`MongoProjectionBindingRemovingExpressionVisitor.TryResolveComplexPropertyDocument`), so a leaf reads through its
   `IProperty` (D-F10, serializer); the EF-337 bridge refusal walks them too (`FindComplexLeafProperties`). A bare dotted
-  field (owned or complex hop) takes the Synthetic `_v` tier (`TryDeriveSyntheticAlias` gate 1f), never a dotted alias.
+  field (owned, complex or composite-key hop) takes the Synthetic `_v` tier (`TryDeriveSyntheticAlias` gate 1f; this
+  replaced the EF-362 owned-hop decline). The EF-362 bug (a dotted alias read back as a literal key but rendered
+  nested) can't recur: `_v` is never dotted and is what the driver's un-stripped fallback writes. Converted dotted
+  fields stay declined (gate 1f checks `HasDefaultKeySerialization`).
   A field under an optional complex parent is MISSING whenever the parent is null/absent: ordinary data, so a projected
   `Distinct` key over a required reference-typed field is marked (`NativeGroupByBinder.IsRequiredReferenceFieldKey`).
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized

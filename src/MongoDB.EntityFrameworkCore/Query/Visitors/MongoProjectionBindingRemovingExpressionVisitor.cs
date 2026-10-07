@@ -1411,6 +1411,15 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             {
                 return embeddedNavDocument.Value;
             }
+
+            // The EF.Property spelling of a complex-property hop (`EF.Property<Addr>(c, "Address")`), as in the
+            // member arm above.
+            var complexDocument = TryResolveComplexPropertyDocument(
+                navSource, navSource.EntityType?.FindComplexProperty(navPropertyName));
+            if (complexDocument != null)
+            {
+                return complexDocument.Value;
+            }
         }
 
         return (null, null);
