@@ -555,6 +555,54 @@ public class MongoModelValidator : ModelValidator
     }
 
     /// <summary>
+    /// Validate the element names of the scalar and complex properties declared directly on an entity type or
+    /// complex type, recursing into each complex property's complex type, whose elements live in its own subdocument.
+    /// </summary>
+    /// <param name="type">The entity type or complex type whose properties and complex properties are validated.</param>
+    /// <returns>The map of element names to the properties and complex properties of <paramref name="type"/>.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when naming rules are violated or duplicate names exist.</exception>
+    private static Dictionary<string, IPropertyBase> ValidateStructuralMemberElementNames(ITypeBase type)
+    {
+        var elementPropertyMap = new Dictionary<string, IPropertyBase>();
+
+        foreach (var member in type.GetProperties().Cast<IPropertyBase>().Concat(type.GetComplexProperties()))
+        {
+            var elementName = member is IComplexProperty complexProperty
+                ? complexProperty.GetElementName()
+                : ((IProperty)member).GetElementName();
+            if (string.IsNullOrWhiteSpace(elementName)) continue;
+
+            if (elementName.StartsWith("$"))
+            {
+                throw new InvalidOperationException(MemberOnType(member) + $" may not map to element '{elementName
+                }' as it starts with the reserved character '$'.");
+            }
+
+            if (elementName.Contains('.'))
+            {
+                throw new InvalidOperationException(MemberOnType(member) + $" may not map to element '{elementName
+                }' as it contains the reserved character '.'.");
+            }
+
+            if (elementPropertyMap.TryGetValue(elementName, out var otherProperty))
+            {
+                throw new InvalidOperationException(
+                    $"Properties '{member.Name}' and '{otherProperty.Name}' on {TypeKind(type)} '{type.DisplayName()
+                    }' are mapped to element '{elementName}'. Map one of them to a different BSON element.");
+            }
+
+            elementPropertyMap[elementName] = member;
+        }
+
+        foreach (var complexProperty in type.GetComplexProperties())
+        {
+            ValidateStructuralMemberElementNames(complexProperty.ComplexType);
+        }
+
+        return elementPropertyMap;
+    }
+
+    /// <summary>
     /// Validate that an entity has a valid primary key.
     /// </summary>
     /// <param name="entityType">The <see cref="IEntityType"/> to validate the primary key of.</param>
@@ -589,35 +637,7 @@ public class MongoModelValidator : ModelValidator
     /// <exception cref="InvalidOperationException">Thrown when naming rules are violated or duplicate names exist.</exception>
     private static void ValidateEntityElementNames(IEntityType entityType)
     {
-        var elementPropertyMap = new Dictionary<string, IPropertyBase>();
-
-        foreach (var property in entityType.GetProperties())
-        {
-            var elementName = property.GetElementName();
-            if (string.IsNullOrWhiteSpace(elementName)) continue;
-
-            if (elementName.StartsWith("$"))
-            {
-                throw new InvalidOperationException(PropertyOnEntity(property) + $" may not map to element '{elementName
-                }' as it starts with the reserved character '$'.");
-            }
-
-            if (elementName.Contains('.'))
-            {
-                throw new InvalidOperationException(PropertyOnEntity(property) + $" may not map to element '{elementName
-                }' as it contains the reserved character '.'.");
-            }
-
-            if (elementPropertyMap.TryGetValue(elementName, out var otherProperty))
-            {
-                throw new InvalidOperationException(
-                    $"Properties '{property.Name}' and '{otherProperty.Name}' on entity type '{entityType.DisplayName()
-                    }' are mapped to element '{elementName}'. Map one of them to a different BSON element.");
-            }
-
-            elementPropertyMap[elementName] = property;
-        }
-
+        var elementPropertyMap = ValidateStructuralMemberElementNames(entityType);
 
         var elementNavigationMap = new Dictionary<string, INavigation>();
 
@@ -742,6 +762,12 @@ public class MongoModelValidator : ModelValidator
             }
         }
     }
+
+    private static string MemberOnType(IPropertyBase member)
+        => $"{(member is IComplexProperty ? "Complex property" : "Property")} '{member.Name}' on {TypeKind(member.DeclaringType)} '{member.DeclaringType.DisplayName()}'";
+
+    private static string TypeKind(ITypeBase type)
+        => type is IEntityType ? "entity type" : "complex type";
 
     private static string PropertyOnEntity(IProperty property)
         => $"Property '{property.Name}' on entity type '{property.DeclaringType.DisplayName()}'";
