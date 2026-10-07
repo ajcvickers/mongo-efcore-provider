@@ -13,6 +13,10 @@ In scope, per EF version (the exact matrix is confirmed by the Phase 0 probe, se
 - Complex properties of class and struct type, nested to any depth, with `HasElementName` / `[BsonElement]` /
   `[BsonIgnore]` / `[BsonRequired]` / `[Column]` honored.
 - Optional (nullable) complex properties and complex collections, where the EF version supports them (EF10).
+- Reading (whole-type and leaf projection, predicates, ordering, grouping, aggregates, set operations,
+  `Include`-adjacent shapes where the complex type sits on an entity), and writing.
+- `ExecuteUpdate` / `ExecuteDelete` involving complex properties, **on the existing driver-LINQ bridge**
+  (owner decision: bulk operations stay on the bridge; retiring it is separate work).
 
 Measured per-version matrix (Phase 0 probe, `ComplexTypeFeatureMatrixTests`, provider convention set; Debug EF8/EF9/EF10):
 
@@ -23,10 +27,6 @@ Measured per-version matrix (Phase 0 probe, `ComplexTypeFeatureMatrixTests`, pro
 | Nested complex property | builds | builds | builds |
 | Optional (nullable reference) complex property | rejected (`InvalidOperationException`: optional not supported, call `IsRequired()`) | rejected (same) | builds |
 | Complex collection (`ComplexCollection`) | API absent (does not compile) | API absent (does not compile) | builds |
-- Reading (whole-type and leaf projection, predicates, ordering, grouping, aggregates, set operations,
-  `Include`-adjacent shapes where the complex type sits on an entity), and writing.
-- `ExecuteUpdate` / `ExecuteDelete` involving complex properties, **on the existing driver-LINQ bridge**
-  (owner decision: bulk operations stay on the bridge; retiring it is separate work).
 
 Out of scope: complex types as keys or foreign-key targets (EF does not allow them), JSON-column mapping
 concepts that do not exist for MongoDB, and any change to owned-type behavior.
