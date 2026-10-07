@@ -27,6 +27,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Options;
 using MongoDB.Bson.Serialization.Serializers;
+using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Metadata;
 
 namespace MongoDB.EntityFrameworkCore.Serializers;
@@ -65,6 +66,68 @@ public sealed class BsonSerializerFactory
 
     internal IBsonSerializer CreateEntitySerializer(IReadOnlyEntityType entityType) =>
         CreateGenericSerializer(typeof(EntitySerializer<>), [entityType.ClrType], entityType, this);
+
+    // Keyed by IReadOnlyComplexType, NOT by CLR type: EF gives every complex property its own complex type, so one
+    // CLR type used at two paths (Home and Work, both Address) is two IReadOnlyComplexType instances that can carry
+    // different element names and leaf configuration. Keying by CLR type would make the second path answer member
+    // lookups with the first path's element names.
+    private readonly ConcurrentDictionary<IReadOnlyComplexType, IBsonSerializer> _complexTypeSerializersCache = new();
+
+    // Property-level serializer (the element serializer itself, or the Nullable<>/collection serializer wrapping it).
+    // A complex type belongs to exactly one complex property (IReadOnlyComplexType.ComplexProperty), so this is
+    // equally a per-complex-type cache; it is keyed by the property because that is what the wrapper depends on.
+    private readonly ConcurrentDictionary<IReadOnlyComplexProperty, IBsonSerializer> _complexPropertySerializersCache = new();
+
+    /// <summary>
+    /// The serializer for one value of <paramref name="complexType"/> (one subdocument), answering member lookups for
+    /// its leaf and nested complex properties.
+    /// </summary>
+    internal IBsonSerializer GetComplexTypeSerializer(IReadOnlyComplexType complexType)
+        => _complexTypeSerializersCache.GetOrAdd(complexType, CreateComplexTypeSerializer);
+
+    private IBsonSerializer CreateComplexTypeSerializer(IReadOnlyComplexType complexType)
+        => CreateGenericSerializer(typeof(ComplexTypeSerializer<>), [complexType.ClrType], complexType, this);
+
+    /// <summary>
+    /// The serializer for the value of <paramref name="complexProperty"/>: the complex-type serializer for a single
+    /// complex property (wrapped in <see cref="NullableSerializer{T}"/> for an optional struct), or a collection
+    /// serializer over it for a complex collection.
+    /// </summary>
+    internal IBsonSerializer GetComplexPropertySerializer(IReadOnlyComplexProperty complexProperty)
+        => _complexPropertySerializersCache.GetOrAdd(complexProperty, CreateComplexPropertySerializer);
+
+    private IBsonSerializer CreateComplexPropertySerializer(IReadOnlyComplexProperty complexProperty)
+    {
+        var elementSerializer = GetComplexTypeSerializer(complexProperty.ComplexType);
+        var type = complexProperty.ClrType;
+
+        if (complexProperty.IsEmbeddedCollection())
+        {
+            if (type.IsArray)
+            {
+                return GetArraySerializer(type, WrapNullable(type.GetElementType()!, elementSerializer));
+            }
+
+            var itemType = type.TryGetItemType(typeof(IEnumerable<>))
+                           ?? throw new NotSupportedException($"Unsupported complex collection type '{type.ShortDisplayName()}'.");
+            return GetCollectionSerializer(type, WrapNullable(itemType, elementSerializer));
+        }
+
+        return WrapNullable(type, elementSerializer);
+
+        // An optional struct complex property (Pt?) or a collection of them is typed Nullable<Pt>; the complex type
+        // itself is Pt. Wrap rather than build the complex serializer over Nullable<>.
+        static IBsonSerializer WrapNullable(Type valueType, IBsonSerializer serializer)
+            => Nullable.GetUnderlyingType(valueType) is { } underlying && underlying == serializer.ValueType
+                ? CreateGenericSerializer(typeof(NullableSerializer<>), [underlying], serializer)
+                : serializer;
+    }
+
+    /// <summary>
+    /// Where <paramref name="complexProperty"/> is stored (its element name) and the serializer for its value.
+    /// </summary>
+    internal BsonSerializationInfo GetComplexPropertySerializationInfo(IReadOnlyComplexProperty complexProperty)
+        => new(complexProperty.GetElementName(), GetComplexPropertySerializer(complexProperty), complexProperty.ClrType);
 
     /// <summary>
     /// Reads a native <c>DateTime.TimeOfDay</c> projection leaf, which the server computes as a whole number of
