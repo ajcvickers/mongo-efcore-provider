@@ -315,6 +315,23 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
     }
 
     [Fact]
+    public void Select_EF_Property_spellings_of_complex_leaves()
+    {
+        var collection = SeedRich();
+        NativeModeAssert.NativeAndExpected(m => Rich(collection, m, q => q.OrderBy(c => c.Name)
+                .Select(c => new { c.Name, City = EF.Property<string>(EF.Property<RichAddress>(c, "Address"), "City") }).ToList()
+                .Select(x => x.Name + ":" + x.City)),
+            ["Ann:Paris", "Bob:London", "Cid:Paris", "Dee:Berlin", "Eve:Amsterdam"]);
+        NativeModeAssert.NativeAndExpected(m => Rich(collection, m, q => q.OrderBy(c => c.Name)
+                .Select(c => EF.Property<RichAddress>(c, "Address").Location.Lon)),
+            [10.0, 20.0, 10.0, 30.0, 40.0]);
+        NativeModeAssert.NativeAndExpected(m => Rich(collection, m, q => q
+                .Where(c => EF.Property<string>(EF.Property<RichAddress>(c, "Address"), "City") == "Paris")
+                .OrderBy(c => c.Name).Select(c => c.Name)),
+            ["Ann", "Cid"]);
+    }
+
+    [Fact]
     public void Select_computed_over_complex_leaves()
     {
         var results = Parity(q => q.OrderBy(c => c.Name)
@@ -706,8 +723,30 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
             ["where_city_ne"] = (q => q.Where(c => c.Address!.City != "a").OrderBy(c => c.Name).Select(c => c.Name), ["D", "Missing", "Null"]),
             ["groupby_city"] = (q => q.GroupBy(c => c.Address!.City).Select(g => new { g.Key, C = g.Count() }).ToList()
                 .Select(x => (x.Key ?? "<null>") + ":" + x.C).OrderBy(x => x), ["<null>:2", "a:1", "d:1"]),
+            // EF.Property spellings of the hop (MongoProjectionBindingExpressionVisitor binds a complex leaf whole; the read
+            // side's TryResolveFieldAccessSource EF.Property arm resolves the complex hop). Before this slice the nested
+            // spelling went native and returned NULL ROWS (the binder folded the selector to default(T)).
+            ["efprop_hop_anon"] = (q => q.OrderBy(c => c.Name)
+                .Select(c => new { c.Name, City = EF.Property<string>(EF.Property<ComplexAddress>(c, "Address"), "City") }).ToList()
+                .Select(x => x.Name + ":" + (x.City ?? "<null>")),
+                ["A:a", "D:d", "Missing:<null>", "Null:<null>"]),
+            ["efprop_hop_bare_lat"] = (q => q.OrderBy(c => c.Name)
+                .Select(c => new { EF.Property<ComplexAddress>(c, "Address").Location.Lat }).ToList().Select(x => x.Lat.ToString()),
+                ["1", "3", "0", "0"]),
             ["count_lat_lt"] = (q => new[] { q.Count(c => c.Address!.Location.Lat < 2).ToString() }, ["1"]),
         };
+
+    [Fact]
+    public void Optional_parent_EF_Property_leaf_over_a_member_hop_declines_cleanly()
+    {
+        // `EF.Property<double>(c.Address!.Location, "Lat")` has no native field resolution yet (the member-hop receiver
+        // under EF.Property is not a chain TryResolveOwnedFieldPath accepts); it declines and the fallback reads default
+        // for the missing/null parent. Follow-up: Task 10 projection work.
+        var collection = SeedOptional(nameof(Optional_parent_EF_Property_leaf_over_a_member_hop_declines_cleanly));
+        Assert.Equal(["A:1", "D:3", "Missing:0", "Null:0"], NativeModeAssert.DeclinesCleanly(m => Optional(collection, m,
+            q => q.OrderBy(c => c.Name).Select(c => new { c.Name, Lat = EF.Property<double>(c.Address!.Location, "Lat") }).ToList()
+                .Select(x => x.Name + ":" + x.Lat))));
+    }
 
     public static TheoryData<string> OptionalParentShapeNames => [.. OptionalParentShapes.Keys];
 
@@ -720,7 +759,9 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
 
         NativeModeAssert.NativeAndExpected(m => Optional(collection, m, run), [.. expected]);
     }
+
 #endif
+
 
     private static string UniqueName(string name)
         => TemporaryDatabaseFixtureBase.CreateCollectionName(name) + Guid.NewGuid().ToString("N")[..8];

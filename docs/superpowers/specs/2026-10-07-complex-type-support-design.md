@@ -31,6 +31,16 @@ Measured per-version matrix (Phase 0 probe, `ComplexTypeFeatureMatrixTests`, pro
 Out of scope: complex types as keys or foreign-key targets (EF does not allow them), JSON-column mapping
 concepts that do not exist for MongoDB, and any change to owned-type behavior.
 
+**Owner-approved exceptions to "no owned-type behavior change"** (ruling R6, Task 9):
+
+- (a) A bare projection of a dotted stored field (`Select(b => b.Home.City)`, multi-hop owned, composite-key component)
+  now goes native under the driver's own bare alias `_v`, replacing the EF-362 decline: the decline existed only because
+  a dotted alias can't round-trip, which `_v` avoids, and the shared read path is what complex leaves need.
+- (b) A projected `Distinct` over a required `string` field whose element is MISSING reads `null`, as main did, instead
+  of throwing: the same `$group` missing-marker fix that optional complex parents need. It changes the MQL baselines of
+  `NorthwindSetOperationsQueryMongoTest.Union_on_distinct`, `Intersect_on_distinct` and `Except_on_distinct`
+  (`CompanyName__isMissing`).
+
 ## Constraints
 
 - No new driver-LINQ query paths. `MongoQueryMode.NativeOnly` is the oracle for every query test.
