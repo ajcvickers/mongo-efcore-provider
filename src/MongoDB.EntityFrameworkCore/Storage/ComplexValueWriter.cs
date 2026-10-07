@@ -55,6 +55,32 @@ internal static class ComplexValueWriter
     /// entity path passes <c>_ => true</c>, which therefore writes everything. Entries in the
     /// <see cref="EntityState.Added"/> state are always written whole.
     /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>How EF reports complex changes (measured on EF 8.0.30, 9.0.19 and 10.0.11; identical on all three, so
+    /// there is no <c>#if</c> here).</b> A non-collection complex property has no entry of its own: its leaves are
+    /// properties of the owning entry, snapshotted and compared by <c>DetectChanges</c> like any scalar.
+    /// </para>
+    /// <list type="bullet">
+    /// <item>Changing a leaf (<c>Address.City</c>) marks exactly that leaf modified (<c>IUpdateEntry.IsModified(IProperty)</c>
+    /// and <c>Entry(e).ComplexProperty(...).Property(...).IsModified</c> agree), leaves its siblings unmodified, and
+    /// moves the owning entry to <see cref="EntityState.Modified"/>, so <c>MongoUpdate.ConvertModified</c> runs.</item>
+    /// <item>A nested struct leaf changed by copy, mutate, assign back (<c>Location.Lat</c>) marks only that nested
+    /// leaf. Replacing the whole complex instance marks only the leaves whose values differ from the snapshot; an
+    /// equal-valued replacement is no change at all (the entry stays <see cref="EntityState.Unchanged"/>).</item>
+    /// <item>After <c>SaveChanges</c> the leaves are accepted, so a second <c>SaveChanges</c> sends no command.</item>
+    /// </list>
+    /// <para>
+    /// The pipeline therefore does pass per-leaf <c>IsModified</c>, but the brief's decision rule still applies:
+    /// a <c>$set</c> of a partial subdocument would replace the stored one and drop the untouched leaves, so any
+    /// modified leaf rewrites the <b>whole</b> top-level complex property. (Dotted <c>$set</c> paths per leaf would
+    /// be a later optimization, not a correctness requirement.)
+    /// </para>
+    /// <para>
+    /// <b>Shadow leaves.</b> EF10 rejects shadow properties on complex types at model building. EF8/EF9 accept them;
+    /// they have no CLR member, so their value is read from the owning entry instead of the instance getter.
+    /// </para>
+    /// </remarks>
     internal static void WriteComplexProperties(IBsonWriter writer, IUpdateEntry entry, Func<IProperty, bool>? propertyFilter)
     {
         // An Added entry is always written whole, whatever filter the caller passed (the owned-entity path passes
@@ -68,11 +94,11 @@ internal static class ComplexValueWriter
                 continue;
             }
 
-            WriteComplexValue(writer, complexProperty, entry.GetCurrentValue(complexProperty));
+            WriteComplexValue(writer, entry, complexProperty, entry.GetCurrentValue(complexProperty));
         }
     }
 
-    private static void WriteComplexValue(IBsonWriter writer, IComplexProperty complexProperty, object? value)
+    private static void WriteComplexValue(IBsonWriter writer, IUpdateEntry entry, IComplexProperty complexProperty, object? value)
     {
         writer.WriteName(complexProperty.GetElementName());
 
@@ -97,7 +123,7 @@ internal static class ComplexValueWriter
                 }
                 else
                 {
-                    WriteSubdocument(writer, complexProperty.ComplexType, element);
+                    WriteSubdocument(writer, entry, complexProperty.ComplexType, element);
                 }
             }
 
@@ -105,27 +131,40 @@ internal static class ComplexValueWriter
             return;
         }
 
-        WriteSubdocument(writer, complexProperty.ComplexType, value);
+        WriteSubdocument(writer, entry, complexProperty.ComplexType, value);
     }
 
-    private static void WriteSubdocument(IBsonWriter writer, IComplexType complexType, object instance)
+    private static void WriteSubdocument(IBsonWriter writer, IUpdateEntry entry, IComplexType complexType, object instance)
     {
         writer.WriteStartDocument();
 
-        foreach (var property in complexType.GetProperties())
+        // An empty element name means "not stored", exactly as for top-level scalars in
+        // MongoUpdate.WriteNonKeyProperties. Model validation skips (does not reject) empty names, so the writer
+        // has to honor it rather than write an element named "".
+        foreach (var property in complexType.GetProperties().Where(p => p.GetElementName() != ""))
         {
             var serializationInfo = BsonSerializerFactory.GetPropertySerializationInfo(property);
-            writer.WriteName(serializationInfo.ElementName);
-            serializationInfo.Serializer.Serialize(BsonSerializationContext.CreateRoot(writer), property.GetGetter().GetClrValue(instance));
+            writer.WriteName(serializationInfo.ElementPath?.Last() ?? serializationInfo.ElementName);
+            serializationInfo.Serializer.Serialize(BsonSerializationContext.CreateRoot(writer), GetValue(entry, property, instance));
         }
 
         foreach (var nested in complexType.GetComplexProperties())
         {
-            WriteComplexValue(writer, nested, nested.GetGetter().GetClrValue(instance));
+            WriteComplexValue(writer, entry, nested, GetValue(entry, nested, instance));
         }
 
         writer.WriteEndDocument();
     }
+
+    /// <summary>
+    /// The value of a member of a complex instance. Shadow members (possible on EF8/EF9 only; EF10 rejects them on
+    /// complex types) have no CLR getter, so they come from the owning entry, which tracks the leaves of a
+    /// non-collection complex property. Complex collection elements (EF10) never reach the shadow branch.
+    /// </summary>
+    private static object? GetValue(IUpdateEntry entry, IPropertyBase member, object instance)
+        => member.IsShadowProperty()
+            ? entry.GetCurrentValue(member)
+            : member.GetGetter().GetClrValue(instance);
 
     private static bool AnyLeafPasses(IComplexProperty complexProperty, Func<IProperty, bool> propertyFilter)
     {
