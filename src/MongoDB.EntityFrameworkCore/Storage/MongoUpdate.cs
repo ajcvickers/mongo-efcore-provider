@@ -130,7 +130,10 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
 
     private static void WriteEntity(IBsonWriter writer, IUpdateEntry entry, Func<IProperty, bool>? propertyFilter = null)
     {
-        if (propertyFilter == null && entry.EntityState == EntityState.Modified)
+        // Only the entry's own Modified pass writes just what changed. Inserts (no filter) and owned dependents
+        // (_ => true, because their whole subdocument is rewritten as part of the owner) write everything.
+        var onlyModified = propertyFilter == null && entry.EntityState == EntityState.Modified;
+        if (onlyModified)
         {
             propertyFilter = entry.IsModified;
         }
@@ -139,7 +142,7 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
         WriteKeyProperties(writer, entry);
         WriteNonKeyProperties(writer, entry, propertyFilter);
         WriteOwnedEntities(writer, entry);
-        ComplexValueWriter.WriteComplexProperties(writer, entry, propertyFilter);
+        ComplexValueWriter.WriteComplexProperties(writer, entry, onlyModified);
         writer.WriteEndDocument();
     }
 

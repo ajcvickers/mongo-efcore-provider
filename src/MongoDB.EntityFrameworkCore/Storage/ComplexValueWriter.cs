@@ -48,18 +48,26 @@ internal static class ComplexValueWriter
     /// </summary>
     /// <param name="writer">The writer positioned inside the entry's document.</param>
     /// <param name="entry">The entry that owns the complex properties.</param>
-    /// <param name="propertyFilter">
-    /// <see langword="null"/> (insert) writes every complex property. Otherwise a complex property is written only
-    /// when at least one of its leaves (at any nesting depth) passes the filter, and it is then written
-    /// <b>whole</b>: a partial subdocument would be sent in a <c>$set</c> and drop the untouched leaves. The owned
-    /// entity path passes <c>_ => true</c>, which therefore writes everything. Entries in the
-    /// <see cref="EntityState.Added"/> state are always written whole.
+    /// <param name="onlyModified">
+    /// <see langword="false"/> writes every complex property: inserts, and owned dependents, whose whole
+    /// subdocument is rewritten as part of their owner (<c>WriteEntity(_ => true)</c>). <see langword="true"/> (the
+    /// entry's own <see cref="EntityState.Modified"/> pass, which goes out as a <c>$set</c>) writes a complex
+    /// property only when EF reports a change anywhere inside it (see <see cref="IsChanged"/>), and then writes it
+    /// <b>whole</b>: a partial subdocument in a <c>$set</c> would replace the stored one and drop the untouched
+    /// leaves. A complex property with no change is skipped.
     /// </param>
     /// <remarks>
     /// <para>
-    /// <b>How EF reports complex changes (measured on EF 8.0.30, 9.0.19 and 10.0.11; identical on all three, so
-    /// there is no <c>#if</c> here).</b> A non-collection complex property has no entry of its own: its leaves are
-    /// properties of the owning entry, snapshotted and compared by <c>DetectChanges</c> like any scalar.
+    /// <b>Cost of the whole rewrite.</b> The unit of update is the top-level complex property (subdocument or
+    /// array), not the leaf: if another writer changed a sibling leaf (or another element) of the same complex
+    /// property since this context read it, that change is overwritten. Last writer wins per complex property, the
+    /// same as for owned entities. Dotted per-leaf <c>$set</c> paths would narrow this and are a possible later
+    /// optimization, not a correctness requirement.
+    /// </para>
+    /// <para>
+    /// <b>How EF reports non-collection complex changes (measured on EF 8.0.30, 9.0.19 and 10.0.11; identical on
+    /// all three).</b> A non-collection complex property has no entry of its own: its leaves are properties of the
+    /// owning entry, snapshotted and compared by <c>DetectChanges</c> like any scalar.
     /// </para>
     /// <list type="bullet">
     /// <item>Changing a leaf (<c>Address.City</c>) marks exactly that leaf modified (<c>IUpdateEntry.IsModified(IProperty)</c>
@@ -71,25 +79,43 @@ internal static class ComplexValueWriter
     /// <item>After <c>SaveChanges</c> the leaves are accepted, so a second <c>SaveChanges</c> sends no command.</item>
     /// </list>
     /// <para>
-    /// The pipeline therefore does pass per-leaf <c>IsModified</c>, but the brief's decision rule still applies:
-    /// a <c>$set</c> of a partial subdocument would replace the stored one and drop the untouched leaves, so any
-    /// modified leaf rewrites the <b>whole</b> top-level complex property. (Dotted <c>$set</c> paths per leaf would
-    /// be a later optimization, not a correctness requirement.)
+    /// <b>Optional complex properties and complex collections (EF10 only; EF8/EF9 reject optional complex
+    /// properties and have no <c>ComplexCollection</c>). Measured on EF 10.0.11.</b>
     /// </para>
+    /// <list type="bullet">
+    /// <item>Optional value to <see langword="null"/> and <see langword="null"/> to value mark the leaves modified
+    /// (including a value whose leaves are all CLR defaults) and the root <see cref="EntityState.Modified"/>; the
+    /// property is written whole, or as BSON <c>null</c> (an element present with a null value, matching a null
+    /// owned reference in <c>WriteOwnedEntities</c>). <see langword="null"/> to <see langword="null"/> is no change.
+    /// A null <b>required</b> complex property or collection is rejected by EF itself on <c>SaveChanges</c>
+    /// (<see cref="InvalidOperationException"/> "configured as required (non-nullable) but has a null value").</item>
+    /// <item>Complex collection elements get their own (complex) entries, so their leaves are <b>not</b> properties
+    /// of the owning entry: <c>IUpdateEntry.IsModified(IProperty)</c> with an element leaf throws ("belongs to the
+    /// type '...Addresses#ComplexAddress', but is being used with an instance of type '...'"). The collection is
+    /// asked as a whole through <c>IUpdateEntry.IsModified(IComplexProperty)</c> (EF10 API), which agrees with
+    /// <c>Entry(e).ComplexCollection(...).IsModified</c>.</item>
+    /// <item>Every kind of collection change (an element leaf edited in place, a nested struct leaf in an element,
+    /// an element added, removed or set to null, the list reordered or cleared, the list instance replaced by a
+    /// different one) makes the collection modified <b>and moves the root entry to</b>
+    /// <see cref="EntityState.Modified"/>: a change only inside a collection is not dropped. Replacing the list with
+    /// an equal-valued one is no change. A scalar-only change leaves the collection unmodified (it is skipped).</item>
+    /// <item>A collection nested inside a non-collection complex property reports through the parent too, and
+    /// inside a collection element through the outer collection. In an owned dependent, a change only inside the
+    /// dependent's collection marks the dependent Modified and leaves the root Unchanged; the root is promoted by
+    /// <c>MongoDatabaseWrapper.GetAllChangedRootEntries</c> and the owned subdocument is rewritten whole.</item>
+    /// <item>An empty collection is stored as <c>[]</c>, a null element as BSON <c>null</c>, and a null optional
+    /// collection (<c>IsRequired(false)</c>) as BSON <c>null</c>.</item>
+    /// </list>
     /// <para>
     /// <b>Shadow leaves.</b> EF10 rejects shadow properties on complex types at model building. EF8/EF9 accept them;
     /// they have no CLR member, so their value is read from the owning entry instead of the instance getter.
     /// </para>
     /// </remarks>
-    internal static void WriteComplexProperties(IBsonWriter writer, IUpdateEntry entry, Func<IProperty, bool>? propertyFilter)
+    internal static void WriteComplexProperties(IBsonWriter writer, IUpdateEntry entry, bool onlyModified)
     {
-        // An Added entry is always written whole, whatever filter the caller passed (the owned-entity path passes
-        // _ => true for Added dependents too).
-        var writeAll = propertyFilter == null || entry.EntityState == EntityState.Added;
-
         foreach (var complexProperty in entry.EntityType.GetComplexProperties())
         {
-            if (!writeAll && !AnyLeafPasses(complexProperty, propertyFilter!))
+            if (onlyModified && !IsChanged(entry, complexProperty))
             {
                 continue;
             }
@@ -166,21 +192,24 @@ internal static class ComplexValueWriter
             ? entry.GetCurrentValue(member)
             : member.GetGetter().GetClrValue(instance);
 
-    private static bool AnyLeafPasses(IComplexProperty complexProperty, Func<IProperty, bool> propertyFilter)
+    /// <summary>
+    /// Whether EF reports a change anywhere inside <paramref name="complexProperty"/> on <paramref name="entry"/>:
+    /// a modified leaf at any depth of the non-collection part, or (EF10) a modified complex collection at any depth
+    /// of the non-collection part. A collection's own elements are not walked: their leaves belong to per-element
+    /// entries, and the collection's modified flag already covers every change inside it, including changes in
+    /// collections nested in its elements.
+    /// </summary>
+    private static bool IsChanged(IUpdateEntry entry, IComplexProperty complexProperty)
     {
+#if !EF8 && !EF9
         if (complexProperty.IsEmbeddedCollection())
         {
-            // The leaves of a complex collection belong to per-element entries (EF10), so the owning entry's
-            // per-property modified filter cannot be asked about them. Detecting a modified collection (and
-            // rewriting the whole array) is scheduled with complex collection updates; until then fail loudly
-            // rather than silently skip or blindly overwrite the stored array.
-            throw new NotSupportedException(
-                $"Updating an entity with the complex collection '{complexProperty.DeclaringType.DisplayName()}.{complexProperty.Name}' "
-                + "is not yet supported by the MongoDB EF Core provider.");
+            return entry.IsModified(complexProperty);
         }
+#endif
 
         var complexType = complexProperty.ComplexType;
-        return complexType.GetProperties().Any(propertyFilter)
-               || complexType.GetComplexProperties().Any(nested => AnyLeafPasses(nested, propertyFilter));
+        return complexType.GetProperties().Any(entry.IsModified)
+               || complexType.GetComplexProperties().Any(nested => IsChanged(entry, nested));
     }
 }
