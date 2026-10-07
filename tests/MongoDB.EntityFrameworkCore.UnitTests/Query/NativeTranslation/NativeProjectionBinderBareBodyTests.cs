@@ -150,19 +150,21 @@ public class NativeProjectionBinderBareBodyTests
     }
 
     [Fact]
-    public void Bare_owned_hop_scalar_is_declined_and_leaves_no_override()
+    public void Bare_owned_hop_scalar_is_admitted_under_the_reserved_alias_and_the_synthetic_tier()
     {
         var mongoQ = TestQuery();
         Expression<Func<Order, string>> selector = o => o.Address.City;
 
-        // The leaf resolves to the dotted path "Address.City", but a dotted alias is read back as a literal key
-        // while `$project: {"Address.City": …}` renders nested output, so tier 1 requires a non-dotted path.
-        Assert.False(NativeProjectionBinder.TryPopulateNativeProjection(mongoQ, selector));
+        // The leaf resolves to the dotted path "Address.City". A dotted alias is read back as a literal key while
+        // `$project: {"Address.City": …}` renders nested output, so tier 1 declines it; tier 2 stages it under the
+        // driver's own bare alias `_v` (gate 1f), which the un-stripped fallback push-down also writes.
+        Assert.True(NativeProjectionBinder.TryPopulateNativeProjection(mongoQ, selector));
 
-        Assert.Empty(mongoQ.Select.Projection);
-        Assert.False(mongoQ.Select.IsBareProjection);
-        Assert.Null(mongoQ.Select.BareProjectionTier);
-        Assert.False(mongoQ.Select.TryGetProjectionAlias(null, out _));
+        var projection = Assert.Single(mongoQ.Select.Projection);
+        Assert.Equal("_v", projection.Alias);
+        Assert.Equal("Address.City", Assert.IsType<MongoFieldExpression>(projection.Expression).ElementName);
+        Assert.True(mongoQ.Select.IsBareProjection);
+        Assert.Equal(ProjectionAliasTier.Synthetic, mongoQ.Select.BareProjectionTier);
     }
 
     // Tier 2: a computed bare leaf under the reserved `_v` alias. The tier is asserted, not just the alias: the

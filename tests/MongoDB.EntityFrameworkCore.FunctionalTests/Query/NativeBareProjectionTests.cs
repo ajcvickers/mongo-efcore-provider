@@ -63,7 +63,7 @@ public class NativeBareProjectionTests(TemporaryDatabaseFixture database) : ICla
         mb.Entity<Blog>().OwnsMany(b => b.Posts, p => p.HasKey(x => x.PostId));
 
     // Owned-hop scalar: the document path is dotted ("Home.City"), which a $project alias can't round-trip
-    // (read back as a literal key, rendered as a nested document), so the bare arm declines. See EF-362.
+    // (read back as a literal key, rendered as a nested document), so the bare arm takes the synthetic `_v` alias.
     public class HopBlog
     {
         public ObjectId Id { get; set; }
@@ -378,26 +378,31 @@ public class NativeBareProjectionTests(TemporaryDatabaseFixture database) : ICla
                 .Select(b => b.Title)));
     }
 
-    // ── 13. Owned-hop scalar declines (EF-362) ────────────────────────────────────
+    // ── 13. Owned-hop scalar goes native under the synthetic alias ───────────────
 
     [Fact]
-    public void Bare_owned_hop_scalar_projection_declines()
+    public void Bare_owned_hop_scalar_projection_goes_native_under_the_synthetic_alias()
     {
-        var collection = SeedHop(nameof(Bare_owned_hop_scalar_projection_declines));
+        var collection = SeedHop(nameof(Bare_owned_hop_scalar_projection_goes_native_under_the_synthetic_alias));
 
-        // Deliberate decline: a dotted alias ("Home.City") is read by the shaper as a literal key but rendered by
-        // $project as a nested document.
-        foreach (var mode in new[] {MongoQueryMode.Native, MongoQueryMode.DriverLinq})
-        {
-            using var db = CreateHopContext(collection, mode);
-            Assert.Equal(
-                ["Bristol", "Cardiff"],
-                db.Entities.AsNoTracking().OrderBy(b => b.Title).Select(b => b.Home.City).ToList());
-        }
+        // A dotted document path ("Home.City") can't be its own $project alias (read back as a literal key, rendered
+        // nested), so it takes the driver's bare alias `_v` (NativeProjectionBinder.TryDeriveSyntheticAlias, gate 1f):
+        // native and an un-stripped fallback both write `_v`. Formerly a deliberate decline (EF-362).
+        Assert.Equal(
+            ["Bristol", "Cardiff"],
+            NativeModeAssert.NativeAndParity(mode =>
+            {
+                using var db = CreateHopContext(collection, mode);
+                return db.Entities.AsNoTracking().OrderBy(b => b.Title).Select(b => b.Home.City).ToList();
+            }));
 
-        using var nativeOnly = CreateHopContext(collection, MongoQueryMode.NativeOnly);
-        Assert.Throws<NativeTranslationNotSupportedException>(
-            () => nativeOnly.Entities.AsNoTracking().OrderBy(b => b.Title).Select(b => b.Home.City).ToList());
+        // Late fallback: a parameterized StartsWith makes the native factory decline under Native, so the `_v`
+        // push-down runs on driver-LINQ through the same shaper.
+        var prefix = "B";
+        using var native = CreateHopContext(collection, MongoQueryMode.Native);
+        Assert.Equal(
+            ["Bristol"],
+            native.Entities.AsNoTracking().Where(b => b.Home.City.StartsWith(prefix)).Select(b => b.Home.City).ToList());
     }
 
     // ── 14. Bare entity: the positive control ─────────────────────────────────────

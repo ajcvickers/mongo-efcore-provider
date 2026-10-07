@@ -278,6 +278,62 @@ public class NativeMalformedAggregateAndDistinctTests(TemporaryDatabaseFixture d
         }
     }
 
+    public class Labelled
+    {
+        public ObjectId Id { get; set; }
+        public string Label { get; set; } = null!;
+        public int Rank { get; set; }
+    }
+
+    /// <summary>
+    /// A projected <c>Distinct</c> over a required <i>reference-typed</i> stored field (<c>string</c>) whose element is
+    /// MISSING reads <see langword="null"/>, as a bare projection of it does (D-F10) and as main did. Its key part is
+    /// marked (<c>NativeGroupByBinder.IsRequiredReferenceFieldKey</c>); unmarked, the lone <c>$group</c> sub-key turned
+    /// MISSING into an explicit null, which the property read rejects. An explicit null still throws natively.
+    /// </summary>
+    [Fact]
+    public void Distinct_over_a_missing_required_string_reads_null_as_main_did()
+    {
+        var raw = database.MongoDatabase.GetCollection<BsonDocument>(
+            TemporaryDatabaseFixtureBase.CreateCollectionName(nameof(Distinct_over_a_missing_required_string_reads_null_as_main_did))
+            + Guid.NewGuid().ToString("N")[..8]);
+        raw.InsertMany(
+        [
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Label", "x" }, { "Rank", 1 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Label", "x" }, { "Rank", 2 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Rank", 3 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Label", BsonNull.Value }, { "Rank", 4 } },
+        ]);
+        var collection = database.MongoDatabase.GetCollection<Labelled>(raw.CollectionNamespace.CollectionName);
+
+        List<string> Run(MongoQueryMode mode, bool includeNull, bool wrapped)
+        {
+            using var db = SingleEntityDbContext.Create(collection, optionsBuilderAction: b =>
+            {
+                b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+                new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
+            });
+            var rows = db.Entities.AsNoTracking().Where(x => includeNull || x.Rank < 4);
+            var values = wrapped
+                ? rows.Select(x => new { x.Label }).Distinct().AsEnumerable().Select(a => a.Label)
+                : rows.Select(x => x.Label).Distinct().AsEnumerable();
+            return values.Select(v => v ?? "<null>").Order(StringComparer.Ordinal).ToList();
+        }
+
+        foreach (var wrapped in new[] { false, true })
+        {
+            Assert.Equal(["<null>", "x"], NativeModeAssert.NativeAndParity(m => Run(m, includeNull: false, wrapped)));
+
+            // An explicit null throws natively (D-F10's explicit-null rule, as for the bare projection). Driver-LINQ reads
+            // a reference-typed null as null instead; that pre-existing difference is outside this fix.
+            foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native })
+            {
+                var ex = Assert.Throws<InvalidOperationException>(() => Run(mode, includeNull: true, wrapped));
+                Assert.Contains("is null for required non-nullable property 'Label'", ex.Message);
+            }
+        }
+    }
+
     private static List<string> RunPerRowSet(
         IMongoCollection<Item> collection, MongoQueryMode mode, Func<IQueryable<Item>, string> run, string[] expected)
     {
