@@ -406,26 +406,5 @@ public class ComplexTypeWriteTests(TemporaryDatabaseFixture database)
 
         Assert.Equal(new BsonArray(), ReadSingleRaw(collection)["Addresses"]);
     }
-
-    [Fact]
-    public void Update_of_entity_with_complex_collection_is_rejected_until_supported()
-    {
-        // Guard: the modified-entry path cannot yet tell whether a complex collection changed, so it throws rather
-        // than silently dropping or overwriting the stored array. Replaced when complex-collection updates land.
-        var collection = database.CreateCollection<CustomerWithAddressList>();
-        var customer = new CustomerWithAddressList
-        {
-            Name = "Eve", Addresses = [new ComplexAddress { Street = "A", City = "X" }]
-        };
-
-        using var db = SingleEntityDbContext.Create(collection,
-            mb => mb.Entity<CustomerWithAddressList>().ComplexCollection(c => c.Addresses, a => a.ComplexProperty(x => x.Location)));
-        db.Entities.Add(customer);
-        db.SaveChanges();
-
-        customer.Name = "Eve2";
-        var ex = Assert.Throws<NotSupportedException>(() => db.SaveChanges());
-        Assert.Contains("Addresses", ex.Message);
-    }
 #endif
 }
