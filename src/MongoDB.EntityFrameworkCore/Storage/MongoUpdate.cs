@@ -139,6 +139,7 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
         WriteKeyProperties(writer, entry);
         WriteNonKeyProperties(writer, entry, propertyFilter);
         WriteOwnedEntities(writer, entry);
+        ComplexValueWriter.WriteComplexProperties(writer, entry, propertyFilter);
         writer.WriteEndDocument();
     }
 
