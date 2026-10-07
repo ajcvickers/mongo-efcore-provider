@@ -211,20 +211,6 @@ public class ComplexTypeOptionalAndCollectionWriteTests(TemporaryDatabaseFixture
         Assert.Equal(BsonNull.Value, ReadSingleRaw(collection)["Address"]);
     }
 
-    [Fact]
-    public void Required_complex_property_null_is_rejected_by_EF_on_save()
-    {
-        var collection = database.CreateCollection<CustomerWithAddress>();
-
-        using var db = SingleEntityDbContext.Create(collection,
-            mb => mb.Entity<CustomerWithAddress>().ComplexProperty(c => c.Address, a => a.ComplexProperty(x => x.Location)));
-        db.Entities.Add(new CustomerWithAddress { Name = "R", Address = null! });
-
-        var ex = Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
-        Assert.Contains("required", ex.Message);
-        Assert.Equal(0, CountRaw(collection));
-    }
-
     public class Inner
     {
         public string Value { get; set; } = null!;
@@ -609,7 +595,9 @@ public class ComplexTypeOptionalAndCollectionWriteTests(TemporaryDatabaseFixture
         var stored = database.GetCollection<BsonDocument>(collection.CollectionNamespace)
             .Find(Builders<BsonDocument>.Filter.Eq("_id", customer.Id)).Single();
         Assert.Equal("Carla", stored["Name"].AsString);
-        Assert.Equal(4, stored["Addresses"].AsBsonArray.Count);
+        Assert.Equal(
+            StoredList(Address("A", "X", 1, 2), Address("B", "Y", 3, 4), Address("C", "Z", 5, 6), Address("D", "W")),
+            stored["Addresses"].AsBsonArray);
 
         capture.Clear();
         customer.Addresses[0].City = "mutated before delete";
@@ -624,6 +612,109 @@ public class ComplexTypeOptionalAndCollectionWriteTests(TemporaryDatabaseFixture
         var remaining = ReadSingleRaw(collection);
         Assert.Equal(other.Id, remaining["_id"].AsObjectId);
         Assert.Equal(StoredList(Address("O", "O")), remaining["Addresses"].AsBsonArray);
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // Disconnected (whole-entry Modified) updates: no query load, a fresh context marks the entity Modified.
+    // ----------------------------------------------------------------------------------------------------------------
+
+    public static TheoryData<string> WholeEntryModifiedShapes
+        => new() { "Update", "Attach+State" };
+
+    private static void MarkWholeEntryModified<T>(SingleEntityDbContext<T> db, T entity, string shape) where T : class
+    {
+        switch (shape)
+        {
+            case "Update":
+                db.Entities.Update(entity);
+                break;
+            case "Attach+State":
+                db.Entities.Attach(entity).State = EntityState.Modified;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(shape));
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(WholeEntryModifiedShapes))]
+    public void Whole_entry_modified_entity_writes_its_complex_collection(string shape)
+    {
+        using var capture = new CommandCapture(database);
+        var collection = capture.Collection(
+            database.CreateCollection<CustomerWithAddressList>(nameof(Whole_entry_modified_entity_writes_its_complex_collection), shape));
+        var customer = NewListCustomer();
+
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureList))
+        {
+            seed.Entities.Add(customer);
+            seed.SaveChanges();
+        }
+
+        capture.Clear();
+        using var db = SingleEntityDbContext.Create(collection, ConfigureList);
+        var detached = new CustomerWithAddressList
+        {
+            Id = customer.Id, Name = "Carol", Addresses = [NewAddress("N", "M", 9, 9), NewAddress("A", "X", 1, 2)]
+        };
+        MarkWholeEntryModified(db, detached, shape);
+
+        // Measured shape (EF10): the root is Modified and the collection reports modified as a whole.
+        var entry = db.Entry(detached);
+        Assert.Equal(EntityState.Modified, entry.State);
+        Assert.True(entry.ComplexCollection(c => c.Addresses).IsModified);
+        var updateEntry = UpdateEntry(db, detached);
+        Assert.True(updateEntry.IsModified(updateEntry.EntityType.FindComplexProperty(nameof(CustomerWithAddressList.Addresses))!));
+
+        Assert.Equal(1, db.SaveChanges());
+
+        var expected = StoredList(Address("N", "M", 9, 9), Address("A", "X", 1, 2));
+        var set = capture.SingleSet();
+        Assert.Equal(new[] { "_id", "Name", "Addresses" }, set.Names.ToArray());
+        Assert.Equal(expected, set["Addresses"].AsBsonArray);
+        Assert.Equal(expected, ReadSingleRaw(collection)["Addresses"].AsBsonArray);
+    }
+
+    [Theory]
+    [MemberData(nameof(WholeEntryModifiedShapes))]
+    public void Whole_entry_modified_entity_writes_optional_complex_property_value_and_null(string shape)
+    {
+        using var capture = new CommandCapture(database);
+        var collection = capture.Collection(database.CreateCollection<CustomerWithOptionalAddress>(
+            nameof(Whole_entry_modified_entity_writes_optional_complex_property_value_and_null), shape));
+        var customer = new CustomerWithOptionalAddress { Name = "N", Address = NewAddress("S", "C", 1, 2) };
+
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureOptional))
+        {
+            seed.Entities.Add(customer);
+            seed.SaveChanges();
+        }
+
+        // Different value.
+        capture.Clear();
+        using (var db = SingleEntityDbContext.Create(collection, ConfigureOptional))
+        {
+            var detached = new CustomerWithOptionalAddress { Id = customer.Id, Name = "N", Address = NewAddress("T", "D", 3, 4) };
+            MarkWholeEntryModified(db, detached, shape);
+            Assert.Equal(1, db.SaveChanges());
+        }
+
+        Assert.Equal(new[] { "_id", "Name", "Address" }, capture.SingleSet().Names.ToArray());
+        Assert.Equal(Address("T", "D", 3, 4), capture.SingleSet()["Address"].AsBsonDocument);
+        Assert.Equal(Address("T", "D", 3, 4), ReadSingleRaw(collection)["Address"].AsBsonDocument);
+
+        // Null.
+        capture.Clear();
+        using (var db = SingleEntityDbContext.Create(collection, ConfigureOptional))
+        {
+            var detached = new CustomerWithOptionalAddress { Id = customer.Id, Name = "N", Address = null };
+            MarkWholeEntryModified(db, detached, shape);
+            Assert.Equal(1, db.SaveChanges());
+        }
+
+        Assert.Equal(new[] { "_id", "Name", "Address" }, capture.SingleSet().Names.ToArray());
+        Assert.Equal(BsonNull.Value, capture.SingleSet()["Address"]);
+        Assert.Equal(BsonNull.Value, ReadSingleRaw(collection)["Address"]);
     }
 
     public class Wrapper

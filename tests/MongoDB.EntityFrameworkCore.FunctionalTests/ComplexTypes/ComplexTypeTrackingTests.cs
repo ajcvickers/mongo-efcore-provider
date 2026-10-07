@@ -319,6 +319,40 @@ public class ComplexTypeTrackingTests(TemporaryDatabaseFixture database)
     }
 
     [Fact]
+    public void Update_of_detached_entity_writes_complex_property_whole()
+    {
+        // Disconnected update (no query load): DbSet.Update marks the entry Modified with every property, complex
+        // leaves included, modified, so the changed subdocument must be written.
+        using var capture = new CommandCapture(database);
+        var collection = capture.Collection(database.CreateCollection<CustomerWithAddress>());
+        var customer = NewCustomer();
+
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureCustomer))
+        {
+            seed.Entities.Add(customer);
+            seed.SaveChanges();
+        }
+
+        capture.Clear();
+        using var db = SingleEntityDbContext.Create(collection, ConfigureCustomer);
+        var detached = new CustomerWithAddress
+        {
+            Id = customer.Id,
+            Name = "Alice",
+            Address = new ComplexAddress { Street = "3 Far Rd", City = "Ogdenville", Location = new GeoPoint { Lat = 7, Lon = 8 } }
+        };
+        db.Entities.Update(detached);
+        Assert.Equal(EntityState.Modified, db.Entry(detached).State);
+        Assert.True(db.Entry(detached).ComplexProperty(c => c.Address).Property(a => a.Street).IsModified);
+
+        Assert.Equal(1, db.SaveChanges());
+        var set = capture.SingleSet();
+        Assert.Equal(new[] { "_id", "Name", "Address" }, set.Names.ToArray());
+        Assert.Equal(ExpectedAddress("3 Far Rd", "Ogdenville", 7, 8), set["Address"].AsBsonDocument);
+        Assert.Equal(ExpectedAddress("3 Far Rd", "Ogdenville", 7, 8), ReadSingleRaw(collection)["Address"].AsBsonDocument);
+    }
+
+    [Fact]
     public void Mutating_complex_leaf_on_owned_entity_rewrites_owned_subdocument()
     {
         var collection = database.CreateCollection<ComplexTypeWriteTests.EntityWithOwnedHoldingComplex>();

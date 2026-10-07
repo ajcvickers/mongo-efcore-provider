@@ -87,8 +87,13 @@ internal static class ComplexValueWriter
     /// (including a value whose leaves are all CLR defaults) and the root <see cref="EntityState.Modified"/>; the
     /// property is written whole, or as BSON <c>null</c> (an element present with a null value, matching a null
     /// owned reference in <c>WriteOwnedEntities</c>). <see langword="null"/> to <see langword="null"/> is no change.
-    /// A null <b>required</b> complex property or collection is rejected by EF itself on <c>SaveChanges</c>
-    /// (<see cref="InvalidOperationException"/> "configured as required (non-nullable) but has a null value").</item>
+    /// A null <b>required</b> complex property (EF8, EF9 and EF10) or collection (EF10) is rejected by EF itself on
+    /// <c>SaveChanges</c> (<see cref="InvalidOperationException"/> "configured as required (non-nullable) but has a
+    /// null value"), so the provider never writes one.</item>
+    /// <item>Disconnected updates (<c>DbSet.Update(detached)</c>, or <c>Attach</c> then <c>State = Modified</c>) mark
+    /// every leaf modified on all three versions, and on EF10 also mark every complex collection modified
+    /// (<c>IsModified(IComplexProperty)</c> true), so every complex property, optional and collection included, is
+    /// written whole.</item>
     /// <item>Complex collection elements get their own (complex) entries, so their leaves are <b>not</b> properties
     /// of the owning entry: <c>IUpdateEntry.IsModified(IProperty)</c> with an element leaf throws ("belongs to the
     /// type '...Addresses#ComplexAddress', but is being used with an instance of type '...'"). The collection is
@@ -128,10 +133,10 @@ internal static class ComplexValueWriter
     {
         writer.WriteName(complexProperty.GetElementName());
 
-        // A required complex property can still be null in memory (EF does not reject it on SaveChanges on every
-        // version); writing BSON null mirrors the owned-reference path (WriteOwnedEntities) instead of silently
-        // dropping the element. On read, a null required subdocument goes through the missing-required-element
-        // rules (Task 10); an optional (EF10) one materializes as null.
+        // Reached only for an optional complex property or collection (EF10). A null *required* one is rejected by
+        // EF itself at SaveChanges before the provider runs (measured on EF8, EF9 and EF10). BSON null mirrors the
+        // owned-reference path (WriteOwnedEntities) rather than dropping the element; on read an optional one
+        // materializes as null.
         if (value == null)
         {
             writer.WriteNull();

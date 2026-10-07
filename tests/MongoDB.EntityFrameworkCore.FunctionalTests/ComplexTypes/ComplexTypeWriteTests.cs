@@ -108,6 +108,22 @@ public class ComplexTypeWriteTests(TemporaryDatabaseFixture database)
     }
 
     [Fact]
+    public void Required_complex_property_null_is_rejected_by_EF_on_save()
+    {
+        // Measured on EF8, EF9 and EF10: EF rejects a null required complex property before the provider runs
+        // ("configured as required (non-nullable) but has a null value when saving changes"), so nothing is stored.
+        var collection = database.CreateCollection<CustomerWithAddress>();
+
+        using var db = SingleEntityDbContext.Create(collection, ConfigureCustomer);
+        db.Entities.Add(new CustomerWithAddress { Name = "R", Address = null! });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
+        Assert.Contains("required", ex.Message);
+        Assert.Equal(0, database.GetCollection<BsonDocument>(collection.CollectionNamespace)
+            .CountDocuments(FilterDefinition<BsonDocument>.Empty));
+    }
+
+    [Fact]
     public void Insert_with_default_struct_writes_zeroed_subdocument()
     {
         var collection = database.CreateCollection<CustomerWithAddress>();
