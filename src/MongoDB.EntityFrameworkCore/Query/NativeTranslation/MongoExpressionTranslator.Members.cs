@@ -345,10 +345,11 @@ internal sealed partial class MongoExpressionTranslator
     /// silently resolves against the wrong scope.
     /// </para>
     /// <para>
-    /// <b>Scope-relative.</b> Callers join each hop's <see cref="MongoEntityTypeExtensions.GetContainingElementName"/>
-    /// relative to <paramref name="scopeType"/>, never <see cref="MongoEntityTypeExtensions.GetDocumentPath"/>,
-    /// which is root-relative and would double-prefix in a nested element scope whose caller prefixes the result.
-    /// Hence no <c>IsDocumentRoot</c> guard anywhere in this family.
+    /// <b>Scope-relative.</b> Callers resolve the names with <see cref="StructuralPath.TryResolve"/>, which joins each
+    /// hop's own element name relative to <paramref name="scopeType"/>, never
+    /// <see cref="MongoEntityTypeExtensions.GetDocumentPath"/>, which is root-relative and would double-prefix in a
+    /// nested element scope whose caller prefixes the result. Hence no <c>IsDocumentRoot</c> guard anywhere in this
+    /// family.
     /// </para>
     /// <para>
     /// <b>Any parameter root is accepted in single-scope mode</b> because a chain rooted on an enclosing parameter
@@ -401,39 +402,15 @@ internal sealed partial class MongoExpressionTranslator
     }
 
     /// <summary>
-    /// Walks the first <paramref name="hopCount"/> hop names as embedded single-reference navigations,
-    /// appending each one's containing element name to <paramref name="segments"/> and advancing
-    /// <paramref name="scopeType"/> to the last walked hop's target.
+    /// Resolves a multi-hop chain to a dotted field path, e.g. <c>p.Address.City</c> → <c>"Address.City"</c>.
+    /// Intermediate hops are resolved by <see cref="StructuralPath"/> (embedded single-reference navigations and
+    /// single complex properties, in any mix the model allows) and the leaf must be a mapped scalar.
     /// </summary>
-    /// Declining here rejects cross-collection and owned-collection intermediates: a leaf under an array has no
-    /// single dotted path. Quantifiers over such a collection go through <see cref="TryResolveOwnedCollectionPath"/>.
-    private static bool TryWalkEmbeddedReferenceHops(
-        List<string> names, int hopCount, ref IEntityType scopeType, List<string> segments)
-    {
-        for (var i = 0; i < hopCount; i++)
-        {
-            var navigation = scopeType.FindNavigation(names[i]);
-            if (navigation is null || !navigation.IsEmbedded() || navigation.IsCollection)
-                return false;
-
-            // The navigation's containing element name is the same source the shapers and pipeline use, so the
-            // emitted path matches stored layout (including HasElementName overrides and shared types).
-            var elementName = navigation.TargetEntityType.GetContainingElementName();
-            if (string.IsNullOrEmpty(elementName))
-                return false;
-
-            segments.Add(elementName);
-            scopeType = navigation.TargetEntityType;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Resolves an owned single-reference chain to a dotted field path, e.g. <c>p.Address.City</c> →
-    /// <c>"Address.City"</c>. Intermediate hops must be embedded single-reference navigations and the leaf a
-    /// mapped scalar.
-    /// </summary>
+    /// <remarks>
+    /// A hop into an owned or complex collection declines (<see cref="StructuralPathResult.CrossesCollection"/>): a
+    /// leaf under an array has no single dotted path. Quantifiers over an owned collection go through
+    /// <see cref="TryResolveOwnedCollectionPath"/>.
+    /// </remarks>
     private bool TryResolveOwnedFieldPath(
         Expression node, [NotNullWhen(true)] out IProperty? property, [NotNullWhen(true)] out string? fieldPath,
         out bool isOuter)
@@ -444,19 +421,16 @@ internal sealed partial class MongoExpressionTranslator
         if (!TryBeginOwnedHopWalk(node, minimumHops: 2, scopeRootFallback: false, out var names, out var scopeType, out isOuter))
             return false;
 
-        var segments = new List<string>(names.Count);
-        if (!TryWalkEmbeddedReferenceHops(names, names.Count - 1, ref scopeType, segments))
+        // A composite-PK leaf keeps the "_id.<name>" local to its declaring type after the hop prefix (e.g.
+        // "Author._id.City"); StructuralPath builds the leaf segment with GetPropertyFieldPath.
+        if (!StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var path)
+            || path.Leaf is not IProperty leaf)
+        {
             return false;
-
-        var leaf = scopeType.FindProperty(names[^1]);
-        if (leaf is null)
-            return false;
+        }
 
         property = leaf;
-        // A composite-PK leaf nests under an "_id" local to its declaring type, so append "_id.<name>" after the
-        // hop prefix (e.g. "Author._id.City").
-        segments.Add(GetPropertyFieldPath(leaf));
-        fieldPath = string.Join(".", segments);
+        fieldPath = string.Join(".", path.Segments);
         return true;
     }
 
@@ -519,14 +493,17 @@ internal sealed partial class MongoExpressionTranslator
         if (!TryBeginOwnedHopWalk(node, minimumHops: 1, scopeRootFallback: false, out var names, out var scopeType, out isOuter))
             return false;
 
-        // Every hop, including the last, must be an embedded single reference. minimumHops: 1 above guarantees at
-        // least one hop was walked, so scopeType is then the leaf navigation's target.
-        var segments = new List<string>(names.Count);
-        if (!TryWalkEmbeddedReferenceHops(names, names.Count, ref scopeType, segments))
+        // The leaf must itself be an embedded single-reference navigation; StructuralPath has already required it to be
+        // embedded with an element name. A complex-property leaf (`e.Address == null` over a complex Address) is not an
+        // entity-typed operand and declines here: its null/missing semantics belong to the complex read path.
+        if (!StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not INavigation { IsCollection: false } leafNavigation)
+        {
             return false;
+        }
 
-        targetType = scopeType;
-        path = string.Join(".", segments);
+        targetType = leafNavigation.TargetEntityType;
+        path = string.Join(".", resolved.Segments);
         return true;
     }
 
@@ -556,25 +533,18 @@ internal sealed partial class MongoExpressionTranslator
         if (!TryBeginOwnedHopWalk(source, minimumHops: 1, scopeRootFallback: true, out var names, out var scopeType, out isOuter))
             return false;
 
-        // Every hop but the last must be an embedded single reference; the FINAL hop is the quantifier's own
-        // source and must be an embedded COLLECTION navigation. That final-hop rule is the structural
-        // protection against a mapped scalar property sharing a navigation's name — a scalar's receiver is
-        // never a collection.
-        var segments = new List<string>(names.Count);
-        if (!TryWalkEmbeddedReferenceHops(names, names.Count - 1, ref scopeType, segments))
+        // Every hop but the last is a StructuralPath hop (never a collection); the FINAL name is the quantifier's own
+        // source and must be an embedded COLLECTION navigation. That final-hop rule is the structural protection
+        // against a mapped scalar property sharing a navigation's name — a scalar's receiver is never a collection.
+        // A primitive collection property, a reference navigation or a complex collection (no element entity type;
+        // the complex-collection quantifier is a later extension) declines.
+        if (!StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not INavigation { IsCollection: true } collectionNavigation)
+        {
             return false;
+        }
 
-        var collectionNavigation = scopeType.FindNavigation(names[^1]);
-        if (collectionNavigation is null || !collectionNavigation.IsEmbedded() || !collectionNavigation.IsCollection)
-            return false; // a primitive collection property, a reference nav, or a non-collection final hop
-
-        var collectionElementName = collectionNavigation.TargetEntityType.GetContainingElementName();
-        if (string.IsNullOrEmpty(collectionElementName))
-            return false;
-
-        segments.Add(collectionElementName);
-
-        arrayPath = string.Join(".", segments);
+        arrayPath = string.Join(".", resolved.Segments);
         elementType = collectionNavigation.TargetEntityType;
         return true;
     }
