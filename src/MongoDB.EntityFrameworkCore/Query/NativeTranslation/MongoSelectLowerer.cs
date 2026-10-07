@@ -588,13 +588,7 @@ internal sealed class MongoSelectLowerer
             }
 
             foreach (var complexProperty in type.GetComplexProperties())
-                names.Add(GetComplexPropertyElementName(complexProperty));
+                names.Add(complexProperty.GetElementName());
         }
     }
-
-    // No GetElementName overload exists for complex properties, so read the annotation with the same CLR-name
-    // fallback. Mirrors MongoQueryableMethodTranslatingExpressionVisitor.GetComplexPropertyElementName.
-    private static string GetComplexPropertyElementName(IReadOnlyComplexProperty complexProperty)
-        => (string?)complexProperty[MongoDB.EntityFrameworkCore.Metadata.MongoAnnotationNames.ElementName]
-           ?? complexProperty.Name;
 }
