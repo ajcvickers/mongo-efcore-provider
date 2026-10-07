@@ -211,6 +211,12 @@ Rendering (null/missing/dialect semantics):
   Whole-entity reads stay strict ("Document element ... is missing"). The exception TYPE for malformed stored data
   (native `InvalidOperationException` vs the driver's `FormatException`/converter exceptions) is not contract; the
   outcome (value vs throw) is.
+- **Complex-property leaves are stored scalars at a dotted path** (`StructuralPath`). The read side resolves the same
+  hops (`MongoProjectionBindingRemovingExpressionVisitor.TryResolveComplexPropertyDocument`), so a leaf reads through its
+  `IProperty` (D-F10, serializer); the EF-337 bridge refusal walks them too (`FindComplexLeafProperties`). A bare dotted
+  field (owned or complex hop) takes the Synthetic `_v` tier (`TryDeriveSyntheticAlias` gate 1f), never a dotted alias.
+  A field under an optional complex parent is MISSING whenever the parent is null/absent: ordinary data, so a projected
+  `Distinct` key over a required reference-typed field is marked (`NativeGroupByBinder.IsRequiredReferenceFieldKey`).
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

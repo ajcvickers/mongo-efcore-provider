@@ -1679,7 +1679,8 @@ internal static class NativeGroupByBinder
                     ? MongoAggregationExpressionRenderer.ClassifyMalformedFieldRead(
                         projection.Source?.Type ?? projection.Expression.Type, projection.Expression)
                     : MongoAggregationExpressionRenderer.ClassifyNonNullableValueRead(projection.Expression.Type, projection.Expression);
-            var marksMissing = malformedRead == NonNullableValueRead.DefaultOnMalformedMissing || projection.DefaultsOnMalformedMissing;
+            var marksMissing = malformedRead == NonNullableValueRead.DefaultOnMalformedMissing || projection.DefaultsOnMalformedMissing
+                               || IsRequiredReferenceFieldKey(projection.Expression);
 
             // ThrowsOnNull carries over to both: the deduped value is the same possibly-null value, read back from
             // "_id.<alias>" by the flatten, and by operators over the Distinct through the key part (DistinctAliasScope).
@@ -1708,6 +1709,26 @@ internal static class NativeGroupByBinder
             select.AddProjection(f);
         return true;
     }
+
+    /// <summary>
+    /// Whether a projected <c>Distinct()</c> key is a bare stored field of a required (non-nullable) reference-typed
+    /// property, such as a required <c>string</c>. Its key part is marked, so a MISSING value stays MISSING through the
+    /// flatten instead of becoming the lone <c>$group</c> sub-key's null.
+    /// </summary>
+    /// <remarks>
+    /// The flatten is read through the property (D-F10): a MISSING element reads <see langword="null"/>, as for a bare
+    /// projection and as driver-LINQ (grouping on the projected document) did, while an explicit BSON null still throws.
+    /// Without the marker a MISSING value reads back as an explicit null and throws. A field under an optional complex
+    /// property is MISSING whenever the property is null or absent, which is ordinary data, not a malformed document.
+    /// Value types get the marker through <see cref="MongoAggregationExpressionRenderer.ClassifyMalformedFieldRead"/>;
+    /// nullable properties read null either way and stay unmarked (missing and null merge, see
+    /// <c>NativeMalformedAggregateAndDistinctTests</c>). A root primary key is never missing.
+    /// </remarks>
+    private static bool IsRequiredReferenceFieldKey(MongoExpression keyExpression)
+        => keyExpression is MongoFieldExpression { Property: { IsNullable: false } property }
+           && !property.ClrType.IsValueType
+           && !property.IsPrimaryKey()
+           && HasDefaultKeySerialization(property);
 
     /// <summary>
     /// Whether <paramref name="field"/>, a non-default-serialized key part of a projected <c>Distinct()</c>, can still

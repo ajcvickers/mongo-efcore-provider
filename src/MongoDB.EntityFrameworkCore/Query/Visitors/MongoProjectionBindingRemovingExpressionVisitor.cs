@@ -1307,7 +1307,9 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         return new ResolvedFieldAccess(null, null, null, null);
     }
 
-    private (IEntityType? EntityType, Expression? DocumentExpression) TryResolveFieldAccessSource(Expression? expression)
+    // The structural type is an IEntityType for the root, an owned navigation's target or a join side, and an
+    // IComplexType after a complex-property hop (TryResolveComplexPropertyDocument).
+    private (ITypeBase? EntityType, Expression? DocumentExpression) TryResolveFieldAccessSource(Expression? expression)
     {
         expression = expression.RemoveConvert();
 
@@ -1380,10 +1382,21 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         if (expression is MemberExpression navMemberExpression)
         {
             var navSource = TryResolveFieldAccessSource(navMemberExpression.Expression);
-            var embeddedNavDocument = TryResolveEmbeddedNavigationDocument(navSource, navSource.EntityType?.FindNavigation(navMemberExpression.Member));
+            var embeddedNavDocument = TryResolveEmbeddedNavigationDocument(
+                navSource, (navSource.EntityType as IEntityType)?.FindNavigation(navMemberExpression.Member));
             if (embeddedNavDocument != null)
             {
                 return embeddedNavDocument.Value;
+            }
+
+            // A complex-property hop (`c.Address.City`, `c.Address.Location.Lat`): the leaf lives in the complex
+            // property's sub-document, so it resolves to its own IProperty (serializer, nullability) rather than an
+            // unresolved member name read by alias.
+            var complexDocument = TryResolveComplexPropertyDocument(
+                navSource, navSource.EntityType?.FindComplexProperty(navMemberExpression.Member.Name));
+            if (complexDocument != null)
+            {
+                return complexDocument.Value;
             }
         }
 
@@ -1392,7 +1405,8 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             && navPropertyCall.Arguments[1] is ConstantExpression { Value: string navPropertyName })
         {
             var navSource = TryResolveFieldAccessSource(navPropertyCall.Arguments[0]);
-            var embeddedNavDocument = TryResolveEmbeddedNavigationDocument(navSource, navSource.EntityType?.FindNavigation(navPropertyName));
+            var embeddedNavDocument = TryResolveEmbeddedNavigationDocument(
+                navSource, (navSource.EntityType as IEntityType)?.FindNavigation(navPropertyName));
             if (embeddedNavDocument != null)
             {
                 return embeddedNavDocument.Value;
@@ -1407,8 +1421,8 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     /// <see langword="null"/> to let callers fall through to other resolution paths. Collection
     /// navigations are excluded: their container is a BSON array, not a <see cref="BsonDocument"/>.
     /// </summary>
-    private (IEntityType EntityType, Expression DocumentExpression)? TryResolveEmbeddedNavigationDocument(
-        (IEntityType? EntityType, Expression? DocumentExpression) navSource, INavigation? navigation)
+    private (ITypeBase EntityType, Expression DocumentExpression)? TryResolveEmbeddedNavigationDocument(
+        (ITypeBase? EntityType, Expression? DocumentExpression) navSource, INavigation? navigation)
     {
         if (navigation == null || navigation.IsCollection || !navigation.IsEmbedded() || navSource.DocumentExpression == null)
         {
@@ -1419,6 +1433,25 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         var navDocumentExpression =
             CreateGetValueExpression(navSource.DocumentExpression, elementName, false, typeof(BsonDocument));
         return (navigation.TargetEntityType, navDocumentExpression);
+    }
+
+    /// <summary>
+    /// Builds the sub-document read for a single (non-collection) complex-property hop, or <see langword="null"/>. The
+    /// segment is the complex property's element name, the same one <c>StructuralPath</c> gives the emit side. A complex
+    /// collection is excluded: its container is a BSON array.
+    /// </summary>
+    private (ITypeBase EntityType, Expression DocumentExpression)? TryResolveComplexPropertyDocument(
+        (ITypeBase? EntityType, Expression? DocumentExpression) source, IComplexProperty? complexProperty)
+    {
+        if (complexProperty == null || complexProperty.IsCollection || source.DocumentExpression == null
+            || complexProperty.GetElementName() is not { Length: > 0 } elementName)
+        {
+            return null;
+        }
+
+        var complexDocumentExpression =
+            CreateGetValueExpression(source.DocumentExpression, elementName, false, typeof(BsonDocument));
+        return (complexProperty.ComplexType, complexDocumentExpression);
     }
 
     private static readonly MethodInfo MqlFieldMethodInfo =

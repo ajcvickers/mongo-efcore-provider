@@ -1917,6 +1917,15 @@ internal static class NativeProjectionBinder
             case MongoConstantExpression or MongoParameterExpression:
                 break;
 
+            // Gate 1f: a stored field at a dotted path (an owned-reference or complex-property hop: `b.Home.City`,
+            // `c.Address.Location.Lat`; a composite-key component `_id.A`). TryDeriveDocumentPathAlias declines it (a
+            // dotted alias is read back as a literal key but rendered nested), but `_v` is exactly the driver's own bare
+            // alias, so an un-stripped fallback push-down writes the element the shaper reads. The shaper resolves the
+            // leaf to its IProperty (TryResolveFieldAccess walks the hops), so D-F10 and the serializer apply. A
+            // non-default-serialized dotted leaf never gets here: TryTranslateLeaf declines it first.
+            case MongoFieldExpression field when field.ElementName.Contains('.'):
+                break;
+
             default:
                 return false;
         }

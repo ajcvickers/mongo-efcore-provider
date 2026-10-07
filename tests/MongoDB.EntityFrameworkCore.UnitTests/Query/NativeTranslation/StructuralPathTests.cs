@@ -361,6 +361,29 @@ public static class StructuralPathTests
         Assert.False(StructuralPath.TryResolve(root, ["Target"], 0, out _));
     }
 
+    [Fact]
+    public static void Reference_navigation_to_non_owned_target_with_element_name_annotation_declines_as_hop_and_leaf()
+    {
+        // The target is a root entity (its own collection) that nevertheless carries a Mongo:ElementName annotation,
+        // so GetContainingElementName() is non-empty. Only the IsEmbedded() checks stop the walk from treating the
+        // cross-document reference as an embedded sub-document ("tgt.Name").
+        var root = EntityType<AnnotatedReferencingHolder>(mb =>
+        {
+            mb.Entity<AnnotatedReferencingHolder>();
+            mb.Entity<AnnotatedReferencedEntity>().Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "tgt");
+        });
+
+        var target = root.FindNavigation(nameof(AnnotatedReferencingHolder.Target))!;
+        Assert.False(target.IsEmbedded());
+        Assert.Equal("tgt", target.TargetEntityType.GetContainingElementName());
+
+        Assert.False(StructuralPath.TryResolve(root, ["Target", "Name"], 1, out var hop));
+        Assert.False(hop.CrossesCollection);
+        Assert.Empty(hop.Segments);
+        Assert.False(StructuralPath.TryResolve(root, ["Target"], 0, out var leaf));
+        Assert.Null(leaf.Leaf);
+    }
+
 #if !EF8 && !EF9
     [Fact]
     public static void Complex_collection_hop_declines_and_reports_crossing()
@@ -451,8 +474,10 @@ public static class StructuralPathTests
 
         // Only a single owned reference is an entity-typed operand; an owned collection compared with null must not
         // become a sub-document null check on the array.
-        var translated = translator.TryTranslate(Predicate<TranslatorCollectionNullHolder>(e => e.Posts == null), out var result);
-        Assert.False(translated && result is MongoBinaryExpression { Left: MongoElementRefExpression });
+        // Measured: the translator declines outright (the comparison has no native rendering here), so the caller
+        // routes the query to the fallback rather than emitting any predicate over the array.
+        Assert.False(translator.TryTranslate(Predicate<TranslatorCollectionNullHolder>(e => e.Posts == null), out var result));
+        Assert.Null(result);
     }
 
     [Fact]
@@ -604,6 +629,8 @@ public static class StructuralPathTests
     class NestedCollectionHopHolder { public int Id { get; set; } public OwnedNotesAddress Address { get; set; } = null!; }
     class ReferencingHolder { public int Id { get; set; } public int TargetId { get; set; } public ReferencedEntity Target { get; set; } = null!; }
     class ReferencedEntity { public int Id { get; set; } public string Name { get; set; } = null!; }
+    class AnnotatedReferencingHolder { public int Id { get; set; } public int TargetId { get; set; } public AnnotatedReferencedEntity Target { get; set; } = null!; }
+    class AnnotatedReferencedEntity { public int Id { get; set; } public string Name { get; set; } = null!; }
     class TranslatorComplexHolder { public int Id { get; set; } public NestedAddr Address { get; set; } = null!; }
     class TranslatorMixedHolder { public int Id { get; set; } public MixedOwned Owned { get; set; } = null!; }
     class TranslatorCollectionNullHolder { public int Id { get; set; } public List<OwnedPost> Posts { get; set; } = []; }
