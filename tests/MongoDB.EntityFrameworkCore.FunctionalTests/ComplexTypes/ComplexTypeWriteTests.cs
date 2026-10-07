@@ -81,18 +81,25 @@ public class ComplexTypeWriteTests(TemporaryDatabaseFixture database)
     [Fact]
     public void Update_of_scalar_on_entity_with_complex_property_keeps_subdocument()
     {
-        // Every Modified entry now passes through the complex writer's change filter; a scalar-only change must
-        // neither throw nor disturb the stored subdocument. (Leaf-change semantics are covered with tracking.)
-        var collection = database.CreateCollection<CustomerWithAddress>();
+        // Every Modified entry passes through the complex writer's change filter; a scalar-only change must skip the
+        // complex property (not rewrite it), which only the sent $set can show: the stored values are equal either way.
+        // (Leaf-change semantics are covered in ComplexTypeTrackingTests.)
+        using var capture = new CommandCapture(database);
+        var collection = capture.Collection(database.CreateCollection<CustomerWithAddress>());
         var customer = NewCustomer();
 
         using (var db = SingleEntityDbContext.Create(collection, ConfigureCustomer))
         {
             db.Entities.Add(customer);
             db.SaveChanges();
+            capture.Clear();
             customer.Name = "Alicia";
             db.SaveChanges();
         }
+
+        var set = capture.SingleSet();
+        Assert.False(set.Contains("Address"), set.ToJson());
+        Assert.Equal(new[] { "_id", "Name" }, set.Names.ToArray());
 
         var raw = ReadSingleRaw(collection);
         Assert.Equal("Alicia", raw["Name"].AsString);
