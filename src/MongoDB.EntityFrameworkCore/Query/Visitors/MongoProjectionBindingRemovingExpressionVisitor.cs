@@ -30,6 +30,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation.Stages;
@@ -47,6 +48,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     private readonly MongoQueryExpression _queryExpression;
     private readonly IEntityType _rootEntityType;
     private readonly ParameterExpression DocParameter;
+    private readonly BsonSerializerFactory _bsonSerializerFactory;
     private readonly bool _trackQueryResults;
     private readonly Dictionary<ParameterExpression, Expression> _materializationContextBindings = new();
     private readonly Dictionary<Expression, ParameterExpression> _projectionBindings = new();
@@ -61,15 +63,18 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     /// <param name="queryExpression">The <see cref="MongoQueryExpression"/> this visitor should use.</param>
     /// <param name="docParameter">The parameter that will hold the <see cref="BsonDocument"/> input parameter to the shaper.</param>
     /// <param name="trackingBehavior">The <see cref="QueryTrackingBehavior"/> for this query.</param>
+    /// <param name="bsonSerializerFactory">The context's serializer factory, for complex-property alias reads.</param>
     public MongoProjectionBindingRemovingExpressionVisitor(
         IEntityType rootEntityType,
         MongoQueryExpression queryExpression,
         ParameterExpression docParameter,
-        QueryTrackingBehavior trackingBehavior)
+        QueryTrackingBehavior trackingBehavior,
+        BsonSerializerFactory bsonSerializerFactory)
     {
         _queryExpression = queryExpression;
         _rootEntityType = rootEntityType;
         DocParameter = docParameter;
+        _bsonSerializerFactory = bsonSerializerFactory;
         _trackQueryResults = trackingBehavior == QueryTrackingBehavior.TrackAll;
     }
 
@@ -335,6 +340,27 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                         return joinScopeRead;
                     }
 
+                    // A whole complex-property leaf: the shaper binding reads the projected complex member off the
+                    // root entity's StructuralTypeShaper (`[entityShaper].Address`). Read the sub-document under the
+                    // staged alias through the complex property's own serializer — the CLR class-map read would
+                    // ignore Mongo element names (leaf annotations, nested complexes). Missing element: a nullable
+                    // binding (EF10 nullable complex) reads default; a required one throws, like a whole-entity read.
+                    // A complex COLLECTION leaf reads the same way: the serializer is the collection serializer, so
+                    // the whole stored array deserializes in one pass.
+                    if (projection.Expression is MemberExpression
+                        {
+                            Expression: StructuralTypeShaperExpression,
+                            Member.Name: { } complexMemberName
+                        }
+                        && _rootEntityType.FindComplexProperty(complexMemberName) is { } complexProperty)
+                    {
+                        return BsonBinding.CreateGetElementValue(
+                            DocParameter,
+                            projection.Alias,
+                            projectionBindingExpression.Type,
+                            _bsonSerializerFactory.GetComplexPropertySerializer(complexProperty));
+                    }
+
                     // Non-property expressions (arithmetic, constants, Mql.Field) and key-property bindings carry
                     // the value under the projection alias as the BSON element name (e.g. `{ OrderID: "$_id" }`),
                     // so read it raw by alias. A GroupBy key, $min/$max output or join-scope leaf over a Local-kind
@@ -522,6 +548,17 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                         _projectionBindings[accessExpression] = parameterExpression;
                         fieldName ??= entityProjectionExpression.Name;
 
+                        // A whole-entity binding of a type whose complex subtree contains a complex collection:
+                        // the DOM materializer has no complex-collection read (EF's materializer block never reads
+                        // the member and silently assigns null), so decline at the exact binding that would lose
+                        // data. Declining HERE rather than shaper-wide keeps projection-only queries (which never
+                        // materialize the collection) native. Root-level complex collections materialize on the
+                        // streaming shaper. There is NO driver-LINQ oracle for this shape: materialization always
+                        // runs through the provider's shaper in every mode (driver LINQ only supplies MQL), so
+                        // this is a no-oracle decline that surfaces under DriverLinq too — pinned by
+                        // Complex_collection_dom_route_declines_under_driver_linq.
+                        StreamingEligibility.ThrowIfComplexCollectionsForDom(entityProjectionExpression.EntityType);
+
                         switch (accessExpression)
                         {
                             case ObjectAccessExpression crossCollectionAccess
@@ -644,6 +681,25 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                 innerExpression =
                     _materializationContextBindings[
                         (ParameterExpression)((MethodCallExpression)methodCallExpression.Arguments[0]).Object!];
+            }
+
+            // A complex-type leaf is stored nested under its complex properties' sub-documents, not at the
+            // document root; read it through the root-relative path (e.g. Contact.Address.City). This covers both
+            // the materialization reads and EF10's nullable-complex all-leaves-null condition (which re-reads the
+            // leaves as object): under a nullable complex property, an explicit null leaf reads default — the
+            // nullability EF threads into leaf materialization, not leaf metadata.
+            if (property.DeclaringType is IComplexType)
+            {
+                var document = ResolveBsonDocumentExpression(innerExpression, required: false);
+                var path = MongoComplexPropertyExtensions.GetDocumentPath(property);
+                var read = MongoComplexPropertyExtensions.IsUnderNullableComplex(property)
+                    ? BsonBinding.CreateGetNullablePropertyValueAtPath(document, path, property, methodCallExpression.Type)
+                    : BsonBinding.CreateGetPropertyValueAtPath(document, path, property, methodCallExpression.Type);
+
+                // A leaf under a nullable complex reads into a nullable-typed value (an explicit null must stay a
+                // null for EF's all-leaves-null condition); the member assignment converts, and only evaluates
+                // inside EF's materialization branch — a null required leaf takes the Default branch instead.
+                return read.Type == methodCallExpression.Type ? read : Expression.Convert(read, methodCallExpression.Type);
             }
 
             return CreateGetValueExpression(innerExpression, property, methodCallExpression.Type);
@@ -1189,6 +1245,37 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         => BsonBinding.CreateGetPropertyValueAtPath(DocParameter, [alias, memberName], field.Property, memberType);
 
     /// <summary>
+    /// Reduces a doc-access expression (a projection binding, a root reference or an object access) to the
+    /// <see cref="BsonDocument"/>-typed expression its value reads start from. Shared by the name-based read
+    /// (<see cref="CreateGetValueExpression(Expression, string?, bool, Type, ITypeBase?, CoreTypeMapping?)"/>) and
+    /// the path-based read of complex-type leaves.
+    /// </summary>
+    private Expression ResolveBsonDocumentExpression(Expression docExpression, bool required)
+    {
+        if (_projectionBindings.TryGetValue(docExpression, out var innerVariable))
+        {
+            return innerVariable;
+        }
+
+        return docExpression switch
+        {
+            // For driver-native LeftJoin Includes, the root entity is under "_outer" in the BsonDocument.
+            RootReferenceExpression when _queryExpression.UsesDriverJoinFields
+                => CreateGetValueExpression(DocParameter, "_outer", required, typeof(BsonDocument)),
+            RootReferenceExpression => CreateGetValueExpression(DocParameter, null, required, typeof(BsonDocument)),
+            // Cross-collection Include results are at the document root, under "_inner" (lone driver-native
+            // reference) or "_lookup_<Navigation>" (flat mode), derived from the projection node.
+            ObjectAccessExpression crossCollectionAccess when IsCrossCollectionAccess(crossCollectionAccess)
+                => CreateGetValueExpression(
+                    GetCrossCollectionRootDocument(crossCollectionAccess),
+                    GetCrossCollectionFieldName(crossCollectionAccess), false, typeof(BsonDocument)),
+            ObjectAccessExpression docAccessExpression => CreateGetValueExpression(docAccessExpression.AccessExpression,
+                docAccessExpression.Name, required, typeof(BsonDocument)),
+            _ => docExpression
+        };
+    }
+
+    /// <summary>
     /// Create a new compilable <see cref="Expression"/> the shaper can use to obtain the value from the <see cref="BsonDocument"/>.
     /// </summary>
     /// <param name="docExpression">The <see cref="Expression"/> used to access the <see cref="BsonDocument"/>.</param>
@@ -1213,30 +1300,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             _ => _rootEntityType
         };
 
-        var innerExpression = docExpression;
-        if (_projectionBindings.TryGetValue(docExpression, out var innerVariable))
-        {
-            innerExpression = innerVariable;
-        }
-        else
-        {
-            innerExpression = docExpression switch
-            {
-                // For driver-native LeftJoin Includes, the root entity is under "_outer" in the BsonDocument.
-                RootReferenceExpression when _queryExpression.UsesDriverJoinFields
-                    => CreateGetValueExpression(DocParameter, "_outer", required, typeof(BsonDocument)),
-                RootReferenceExpression => CreateGetValueExpression(DocParameter, null, required, typeof(BsonDocument)),
-                // Cross-collection Include results are at the document root, under "_inner" (lone driver-native
-                // reference) or "_lookup_<Navigation>" (flat mode), derived from the projection node.
-                ObjectAccessExpression crossCollectionAccess when IsCrossCollectionAccess(crossCollectionAccess)
-                    => CreateGetValueExpression(
-                        GetCrossCollectionRootDocument(crossCollectionAccess),
-                        GetCrossCollectionFieldName(crossCollectionAccess), false, typeof(BsonDocument)),
-                ObjectAccessExpression docAccessExpression => CreateGetValueExpression(docAccessExpression.AccessExpression,
-                    docAccessExpression.Name, required, typeof(BsonDocument)),
-                _ => innerExpression
-            };
-        }
+        var innerExpression = ResolveBsonDocumentExpression(docExpression, required);
 
         var elementType = typeMapping?.ClrType ?? type;
         return BsonBinding.CreateGetValueExpression(innerExpression, propertyName, required, elementType, entityType!);

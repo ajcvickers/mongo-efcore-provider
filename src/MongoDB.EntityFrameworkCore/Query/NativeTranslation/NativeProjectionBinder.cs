@@ -25,6 +25,7 @@ using Microsoft.EntityFrameworkCore.Query;
 using MongoDB.Bson;
 using MongoDB.Driver;                                // Mql.Field
 using MongoDB.EntityFrameworkCore.Extensions;        // IsEmbedded()
+using MongoDB.EntityFrameworkCore.Metadata;          // MongoComplexPropertyExtensions
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation.Stages;
 
@@ -915,6 +916,36 @@ internal static class NativeProjectionBinder
     }
 
     /// <summary>
+    /// Matches a whole complex-property leaf (<c>c.Address</c>), as a bare member access or as
+    /// <c>EF.Property(receiver, "Address")</c>, mirroring <see cref="TryGetOwnedReferenceNavigationLeaf"/>.
+    /// </summary>
+    /// <remarks>
+    /// Declines collection complex properties (EF10; they need element binding, not a whole-value leaf) and leaves
+    /// whose CLR type differs from the complex property's.
+    /// </remarks>
+    private static bool TryGetComplexPropertyLeaf(
+        MongoQueryExpression mongoQ, ParameterExpression outerParameter, Expression leafExpression,
+        [NotNullWhen(true)] out IReadOnlyComplexProperty? complexProperty)
+    {
+        complexProperty = null;
+        if (!leafExpression.TryGetMemberOrEFProperty(out var receiver, out var name)
+            || !IsSelectorParameter(receiver, outerParameter))
+        {
+            return false;
+        }
+
+        if (mongoQ.CollectionExpression.EntityType.FindComplexProperty(name) is not { } candidate
+            || candidate.IsCollection
+            || leafExpression.Type != candidate.ClrType)
+        {
+            return false;
+        }
+
+        complexProperty = candidate;
+        return true;
+    }
+
+    /// <summary>
     /// Matches a constructed sub-entity leaf (<c>new Book { Id = e.Id, Title = e.Title }</c>) and translates it to a
     /// <see cref="MongoDocumentConstructionExpression"/> emitting a nested sub-document.
     /// </summary>
@@ -1014,7 +1045,8 @@ internal static class NativeProjectionBinder
     {
         // Set only by the owned array-leaf branch.
         isArrayLeaf = false;
-        // Set only by the owned-reference nav-entity branch.
+        // Set only by the owned-reference nav-entity and whole complex-property branches (both stage the value as
+        // a whole sub-document under an alias that must equal its document path, and share the hazards).
         isOwnedNavEntityLeaf = false;
 
         // Plain top-level scalar leaf (c.Foo or EF.Property), or a string-to-char-sequence leaf over one
@@ -1076,6 +1108,21 @@ internal static class NativeProjectionBinder
             && alias == ownedNavElementName)
         {
             result = new MongoElementRefExpression(ownedNavElementName, ownedNav.TargetEntityType.ClrType);
+            isOwnedNavEntityLeaf = true;
+            return true;
+        }
+
+        // Whole complex-property leaf — `new { c.Address, c.Title }` — projected by its element name. Same hazards
+        // as the owned-reference leaf above: a late fallback strips the projection and hands the shaper whole
+        // documents (whose complex-property materialization is the Task-4 machinery), so the alias must equal the
+        // complex property's element name, and the alias override + sibling-readability sweep + retained _id apply.
+        // Complex types carry no shadow key, but the retained _id is inert and keeps one set of shared hazards.
+        // Wrapped bodies only; a bare `c => c.Address` declines, exactly like a bare owned-reference body.
+        if (allowWholeRootEntityLeaf
+            && TryGetComplexPropertyLeaf(mongoQ, outerParameter, leafExpression, out var complexProperty)
+            && alias == MongoComplexPropertyExtensions.GetElementName(complexProperty))
+        {
+            result = new MongoElementRefExpression(alias, complexProperty.ClrType);
             isOwnedNavEntityLeaf = true;
             return true;
         }
@@ -1536,6 +1583,16 @@ internal static class NativeProjectionBinder
             && TryGetRootRelativeArrayPath(ownedNavigation, mongoQ.CollectionExpression.EntityType, out var path))
         {
             return path;
+        }
+
+        // A whole complex-property leaf is read back under its document path (the alias-agreement invariant):
+        // with a Mongo:ElementName annotation the member name ("Address") and stored element ("shipping") differ,
+        // so the alias is the element name and the commit block registers it as a DocumentPath alias override.
+        if (leafExpression.TryGetMemberOrEFProperty(out var complexReceiver, out var complexName)
+            && IsSelectorParameter(complexReceiver, outerParameter)
+            && mongoQ.CollectionExpression.EntityType.FindComplexProperty(complexName) is { IsCollection: false } leafComplex)
+        {
+            return MongoComplexPropertyExtensions.GetElementName(leafComplex);
         }
 
         // A projected reference-collection-nav list (`Orders = c.Orders.ToList()`) is read back by

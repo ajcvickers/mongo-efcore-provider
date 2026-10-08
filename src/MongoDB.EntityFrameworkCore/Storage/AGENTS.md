@@ -39,6 +39,12 @@ Only Storage may call the driver client/collection/session types directly.
   `TranslateBulkOrThrow` maps failures to EF's canonical "could not be translated".
 - **Serializers come from `BsonSerializerFactory`** (`MongoUpdate.WriteProperty`); a `BsonWriter`/`BsonReader` here is
   almost certainly a layering mistake. Storage reads metadata, never writes annotations.
+- **Complex properties write unconditionally and whole** (`WriteComplexProperties` walks `GetComplexProperties()`
+  recursively: single complex → sub-document, collection → array of sub-documents). There is no
+  `IsModified(IComplexProperty)` on EF8/9, so like `WriteOwnedEntities` the write ignores the modified filter.
+  Null convention matches `WriteProperty` exactly: `WriteName` then serialize — a null complex value is a PRESENT
+  BSON-null element, never omitted. Direct non-generic `IBsonSerializer.Serialize` calls must set
+  `NominalType` (else arrays pick up a `{_t,_v}` discriminated wrapper). Pin: `ComplexTypeUpdateTests`.
 - **Queryable Encryption auto-schema is injected at client construction** in `MongoClientWrapper`;
   `MongoOptionsExtension` (Infrastructure) builds the client.
 - **`MongoTypeMappingSource` has `#if EF8 || EF9` branches** (EF10 reworked dictionary-comparer signatures); must

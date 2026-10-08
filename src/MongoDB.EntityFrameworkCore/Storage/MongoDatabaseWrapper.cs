@@ -29,6 +29,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Serializers;
 
 namespace MongoDB.EntityFrameworkCore.Storage;
 
@@ -40,6 +41,7 @@ public class MongoDatabaseWrapper : Database
     private readonly ICurrentDbContext _currentDbContext;
     private readonly IMongoClientWrapper _mongoClient;
     private readonly IDbContextTransactionManager _transactionManager;
+    private readonly BsonSerializerFactory _bsonSerializerFactory;
     private readonly IDiagnosticsLogger<DbLoggerCategory.Update> _updateLogger;
     private readonly IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> _transactionLogger;
     private readonly TransactionOptions _transactionOptions = new();
@@ -65,6 +67,7 @@ public class MongoDatabaseWrapper : Database
         _currentDbContext = currentDbContext;
         _mongoClient = mongoClient;
         _transactionManager = transactionManager;
+        _bsonSerializerFactory = currentDbContext.Context.GetService<BsonSerializerFactory>() ?? new BsonSerializerFactory();
         _updateLogger = updateLogger;
         _transactionLogger = transactionLogger;
     }
@@ -77,7 +80,7 @@ public class MongoDatabaseWrapper : Database
     public override int SaveChanges(IList<IUpdateEntry> entries)
     {
         var rootEntries = GetAllChangedRootEntries(entries);
-        var updates = MongoUpdate.CreateAll(rootEntries).ToList();
+        var updates = MongoUpdate.CreateAll(rootEntries, _bsonSerializerFactory).ToList();
         AddEntriesPromotedDuringSave(entries);
 
         // Explicit transaction mode
@@ -122,7 +125,7 @@ public class MongoDatabaseWrapper : Database
     public override async Task<int> SaveChangesAsync(IList<IUpdateEntry> entries, CancellationToken cancellationToken = default)
     {
         var rootEntries = GetAllChangedRootEntries(entries);
-        var updates = MongoUpdate.CreateAll(rootEntries).ToList();
+        var updates = MongoUpdate.CreateAll(rootEntries, _bsonSerializerFactory).ToList();
         AddEntriesPromotedDuringSave(entries);
 
         // Explicit transaction mode

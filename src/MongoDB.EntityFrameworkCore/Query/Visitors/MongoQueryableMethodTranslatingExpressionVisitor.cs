@@ -26,6 +26,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation.Stages;
@@ -1242,8 +1243,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     /// projection at the element type.</item>
     /// <item>No property (scalar or complex) whose element name is <see cref="MongoReplaceRootStage.ShadowField"/>:
     /// the sentinel is merged after the element, so it would silently overwrite that field. Complex properties
-    /// need a separate check (<see cref="GetComplexPropertyElementName"/>) because
-    /// <see cref="IEntityType.GetProperties"/> doesn't include them.</item>
+    /// need a separate check (<see cref="MongoComplexPropertyExtensions.GetElementName(IReadOnlyComplexProperty)"/>)
+    /// because <see cref="IEntityType.GetProperties"/> doesn't include them.</item>
     /// <item>Every owned-key property (<see cref="MongoPropertyExtensions.IsOwnedTypeKey"/>) has default
     /// serialization (<see cref="NativeGroupByBinder.HasDefaultKeySerialization"/>): the <c>__ownerKey</c>
     /// sentinel is copied from the owner's raw <c>_id</c>, bypassing any converter or representation.</item>
@@ -1258,19 +1259,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         return !innerEntityType.GetNavigations().Any(n => !n.IsEmbedded())
                && innerEntityType.GetProperties().All(p => p.GetElementName() != MongoReplaceRootStage.ShadowField)
                && innerEntityType.GetComplexProperties().All(c =>
-                   GetComplexPropertyElementName(c) != MongoReplaceRootStage.ShadowField)
+                   c.GetElementName() != MongoReplaceRootStage.ShadowField)
                && innerEntityType.GetProperties().Where(p => p.IsOwnedTypeKey())
                    .All(NativeGroupByBinder.HasDefaultKeySerialization);
     }
-
-    /// <summary>
-    /// The element name a complex property occupies, read from the same <c>Mongo:ElementName</c> annotation as
-    /// <see cref="MongoPropertyExtensions.GetElementName(IReadOnlyProperty)"/>, falling back to the CLR name.
-    /// There is no complex-property overload of <c>GetElementName</c>.
-    /// </summary>
-    private static string GetComplexPropertyElementName(IReadOnlyComplexProperty complexProperty)
-        => (string?)complexProperty[MongoDB.EntityFrameworkCore.Metadata.MongoAnnotationNames.ElementName]
-           ?? complexProperty.Name;
 
     /// <summary>
     /// Whether <paramref name="selector"/> is the <c>Select(x =&gt; IncludeExpression)</c> nav-expansion generates
@@ -1978,8 +1970,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         {
             if (entityShaperExpression.StructuralType is not IEntityType entityType)
             {
-                throw new NotSupportedException($"Complex type '{entityShaperExpression.StructuralType.DisplayName()
-                }' not supported in MongoDB.");
+                throw new NotSupportedException(
+                    ComplexTypeDeclines.OfTypeOverComplex(entityShaperExpression.StructuralType));
             }
 
             if (entityType.ClrType == resultType) return source;

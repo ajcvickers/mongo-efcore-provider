@@ -14,6 +14,7 @@
  */
 
 using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Extensions; // IsInHierarchy()
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 
@@ -41,11 +42,12 @@ internal sealed partial class MongoExpressionTranslator
         if (!IsSelfParamTheEntity(Unwrap(typeBinary.Expression)))
             return false;
 
-        // Hierarchy types need a discriminator predicate, not a constant; decline.
-        if (_entityType.IsInHierarchy())
+        // Complex scopes and hierarchy types decline: a complex type has no discriminator, and hierarchy
+        // types need a discriminator predicate, not a constant.
+        if (_entityType is not IEntityType entityType || entityType.IsInHierarchy())
             return false;
 
-        var matches = typeBinary.TypeOperand.IsAssignableFrom(_entityType.ClrType);
+        var matches = typeBinary.TypeOperand.IsAssignableFrom(entityType.ClrType);
         result = new MongoConstantExpression(matches, forSerialization: null);
         return true;
     }

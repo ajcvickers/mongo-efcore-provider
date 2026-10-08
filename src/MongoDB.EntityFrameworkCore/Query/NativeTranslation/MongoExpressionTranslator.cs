@@ -41,7 +41,11 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// </remarks>
 internal sealed partial class MongoExpressionTranslator
 {
-    private readonly IEntityType _entityType;
+    // The structural type this translator's scope resolves against: usually the entity type, but an
+    // element predicate over a complex collection (Any/All/Count) scopes it to the ELEMENT's complex
+    // type. Entity-specific arms (primary keys, hierarchies, entity equality) guard `is IEntityType`
+    // and decline for a complex scope — complex types have no keys and no navigations.
+    private readonly ITypeBase _entityType;
     private readonly ParameterExpression? _outerParam;
     private readonly IEntityType? _outerEntityType;
     private readonly string? _innerPrefix;
@@ -62,6 +66,18 @@ internal sealed partial class MongoExpressionTranslator
     }
 
     /// <summary>
+    /// Creates a single-scope translator over a complex type — the element scope of a complex-collection
+    /// quantifier (<c>o.Lines.Any(l => l.Sku == "X")</c>). Members resolve against the complex type's own
+    /// properties exactly as they do for an entity; the entity-specific arms decline (see the
+    /// <c>_entityType</c> field remarks).
+    /// </summary>
+    public MongoExpressionTranslator(IComplexType complexType, ParameterExpression? selfParam = null)
+    {
+        _entityType = complexType;
+        SelfParam = selfParam;
+    }
+
+    /// <summary>
     /// Creates a two-scope translator for a correlated reference-<c>SelectMany</c> inner filter or a correlated
     /// owned-collection element predicate rendered via <c>$filter</c>. Members rooted on
     /// <paramref name="outerParam"/> (matched by reference identity, never by name) resolve against
@@ -71,7 +87,7 @@ internal sealed partial class MongoExpressionTranslator
     /// path (<c>"$$e..x"</c>), which MongoDB rejects.
     /// </summary>
     public MongoExpressionTranslator(
-        IEntityType innerEntityType, ParameterExpression outerParam, IEntityType outerEntityType, string? innerPrefix)
+        ITypeBase innerEntityType, ParameterExpression outerParam, IEntityType outerEntityType, string? innerPrefix)
     {
         _entityType = innerEntityType;
         _outerParam = outerParam;
@@ -128,6 +144,9 @@ internal sealed partial class MongoExpressionTranslator
         => SelfParam is not null
            && ReferenceEquals(node, SelfParam)
            && ProjectedAliasScope is null
+           // A complex element scope is not "the entity": key equality, GetType() folds and entity-list
+           // Contains are entity-only shapes and must decline (a whole-complex comparison declines instead).
+           && _entityType is IEntityType
            && _entityType.ClrType.IsAssignableFrom(SelfParam.Type);
 
     /// <summary>
@@ -1398,6 +1417,20 @@ internal sealed partial class MongoExpressionTranslator
         if (nodeType == ExpressionType.NotEqual
             && leftUnwrapped.TryGetProjectionMembers(out _) && rightUnwrapped.TryGetProjectionMembers(out _))
             return null;
+
+        // --- Whole-complex comparisons decline loudly ---
+        // A chain whose leaf is a complex property has no scalar representation to compare, and driver-LINQ has no
+        // complex-type oracle — falling back would surface the driver's bare ExpressionNotSupportedException (no
+        // member serializer) instead of a clear message. So this shape throws in every mode (the compile-time gate
+        // does not catch InvalidOperationException), naming the member. Compare a scalar member of the complex
+        // instead, e.g. `x.Address.City == value`.
+        IComplexProperty? leftComplex = null, rightComplex = null;
+        if (TryResolveComplexValuedChain(leftUnwrapped, out leftComplex, out _, out _)
+            || TryResolveComplexValuedChain(rightUnwrapped, out rightComplex, out _, out _))
+        {
+            var complexProperty = leftComplex ?? rightComplex!;
+            throw new InvalidOperationException(ComplexTypeDeclines.WholeValueComparison(complexProperty));
+        }
 
         // --- Field-to-field / arithmetic-operand shape: always routes to $expr ---
 

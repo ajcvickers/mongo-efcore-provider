@@ -254,7 +254,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                                               // reader evaluates both off whole documents.
                                               || mongoQueryExpression.Select.HasClientConditionalProjectionLeaf
                     ? (bsonDoc, behavior) => new MongoMixedProjectionBindingRemovingExpressionVisitor(
-                        rootEntityType, mongoQueryExpression, bsonDoc, behavior)
+                        rootEntityType, mongoQueryExpression, bsonDoc, behavior, _bsonSerializerFactory)
                     : null);
         }
 
@@ -374,7 +374,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
 
         return CompileShapedQuery(shapedQueryExpression, mongoQueryExpression, rootEntityType,
             (bsonDoc, behavior) => new MongoMixedProjectionBindingRemovingExpressionVisitor(
-                rootEntityType, mongoQueryExpression, bsonDoc, behavior, pushedDownSelectRetained));
+                rootEntityType, mongoQueryExpression, bsonDoc, behavior, _bsonSerializerFactory, pushedDownSelectRetained));
     }
 
     /// <summary>
@@ -612,10 +612,10 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         => mongoQueryExpression.Select.Projection.Any(p => p.Expression is MongoDocumentConstructionExpression);
 
     // The DOM shaper's binding remover, rooted at entityType.
-    private static Func<ParameterExpression, QueryTrackingBehavior, System.Linq.Expressions.ExpressionVisitor>
+    private Func<ParameterExpression, QueryTrackingBehavior, System.Linq.Expressions.ExpressionVisitor>
         CreateDomBindingRemover(IEntityType entityType, MongoQueryExpression mongoQueryExpression)
         => (bsonDoc, behavior) => new MongoProjectionBindingRemovingExpressionVisitor(
-            entityType, mongoQueryExpression, bsonDoc, behavior);
+            entityType, mongoQueryExpression, bsonDoc, behavior, _bsonSerializerFactory);
 
     private MethodCallExpression CompileShapedQuery(
         ShapedQueryExpression shapedQueryExpression,
@@ -679,7 +679,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             var contextParameter = Expression.Parameter(typeof(BsonDeserializationContext), "__context");
             try
             {
-                var onePassBody = new MongoStreamingEntityMaterializerRewriter(rootEntityType)
+                var onePassBody = new MongoStreamingEntityMaterializerRewriter(rootEntityType, _bsonSerializerFactory)
                     .Rewrite(injectedBody, readerParameter, contextParameter);
 
                 var onePassLambda = Expression.Lambda(

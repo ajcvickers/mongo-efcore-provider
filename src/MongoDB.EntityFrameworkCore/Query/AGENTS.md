@@ -107,6 +107,38 @@ Scope, joins, grouping:
 - **A composite `$group` `_id` omits a missing sub-key**; `MongoPipelineFactory.RenderCompositeKeyPart`
   `$ifNull`-normalizes every possibly-null part once. Key-only accumulator conditions use `NullSafeKeyRead`.
 
+Complex-type members:
+
+- **A complex property is a structural hop, not a member lookup.** Member paths through one resolve via
+  `MongoExpressionTranslator.TryWalkEmbeddedReferenceOrComplexHops`: a hop advances either through an
+  `IComplexProperty` (scope → its `ComplexType`, path prefix → element name) or an embedded single-reference
+  navigation — a nav hop can never follow a complex hop. Scope still resolves by parameter identity. Pin:
+  `ComplexMemberPathTests`.
+- **Complex element names come only from `MongoComplexPropertyExtensions.GetElementName`** (annotation
+  `Mongo:ElementName`, CLR-name fallback) — never a CLR-reflected name. A whole complex-value projection leaf's
+  alias must equal the complex property's document path (alias agreement; a mismatch silently returns empty).
+  Pins: `MongoComplexPropertyExtensionsTests`, `ComplexTypeProjectionTests`.
+- **A whole complex-value projection leaf** (`TryGetComplexPropertyLeaf` → `MongoElementRefExpression`) reads
+  through the complex property's own serializer, never a class-map read (which would ignore leaf element names
+  and nested complexes). Pin: `ComplexTypeProjectionTests`.
+- **Complex collections bind elements through the existing quantifier machinery** (`$elemMatch`,
+  `MongoQuantifierExpression`) with element paths from `GetElementName`; `$expr` inside `$elemMatch` stays a hard
+  server error, so a predicate that would render it declines. Pin: `ComplexCollectionQueryTests`.
+- **Complex-shape declines split by oracle, all text in `ComplexTypeDeclines`.** A shape driver LINQ cannot read
+  (whole-value comparison) throws `InvalidOperationException` — never `MarkNotNativelyRepresentable()`, whose
+  fallback cannot produce correct rows. A whole-entity complex collection routed to the DOM shaper has **no
+  driver oracle either** (materialization always runs through the provider's shaper in every mode — driver LINQ
+  supplies MQL only), so it declines loudly in every mode
+  (`ThrowIfComplexCollectionsForDom`; pin: `Complex_collection_dom_route_declines_under_driver_linq`).
+  SelectMany whole-element re-rooting over a complex collection is a documented decline (EF10 nav expansion never
+  produces the shape; it needs a complex-type row shaper). Pins: `ComplexTypeFilterTests`,
+  `ComplexTypeJoinProjectionTests`, `ComplexCollectionQueryTests`.
+- **Nullable complex read-back is structural-null** (EF10): a nullable complex materializes `default` when every
+  flattened leaf is null/missing — value-type leaves read into nullable locals under `NullableContext` so the
+  all-leaves-null condition sees true nulls; a null required leaf materializes the whole complex as `default`
+  (EF10's single-required-property nullCheck — pinned as contract); a required complex whose element is missing
+  throws the missing-required error. Pin: `ComplexMaterializerTests`.
+
 Rendering (null/missing/dialect semantics):
 
 - **Every string constant/parameter in the aggregation dialect is `$literal`-wrapped** (else `"$Field"` user input

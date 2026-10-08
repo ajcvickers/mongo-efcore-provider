@@ -54,28 +54,29 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
     /// <see cref="IUpdateEntry"/>.
     /// </summary>
     /// <param name="entries">The EF Core-supplied <see cref="IUpdateEntry"/> to process.</param>
+    /// <param name="bsonSerializerFactory">The <see cref="BsonSerializerFactory"/> to obtain complex-property serializers from.</param>
     /// <returns>An enumeration of <see cref="MongoUpdate"/> that corresponds to these updates.</returns>
-    public static IEnumerable<MongoUpdate> CreateAll(IEnumerable<IUpdateEntry> entries)
-        => entries.Select(Create).OfType<MongoUpdate>();
+    public static IEnumerable<MongoUpdate> CreateAll(IEnumerable<IUpdateEntry> entries, BsonSerializerFactory bsonSerializerFactory)
+        => entries.Select(e => Create(e, bsonSerializerFactory)).OfType<MongoUpdate>();
 
-    private static MongoUpdate? Create(IUpdateEntry entry)
+    private static MongoUpdate? Create(IUpdateEntry entry, BsonSerializerFactory bsonSerializerFactory)
         => entry.EntityState switch
         {
-            EntityState.Added => ConvertAdded(entry),
+            EntityState.Added => ConvertAdded(entry, bsonSerializerFactory),
             EntityState.Deleted => ConvertDeleted(entry),
-            EntityState.Modified => ConvertModified(entry),
+            EntityState.Modified => ConvertModified(entry, bsonSerializerFactory),
             EntityState.Detached => null,
             EntityState.Unchanged => null,
             _ => throw new NotSupportedException($"Unexpected entity state: {entry.EntityState}.")
         };
 
-    private static MongoUpdate ConvertAdded(IUpdateEntry entry)
+    private static MongoUpdate ConvertAdded(IUpdateEntry entry, BsonSerializerFactory bsonSerializerFactory)
     {
         var document = new BsonDocument();
         using var writer = new BsonDocumentWriter(document);
 
         SetStoreGeneratedValues(entry);
-        WriteEntity(writer, entry);
+        WriteEntity(writer, entry, bsonSerializerFactory);
 
         return new MongoUpdate(entry, new InsertOneModel<BsonDocument>(document));
     }
@@ -85,14 +86,14 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
         return new MongoUpdate(entry, new DeleteOneModel<BsonDocument>(CreateWhereFilter(entry)));
     }
 
-    private static MongoUpdate ConvertModified(IUpdateEntry entry)
+    private static MongoUpdate ConvertModified(IUpdateEntry entry, BsonSerializerFactory bsonSerializerFactory)
     {
         var document = new BsonDocument();
         using var writer = new BsonDocumentWriter(document);
 
         var whereFilter = CreateWhereFilter(entry); // Before row version incrementation
         SetStoreGeneratedValues(entry);
-        WriteEntity(writer, entry);
+        WriteEntity(writer, entry, bsonSerializerFactory);
 
         var updateDefinition = new BsonDocumentUpdateDefinition<BsonDocument>(new BsonDocument("$set", document));
         return new MongoUpdate(entry, new UpdateOneModel<BsonDocument>(whereFilter, updateDefinition));
@@ -128,7 +129,11 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
         }
     }
 
-    private static void WriteEntity(IBsonWriter writer, IUpdateEntry entry, Func<IProperty, bool>? propertyFilter = null)
+    private static void WriteEntity(
+        IBsonWriter writer,
+        IUpdateEntry entry,
+        BsonSerializerFactory bsonSerializerFactory,
+        Func<IProperty, bool>? propertyFilter = null)
     {
         if (propertyFilter == null && entry.EntityState == EntityState.Modified)
         {
@@ -138,7 +143,8 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
         writer.WriteStartDocument();
         WriteKeyProperties(writer, entry);
         WriteNonKeyProperties(writer, entry, propertyFilter);
-        WriteOwnedEntities(writer, entry);
+        WriteOwnedEntities(writer, entry, bsonSerializerFactory);
+        WriteComplexProperties(writer, entry, bsonSerializerFactory);
         writer.WriteEndDocument();
     }
 
@@ -209,7 +215,7 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
         serializationInfo.Serializer.Serialize(root, value);
     }
 
-    private static void WriteOwnedEntities(IBsonWriter writer, IUpdateEntry entry)
+    private static void WriteOwnedEntities(IBsonWriter writer, IUpdateEntry entry, BsonSerializerFactory bsonSerializerFactory)
     {
         foreach (var navigation in entry.EntityType.GetNavigations())
         {
@@ -250,7 +256,7 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
                             embeddedEntry.SetStoreGeneratedValue(ordinalKeyProperty, ordinal, setModified: false);
                         }
 
-                        WriteEntity(writer, embeddedEntry, _ => true);
+                        WriteEntity(writer, embeddedEntry, bsonSerializerFactory, _ => true);
                         ordinal++;
                     }
 
@@ -261,10 +267,39 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
                     var embeddedEntry =
                         ((InternalEntityEntry)entry).StateManager.TryGetEntry(embeddedValue,
                             navigation.ForeignKey.DeclaringEntityType)!;
-                    WriteEntity(writer, embeddedEntry, _ => true);
+                    WriteEntity(writer, embeddedEntry, bsonSerializerFactory, _ => true);
                 }
             }
         }
+    }
+
+    private static void WriteComplexProperties(
+        IBsonWriter writer,
+        IUpdateEntry entry,
+        BsonSerializerFactory bsonSerializerFactory)
+    {
+        foreach (var complexProperty in entry.EntityType.GetComplexProperties())
+        {
+            // Written unconditionally, like owned navigations: a complex property is a single CLR value on the
+            // entry, so a $set of the whole sub-document is the correct update whether or not only part of it
+            // changed. (Unlike owned navigations there is no per-child entry to consult.)
+            WriteComplexProperty(writer, entry.GetCurrentValue(complexProperty), complexProperty, bsonSerializerFactory);
+        }
+    }
+
+    private static void WriteComplexProperty(
+        IBsonWriter writer,
+        object? value,
+        IReadOnlyComplexProperty complexProperty,
+        BsonSerializerFactory bsonSerializerFactory)
+    {
+        var serializationInfo = bsonSerializerFactory.GetComplexPropertySerializationInfo(complexProperty);
+        writer.WriteName(serializationInfo.ElementName);
+        var root = BsonSerializationContext.CreateRoot(writer);
+        // Set the nominal type the way the driver's generic Serialize extension does: a collection serializer
+        // wraps values in a {_t, _v} document when the nominal type doesn't match the runtime type.
+        serializationInfo.Serializer.Serialize(
+            root, new BsonSerializationArgs { NominalType = serializationInfo.Serializer.ValueType }, value);
     }
 
     private static void SetTemporaryOrdinals(IUpdateEntry entry, IForeignKey fk, object embeddedValue)

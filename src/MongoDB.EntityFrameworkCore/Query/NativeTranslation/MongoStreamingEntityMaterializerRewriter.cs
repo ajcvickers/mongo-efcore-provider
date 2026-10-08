@@ -28,6 +28,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Serializers;
 
@@ -55,11 +56,17 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 internal sealed class MongoStreamingEntityMaterializerRewriter
 {
     private readonly IEntityType _rootEntityType;
+    private readonly BsonSerializerFactory _bsonSerializerFactory;
 
-    // No BsonSerializerFactory dependency: each property's serializer is baked into the expression tree at
-    // compile time via the static BsonSerializerFactory.GetPropertySerializationInfo (see BuildTypedRead).
-    public MongoStreamingEntityMaterializerRewriter(IEntityType rootEntityType)
-        => _rootEntityType = rootEntityType;
+    // Scalar property serializers bake in at compile time via the static BsonSerializerFactory
+    // .GetPropertySerializationInfo (see BuildTypedRead); complex-collection reads use the instance factory's
+    // cached complex serializers (see BuildComplexCollectionRead).
+    public MongoStreamingEntityMaterializerRewriter(
+        IEntityType rootEntityType, BsonSerializerFactory bsonSerializerFactory)
+    {
+        _rootEntityType = rootEntityType;
+        _bsonSerializerFactory = bsonSerializerFactory;
+    }
 
     private static readonly MethodInfo ReadStartDocumentMethod =
         typeof(IBsonReader).GetMethod(nameof(IBsonReader.ReadStartDocument))!;
@@ -112,6 +119,8 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         public required List<(INavigationBase Navigation, EntityPlan Child)> OwnedNavigations { get; init; }
         public required List<CollectionPlan> OwnedCollections { get; init; }
         public required List<LookupReferencePlan> LookupReferences { get; init; }
+        public required List<ComplexPlan> Complexes { get; init; }
+        public required List<ComplexCollectionPlan> ComplexCollections { get; init; }
 
         /// <summary>
         /// The property→local scope this plan's construction block reads from. The root entity and its owned
@@ -157,6 +166,52 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         // RewriteMaterializer from the CollectionShaperExpression's inner shaper, consumed by BuildFillLoop to
         // emit `list.Add(<constructed element>)` inside the array loop.
         public Expression? ElementConstructor { get; set; }
+    }
+
+    /// <summary>
+    /// A plan for one complex property's sub-document: the typed locals for its scalar leaf properties (with
+    /// required-presence flags, exactly as an <see cref="EntityPlan"/> tracks them), a presence flag for the
+    /// sub-document itself, and the plans for nested complex properties (recursively). Complex properties share the
+    /// surrounding entity's locals scope — their leaf reads resolve by the same <see cref="IProperty"/> identity.
+    /// A complex <em>collection</em> is not planned here: it is rejected upstream by <see cref="StreamingEligibility"/>
+    /// (EF materializes collection members separately from the structural-type block), so the DOM shaper handles it.
+    /// </summary>
+    private sealed class ComplexPlan
+    {
+        public required IComplexProperty ComplexProperty { get; init; }
+        public required string ElementName { get; init; }
+        public required ParameterExpression Present { get; init; }
+        public required Dictionary<IProperty, ParameterExpression> Locals { get; init; }
+        public required Dictionary<IProperty, ParameterExpression> RequiredPresence { get; init; }
+        public required List<ComplexPlan> NestedComplexes { get; init; }
+
+        /// <summary>
+        /// Whether any complex property on the path to (and including) this one is nullable. Leaves under a
+        /// nullable complex read an explicit BSON <c>null</c> as <c>default</c> — EF threads the complex property's
+        /// nullability into its leaves' materialization (<c>StructuralTypeMaterializerSource</c>'s
+        /// <c>parameters.IsNullable</c>), rather than storing it on each leaf.
+        /// </summary>
+        public bool NullableContext { get; init; }
+
+        /// <summary>Required (non-nullable) complex properties throw when the sub-document is missing; nullable ones
+        /// leave their leaves at <c>default</c>, which EF's own all-leaves-null condition turns into a default value.</summary>
+        public bool IsRequired => !ComplexProperty.IsNullable;
+    }
+
+    /// <summary>
+    /// A plan for a (root-level) complex <em>collection</em> property: the whole stored array is read in one pass
+    /// through the complex property's own collection serializer into a <see cref="List"/> local, rather than
+    /// per-element. A <see cref="Present"/> flag distinguishes a MISSING element (assignment skipped, so the
+    /// constructed instance's own field initializer survives — driver-LINQ parity) from an explicit BSON null
+    /// (assigned as null — also driver-LINQ parity). Nested complex collections are not planned here; they are
+    /// declined by <see cref="StreamingEligibility"/>.
+    /// </summary>
+    private sealed class ComplexCollectionPlan
+    {
+        public required IComplexProperty ComplexProperty { get; init; }
+        public required string ElementName { get; init; }
+        public required ParameterExpression List { get; init; }
+        public required ParameterExpression Present { get; init; }
     }
 
     private static readonly MethodInfo ReadStartArrayMethod =
@@ -244,6 +299,31 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         var ownedNavigations = new List<(INavigationBase, EntityPlan)>();
         var ownedCollections = new List<CollectionPlan>();
         var lookupReferences = new List<LookupReferencePlan>();
+        var complexes = new List<ComplexPlan>();
+        var complexCollections = new List<ComplexCollectionPlan>();
+        foreach (var complexProperty in entityType.GetComplexProperties())
+        {
+            if (complexProperty.IsCollection)
+            {
+                // Root-level complex collection: the whole array reads in one pass through the property's own
+                // collection serializer (see ComplexCollectionPlan). A nested one is declined upstream by
+                // StreamingEligibility.
+                var list = Expression.Variable(
+                    complexProperty.ClrType, "__list_c_" + complexProperty.Name);
+                var collectionPresent = Expression.Variable(typeof(bool), "__present_c_" + complexProperty.Name);
+                complexCollections.Add(new ComplexCollectionPlan
+                {
+                    ComplexProperty = complexProperty,
+                    ElementName = complexProperty.GetElementName(),
+                    List = list,
+                    Present = collectionPresent
+                });
+                continue;
+            }
+
+            complexes.Add(BuildComplexPlan(complexProperty, allLocals, inheritedNullable: false));
+        }
+
         foreach (var navigation in entityType.GetNavigations())
         {
             var target = navigation.TargetEntityType;
@@ -320,8 +400,67 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             OwnedNavigations = ownedNavigations,
             OwnedCollections = ownedCollections,
             LookupReferences = lookupReferences,
+            Complexes = complexes,
+            ComplexCollections = complexCollections,
             AllLocals = allLocals
         };
+    }
+
+    /// <summary>
+    /// Builds the plan for one complex property (recursively for nested complex properties). Leaf locals join the
+    /// shared <paramref name="allLocals"/> scope so the construction block's <c>ValueBufferTryReadValue</c> reads for
+    /// complex leaves resolve exactly like the entity's own — the sub-document descent is what scopes them, since a
+    /// leaf's fill only runs while the reader is positioned inside its sub-document.
+    /// </summary>
+    private static ComplexPlan BuildComplexPlan(
+        IComplexProperty complexProperty,
+        Dictionary<IProperty, ParameterExpression> allLocals,
+        bool inheritedNullable)
+    {
+        var plan = new ComplexPlan
+        {
+            ComplexProperty = complexProperty,
+            ElementName = complexProperty.GetElementName(),
+            Present = Expression.Variable(typeof(bool), "__present_c_" + complexProperty.Name),
+            Locals = new Dictionary<IProperty, ParameterExpression>(),
+            RequiredPresence = new Dictionary<IProperty, ParameterExpression>(),
+            NestedComplexes = new List<ComplexPlan>(),
+            NullableContext = inheritedNullable || complexProperty.IsNullable
+        };
+
+        FillComplexTypePlan(complexProperty.ComplexType, plan, allLocals);
+        return plan;
+    }
+
+    private static void FillComplexTypePlan(
+        IComplexType complexType,
+        ComplexPlan plan,
+        Dictionary<IProperty, ParameterExpression> allLocals)
+    {
+        foreach (var property in complexType.GetProperties())
+        {
+            // A leaf of a nullable complex property is effectively nullable (its null contributes to EF's
+            // all-leaves-null condition), even when its own CLR shape is not: value-type leaves read into
+            // nullable locals so the condition sees a true null (not a boxed default) for them too.
+            var localType = plan.NullableContext && property.ClrType.IsValueType
+                ? property.ClrType.MakeNullable()
+                : property.ClrType;
+            var local = Expression.Variable(localType, "__p_" + complexType.ShortName() + "_" + property.Name);
+            plan.Locals[property] = local;
+            allLocals[property] = local;
+
+            if (!property.IsNullable && !plan.NullableContext)
+            {
+                plan.RequiredPresence[property] =
+                    Expression.Variable(typeof(bool), "__present_p_" + complexType.ShortName() + "_" + property.Name);
+            }
+        }
+
+        foreach (var nested in complexType.GetComplexProperties())
+        {
+            var nestedPlan = BuildComplexPlan(nested, allLocals, plan.NullableContext);
+            plan.NestedComplexes.Add(nestedPlan);
+        }
     }
 
     private void CollectLocals(EntityPlan plan, List<ParameterExpression> locals, List<Expression> initializers)
@@ -365,6 +504,42 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
 
             // Element locals are shared across iterations; declare + default-init them once here.
             CollectLocals(collection.Element, locals, initializers);
+        }
+
+        foreach (var complex in plan.Complexes)
+        {
+            CollectComplexLocals(complex, locals, initializers);
+        }
+
+        foreach (var complexCollection in plan.ComplexCollections)
+        {
+            locals.Add(complexCollection.Present);
+            initializers.Add(Expression.Assign(complexCollection.Present, Expression.Constant(false)));
+            locals.Add(complexCollection.List);
+            initializers.Add(Expression.Assign(complexCollection.List, Expression.Default(complexCollection.List.Type)));
+        }
+    }
+
+    private static void CollectComplexLocals(ComplexPlan plan, List<ParameterExpression> locals, List<Expression> initializers)
+    {
+        locals.Add(plan.Present);
+        initializers.Add(Expression.Assign(plan.Present, Expression.Constant(false)));
+
+        foreach (var local in plan.Locals.Values)
+        {
+            locals.Add(local);
+            initializers.Add(Expression.Assign(local, Expression.Default(local.Type)));
+        }
+
+        foreach (var present in plan.RequiredPresence.Values)
+        {
+            locals.Add(present);
+            initializers.Add(Expression.Assign(present, Expression.Constant(false)));
+        }
+
+        foreach (var nested in plan.NestedComplexes)
+        {
+            CollectComplexLocals(nested, locals, initializers);
         }
     }
 
@@ -424,6 +599,16 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             ifChain = Dispatch(elementName, BuildCollectionLoop(collection), ifChain);
         }
 
+        foreach (var complex in plan.Complexes)
+        {
+            ifChain = Dispatch(complex.ElementName, BuildComplexDescent(complex), ifChain);
+        }
+
+        foreach (var complexCollection in plan.ComplexCollections)
+        {
+            ifChain = Dispatch(complexCollection.ElementName, BuildComplexCollectionRead(complexCollection), ifChain);
+        }
+
         var breakTarget = Expression.Label("__fillDone_" + plan.EntityType.ShortName());
         var loop = Expression.Loop(
             Expression.IfThenElse(
@@ -437,7 +622,9 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             breakTarget);
 
         // Nothing to enforce or normalize after the loop: the loop is the whole fill.
-        if (plan.RequiredPresence.Count == 0 && plan.OwnedCollections.Count == 0)
+        if (plan.RequiredPresence.Count == 0
+            && plan.OwnedCollections.Count == 0
+            && plan.Complexes.All(c => !c.IsRequired))
         {
             return loop;
         }
@@ -481,6 +668,26 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
                         Expression.New(
                             InvalidOperationExceptionCtor,
                             Expression.Constant(Storage.BsonBinding.RequiredPropertyMissingMessage(property))))));
+        }
+
+        // A required complex property whose sub-document is missing (never dispatched) or BSON Null throws, like
+        // the DOM path's "required but not present" for owned references. A nullable complex leaves its leaves at
+        // default; EF's own all-leaves-null condition then materializes default(T) — structural-null semantics.
+        foreach (var complex in plan.Complexes)
+        {
+            if (!complex.IsRequired)
+            {
+                continue;
+            }
+
+            body.Add(
+                Expression.IfThen(
+                    Expression.Not(complex.Present),
+                    Expression.Throw(
+                        Expression.New(
+                            InvalidOperationExceptionCtor,
+                            Expression.Constant(
+                                $"Field '{complex.ElementName}' required but not present in BsonDocument for a '{plan.EntityType.DisplayName()}'.")))));
         }
 
         return Expression.Block(body);
@@ -562,6 +769,166 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             arrayBody);
     }
 
+    // Descends into a complex property's sub-document. If the element is BSON Null the sub-document is absent:
+    // ReadNull + present=false. Otherwise: present=true, descend (ReadStartDocument / complex fill loop /
+    // ReadEndDocument). A MISSING element never dispatches — present stays false, which the caller's post-loop
+    // enforcement turns into a throw for a required complex and into default leaves for a nullable one.
+    private Expression BuildComplexDescent(ComplexPlan plan)
+        => Expression.IfThenElse(
+            IsCurrentNull(),
+            Expression.Block(
+                Expression.Call(_reader, ReadNullMethod),
+                Expression.Assign(plan.Present, Expression.Constant(false))),
+            Expression.Block(
+                Expression.Assign(plan.Present, Expression.Constant(true)),
+                Expression.Call(_reader, ReadStartDocumentMethod),
+                BuildComplexFillLoop(plan),
+                Expression.Call(_reader, ReadEndDocumentMethod)));
+
+    /// <summary>
+    /// Reads a complex collection's whole stored array in one pass through the complex property's own collection
+    /// serializer (the reader is positioned at the array value, after the element name). An explicit BSON null is
+    /// consumed and leaves the <see cref="ComplexCollectionPlan.List"/> local <c>null</c>; a MISSING element never
+    /// dispatches. Either way <see cref="ComplexCollectionPlan.Present"/> records that the element was seen, so the
+    /// construction block's member assignment (skipped when absent) can preserve the instance's own field
+    /// initializer — driver-LINQ parity for the missing/null states.
+    /// </summary>
+    private Expression BuildComplexCollectionRead(ComplexCollectionPlan plan)
+    {
+        var serializer = _bsonSerializerFactory.GetComplexPropertySerializationInfo(plan.ComplexProperty).Serializer;
+
+        // The same reuse-the-per-row-context deserialize BuildTypedRead emits, into the List local.
+        var valueType = serializer.ValueType;
+        var genericSerializerType = typeof(IBsonSerializer<>).MakeGenericType(valueType);
+
+        Expression deserialize;
+        if (genericSerializerType.IsInstanceOfType(serializer))
+        {
+            var typedDeserialize = genericSerializerType.GetMethod(
+                nameof(IBsonSerializer.Deserialize),
+                [typeof(BsonDeserializationContext), typeof(BsonDeserializationArgs)])!;
+
+            deserialize = Expression.Call(
+                Expression.Constant(serializer, genericSerializerType),
+                typedDeserialize,
+                _context,
+                Expression.Default(typeof(BsonDeserializationArgs)));
+        }
+        else
+        {
+            Expression boxedCall = Expression.Call(
+                Expression.Constant(serializer, typeof(IBsonSerializer)),
+                DeserializeMethod,
+                _context,
+                Expression.Default(typeof(BsonDeserializationArgs)));
+
+            deserialize = Expression.Convert(boxedCall, plan.List.Type);
+        }
+
+        return Expression.IfThenElse(
+            IsCurrentNull(),
+            Expression.Block(
+                Expression.Call(_reader, ReadNullMethod),
+                Expression.Assign(plan.Present, Expression.Constant(true))),
+            Expression.Block(
+                Expression.Assign(plan.Present, Expression.Constant(true)),
+                Expression.Assign(plan.List, deserialize.ConvertIfRequired(plan.List.Type))));
+    }
+
+    /// <summary>
+    /// The forward name-dispatch fill loop for one complex sub-document level (reader already after
+    /// <c>ReadStartDocument</c>): scalar leaves read into typed locals with required-presence enforcement,
+    /// nested complex properties descend recursively. Mirrors <see cref="BuildFillLoop"/>, minus keys (complex
+    /// types have none) and collections — a complex collection NESTED inside a complex property is declined by
+    /// <see cref="StreamingEligibility"/> (a ROOT-level one never appears here: the entity-level fill loop
+    /// dispatches it to <see cref="BuildComplexCollectionRead"/>).
+    /// </summary>
+    private Expression BuildComplexFillLoop(ComplexPlan plan)
+    {
+        var ifChain = (Expression)Expression.Call(_reader, SkipValueMethod);
+
+        foreach (var property in plan.ComplexProperty.ComplexType.GetProperties())
+        {
+            var local = plan.Locals[property];
+
+            // Mark present before reading (not inside BuildTypedRead): a present-but-null required scalar must
+            // take BuildTypedRead's null handling, not the post-loop missing-required throw.
+            Expression read = BuildTypedRead(property, local, plan.NullableContext);
+            if (plan.RequiredPresence.TryGetValue(property, out var presenceFlag))
+            {
+                read = Expression.Block(
+                    Expression.Assign(presenceFlag, Expression.Constant(true)),
+                    read);
+            }
+
+            ifChain = Dispatch(property.GetElementName(), read, ifChain);
+        }
+
+        foreach (var nested in plan.NestedComplexes)
+        {
+            ifChain = Dispatch(nested.ElementName, BuildComplexDescent(nested), ifChain);
+        }
+
+        var breakTarget = Expression.Label("__complexFillDone_" + plan.ComplexProperty.ComplexType.ShortName());
+        var loop = Expression.Loop(
+            Expression.IfThenElse(
+                Expression.NotEqual(
+                    Expression.Call(_reader, ReadBsonTypeMethod),
+                    Expression.Constant(BsonType.EndOfDocument, typeof(BsonType))),
+                Expression.Block(
+                    Expression.Assign(_name, Expression.Call(ReadNameMethod, _reader)),
+                    ifChain),
+                Expression.Break(breakTarget)),
+            breakTarget);
+
+        if (plan.RequiredPresence.Count == 0)
+        {
+            return loop;
+        }
+
+        // Reset presence flags before each pass (nested complexes inside a complex COLLECTION element would reuse
+        // the locals across iterations) and enforce after, exactly as the entity-level loop does.
+        var body = new List<Expression>();
+        foreach (var (_, presenceFlag) in plan.RequiredPresence)
+        {
+            body.Add(Expression.Assign(presenceFlag, Expression.Constant(false)));
+        }
+
+        body.Add(loop);
+
+        foreach (var (property, presenceFlag) in plan.RequiredPresence)
+        {
+            body.Add(
+                Expression.IfThen(
+                    Expression.Not(presenceFlag),
+                    Expression.Throw(
+                        Expression.New(
+                            InvalidOperationExceptionCtor,
+                            Expression.Constant(Storage.BsonBinding.RequiredPropertyMissingMessage(property))))));
+        }
+
+        // A required NESTED complex property whose sub-document is missing or BSON Null throws, like a required
+        // complex at the entity level; a nullable one leaves its leaves at default for EF's condition.
+        foreach (var nested in plan.NestedComplexes)
+        {
+            if (!nested.IsRequired)
+            {
+                continue;
+            }
+
+            body.Add(
+                Expression.IfThen(
+                    Expression.Not(nested.Present),
+                    Expression.Throw(
+                        Expression.New(
+                            InvalidOperationExceptionCtor,
+                            Expression.Constant(
+                                $"Field '{nested.ElementName}' required but not present in BsonDocument for a '{plan.ComplexProperty.ComplexType.DisplayName()}'.")))));
+        }
+
+        return Expression.Block(body);
+    }
+
     /// <summary>
     /// Rewrite the materializer expression, preserving any <see cref="IncludeExpression"/> structure.
     /// For a plain entity block the value source is redirected to <paramref name="plan"/>'s locals; for an
@@ -622,7 +989,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         // block directly, redirecting its value source to this plan's locals. When building a collection
         // element, `collection` carries the loop counter so the synthesized ordinal key resolves to counter+1.
         var materializerBlock = ExtractMaterializerBlock(body, plan.EntityType);
-        return new ConstructionRewriter(plan.AllLocals, collection).Visit(materializerBlock);
+        return new ConstructionRewriter(plan.AllLocals, collection, plan.ComplexCollections).Visit(materializerBlock);
     }
 
     /// <summary>
@@ -909,7 +1276,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
     /// <see cref="InvalidOperationException"/> as <see cref="Storage.BsonBinding"/>, since <c>default(T)</c> would be
     /// an invalid null. A missing element is handled separately by the fill loop's presence tracking.
     /// </remarks>
-    private Expression BuildTypedRead(IProperty property, ParameterExpression local)
+    private Expression BuildTypedRead(IProperty property, ParameterExpression local, bool nullableContext = false)
     {
         var serializer = BsonSerializerFactory.GetPropertySerializationInfo(property).Serializer;
 
@@ -946,7 +1313,9 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
 
         var readAssign = Expression.Assign(local, deserialize);
 
-        Expression onNull = !property.IsNullable && !local.Type.IsValueType
+        // A leaf under a nullable complex property reads an explicit BSON null as default — the same nullability
+        // EF threads into leaf materialization (see ComplexPlan.NullableContext).
+        Expression onNull = !property.IsNullable && !nullableContext && !local.Type.IsValueType
             ? Expression.Throw(
                 Expression.New(
                     InvalidOperationExceptionCtor,
@@ -970,11 +1339,16 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
     {
         private readonly Dictionary<IProperty, ParameterExpression> _locals;
         private readonly CollectionPlan? _collection;
+        private readonly List<ComplexCollectionPlan>? _complexCollections;
 
-        public ConstructionRewriter(Dictionary<IProperty, ParameterExpression> locals, CollectionPlan? collection = null)
+        public ConstructionRewriter(
+            Dictionary<IProperty, ParameterExpression> locals,
+            CollectionPlan? collection = null,
+            List<ComplexCollectionPlan>? complexCollections = null)
         {
             _locals = locals;
             _collection = collection;
+            _complexCollections = complexCollections;
         }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
@@ -1006,6 +1380,47 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             }
 
             return base.VisitMethodCall(node);
+        }
+
+        /// <summary>
+        /// EF10's materializer block assigns <c>default</c> to a (root-level) complex collection member (v10.0.0
+        /// <c>StructuralTypeMaterializerSource.AddInitializeExpression</c>: "Initialize collections to null, they'll
+        /// be populated separately") — no value read to redirect. Replace that assignment with the
+        /// presence-conditional read from the plan's <see cref="ComplexCollectionPlan.List"/> local: present (an
+        /// array or an explicit BSON null) assigns the local — null stays null; missing assigns nothing, so the
+        /// instance's own field initializer survives, matching driver-LINQ.
+        /// </summary>
+        /// <remarks>
+        /// This arm is the LIVE member-assignment path for complex collections: the fill loop populates the
+        /// plan's <see cref="ComplexCollectionPlan.List"/> local, and this arm is what assigns that local into
+        /// the materialized instance in place of EF's <c>default</c> assignment — without it the init assignment
+        /// would clobber the filled list after the fill loop. Confirmed by the final whole-branch review (the
+        /// whole-entity complex-collection materialization test depends on it); the earlier fix-round probes that
+        /// suggested otherwise were stale-binary-unreliable. Matching keys on <see cref="MemberInfo"/> identity,
+        /// never a member name.
+        /// </remarks>
+        protected override Expression VisitBinary(BinaryExpression node)
+        {
+            if (node.NodeType == ExpressionType.Assign
+                && node.Right is DefaultExpression
+                && node.Left is MemberExpression { Expression: not null } memberAccess
+                && _complexCollections is { } complexCollections)
+            {
+                foreach (var complexCollection in complexCollections)
+                {
+                    if (complexCollection.ComplexProperty.GetMemberInfo(forMaterialization: true, forSet: true)
+                        == memberAccess.Member)
+                    {
+                        return Expression.IfThen(
+                            complexCollection.Present,
+                            Expression.Assign(
+                                memberAccess,
+                                complexCollection.List.ConvertIfRequired(memberAccess.Type)));
+                    }
+                }
+            }
+
+            return base.VisitBinary(node);
         }
 
         /// <summary>

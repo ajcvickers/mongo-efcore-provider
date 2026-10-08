@@ -102,6 +102,13 @@ internal class EntitySerializer<TValue> :
             return true;
         }
 
+        var complexProperty = _entityType.FindComplexProperty(memberName);
+        if (complexProperty != null)
+        {
+            serializationInfo = _bsonSerializerFactory.GetComplexPropertySerializationInfo(complexProperty);
+            return true;
+        }
+
         var navigation = _entityType.FindNavigation(memberName);
         if (navigation != null)
         {

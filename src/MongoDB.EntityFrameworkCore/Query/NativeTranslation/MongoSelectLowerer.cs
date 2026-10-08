@@ -19,6 +19,7 @@ using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation.Stages;
 
@@ -588,13 +589,7 @@ internal sealed class MongoSelectLowerer
             }
 
             foreach (var complexProperty in type.GetComplexProperties())
-                names.Add(GetComplexPropertyElementName(complexProperty));
+                names.Add(complexProperty.GetElementName());
         }
     }
-
-    // No GetElementName overload exists for complex properties, so read the annotation with the same CLR-name
-    // fallback. Mirrors MongoQueryableMethodTranslatingExpressionVisitor.GetComplexPropertyElementName.
-    private static string GetComplexPropertyElementName(IReadOnlyComplexProperty complexProperty)
-        => (string?)complexProperty[MongoDB.EntityFrameworkCore.Metadata.MongoAnnotationNames.ElementName]
-           ?? complexProperty.Name;
 }

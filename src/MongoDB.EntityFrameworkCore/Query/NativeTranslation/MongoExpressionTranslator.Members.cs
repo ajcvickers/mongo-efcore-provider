@@ -24,6 +24,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure; // IsEFPropertyMethod()
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;           // QueryableMethods
 using MongoDB.EntityFrameworkCore.Extensions;        // GetDocumentPath(), IsEmbedded()
+using MongoDB.EntityFrameworkCore.Metadata;         // MongoComplexPropertyExtensions.GetElementName()
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -356,7 +357,7 @@ internal sealed partial class MongoExpressionTranslator
         Expression node,
         int minimumHops,
         [NotNullWhen(true)] out List<string>? names,
-        [NotNullWhen(true)] out IEntityType? scopeType,
+        [NotNullWhen(true)] out ITypeBase? scopeType,
         out bool isOuter)
     {
         names = null;
@@ -403,11 +404,16 @@ internal sealed partial class MongoExpressionTranslator
     /// Declining here rejects cross-collection and owned-collection intermediates: a leaf under an array has no
     /// single dotted path. Quantifiers over such a collection go through <see cref="TryResolveOwnedCollectionPath"/>.
     private static bool TryWalkEmbeddedReferenceHops(
-        List<string> names, int hopCount, ref IEntityType scopeType, List<string> segments)
+        List<string> names, int hopCount, ref ITypeBase scopeType, List<string> segments)
     {
         for (var i = 0; i < hopCount; i++)
         {
-            var navigation = scopeType.FindNavigation(names[i]);
+            // Complex types have no navigations; a walk rooted on (or reaching) a complex scope that then
+            // asks for a navigation declines.
+            if (scopeType is not IEntityType entityType)
+                return false;
+
+            var navigation = entityType.FindNavigation(names[i]);
             if (navigation is null || !navigation.IsEmbedded() || navigation.IsCollection)
                 return false;
 
@@ -425,9 +431,95 @@ internal sealed partial class MongoExpressionTranslator
     }
 
     /// <summary>
+    /// Walks the first <paramref name="hopCount"/> hop names as embedded single-reference navigations or complex
+    /// properties, appending each one's element name to <paramref name="segments"/> and advancing
+    /// <paramref name="scopeType"/> to the last walked hop's structural type.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The complex-aware generalization of <see cref="TryWalkEmbeddedReferenceHops"/> for scalar-leaf chains: a
+    /// complex property advances the scope to its <see cref="IComplexProperty.ComplexType"/> exactly as an embedded
+    /// reference navigation advances it to its target, using
+    /// <see cref="MongoComplexPropertyExtensions.GetElementName"/> for the stored element name. Complex types
+    /// contain no navigations, so a navigation hop can never follow a complex hop.
+    /// </para>
+    /// <para>
+    /// A complex- or navigation-COLLECTION intermediate declines: a leaf under an array has no single dotted path.
+    /// Quantifiers over collections go through <see cref="TryResolveOwnedCollectionPath"/>.
+    /// </para>
+    /// </remarks>
+    private static bool TryWalkEmbeddedReferenceOrComplexHops(
+        List<string> names, int hopCount, ref ITypeBase scopeType, List<string> segments)
+    {
+        for (var i = 0; i < hopCount; i++)
+        {
+            if (scopeType is IEntityType entityType && entityType.FindNavigation(names[i]) is { } navigation)
+            {
+                if (!navigation.IsEmbedded() || navigation.IsCollection)
+                    return false;
+
+                // The navigation's containing element name is the same source the shapers and pipeline use, so the
+                // emitted path matches stored layout (including HasElementName overrides and shared types).
+                var navigationElementName = navigation.TargetEntityType.GetContainingElementName();
+                if (string.IsNullOrEmpty(navigationElementName))
+                    return false;
+
+                segments.Add(navigationElementName);
+                scopeType = navigation.TargetEntityType;
+                continue;
+            }
+
+            var complexProperty = scopeType.FindComplexProperty(names[i]);
+            if (complexProperty is null || complexProperty.IsCollection)
+                return false;
+
+            segments.Add(complexProperty.GetElementName());
+            scopeType = complexProperty.ComplexType;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves a member chain whose LEAF is a complex property (<c>c.Address</c>, <c>b.Contact.Address</c>) to its
+    /// dotted document path and the leaf complex property. Intermediate hops follow
+    /// <see cref="TryWalkEmbeddedReferenceOrComplexHops"/>; the leaf itself must be a complex property, so this
+    /// never competes with <see cref="TryResolveOwnedFieldPath"/>'s scalar leaf or
+    /// <see cref="TryResolveOwnedReferenceNavigationPath"/>'s navigation leaf.
+    /// </summary>
+    /// <remarks>
+    /// A whole complex value has no scalar representation: comparison callers use this as their hard-decline
+    /// recognizer so the exception names the member, instead of falling back to driver-LINQ (which has no
+    /// complex-type oracle and would answer with a bare <c>ExpressionNotSupportedException</c>).
+    /// </remarks>
+    private bool TryResolveComplexValuedChain(
+        Expression node, [NotNullWhen(true)] out IComplexProperty? complexProperty,
+        [NotNullWhen(true)] out string? fieldPath, out bool isOuter)
+    {
+        complexProperty = null;
+        fieldPath = null;
+
+        if (!TryBeginOwnedHopWalk(node, minimumHops: 1, out var names, out var scopeEntityType, out isOuter))
+            return false;
+
+        ITypeBase scopeType = scopeEntityType;
+        var segments = new List<string>(names.Count);
+        if (!TryWalkEmbeddedReferenceOrComplexHops(names, names.Count - 1, ref scopeType, segments))
+            return false;
+
+        if (scopeType.FindComplexProperty(names[^1]) is not { IsCollection: false } leafComplex)
+            return false;
+
+        complexProperty = leafComplex;
+        segments.Add(leafComplex.GetElementName());
+        fieldPath = string.Join(".", segments);
+        return true;
+    }
+
+    /// <summary>
     /// Resolves an owned single-reference chain to a dotted field path, e.g. <c>p.Address.City</c> →
-    /// <c>"Address.City"</c>. Intermediate hops must be embedded single-reference navigations and the leaf a
-    /// mapped scalar.
+    /// <c>"Address.City"</c>. Intermediate hops may be embedded single-reference navigations or complex
+    /// properties; the leaf must be a mapped scalar of the scope it lands on.
     /// </summary>
     private bool TryResolveOwnedFieldPath(
         Expression node, [NotNullWhen(true)] out IProperty? property, [NotNullWhen(true)] out string? fieldPath,
@@ -436,11 +528,15 @@ internal sealed partial class MongoExpressionTranslator
         property = null;
         fieldPath = null;
 
-        if (!TryBeginOwnedHopWalk(node, minimumHops: 2, out var names, out var scopeType, out isOuter))
+        if (!TryBeginOwnedHopWalk(node, minimumHops: 2, out var names, out var scopeEntityType, out isOuter))
             return false;
 
+        // Intermediate hops may pass through embedded reference navigations and complex properties; the leaf must
+        // be a mapped scalar of the scope it lands on. A complex-property leaf is not a scalar: it declines here,
+        // and TranslateComparisonCore's complex-chain guard turns that shape into a clear decline for comparisons.
+        ITypeBase scopeType = scopeEntityType;
         var segments = new List<string>(names.Count);
-        if (!TryWalkEmbeddedReferenceHops(names, names.Count - 1, ref scopeType, segments))
+        if (!TryWalkEmbeddedReferenceOrComplexHops(names, names.Count - 1, ref scopeType, segments))
             return false;
 
         var leaf = scopeType.FindProperty(names[^1]);
@@ -520,15 +616,17 @@ internal sealed partial class MongoExpressionTranslator
         if (!TryWalkEmbeddedReferenceHops(names, names.Count, ref scopeType, segments))
             return false;
 
-        targetType = scopeType;
+        // Every hop was a navigation, so the final scope is the target entity type.
+        targetType = (IEntityType)scopeType;
         path = string.Join(".", segments);
         return true;
     }
 
     /// <summary>
-    /// Resolves the source of an owned-collection quantifier (<c>b.Posts</c>, <c>b.Address.Notes</c>) to the dotted
-    /// path of the embedded array, relative to this translator's scope entity type, and its element type. Non-final
-    /// hops must be embedded single references and the final hop an embedded collection.
+    /// Resolves the source of an owned-collection or complex-collection quantifier (<c>b.Posts</c>,
+    /// <c>b.Address.Notes</c>, <c>o.Lines</c>) to the dotted path of the embedded array, relative to this
+    /// translator's scope entity type, and its element type. Non-final hops must be embedded single references
+    /// or complex properties; the final hop an embedded collection (navigation or complex property).
     /// </summary>
     /// <remarks>
     /// The path is scope-relative (see <see cref="TryBeginOwnedHopWalk"/>), which composes with
@@ -538,7 +636,7 @@ internal sealed partial class MongoExpressionTranslator
     private bool TryResolveOwnedCollectionPath(
         Expression source,
         [NotNullWhen(true)] out string? arrayPath,
-        [NotNullWhen(true)] out IEntityType? elementType,
+        [NotNullWhen(true)] out ITypeBase? elementType,
         out bool isOuter)
     {
         arrayPath = null;
@@ -547,15 +645,24 @@ internal sealed partial class MongoExpressionTranslator
         if (!TryBeginOwnedHopWalk(source, minimumHops: 1, out var names, out var scopeType, out isOuter))
             return false;
 
-        // Every hop but the last must be an embedded single reference; the FINAL hop is the quantifier's own
-        // source and must be an embedded COLLECTION navigation. That final-hop rule is the structural
-        // protection against a mapped scalar property sharing a navigation's name — a scalar's receiver is
-        // never a collection.
+        // Every hop but the last must be an embedded single reference or complex property; the FINAL hop is the
+        // quantifier's own source and must be an embedded COLLECTION — navigation or complex property. That
+        // final-hop rule is the structural protection against a mapped scalar property sharing a member's name —
+        // a scalar's receiver is never a collection.
         var segments = new List<string>(names.Count);
-        if (!TryWalkEmbeddedReferenceHops(names, names.Count - 1, ref scopeType, segments))
+        if (!TryWalkEmbeddedReferenceOrComplexHops(names, names.Count - 1, ref scopeType, segments))
             return false;
 
-        var collectionNavigation = scopeType.FindNavigation(names[^1]);
+        // Complex-collection final hop: the element type is the complex type itself.
+        if (scopeType.FindComplexProperty(names[^1]) is { IsCollection: true } complexCollection)
+        {
+            segments.Add(complexCollection.GetElementName());
+            arrayPath = string.Join(".", segments);
+            elementType = complexCollection.ComplexType;
+            return true;
+        }
+
+        var collectionNavigation = (scopeType as IEntityType)?.FindNavigation(names[^1]);
         if (collectionNavigation is null || !collectionNavigation.IsEmbedded() || !collectionNavigation.IsCollection)
             return false; // a primitive collection property, a reference nav, or a non-collection final hop
 
