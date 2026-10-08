@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore.Query;
 using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.Visitors;
+using MongoDB.EntityFrameworkCore.Serializers;
 using MongoDB.EntityFrameworkCore.UnitTests.TestUtilities;
 
 namespace MongoDB.EntityFrameworkCore.UnitTests.Query.Visitors;
@@ -72,7 +73,8 @@ public class MongoMixedProjectionBindingRemovingExpressionVisitorTests
 
     private static MongoMixedProjectionBindingRemovingExpressionVisitor CreateVisitor(
         MongoQueryExpression queryExpression, IEntityType rootEntityType)
-        => new(rootEntityType, queryExpression, Expression.Parameter(typeof(BsonDocument), "d"), QueryTrackingBehavior.NoTracking);
+        => new(rootEntityType, queryExpression, Expression.Parameter(typeof(BsonDocument), "d"), QueryTrackingBehavior.NoTracking,
+            new BsonSerializerFactory());
 
     [Fact]
     public void ReadDocumentConstructionMember_uses_dotted_path_reader_for_join_scope_sourced_field()

@@ -16,6 +16,7 @@
 using System;
 using System.Linq.Expressions;
 using System.Reflection;
+using Microsoft.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Extensions; // IsInHierarchy()
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 
@@ -66,11 +67,14 @@ internal sealed partial class MongoExpressionTranslator
             return false;
         }
 
-        // A hierarchy needs a discriminator predicate, not a constant.
-        if (_entityType.IsInHierarchy())
+        // A complex scope has no discriminator; a hierarchy needs a discriminator predicate, not a constant.
+        if (_entityType is not IEntityType entityType)
+            return false;
+
+        if (entityType.IsInHierarchy())
             return TryTranslateHierarchyTypeTest(comparisonType, exact: true, negated: !isEqual, out result);
 
-        var matches = _entityType.ClrType == comparisonType;
+        var matches = entityType.ClrType == comparisonType;
         result = new MongoConstantExpression(matches == isEqual, forSerialization: null);
         return true;
     }

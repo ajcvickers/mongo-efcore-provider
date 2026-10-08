@@ -320,10 +320,24 @@ internal static class BsonBinding
     /// </remarks>
     internal static MethodCallExpression CreateGetPropertyValueAtPath(
         Expression bsonDocExpression, string[] path, IProperty property, Type mappedType)
+        => CreateGetPropertyValueAtPath(bsonDocExpression, path, property, mappedType, treatLeafAsNullable: false);
+
+    /// <summary>
+    /// As <see cref="CreateGetPropertyValueAtPath(Expression, string[], IProperty, Type)"/>, but an explicit BSON
+    /// <c>null</c> at the leaf reads <c>default</c> even though the leaf property is non-nullable. Used for leaves
+    /// under a nullable complex property, where EF threads the complex property's nullability into its leaves'
+    /// materialization instead of storing it on each leaf.
+    /// </summary>
+    internal static MethodCallExpression CreateGetNullablePropertyValueAtPath(
+        Expression bsonDocExpression, string[] path, IProperty property, Type mappedType)
+        => CreateGetPropertyValueAtPath(bsonDocExpression, path, property, mappedType, treatLeafAsNullable: true);
+
+    private static MethodCallExpression CreateGetPropertyValueAtPath(
+        Expression bsonDocExpression, string[] path, IProperty property, Type mappedType, bool treatLeafAsNullable)
         => Expression.Call(
             null,
-            GetPropertyValueAtPathMethodInfo.MakeGenericMethod(
-                property.IsNullable ? mappedType.MakeNullable() : mappedType),
+            (treatLeafAsNullable ? GetNullablePropertyValueAtPathMethodInfo : GetPropertyValueAtPathMethodInfo)
+                .MakeGenericMethod(property.IsNullable || treatLeafAsNullable ? mappedType.MakeNullable() : mappedType),
             bsonDocExpression,
             Expression.Constant(path),
             Expression.Constant(property));
@@ -332,7 +346,20 @@ internal static class BsonBinding
         = typeof(BsonBinding).GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
             .Single(mi => mi.Name == nameof(GetPropertyValueAtPath));
 
+    private static readonly MethodInfo GetNullablePropertyValueAtPathMethodInfo
+        = typeof(BsonBinding).GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
+            .Single(mi => mi.Name == nameof(NullablePropertyValueAtPath));
+
     internal static T? GetPropertyValueAtPath<T>(BsonDocument document, string[] path, IReadOnlyProperty property)
+        => PropertyValueAtPath<T>(document, path, property, treatLeafAsNullable: false);
+
+    // The treatLeafAsNullable sibling (leaves under a nullable complex property): an explicit BSON null — and a
+    // missing element — at the leaf reads default instead of throwing, matching the nullability EF threads into
+    // leaf materialization for nullable complex properties.
+    private static T? NullablePropertyValueAtPath<T>(BsonDocument document, string[] path, IReadOnlyProperty property)
+        => PropertyValueAtPath<T>(document, path, property, treatLeafAsNullable: true);
+
+    private static T? PropertyValueAtPath<T>(BsonDocument document, string[] path, IReadOnlyProperty property, bool treatLeafAsNullable)
     {
         var current = document;
         for (var i = 0; i < path.Length - 1; i++)
@@ -356,7 +383,7 @@ internal static class BsonBinding
             current = segmentDocument;
         }
 
-        return GetPropertyValueAtElement<T>(current, path[^1], property);
+        return PropertyValueAtElement<T>(current, path[^1], property, treatLeafAsNullable);
     }
 
     private static readonly MethodInfo GetPropertyValueMethodInfo
@@ -473,6 +500,9 @@ internal static class BsonBinding
     }
 
     internal static T? GetPropertyValueAtElement<T>(BsonDocument document, string elementName, IReadOnlyProperty property)
+        => PropertyValueAtElement<T>(document, elementName, property, treatLeafAsNullable: false);
+
+    private static T? PropertyValueAtElement<T>(BsonDocument document, string elementName, IReadOnlyProperty property, bool treatLeafAsNullable)
     {
         var serializationInfo = BsonSerializerFactory.GetPropertySerializationInfo(property);
 
@@ -487,11 +517,15 @@ internal static class BsonBinding
 
         if (TryReadElementValue(document, projectedSerializationInfo, out T? value))
         {
-            ThrowIfNullForRequired(value, property);
+            if (!treatLeafAsNullable)
+            {
+                ThrowIfNullForRequired(value, property);
+            }
+
             return value;
         }
 
-        if (property.IsNullable) return default;
+        if (property.IsNullable || treatLeafAsNullable) return default;
 
         throw new InvalidOperationException($"Document element '{elementName}' is missing for required non-nullable property '{property.Name}'.");
     }

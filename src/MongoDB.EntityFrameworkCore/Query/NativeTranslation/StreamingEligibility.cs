@@ -86,6 +86,64 @@ internal static class StreamingEligibility
             return false;
         }
 
-        return true;
+        // A ROOT-LEVEL complex collection streams: its whole stored array is read in one pass through the
+        // property's own collection serializer (see MongoStreamingEntityMaterializerRewriter
+        // .BuildComplexCollectionRead). A complex collection NESTED inside a complex property does not stream —
+        // IsEligible returns false and ThrowIfComplexCollectionsForDom declines it with the DOM route.
+        return !HasNestedComplexCollection(entityType, new HashSet<ITypeBase>());
+    }
+
+    /// <summary>
+    /// Throws when the DOM shaper would materialize an entity whose complex subtree contains a complex collection
+    /// property: the DOM shaper's whole-entity path has no complex-collection read (EF's materializer block never
+    /// reads the member and silently assigns null), and silently returning null collections is not an option.
+    /// Root-level complex collections materialize on the streaming shaper — only queries already routed to the
+    /// DOM shaper (TPH, skip navigations, includes inside collection elements, a nested complex collection,
+    /// Single/First cardinality, …) decline here.
+    /// </summary>
+    public static void ThrowIfComplexCollectionsForDom(IEntityType rootEntityType)
+    {
+        if (HasComplexCollection(rootEntityType, new HashSet<ITypeBase>()))
+        {
+            throw new NativeTranslationNotSupportedException(ComplexTypeDeclines.DomComplexCollection(rootEntityType));
+        }
+    }
+
+    /// Whether a complex property that is NOT itself a collection contains a complex collection in its subtree.
+    private static bool HasNestedComplexCollection(IEntityType entityType, HashSet<ITypeBase> visiting)
+    {
+        foreach (var complexProperty in entityType.GetComplexProperties())
+        {
+            if (complexProperty.IsCollection)
+            {
+                continue; // root-level: streamable
+            }
+
+            if (HasComplexCollection(complexProperty.ComplexType, visiting))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasComplexCollection(ITypeBase structuralType, HashSet<ITypeBase> visiting)
+    {
+        if (!visiting.Add(structuralType))
+        {
+            return false; // cycle guard
+        }
+
+        foreach (var complexProperty in structuralType.GetComplexProperties())
+        {
+            if (complexProperty.IsCollection
+                || HasComplexCollection(complexProperty.ComplexType, visiting))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

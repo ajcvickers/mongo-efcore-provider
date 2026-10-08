@@ -28,6 +28,14 @@ themselves live in Storage/ValueConversion.
 - **Comparer signatures differ between EF8/EF9 and EF10** (`StringDictionaryComparer` has `#if` variants); new
   comparer work must compile on all three.
 - Serializers read annotations, never write them.
+- **Complex types serialize EF-metadata-driven** (`ComplexTypeSerializer<T>`, built per `IReadOnlyComplexType` and
+  cached like entity serializers): a driver class map is wrong for them — it renames `Id` to `_id` and ignores
+  `Mongo:ElementName`. Element names come only from `MongoComplexPropertyExtensions.GetElementName`; nested
+  complexes recurse; a missing/null leaf deserializes to the CLR default. Pin: `EntitySerializerComplexPropertyTests`.
+- **Direct serializer invocation needs `NominalType`**: calling a serializer via non-generic
+  `IBsonSerializer.Serialize` with default `BsonSerializationArgs` wraps collections in a `{_t,_v}` discriminated
+  wrapper — set `args.NominalType = serializer.ValueType` (as the driver's generic `Serialize` extension does).
+  Pin: `EntitySerializerComplexPropertyTests`.
 
 ## Testing
 

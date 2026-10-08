@@ -59,12 +59,41 @@ public sealed class BsonSerializerFactory
         = new(BinaryVectorDataType.PackedBit);
 
     private readonly ConcurrentDictionary<IReadOnlyEntityType, IBsonSerializer> _entitySerializersCache = new();
+    private readonly ConcurrentDictionary<IReadOnlyComplexType, IBsonSerializer> _complexTypeSerializersCache = new();
 
     internal IBsonSerializer GetEntitySerializer(IReadOnlyEntityType entityType) =>
         _entitySerializersCache.GetOrAdd(entityType, CreateEntitySerializer);
 
     internal IBsonSerializer CreateEntitySerializer(IReadOnlyEntityType entityType) =>
         CreateGenericSerializer(typeof(EntitySerializer<>), [entityType.ClrType], entityType, this);
+
+    internal IBsonSerializer GetComplexTypeSerializer(IReadOnlyComplexType complexType) =>
+        _complexTypeSerializersCache.GetOrAdd(complexType, CreateComplexTypeSerializer);
+
+    internal IBsonSerializer CreateComplexTypeSerializer(IReadOnlyComplexType complexType) =>
+        CreateGenericSerializer(typeof(ComplexTypeSerializer<>), [complexType.ClrType], complexType, this);
+
+    /// <summary>
+    /// The serializer for a complex property's value: the complex type serializer itself for a single complex
+    /// property, a nullable wrapper for a nullable value-typed one (EF10+; <see cref="NullableSerializer{T}"/> is
+    /// struct-constrained, and a class-type complex serializer already writes null for a null value), and a
+    /// collection of them for a complex collection.
+    /// </summary>
+    internal IBsonSerializer GetComplexPropertySerializer(IReadOnlyComplexProperty complexProperty)
+    {
+        var elementSerializer = GetComplexTypeSerializer(complexProperty.ComplexType);
+        if (complexProperty.IsCollection)
+        {
+            return GetCollectionSerializer(complexProperty.ClrType, elementSerializer);
+        }
+
+        return complexProperty.IsNullable && complexProperty.ComplexType.ClrType.IsValueType
+            ? GetNullableSerializer(complexProperty.ComplexType.ClrType, null)
+            : elementSerializer;
+    }
+
+    internal BsonSerializationInfo GetComplexPropertySerializationInfo(IReadOnlyComplexProperty complexProperty)
+        => new(complexProperty.GetElementName(), GetComplexPropertySerializer(complexProperty), complexProperty.ClrType);
 
     /// <summary>
     /// Reads a native <c>DateTime.TimeOfDay</c> projection leaf, which the server computes as a whole number of

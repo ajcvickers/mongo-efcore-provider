@@ -266,10 +266,11 @@ internal sealed partial class MongoExpressionTranslator
     }
 
     /// <summary>
-    /// Builds the translator for an owned-collection element predicate (<c>Any</c>/<c>All</c>/<c>Count(pred)</c>)
-    /// over <paramref name="elementType"/>: single-scope when the predicate is uncorrelated, two-scope
-    /// (<paramref name="isCorrelated"/>) when its sole free parameter is this translator's own
-    /// <see cref="SelfParam"/> (by reference) or, on a two-scope translator, its outer parameter. Any other
+    /// Builds the translator for an owned-collection or complex-collection element predicate
+    /// (<c>Any</c>/<c>All</c>/<c>Count(pred)</c>) over <paramref name="elementType"/> (an entity or complex
+    /// type): single-scope when the predicate is uncorrelated, two-scope (<paramref name="isCorrelated"/>) when
+    /// its sole free parameter is this translator's own <see cref="SelfParam"/> (by reference) or, on a two-scope
+    /// translator, its outer parameter. Any other
     /// correlation, including two or more distinct free parameters, declines.
     /// </summary>
     /// <remarks>
@@ -277,14 +278,16 @@ internal sealed partial class MongoExpressionTranslator
     /// it an enclosing member sharing a name with an element member would silently retarget to the element.
     /// </remarks>
     private bool TryCreateElementPredicateTranslator(
-        LambdaExpression predicate, IEntityType elementType,
+        LambdaExpression predicate, ITypeBase elementType,
         [NotNullWhen(true)] out MongoExpressionTranslator? translator, out bool isCorrelated)
     {
         translator = null;
         isCorrelated = ReferencesEnclosingScope(predicate.Body, predicate.Parameters[0], out var freeParam);
         if (!isCorrelated)
         {
-            translator = new MongoExpressionTranslator(elementType);
+            translator = elementType is IEntityType entityElementType
+                ? new MongoExpressionTranslator(entityElementType)
+                : new MongoExpressionTranslator((IComplexType)elementType);
             return true;
         }
 
@@ -293,7 +296,10 @@ internal sealed partial class MongoExpressionTranslator
         // nested predicate correlating back to the same root is admitted. A correlation to an intermediate scope
         // (neither identity) still declines.
         var rootParam = SelfParam ?? _outerParam;
-        var rootEntityType = SelfParam is not null ? _entityType : _outerEntityType;
+        // The outer scope is always an entity (the query root). A correlated predicate whose translator's own
+        // scope is itself a complex element (nested Any-within-Any across complex collections) declines: the
+        // two-scope machinery has no outer scope to resolve against.
+        var rootEntityType = SelfParam is not null ? _entityType as IEntityType : _outerEntityType;
         if (rootParam is null || rootEntityType is null || freeParam is null || !ReferenceEquals(freeParam, rootParam))
             return false;
 
