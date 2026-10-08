@@ -73,11 +73,19 @@ internal sealed class ComplexValueProjectionExpression(ProjectionBindingExpressi
                 return node;
             }
 
-            // Don't descend into nodes that can't be (or needn't be) walked: a nested query (ShapedQueryExpression throws
-            // on VisitChildren, e.g. a GroupByShaperExpression's element source) or an entity/binding leaf.
-            return node is ProjectionBindingExpression or StructuralTypeShaperExpression or ShapedQueryExpression
-                ? node
-                : base.Visit(node);
+            // Standard nodes are walked. Of extension nodes only the shaper wrappers the projection binder emits (whose
+            // VisitChildren walks their children) are entered; a ComplexValueProjectionExpression is only ever created by
+            // MongoProjectionBindingExpressionVisitor, inside those or standard nodes. Any other extension node (a nested
+            // ShapedQueryExpression, whose VisitChildren throws; an entity shaper or binding; a node of some other visitor)
+            // is a leaf here: it can't hold a node the binder produced.
+            if (node.NodeType != ExpressionType.Extension)
+            {
+                return base.Visit(node);
+            }
+
+            return node is NativeComputedLeafExpression or CollectionShaperExpression or IncludeExpression
+                ? base.Visit(node)
+                : node;
         }
     }
 
