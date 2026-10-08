@@ -1502,10 +1502,12 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         return (null, null);
     }
 
-    // Whether `shaper` is the query root's own entity shaper: bound to the root (empty) projection member. A join's other
-    // side is bound by index or under its own member (TransparentIdentifier.Inner), never the empty root member.
-    protected static bool IsRootProjectionShaper(StructuralTypeShaperExpression shaper)
-        => shaper.ValueBufferExpression is ProjectionBindingExpression { ProjectionMember: { Last: null }, Index: null };
+    // Whether `shaper` is THIS query's root entity shaper: bound to this query's root (empty) projection member. A join's
+    // other side is bound by index or under its own member (TransparentIdentifier.Inner); an inner shaper left un-rebound
+    // carries its own (inner) query expression, so the query check keeps it off the root document.
+    protected bool IsRootProjectionShaper(StructuralTypeShaperExpression shaper)
+        => shaper.ValueBufferExpression is ProjectionBindingExpression { ProjectionMember: { Last: null }, Index: null } binding
+           && ReferenceEquals(binding.QueryExpression, _queryExpression);
 
     /// <summary>
     /// Builds the nested-document read for an embedded (owned) *reference* navigation hop, or

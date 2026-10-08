@@ -362,10 +362,167 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (((MongoQueryExpression)source.QueryExpression).Select.HasComplexValueShaperLeaf
             && !IsProjectedValueFreeOperator(methodDefinition))
         {
-            throw new NotSupportedException(
-                $"A projected whole complex value cannot be the operand of '{methodDefinition.Name}': the MongoDB provider "
-                + "can't compare or combine complex values. Project the complex type's properties you need instead, or apply "
-                + "the operator after 'AsEnumerable()'.");
+            throw ComplexValueOperandRefusal(methodDefinition.Name);
+        }
+    }
+
+    // The single R7 message, shared by every refusal site.
+    private static NotSupportedException ComplexValueOperandRefusal(string operatorName)
+        => new(
+            $"A projected whole complex value cannot be the operand of '{operatorName}': the MongoDB provider "
+            + "can't compare or combine complex values. Project the complex type's properties you need instead, or apply "
+            + "the operator after 'AsEnumerable()'.");
+
+    /// <summary>
+    /// Refuses (ruling R8, every mode) a GroupBy whose key, element or result selector reads a whole complex value
+    /// (<c>GroupBy(c =&gt; c.Address)</c>, an anonymous key holding one, <c>Select(c =&gt; c.Address).GroupBy(a =&gt; a.City)</c>,
+    /// which EF rewrites to an element selector, or a source projection holding one). A complex LEAF key
+    /// (<c>GroupBy(c =&gt; c.Address.City)</c>) is a scalar and is unaffected. Selectors are checked with the source
+    /// shaper substituted for their parameter, through the same predicate the projection binder uses
+    /// (<see cref="MongoProjectionBindingExpressionVisitor.ResolveComplexValueProperty"/>).
+    /// </summary>
+    private static void ThrowIfGroupByOverComplexValue(
+        ShapedQueryExpression source, LambdaExpression keySelector, LambdaExpression? elementSelector, LambdaExpression? resultSelector)
+    {
+        if (((MongoQueryExpression)source.QueryExpression).Select.HasComplexValueShaperLeaf
+            || ReadsWholeComplexValue(source, keySelector)
+            || elementSelector != null && ReadsWholeComplexValue(source, elementSelector)
+            || resultSelector != null && WholeComplexValueReadFinder.Finds(resultSelector.Body))
+        {
+            throw ComplexValueOperandRefusal(nameof(Queryable.GroupBy));
+        }
+
+        static bool ReadsWholeComplexValue(ShapedQueryExpression source, LambdaExpression selector)
+            => WholeComplexValueReadFinder.Finds(
+                ReplacingExpressionVisitor.Replace(selector.Parameters[0], source.ShaperExpression, selector.Body));
+    }
+
+    // The post-group Select variant: the selector's parameter is the grouping; a whole complex value of an element is read
+    // inside a nested element lambda (`g.Select(x => x.Address)`) or off an element (`g.First().Address`), so look for a
+    // complex-typed member access over any entity-typed receiver in the body.
+    private static void ThrowIfGroupByOverComplexValue(ShapedQueryExpression source, LambdaExpression selector)
+    {
+        if (ComplexMemberOfEntityFinder.Finds(selector.Body, source.QueryExpression is MongoQueryExpression mq ? mq.CollectionExpression.EntityType : null))
+        {
+            throw ComplexValueOperandRefusal(nameof(Queryable.GroupBy));
+        }
+    }
+
+    // A member/EF.Property access whose receiver is typed as an entity type of the model (or a hop chain to one) and that
+    // names one of its complex properties typed as the access itself: a whole complex value read.
+    private sealed class ComplexMemberOfEntityFinder(IEntityType rootEntityType) : System.Linq.Expressions.ExpressionVisitor
+    {
+        private bool _found;
+
+        internal static bool Finds(Expression body, IEntityType? rootEntityType)
+        {
+            if (rootEntityType == null)
+            {
+                return false;
+            }
+
+            var finder = new ComplexMemberOfEntityFinder(rootEntityType);
+            finder.Visit(body);
+            return finder._found;
+        }
+
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+        {
+            if (_found || node is null)
+            {
+                return node;
+            }
+
+            if (node.TryGetMemberOrEFProperty(out var receiver, out var name) && ResolveType(receiver) is { } owner)
+            {
+                if (owner.FindComplexProperty(name) is { } complexProperty && complexProperty.ClrType == node.Type)
+                {
+                    _found = true;
+                    return node;
+                }
+
+                // A leaf (or hop) over a resolvable receiver (`x.Address.Floor`): the receiver is a hop, not a value read.
+                return node;
+            }
+
+            return node is ShapedQueryExpression or StructuralTypeShaperExpression or ProjectionBindingExpression
+                   || node.NodeType == ExpressionType.Extension && !node.CanReduce
+                ? node
+                : base.Visit(node);
+        }
+
+        // The structural type a receiver denotes: an entity type of the model by CLR type (a lambda parameter over the
+        // group's elements), or a complex hop of one.
+        private ITypeBase? ResolveType(Expression receiver)
+        {
+            receiver = receiver.RemoveConvert();
+            if (receiver.TryGetMemberOrEFProperty(out var inner, out var name))
+            {
+                return ResolveType(inner) is { } owner && owner.FindComplexProperty(name) is { IsCollection: false } hop
+                    ? hop.ComplexType
+                    : null;
+            }
+
+            return rootEntityType.Model.FindEntityType(receiver.Type) is { } entityType
+                   && (rootEntityType.IsAssignableFrom(entityType) || entityType.IsAssignableFrom(rootEntityType))
+                ? entityType
+                : null;
+        }
+    }
+
+    // Finds a member/EF.Property access that reads a whole complex value of an entity shaper (directly or through hops).
+    private sealed class WholeComplexValueReadFinder : System.Linq.Expressions.ExpressionVisitor
+    {
+        private bool _found;
+
+        // A chain of member/EF.Property accesses down to an entity shaper (no other node kind in between).
+        private static bool IsHopChain(Expression expression)
+        {
+            var current = expression.RemoveConvert();
+            while (current.TryGetMemberOrEFProperty(out var inner, out _))
+            {
+                current = inner.RemoveConvert();
+            }
+
+            return current is StructuralTypeShaperExpression;
+        }
+
+        internal static bool Finds(Expression expression)
+        {
+            var finder = new WholeComplexValueReadFinder();
+            finder.Visit(expression);
+            return finder._found;
+        }
+
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+        {
+            if (_found || node is null)
+            {
+                return node;
+            }
+
+            if (node is MemberExpression or MethodCallExpression
+                && MongoProjectionBindingExpressionVisitor.ResolveComplexValueProperty(node) != null)
+            {
+                _found = true;
+                return node;
+            }
+
+            // A member/EF.Property access over a hop chain (`c.Address.City`) reads a leaf: its receiver `c.Address` is a
+            // hop, not a whole-value read, so don't visit it (the receiver can only hold a complex read as a hop).
+            if (node.TryGetMemberOrEFProperty(out var receiver, out _) && IsHopChain(receiver))
+            {
+                return node;
+            }
+
+            // Shapers and nested queries are leaves here (walking a ShapedQueryExpression throws).
+            return node is StructuralTypeShaperExpression or ShapedQueryExpression or ProjectionBindingExpression
+                ? node
+                : node.NodeType == ExpressionType.Extension && !node.CanReduce && node is not IncludeExpression
+                    ? node
+                    : base.Visit(node);
         }
     }
 
@@ -379,6 +536,13 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     {
         // Every arm below returns its shaper through here, so the complex-value refusal flag is set from ONE predicate
         // whichever arm built the shaper (generic fold, positional-ctor, join scope, GroupBy, SelectMany, ...).
+        // A post-group Select reading a whole complex value of the group's elements (`g.Select(x => x.Address)`,
+        // `g.First().Address`): refused like a complex grouping key (ruling R8).
+        if (source.ShaperExpression is GroupByShaperExpression)
+        {
+            ThrowIfGroupByOverComplexValue(source, selector);
+        }
+
         var translated = TranslateSelectCore(source, selector);
         RecordComplexValueShaperLeaf(translated);
         return translated;
@@ -387,8 +551,9 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     /// <summary>
     /// Sets <see cref="MongoSelectDefinition.HasComplexValueShaperLeaf"/> when the projection reads a whole complex value:
     /// the shaper holds a <see cref="ComplexValueProjectionExpression"/> at any depth, or the native projection staged one
-    /// (<see cref="MongoSelectDefinition.HasComplexValueProjectionLeaf"/>, e.g. an index-built positional-ctor shaper).
-    /// The single source for <see cref="ThrowIfComplexValueOperand"/>.
+    /// (<see cref="MongoSelectDefinition.HasComplexValueProjectionLeaf"/>). The second input is a seam, not reachable today
+    /// (every arm that stages a complex value also binds the node: positional ctors decline one); kept so a future arm that
+    /// stages one without the node is still refused. The single source for <see cref="ThrowIfComplexValueOperand"/>.
     /// </summary>
     private static void RecordComplexValueShaperLeaf(ShapedQueryExpression translated)
     {
@@ -2240,6 +2405,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // The base TranslateGroupBy is abstract, so the grouped query is built here. Native supports only
         // GroupBy(key).Select(aggregate), over the root collection or an eligible join scope
         // (TryGetGroupByJoinScope); a non-null resultSelector or an unbindable key marks non-native.
+        ThrowIfGroupByOverComplexValue(source, keySelector, elementSelector, resultSelector);
         var mongoQueryExpression = (MongoQueryExpression)source.QueryExpression;
 
         // A GroupBy over an existing grouping/distinct terminal must not rebind by default: TryBindGroupKey would

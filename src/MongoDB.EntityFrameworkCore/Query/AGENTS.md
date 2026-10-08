@@ -243,11 +243,16 @@ Rendering (null/missing/dialect semantics):
   `TranslateSelect` arm (shaper holds a `ComplexValueProjectionExpression`, or the native projection staged a complex
   value). A positional-ctor/container projection never stages a complex argument (`IsScalarPositionalConstruction`: its
   index shaper would read it through a class map); it declines and the fallback refuses the memberless construction.
-  GroupBy over a complex projection or KEY fails inside EF (`VisitChildren`) in every mode. Complex types are new in this
-  slice, so none of this changes released behaviour.
-  The query root's own shaper (bound to the empty projection member) resolves to the root document even when typed as a
-  derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other derived
-  shaper does only outside a join (in a join it may be the joined side of the root's own hierarchy).
+  GroupBy in which a whole complex value takes part (key, key part, read off the grouped elements in a post-group Select:
+  `ThrowIfGroupByOverComplexValue`) is refused with the same message naming GroupBy (ruling R8). Where EF erases the value
+  (`Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key)` becomes a leaf-key grouping over the entity; the
+  `GroupBy(key, resultSelector)` overload) the outcome is the pre-existing one of its scalar analogue. Complex types are new
+  in this slice, so none of this changes released behaviour.
+  The query root's own shaper (bound to THIS query's empty projection member) resolves to the root document even when
+  typed as a derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other
+  derived shaper does only outside a join. This also corrected a pre-existing NON-complex wrong read (owner-approved
+  exception, ruling R9): `OfType<E>().Select(e => new { e, e.Name, R = e.Referrer!.Name })` read `e.Name` off the joined
+  referrer at 040cecdf (`Dev|Boss|Boss`), now `Dev|Dev|Boss`.
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

@@ -139,6 +139,11 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
                 Assert.True(error == null, $"{mode}: expected rows, got {error}");
                 Assert.True(expected.SequenceEqual(rows!), $"{mode}: expected [{string.Join("; ", expected)}], got [{string.Join("; ", rows!)}]");
             }
+            else if (want == NotNativeAny)
+            {
+                Assert.True(error is MongoDB.EntityFrameworkCore.Query.NativeTranslation.NativeTranslationNotSupportedException,
+                    $"{mode}: expected NativeTranslationNotSupportedException, got {(error == null ? $"rows [{string.Join("; ", rows!)}]" : error.ToString())}");
+            }
             else
             {
                 Assert.True(error != null && error.Message.Contains(want),
@@ -147,10 +152,8 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
         }
     }
 
-    private const string NotNative = "forbids the driver-LINQ fallback";
-
-    // A NativeOnly decline (either the gate's or the lowerer's NativeTranslationNotSupportedException message).
-    private const string NotNativeAny = "Native";
+    // A NativeOnly decline: asserted by exception TYPE (NativeTranslationNotSupportedException), not by message.
+    private const string NotNativeAny = "<NativeTranslationNotSupportedException>";
 
     [Fact]
     public void Mixed_projection_through_a_derived_reference_reads_the_joined_document()
@@ -236,6 +239,69 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
             db => db.People.OfType<Employee>().Where(e => e.ReferrerId != null)
                 .Select(e => new { e, R = e.Referrer!.Name }).ToList().Select(x => $"{x.e.Name}|{x.e.Desk.Lat}|{x.e.Badge.Code}|{x.R}"),
             ["Dev|2|B-dev|Boss"], NotNativeAny, Serves, Serves);
+    }
+
+    // ── The same reverse-direction shape with NO complex properties in the model (ruling R9) ─────────────────────
+
+    public class PlainPerson
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public ObjectId? ReferrerId { get; set; }
+        public PlainEmployee? Referrer { get; set; }
+    }
+
+    public class PlainEmployee : PlainPerson
+    {
+        public int Level { get; set; }
+    }
+
+    private sealed class PlainPeopleContext(DbContextOptions options, string collection) : DbContext(options)
+    {
+        public DbSet<PlainPerson> People => Set<PlainPerson>();
+
+        protected override void OnModelCreating(ModelBuilder mb)
+        {
+            mb.Entity<PlainEmployee>().HasBaseType<PlainPerson>();
+            mb.Entity<PlainPerson>(b =>
+            {
+                b.ToCollection(collection);
+                b.HasDiscriminator<string>("_t").HasValue<PlainPerson>("P").HasValue<PlainEmployee>("E");
+                b.HasOne(p => p.Referrer).WithMany().HasForeignKey(p => p.ReferrerId);
+                b.Ignore("Badge");
+            });
+        }
+    }
+
+    private List<string> PlainOutcome(string collection, MongoQueryMode mode, Func<PlainPeopleContext, IEnumerable<string>> query)
+    {
+        var builder = new DbContextOptionsBuilder<PlainPeopleContext>()
+            .UseMongoDB(database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName)
+            .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+            .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+        new MongoDbContextOptionsBuilder(builder).UseQueryMode(mode);
+        using var db = new PlainPeopleContext(builder.Options, collection);
+        return query(db).ToList();
+    }
+
+    [Fact]
+    public void Derived_outer_root_in_a_join_without_complex_properties()
+    {
+        // Ruling R9: the structural root-shaper fix also corrects this NON-complex mixed projection (`x.e` the derived
+        // outer root, `e.Name` the OUTER name, `R` the referrer's): at 040cecdf it answered `Dev|Boss|Boss` (the outer Name
+        // read off the joined referrer document; observed, see the fix round 3 report). Hand-written answer.
+        var collection = Seed(nameof(Derived_outer_root_in_a_join_without_complex_properties));
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            Assert.Equal(["Dev|Dev|Boss"], PlainOutcome(collection, mode, db => db.People.OfType<PlainEmployee>().Where(e => e.ReferrerId != null)
+                .Select(e => new { e, e.Name, R = e.Referrer!.Name }).ToList().Select(x => $"{x.e.Name}|{x.Name}|{x.R}")));
+            Assert.Equal(["Dev|2|Boss"], PlainOutcome(collection, mode, db => db.People.OfType<PlainEmployee>().Where(e => e.ReferrerId != null)
+                .Select(e => new { e.Name, e.Level, R = e.Referrer!.Name }).ToList().Select(x => $"{x.Name}|{x.Level}|{x.R}")));
+        }
+
+        Assert.Throws<MongoDB.EntityFrameworkCore.Query.NativeTranslation.NativeTranslationNotSupportedException>(() => PlainOutcome(collection,
+            MongoQueryMode.NativeOnly, db => db.People.OfType<PlainEmployee>().Where(e => e.ReferrerId != null)
+                .Select(e => new { e, e.Name, R = e.Referrer!.Name }).ToList().Select(x => $"{x.e.Name}|{x.Name}|{x.R}")));
     }
 
     [Fact]

@@ -41,6 +41,11 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   `NorthwindSetOperationsQueryMongoTest.Union_on_distinct`, `Intersect_on_distinct` and `Except_on_distinct`
   (`CompanyName__isMissing`).
 
+- (c) (ruling R9, Task 10) In a join, the query root's own shaper is recognised by its projection binding, not its CLR type, so a
+  derived OUTER root (`People.OfType<Employee>()` with a self-reference to `Employee`) reads its own members from the root
+  document: the mixed projection `new { e, e.Name, R = e.Referrer!.Name }` read `e.Name` off the joined referrer at 040cecdf
+  (`Dev|Boss|Boss`, observed) and now answers `Dev|Dev|Boss`. A wrong-rows fix needed for derived complex values.
+
 ## Constraints
 
 - No new driver-LINQ query paths. `MongoQueryMode.NativeOnly` is the oracle for every query test.

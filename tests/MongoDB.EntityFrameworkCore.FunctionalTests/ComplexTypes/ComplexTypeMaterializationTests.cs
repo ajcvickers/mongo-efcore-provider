@@ -441,7 +441,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         }
     }
 
-    public static TheoryData<string> OtherValueReadingOperatorShapes => ["contains", "all", "max_selector", "cast_distinct", "groupby_complex_key", "distinct_count"];
+    public static TheoryData<string> OtherValueReadingOperatorShapes => ["contains", "all", "max_selector", "cast_distinct", "distinct_count"];
 
     [Theory]
     [MemberData(nameof(OtherValueReadingOperatorShapes))]
@@ -455,7 +455,6 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
             "all" => new[] { q.Select(c => c.Address).All(a => a.Floor > 0).ToString() },
             "max_selector" => new[] { q.Select(c => c.Address).Max(a => a.Floor).ToString() },
             "cast_distinct" => q.Select(c => c.Address).Cast<object>().Distinct().ToList().Select(x => x.ToString()!),
-            "groupby_complex_key" => q.GroupBy(c => c.Address).Select(g => g.Count()).ToList().Select(x => x.ToString()),
             _ => new[] { q.Select(c => c.Address).Distinct().Count().ToString() }
         }));
         ExpectedOtherOperatorOutcomes.TryGetValue(shape, out var expected);
@@ -463,8 +462,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
     }
 
     // Per-shape fragments every mode's outcome must contain, measured (fix round 2): EF folds All/Max(selector) over the
-    // source (correct rows); Cast is folded away so Distinct is refused; a complex GroupBy KEY is not native and its
-    // fallback fails inside EF (never rows).
+    // source (correct rows); Cast is folded away so Distinct is refused. GroupBy shapes: GroupBy_over_a_whole_complex_value….
     private static readonly Dictionary<string, string[]> ExpectedOtherOperatorOutcomes = new()
     {
         ["contains"] = R7("Contains"),
@@ -472,12 +470,6 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         ["distinct_count"] = R7("Distinct"),
         ["all"] = ["NativeOnly: rows [True]", "Native: rows [True]", "DriverLinq: rows [True]"],
         ["max_selector"] = ["NativeOnly: rows [5]", "Native: rows [5]", "DriverLinq: rows [5]"],
-        ["groupby_complex_key"] =
-        [
-            "NativeOnly: NativeTranslationNotSupportedException: Query groups without a supported aggregate projection",
-            "Native: InvalidOperationException: Calling 'ShapedQueryExpression.VisitChildren' is not allowed",
-            "DriverLinq: InvalidOperationException: Calling 'ShapedQueryExpression.VisitChildren' is not allowed"
-        ],
     };
 
     private static string[] R7(string op)
@@ -511,23 +503,62 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         AssertRefusedInEveryMode(m => Customers(collection, m, q => query(q).ToList()), op);
     }
 
-    [Fact]
-    public void GroupBy_after_a_complex_value_projection_never_returns_rows()
+    public static TheoryData<string> GroupByOverComplexValueShapes
+        => ["key", "anon_key_part", "grouped_select_complex", "grouped_first_complex"];
+
+    [Theory]
+    [MemberData(nameof(GroupByOverComplexValueShapes))]
+    public void GroupBy_over_a_whole_complex_value_is_refused_in_every_mode(string shape)
     {
-        // EF folds `Select(c => c.Address).GroupBy(a => a.City)` into a grouping of the SOURCE with the complex value as its
-        // element selector, which the provider's grouping support doesn't serve (not native; the fallback fails in EF, as
-        // for any element-selector grouping without an aggregate). Pinned so it can't start returning rows unnoticed.
-        var collection = SeedCustomers(nameof(GroupBy_after_a_complex_value_projection_never_returns_rows));
-        // Measured: not native (NativeOnly declines); the fallback fails inside EF's own grouping translation
-        // (`ShapedQueryExpression.VisitChildren`), as for any element-selector grouping without an aggregate.
-        Assert.Throws<NativeTranslationNotSupportedException>(
-            () => Customers(collection, MongoQueryMode.NativeOnly, q => q.Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key).ToList()));
-        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        // Ruling R8: a whole complex value taking part in a grouping (the key, a key part, or read off the grouped elements in
+        // the result) is refused with the R7 message naming GroupBy in every mode. Before, these reached EF's
+        // ConstantVerifyingExpressionVisitor over an unbound GroupByShaperExpression ("Calling
+        // 'ShapedQueryExpression.VisitChildren' is not allowed"; stack in the fix round 3 report).
+        var collection = SeedCustomers(nameof(GroupBy_over_a_whole_complex_value_is_refused_in_every_mode) + shape);
+        AssertRefusedInEveryMode(m => Customers(collection, m, q => shape switch
         {
-            var ex = Assert.Throws<InvalidOperationException>(
-                () => Customers(collection, mode, q => q.Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key).ToList()));
-            Assert.Contains("VisitChildren", ex.Message);
-        }
+            "key" => q.GroupBy(c => c.Address).Select(g => g.Count()).ToList().Select(x => x.ToString()),
+            "anon_key_part" => q.GroupBy(c => new { c.Name, c.Address }).Select(g => g.Count()).ToList().Select(x => x.ToString()),
+            "grouped_select_complex" => q.GroupBy(c => c.Name).Select(g => new { g.Key, A = g.Select(x => x.Address) }).Distinct().ToList().Select(x => x.Key),
+            _ => q.GroupBy(c => c.Name).Select(g => new { g.Key, A = g.First().Address }).ToList().Select(x => x.Key)
+        }), "GroupBy");
+    }
+
+    [Fact]
+    public void GroupBy_whose_complex_value_EF_erases_behaves_like_its_scalar_analogue()
+    {
+        // `Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key)`: EF rewrites it to GroupBy(c => c.Address.City) over
+        // the ENTITY (a complex LEAF key) and reads only the key, so no complex value reaches translation; it is the
+        // provider's pre-existing "grouping without an aggregate" shape, which fails exactly like its scalar analogue
+        // (`Select(c => new { c.Name, c.Rank }).GroupBy(a => a.Name).Select(g => g.Key)`, measured identical). Not wrong rows.
+        // And an element selector that is never read is dropped by EF: Count answers correctly.
+        var collection = SeedCustomers(nameof(GroupBy_whose_complex_value_EF_erases_behaves_like_its_scalar_analogue));
+        var complex = Outcomes(m => Customers(collection, m, q => q.Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key).ToList()));
+        var scalar = Outcomes(m => Customers(collection, m, q => q.Select(c => new { c.Name, c.Rank }).GroupBy(a => a.Name).Select(g => g.Key).ToList()));
+        Assert.Equal(scalar, complex);
+        Assert.DoesNotContain("rows [", complex);
+
+        // The GroupBy(key, resultSelector) overload is never translated by the provider (pre-existing: it never reaches
+        // TranslateGroupBy; NativeOnly declines, the fallback fails building the executor with an ArgumentException), with
+        // or without a complex value in the result selector (measured identical).
+        var complexResult = Outcomes(m => Customers(collection, m, q => q.GroupBy(c => c.Rank, (k, g) => new { k, A = g.Select(x => x.Address) })
+            .ToList().Select(x => x.k.ToString())));
+        var scalarResult = Outcomes(m => Customers(collection, m, q => q.GroupBy(c => c.Rank, (k, g) => new { k, A = g.Select(x => x.Name) })
+            .ToList().Select(x => x.k.ToString())));
+        Assert.DoesNotContain("rows [", complexResult);
+        Assert.Equal(scalarResult.Split(" || ").Select(o => o.Split(':')[0] + ":" + o.Split(':')[1]), complexResult.Split(" || ").Select(o => o.Split(':')[0] + ":" + o.Split(':')[1]));
+        NativeModeAssert.NativeAndExpected(m => Customers(collection, m, q => q.GroupBy(c => c.Rank, c => c.Address).Select(g => g.Count()).ToList()
+            .Select(x => x.ToString())), ["1", "1", "1"]);
+    }
+
+    [Fact]
+    public void GroupBy_by_a_complex_leaf_stays_native()
+    {
+        var collection = SeedCustomers(nameof(GroupBy_by_a_complex_leaf_stays_native));
+        NativeModeAssert.NativeAndExpected(m => Customers(collection, m, q => q.GroupBy(c => c.Address.City)
+            .Select(g => new { g.Key, C = g.Count() }).ToList().Select(x => x.Key + ":" + x.C).Order()), ["London:1", "Paris:1", "Rome:1"]);
+        NativeModeAssert.NativeAndExpected(m => Customers(collection, m, q => q.GroupBy(c => c.Address.Location.Lat)
+            .Select(g => g.Count()).ToList().Select(x => x.ToString())), ["1", "1", "1"]);
     }
 
     [Fact]
