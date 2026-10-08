@@ -374,13 +374,22 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             + "the operator after 'AsEnumerable()'.");
 
     /// <summary>
-    /// Refuses (ruling R8, every mode) a GroupBy whose key, element or result selector reads a whole complex value
-    /// (<c>GroupBy(c =&gt; c.Address)</c>, an anonymous key holding one, <c>Select(c =&gt; c.Address).GroupBy(a =&gt; a.City)</c>,
-    /// which EF rewrites to an element selector, or a source projection holding one). A complex LEAF key
-    /// (<c>GroupBy(c =&gt; c.Address.City)</c>) is a scalar and is unaffected. Selectors are checked with the source
-    /// shaper substituted for their parameter, through the same predicate the projection binder uses
+    /// Refuses (ruling R8, every mode) a GroupBy whose source projection or key selector reads a whole complex value
+    /// (<c>GroupBy(c =&gt; c.Address)</c>, an anonymous key holding one, a projected complex value upstream). A complex
+    /// LEAF key (<c>GroupBy(c =&gt; c.Address.City)</c>) is a scalar and is unaffected. Selectors are checked with the
+    /// source shaper substituted for their parameter, through the same predicate the projection binder uses
     /// (<see cref="MongoProjectionBindingExpressionVisitor.ResolveComplexValueProperty"/>).
     /// </summary>
+    /// <remarks>
+    /// <c>Select(c =&gt; c.Address).GroupBy(a =&gt; a.City)</c> is NOT caught here: EF rewrites it to a leaf key over the
+    /// ENTITY (<c>GroupBy(c =&gt; c.Address.City)</c>) with no element selector, erasing the complex value before
+    /// translation; its outcome equals its scalar analogue's (pinned). The element-selector branch is live only for a
+    /// join-scope grouping (EF passes <c>ti =&gt; ti.Outer</c>/<c>ti.Inner</c> as the element; measured 25 of 4477
+    /// GroupBy translations over the GroupBy and ComplexType suites); a user element selector reading a complex value
+    /// (<c>GroupBy(c =&gt; c.Rank, c =&gt; c.Address)</c>) is dropped by EF when unread, else folded into the post-group
+    /// Select, which the two-argument overload below checks. EF never passed a result selector in that measurement
+    /// (<c>GroupBy(key, resultSelector)</c> fails in EF before reaching the provider); that branch is defence in depth.
+    /// </remarks>
     private static void ThrowIfGroupByOverComplexValue(
         ShapedQueryExpression source, LambdaExpression keySelector, LambdaExpression? elementSelector, LambdaExpression? resultSelector)
     {

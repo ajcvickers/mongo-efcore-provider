@@ -252,7 +252,12 @@ Rendering (null/missing/dialect semantics):
   typed as a derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other
   derived shaper does only outside a join. This also corrected a pre-existing NON-complex wrong read (owner-approved
   exception, ruling R9): `OfType<E>().Select(e => new { e, e.Name, R = e.Referrer!.Name })` read `e.Name` off the joined
-  referrer at 040cecdf (`Dev|Boss|Boss`), now `Dev|Dev|Boss`.
+  referrer at 040cecdf (`Dev|Boss|Boss`), now `Dev|Dev|Boss`. A bare-nav SelectMany's ITEM shaper
+  (`BuildBareNavWrappedShaper`) is bound to the same empty member, so `IsRootProjectionShaper` is true for it too; this
+  is harmless today because the arm is never reached for a served row (an item type in the root's EF hierarchy needs a
+  reference unwind, which has no driver-LINQ fallback; the native path binds by scope depth and reads by alias; an owned
+  element type is never in the root's hierarchy). Pinned per mode in `ComplexTypeDerivedSelectManyItemTests`; if a
+  reference-unwind fallback is ever added, distinguish the item shaper first.
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

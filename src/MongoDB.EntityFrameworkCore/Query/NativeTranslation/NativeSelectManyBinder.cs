@@ -464,6 +464,12 @@ internal static class NativeSelectManyBinder
                     member.Expression, ti, MongoTransparentScopeResolver.TransparentIdentifierHops, sources.Count,
                     out var scopeIndex))
             {
+                // The scope parameter is typed as the COLLECTION root; after OfType<TDerived>() the outer scope is the
+                // derived type and a derived-declared member (`ti.Outer.Level`) isn't defined on it, so MakeMemberAccess
+                // would throw ArgumentException in every mode. Decline instead (the ScopeRerootingVisitor guard, mirrored).
+                if (member.Member.DeclaringType?.IsAssignableFrom(scopeParams[scopeIndex].Type) != true)
+                    return false;
+
                 var rerooted = Expression.MakeMemberAccess(scopeParams[scopeIndex], member.Member);
                 if (!translators[scopeIndex].TryTranslateField(rerooted, out var field))
                     return false;
