@@ -78,6 +78,11 @@ Scope, joins, grouping:
   declines (`JoinLookupImplementsKeySelectors`). Composite-PK components live at `_id.<Name>`
   (`LookupExpression.GetFieldPath`). "Simple" includes an anonymous key of scalar properties (same anonymous type
   both sides, one hop, `StoredSerialization.StoredAlike` per pair), rendered as `let` + `$and`.
+- **A join key is resolved by property NAME only if it is a direct read** off its scope (`IsDirectKeyRead`: the key
+  parameter or an `Outer`/`Inner` chain, no owned/complex hop): `x => x.Ship.City` shares the root `City`'s simple name and
+  the raw-key `$lookup` and navigation search silently joined on it. Hop keys decline natively; the bridge's left-join
+  builder resolves the full path (`StructuralPath`). On the bridge, join-result complex hops read through the complex
+  serializer, and the mixed reader's `_outer` redirect applies to every hop's source (`ResolveWholeDocumentSource`).
 - **Paging vs. joins.** EF hoists `Skip`/`Take`/`Where`/`OrderBy` ahead of a join's result selector; recorded ops
   are deferred until after the join unless the join is in the left-outer-reference-navigation "safe to page
   before `$lookup`" set (reducers there decline). Paging ahead of a row-multiplying join stays ahead; paging both

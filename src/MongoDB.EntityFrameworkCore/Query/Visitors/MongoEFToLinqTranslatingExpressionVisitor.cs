@@ -409,6 +409,14 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
                             _bsonSerializerFactory.GetNavigationSerializer(efNavigation));
                         return callExpression.ConvertIfRequired(methodCallExpression.Method.ReturnType);
                     }
+
+                    // The EF.Property spelling of a complex-property hop, as in the join member-access arm below.
+                    if (entityType.FindComplexProperty(propertyName) is { } efComplexProperty)
+                    {
+                        var complexInfo = _bsonSerializerFactory.GetComplexPropertySerializationInfo(efComplexProperty);
+                        return MqlField(source, efComplexProperty.ClrType, complexInfo.ElementName, complexInfo.Serializer)
+                            .ConvertIfRequired(methodCallExpression.Method.ReturnType);
+                    }
                 }
 
                 // Try CLR property
@@ -441,7 +449,8 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
                      && memberExpression.Expression != null
                      && _queryContext.Context.Model.FindEntityType(memberExpression.Expression.Type) is { } memberEntityType
                      && (memberEntityType.FindProperty(memberExpression.Member.Name) != null
-                         || memberEntityType.FindNavigation(memberExpression.Member.Name) != null):
+                         || memberEntityType.FindNavigation(memberExpression.Member.Name) != null
+                         || memberEntityType.FindComplexProperty(memberExpression.Member.Name) != null):
                 {
                     var memberSource = Visit(memberExpression.Expression)
                                        ?? throw new InvalidOperationException("Unsupported source to member access expression.");
@@ -462,6 +471,17 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
                         var callExpression = MqlField(doc, memberProperty.ClrType, memberProperty.GetElementName(),
                             BsonSerializerFactory.CreateTypeSerializer(memberProperty));
                         return callExpression.ConvertIfRequired(memberExpression.Type);
+                    }
+
+                    // A complex-property hop (`x.c.Shipping.City`): read the subdocument under its element name through the
+                    // complex type's serializer, whose member lookup resolves the leaves' element names and serializers. Left to
+                    // the driver, the synthesized join-result serializer would read the CLR name (`Shipping.City`) and match or
+                    // project nothing.
+                    if (memberEntityType.FindComplexProperty(memberExpression.Member.Name) is { } memberComplexProperty)
+                    {
+                        var complexInfo = _bsonSerializerFactory.GetComplexPropertySerializationInfo(memberComplexProperty);
+                        return MqlField(memberSource, memberComplexProperty.ClrType, complexInfo.ElementName, complexInfo.Serializer)
+                            .ConvertIfRequired(memberExpression.Type);
                     }
 
                     var memberNavigation = memberEntityType.FindNavigation(memberExpression.Member.Name)!;

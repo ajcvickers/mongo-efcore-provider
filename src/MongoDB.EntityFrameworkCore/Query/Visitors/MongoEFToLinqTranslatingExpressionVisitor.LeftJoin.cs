@@ -305,8 +305,8 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
             return null;
         }
 
-        var outerField = TryGetKeyFieldPath(outerKey.Body, outerEntityType);
-        var innerField = TryGetKeyFieldPath(innerKey.Body, innerEntityType);
+        var outerField = TryGetKeyFieldPath(outerKey, outerEntityType);
+        var innerField = TryGetKeyFieldPath(innerKey, innerEntityType);
         if (outerField == null || innerField == null)
         {
             return null;
@@ -371,31 +371,32 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
     }
 
     /// <summary>
-    /// Resolves the dotted BSON field path for a simple <c>EF.Property(p, "Name")</c> / member-access join
-    /// key selector body. Returns <see langword="null"/> for shapes we don't handle (composite/anonymous
-    /// keys, conversions, computed keys).
+    /// Resolves the dotted BSON field path of a join key selector that reads one property off its parameter, directly or
+    /// through owned-navigation / complex-property hops (<c>o =&gt; o.Ship.City</c> is <c>Ship.City</c>), via
+    /// <see cref="NativeTranslation.StructuralPath"/>. Resolving by the leaf's simple name alone would answer the entity's
+    /// own same-named property. Returns <see langword="null"/> for shapes we don't handle (composite/anonymous keys,
+    /// conversions, computed keys, a hop into an array).
     /// </summary>
-    private static string? TryGetKeyFieldPath(Expression keyBody, IEntityType entityType)
+    private static string? TryGetKeyFieldPath(LambdaExpression keySelector, IEntityType entityType)
     {
-        var propertyName = keyBody.TryGetSimplePropertyName();
-        if (propertyName == null)
+        var names = new List<string>();
+        var current = keySelector.Body.RemoveConvert();
+        while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
+        {
+            names.Insert(0, name);
+            current = receiver.RemoveConvert();
+        }
+
+        if (names.Count == 0
+            || !ReferenceEquals(current, keySelector.Parameters[0])
+            || !NativeTranslation.StructuralPath.TryResolve(entityType, names, names.Count - 1, out var path)
+            || path.Leaf is not IProperty)
         {
             return null;
         }
 
-        var property = entityType.FindProperty(propertyName);
-        if (property == null)
-        {
-            return null;
-        }
-
-        var elementName = property.GetElementName();
-        if (property.IsPrimaryKey() && entityType.FindPrimaryKey()?.Properties.Count > 1)
-        {
-            return $"_id.{elementName}";
-        }
-
-        return elementName;
+        // StructuralPath builds a composite-key leaf as `_id.<element>` (GetPropertyFieldPath), as before.
+        return string.Join(".", path.Segments);
     }
 
     /// <summary>

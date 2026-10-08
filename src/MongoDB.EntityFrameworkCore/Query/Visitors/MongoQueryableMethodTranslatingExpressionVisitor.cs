@@ -2638,7 +2638,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (joinInfo.Navigation == null)
         {
             // Navigation-less: the Lookup was built directly from these key selectors, so it matches by
-            // construction.
+            // construction (the raw-key builder resolves only direct reads: IsDirectKeyRead).
             return true;
         }
 
@@ -2718,20 +2718,46 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     }
 
     /// <summary>
-    /// Resolves the raw outer/inner key properties a navigation-less (EF-377) join <c>$lookup</c> is built from:
-    /// <paramref name="fkPropertyName"/> on <paramref name="fkOwnerEntityType"/> (the root, or a transitive hop's
-    /// target) and the inner key selector's simple property on <paramref name="innerEntityType"/>.
+    /// Resolves the raw outer/inner key properties a navigation-less (EF-377) join <c>$lookup</c> is built from: the outer
+    /// key selector's property on <paramref name="fkOwnerEntityType"/> (the root, or a transitive hop's target) and the
+    /// inner key selector's on <paramref name="innerEntityType"/>. Both must be direct reads (<see cref="IsDirectKeyRead"/>).
     /// </summary>
     private static bool TryResolveRawKeyJoinProperties(
         IEntityType fkOwnerEntityType,
         IEntityType innerEntityType,
-        string? fkPropertyName,
+        LambdaExpression outerKeySelector,
         LambdaExpression innerKeySelector,
         [NotNullWhen(true)] out IProperty? outerProperty,
         [NotNullWhen(true)] out IProperty? innerProperty)
-        => TryResolveRawKeyJoinProperties(
-            fkOwnerEntityType, innerEntityType, fkPropertyName, innerKeySelector.Body.TryGetSimplePropertyName(),
-            out outerProperty, out innerProperty);
+    {
+        if (!IsDirectKeyRead(outerKeySelector) || !IsDirectKeyRead(innerKeySelector))
+        {
+            outerProperty = innerProperty = null;
+            return false;
+        }
+
+        return TryResolveRawKeyJoinProperties(
+            fkOwnerEntityType, innerEntityType, outerKeySelector.Body.TryGetSimplePropertyName(),
+            innerKeySelector.Body.TryGetSimplePropertyName(), out outerProperty, out innerProperty);
+    }
+
+    /// <summary>
+    /// Whether a join key selector reads ONE property directly off its scope: the key parameter itself, or a
+    /// TransparentIdentifier <c>Outer</c>/<c>Inner</c> chain over it (a prior join's side), with no owned-navigation or
+    /// complex-property hop in between. Only such a key may be resolved by its property NAME (raw-key <c>$lookup</c>,
+    /// navigation key matching, the driver-LINQ bridge's key path): a hop key (<c>x =&gt; x.Ship.City</c>) has the same
+    /// simple name as the scope's own <c>City</c>, and resolving it by name silently joins on the wrong field.
+    /// </summary>
+    internal static bool IsDirectKeyRead(LambdaExpression keySelector)
+    {
+        var target = GetKeySelectorTargetObject(keySelector.Body)?.RemoveConvert();
+        while (target is MemberExpression step && step.IsTransparentIdentifierOuterOrInnerAccess())
+        {
+            target = step.Expression?.RemoveConvert();
+        }
+
+        return target != null && ReferenceEquals(target, keySelector.Parameters[0]);
+    }
 
     private static bool TryResolveRawKeyJoinProperties(
         IEntityType fkOwnerEntityType,
@@ -3056,6 +3082,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         INavigation? navigation = null;
         JoinInfo? throughJoin = null;
         string? embeddedPath = null;
+        var unresolvableKeyPath = false;
 
         // A transitive join resolves the navigation on the join hop the key selector actually reaches through (found
         // by position, not by IEntityType — see above) and remembers it so the $lookup's localField can be prefixed
@@ -3075,8 +3102,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 {
                     if (searchEntityType.FindNavigation(segment) is not { } segmentNavigation)
                     {
-                        // Unresolvable embedded path: search the anchor itself, as if there were no segments.
-                        searchEntityType = anchorEntityType;
+                        // Unresolvable embedded path (e.g. a complex-property hop, `x.Ship.City`): no navigation's $lookup
+                        // implements a key read inside it, and searching the anchor instead would match the leaf NAME
+                        // against the anchor's own same-named FK (silently joining on `ClientId` for `x.Ship.ClientId`).
+                        unresolvableKeyPath = true;
                         elementSegments = null;
                         break;
                     }
@@ -3091,7 +3120,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 }
             }
 
-            if (fkPropertyName != null)
+            // An unresolvable key path resolves no navigation; the raw-key branch declines a hop key too (IsDirectKeyRead).
+            if (!unresolvableKeyPath && fkPropertyName != null)
             {
                 // IsOnDependent disambiguates a self-referencing relationship declared with both a reference nav
                 // (Manager) and its inverse collection nav (DirectReports): both share the same IForeignKey, and picking
@@ -3102,8 +3132,11 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                                          && n.ForeignKey.Properties.Any(p => p.Name == fkPropertyName));
             }
 
-            navigation ??= searchEntityType.GetNavigations()
-                .FirstOrDefault(n => n.TargetEntityType == innerEntityType);
+            if (!unresolvableKeyPath)
+            {
+                navigation ??= searchEntityType.GetNavigations()
+                    .FirstOrDefault(n => n.TargetEntityType == innerEntityType);
+            }
         }
 
         // A navigation resolved above — by the FK match OR the loose "any navigation onto the joined type"
@@ -3122,7 +3155,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 BuildNavigationJoinLookup(navigation, alias: "", joinInfo.IsLeftOuter, throughJoin, embeddedPath),
                 navigation, innerEntityType, outerKeySelector, innerKeySelector)
             && TryResolveRawKeyJoinProperties(
-                throughJoin?.InnerEntityType ?? outerEntityType, innerEntityType, fkPropertyName, innerKeySelector,
+                throughJoin?.InnerEntityType ?? outerEntityType, innerEntityType, outerKeySelector, innerKeySelector,
                 out _, out _))
         {
             navigation = null;
@@ -3173,7 +3206,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             // outer/inner key property paths. The FK-owning entity type is the root when isDirectFromRoot, else the
             // through-hop's target; localField is scoped by the through-hop's alias as for a transitive navigation hop.
             if (TryResolveRawKeyJoinProperties(
-                    throughJoin?.InnerEntityType ?? outerEntityType, innerEntityType, fkPropertyName, innerKeySelector,
+                    throughJoin?.InnerEntityType ?? outerEntityType, innerEntityType, outerKeySelector, innerKeySelector,
                     out var outerProperty, out var innerProperty))
             {
                 joinInfo.Lookup = BuildRawKeyJoinLookup(
