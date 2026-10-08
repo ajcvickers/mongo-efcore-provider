@@ -319,11 +319,11 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
             new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "ClientId", AnnId }, { "Label", "p1" }, { "City", "Paris" }, { "Delivery", new BsonDocument { { "ClientId", BobId }, { "City", "Oslo" } } } },
             new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "ClientId", BobId }, { "Label", "p2" }, { "City", "Oslo" }, { "Delivery", new BsonDocument { { "ClientId", AnnId }, { "City", "Paris" } } } }
         ]);
-        // k1 lives in Rome with Home.City Lima, k2 in Oslo with Home.City Kyiv.
+        // k1 lives in Rome with Home.City Lima, k2 in Oslo with Home.City Rome (= k1's root City).
         database.MongoDatabase.GetCollection<BsonDocument>(couriers).InsertMany(
         [
             new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "ClientId", AnnId }, { "City", "Rome" }, { "Home", new BsonDocument("City", "Lima") } },
-            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "ClientId", BobId }, { "City", "Oslo" }, { "Home", new BsonDocument("City", "Kyiv") } }
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "ClientId", BobId }, { "City", "Oslo" }, { "Home", new BsonDocument("City", "Rome") } }
         ]);
         return mode =>
         {
@@ -351,9 +351,10 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
     public void Join_key_through_an_owned_hop_never_resolves_to_a_same_named_root_property()
         // NON-complex analogue (owner-visible correction): Courier has a root City AND an owned Home.City. At 1c616111 the
         // key `k => k.Home.City` resolved by simple name to the root City and NativeOnly served `k1|k1; k2|k2` (wrong rows,
-        // every mode). Now it declines natively and the fallback joins on Home.City: no Home.City (Lima, Kyiv) equals a root
-        // City (Rome, Oslo), so no rows.
-        => Declines(Parcels(db => [.. db.Couriers.Join(db.Couriers, a => a.Home.City, b => b.City, (a, b) => a.City + "|" + b.City).ToList()]));
+        // every mode: Rome|Rome, Oslo|Oslo). Now it declines natively and the fallback joins on Home.City: only k2's Home.City
+        // (Rome) equals a root City (k1's), so the one row is k2|k1.
+        => Declines(Parcels(db => [.. db.Couriers.Join(db.Couriers, a => a.Home.City, b => b.City, (a, b) => a.City + "|" + b.City).ToList()]),
+            "Oslo|Rome");
 
     [Fact]
     public void Owned_hop_beside_a_whole_joined_entity_reads_the_outer_document()
@@ -361,17 +362,149 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
         // root `Home` the {_outer, _inner} document doesn't have (null; pre-existing for owned).
         => Declines(Parcels(db => [.. db.Couriers.Join(db.Clients, k => k.ClientId, c => (ObjectId?)c.Id, (k, c) => new { k, c })
                 .Select(x => new { x.c, x.k.Home.City }).ToList().Select(x => x.c.Name + "#" + x.City).Order()]),
-            "Ann#Lima", "Bob#Kyiv");
+            "Ann#Lima", "Bob#Rome");
 
 #if !EF8 && !EF9
     [Fact]
     public void Whole_entity_LeftJoin_keyed_through_a_complex_hop_does_not_join_on_a_same_named_root_property()
         // Parcel has a root City AND Delivery.City. A whole-entity LeftJoin takes the bridge's own left-join $lookup builder,
-        // which resolves keys by simple name: `p.Delivery.City` must not become the root `City` (p1 Paris -> Ann would be
-        // wrong; Delivery cities: p1 Oslo -> nobody, p2 Paris -> Ann by Billing.City... here inner key is the client's Name).
+        // which resolved keys by simple name: `p.Delivery.City` must not become the root `City`.
         => Declines(Parcels(db => [.. db.Parcels.LeftJoin(db.Couriers, p => p.Delivery.City, k => k.City, (p, k) => new { p, k })
                 .ToList().Select(x => x.p.Label + "|" + (x.k == null ? "-" : x.k.City)).Order()]),
             // p1 Delivery.City Oslo -> k2 (Oslo); p2 Delivery.City Paris -> none. Root cities would give p1 Paris -> none, p2 Oslo -> k2.
             "p1|Oslo", "p2|-");
+#endif
+
+    // ── Inner-side hop key on a NAVIGATION-backed join (fix round 1, I1) ─────────────────────────────────────────
+
+    public class AccountRef
+    {
+        public ObjectId Id { get; set; }
+        public AccountRefInner Inner { get; set; } = null!;
+    }
+
+    public class AccountRefInner
+    {
+        public ObjectId Id { get; set; }
+    }
+
+    public class AccountTag
+    {
+        public ObjectId Id { get; set; }
+    }
+
+    public class Account
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public AccountRef Ref { get; set; } = null!;
+        public AccountTag Tag { get; set; } = null!;
+    }
+
+    public class Ticket
+    {
+        public ObjectId Id { get; set; }
+        public string Label { get; set; } = null!;
+        public ObjectId? AccountId { get; set; }
+        public Account? Account { get; set; }
+    }
+
+    private sealed class TicketContext(DbContextOptions options, string accounts, string tickets) : DbContext(options)
+    {
+        public DbSet<Account> Accounts => Set<Account>();
+        public DbSet<Ticket> Tickets => Set<Ticket>();
+
+        protected override void OnModelCreating(ModelBuilder mb)
+        {
+            mb.Entity<Account>(b =>
+            {
+                b.ToCollection(accounts);
+                b.ComplexProperty(a => a.Ref, r => r.ComplexProperty(x => x.Inner));
+                b.OwnsOne(a => a.Tag);
+            });
+            mb.Entity<Ticket>(b =>
+            {
+                b.ToCollection(tickets);
+                b.HasOne(t => t.Account).WithMany().HasForeignKey(t => t.AccountId);
+            });
+        }
+    }
+
+    private static readonly ObjectId AccountA = ObjectId.GenerateNewId();
+    private static readonly ObjectId AccountB = ObjectId.GenerateNewId();
+
+    // Ann (_id A) points at B in every hop (Ref.Id, Ref.Inner.Id, Tag.Id) and Bob (_id B) at A. t1 references A, t2 B,
+    // t3 nothing. Joining a hop key on the navigation's `_id` instead swaps the names.
+    private Func<MongoQueryMode, List<string>> Tickets(
+        Func<TicketContext, IEnumerable<string>> query, [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var accounts = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + suffix + "_a";
+        var tickets = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + suffix + "_t";
+        BsonDocument Points(ObjectId to) => new() { { "Id", to }, { "Inner", new BsonDocument("Id", to) } };
+        database.MongoDatabase.GetCollection<BsonDocument>(accounts).InsertMany(
+        [
+            new BsonDocument { { "_id", AccountA }, { "Name", "Ann" }, { "Ref", Points(AccountB) }, { "Tag", new BsonDocument("Id", AccountB) } },
+            new BsonDocument { { "_id", AccountB }, { "Name", "Bob" }, { "Ref", Points(AccountA) }, { "Tag", new BsonDocument("Id", AccountA) } }
+        ]);
+        database.MongoDatabase.GetCollection<BsonDocument>(tickets).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Label", "t1" }, { "AccountId", AccountA } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Label", "t2" }, { "AccountId", AccountB } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Label", "t3" }, { "AccountId", BsonNull.Value } }
+        ]);
+        return mode =>
+        {
+            var builder = new DbContextOptionsBuilder<TicketContext>()
+                .UseMongoDB(database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName)
+                .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+                .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+            new MongoDbContextOptionsBuilder(builder).UseQueryMode(mode);
+            using var db = new TicketContext(builder.Options, accounts, tickets);
+            return query(db).ToList();
+        };
+    }
+
+    // The outer key `t.AccountId` is the Ticket.Account FK, and the inner hop key's leaf is named `Id` like Account's PK, so a
+    // simple-name check accepted the navigation's $lookup (`_id`) and NativeOnly served the swapped rows (t1|Ann, t2|Bob).
+    // Correct: t1 (A) -> Bob (whose hops hold A), t2 (B) -> Ann.
+    public static TheoryData<string> InnerHopKeyShapes => ["complex", "complex_multi_hop", "owned", "left_join"];
+
+    [Theory]
+    [MemberData(nameof(InnerHopKeyShapes))]
+    public void Inner_hop_key_named_like_the_navigations_principal_key_does_not_use_the_navigation(string shape)
+        => Declines(Tickets(db => shape switch
+            {
+                "complex" => [.. db.Tickets.Join(db.Accounts, t => t.AccountId, a => (ObjectId?)a.Ref.Id, (t, a) => t.Label + "|" + a.Name).ToList().Order()],
+                "complex_multi_hop" => [.. db.Tickets.Join(db.Accounts, t => t.AccountId, a => (ObjectId?)a.Ref.Inner.Id, (t, a) => t.Label + "|" + a.Name).ToList().Order()],
+                // An owned type may carry a CLR property named Id (EF maps it as an ordinary property; the owned key is shadow).
+                "owned" => [.. db.Tickets.Join(db.Accounts, t => t.AccountId, a => (ObjectId?)a.Tag.Id, (t, a) => t.Label + "|" + a.Name).ToList().Order()],
+                _ => [.. (from t in db.Tickets
+                        join a in db.Accounts on t.AccountId equals (ObjectId?)a.Ref.Id into g
+                        from a in g.DefaultIfEmpty()
+                        select t.Label + "|" + (a == null ? "-" : a.Name)).ToList().Order().Where(x => x != "t3|-")]
+            }, nameof(Inner_hop_key_named_like_the_navigations_principal_key_does_not_use_the_navigation) + shape),
+            "t1|Bob", "t2|Ann");
+
+    [Fact]
+    public void Direct_inner_key_on_a_navigation_join_stays_native()
+        => Native(Tickets(db => [.. db.Tickets.Join(db.Accounts, t => t.AccountId, a => (ObjectId?)a.Id, (t, a) => t.Label + "|" + a.Name).ToList().Order()]),
+            "t1|Ann", "t2|Bob");
+
+    [Fact]
+    public void GroupJoin_count_over_an_inner_hop_key()
+        // Account has no collection navigation back to Ticket, so the M35 count binder can't bind it; EF refuses the
+        // correlated count in every mode. Never rows. Correct answer would be t1 1, t2 1, t3 0.
+        => PerMode(Tickets(db => [.. db.Tickets.GroupJoin(db.Accounts, t => t.AccountId, a => (ObjectId?)a.Ref.Id, (t, g) => new { t.Label, N = g.Count() })
+                .ToList().Select(x => x.Label + "|" + x.N).Order()]),
+            ["t1|1", "t2|1", "t3|0"], "could not be translated", "could not be translated", "could not be translated");
+
+#if !EF8 && !EF9
+    [Fact]
+    public void Inner_hop_key_LeftJoin_operator_does_not_use_the_navigation()
+        => Declines(Tickets(db => [.. db.Tickets.LeftJoin(db.Accounts, t => t.AccountId, a => (ObjectId?)a.Ref.Id, (t, a) => t.Label + "|" + (a == null ? "-" : a.Name))
+                .ToList().Order()]),
+            "t1|Bob", "t2|Ann", "t3|-");
 #endif
 }

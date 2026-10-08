@@ -848,25 +848,18 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// </summary>
     private static string GetSortField(MethodCallExpression orderByCall, IEntityType entityType)
     {
-        // The key selector is the second argument: e.g., o => o.OrderID
-        var name = orderByCall.Arguments[1].UnwrapLambdaFromQuote().Body.TryGetSimplePropertyName();
-        if (name == null)
+        // The key selector is the second argument: e.g., o => o.OrderID, or through owned/complex hops o => o.Ship.City.
+        // The whole chain is resolved (StructuralPath): resolving the leaf's simple name would sort by the root's own
+        // same-named property (`City` for `o.Ship.City`). Anything else (not a mapped property: `o.Label.Length`, a
+        // computed key) has no element to sort on; a raw member name would $sort on an absent field, which MongoDB treats
+        // as all-equal (arbitrary order), so fail loudly.
+        if (!NativeTranslation.StructuralPath.TryResolveSelectorLeaf(
+                orderByCall.Arguments[1].UnwrapLambdaFromQuote(), entityType, out _, out var path))
         {
-            // Not a simple property access — fail loudly rather than silently sorting by "_id".
             throw new InvalidOperationException(CoreStrings.TranslationFailed(orderByCall.Print()));
         }
 
-        var property = entityType.FindProperty(name);
-        if (property == null)
-        {
-            // A member access that isn't a mapped property of the target entity (e.g. "o.Label.Length", or a
-            // member reached through an embedded document, where only the outermost member name survives).
-            // There is no element to sort on: using the raw member name would $sort on a field absent from the
-            // documents, which MongoDB treats as all-equal and returns in an arbitrary order. Fail loudly.
-            throw new InvalidOperationException(CoreStrings.TranslationFailed(orderByCall.Print()));
-        }
-
-        return Microsoft.EntityFrameworkCore.MongoPropertyExtensions.GetElementName(property);
+        return path;
     }
 
     /// <summary>

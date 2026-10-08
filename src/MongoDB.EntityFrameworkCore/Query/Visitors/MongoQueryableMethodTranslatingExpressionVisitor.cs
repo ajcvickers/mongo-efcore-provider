@@ -2661,7 +2661,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     {
         var outerKeyName = outerKeySelector.Body.TryGetSimplePropertyName();
         var innerKeyName = innerKeySelector.Body.TryGetSimplePropertyName();
-        if (outerKeyName == null || innerKeyName == null)
+        // The inner key is looked up by name on the inner ROOT type, so it must be a direct read (IsDirectKeyRead): a hop key
+        // `a => a.Ref.Id` would otherwise match the PK `Id` and keep the navigation's `_id` $lookup. The outer key resolves on
+        // the navigation's declaring type, which already accounts for owned segments (EF-380).
+        if (outerKeyName == null || innerKeyName == null || !IsDirectKeyRead(innerKeySelector))
         {
             return false;
         }

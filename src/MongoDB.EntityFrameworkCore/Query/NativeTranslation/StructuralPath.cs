@@ -15,6 +15,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Extensions;
@@ -75,6 +77,41 @@ internal readonly record struct StructuralPathResult(
 /// </remarks>
 internal static class StructuralPath
 {
+    /// <summary>
+    /// Resolves a single-parameter selector that reads one mapped property off its parameter, directly or through owned /
+    /// complex hops (<c>o =&gt; o.Ship.City</c>, <c>EF.Property</c> spellings), to that property and its dotted stored path
+    /// relative to <paramref name="entityType"/>. Callers that address a field by a selector (a join key, a sort key) must
+    /// resolve the WHOLE chain: resolving the leaf's simple name answers the root's own same-named property.
+    /// </summary>
+    internal static bool TryResolveSelectorLeaf(
+        LambdaExpression selector, IEntityType entityType,
+        [NotNullWhen(true)] out IProperty? property, [NotNullWhen(true)] out string? path)
+    {
+        property = null;
+        path = null;
+
+        var names = new List<string>();
+        var current = selector.Body.RemoveConvert();
+        while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
+        {
+            names.Insert(0, name);
+            current = receiver.RemoveConvert();
+        }
+
+        if (names.Count == 0
+            || selector.Parameters.Count != 1
+            || !ReferenceEquals(current, selector.Parameters[0])
+            || !TryResolve(entityType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not IProperty leaf)
+        {
+            return false;
+        }
+
+        property = leaf;
+        path = string.Join(".", resolved.Segments);
+        return true;
+    }
+
     /// <summary>
     /// Resolves <paramref name="names"/> against <paramref name="scope"/>: the first <paramref name="hopCount"/> names
     /// are hops; the name after them, if any, is the leaf.
