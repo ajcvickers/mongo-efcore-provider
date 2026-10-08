@@ -1,0 +1,218 @@
+/* Copyright 2023-present MongoDB Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using MongoDB.Bson;
+using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Infrastructure;
+
+namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
+
+#nullable enable
+
+/// <summary>
+/// A shaper of a type DERIVED from the query root (a TPH subtype) that belongs to a JOINED row must read the joined
+/// sub-document, never the outer root document, even though the derived type is in the root's hierarchy. Every inner row
+/// carries values that differ from the outer row's, so reading the wrong document shows.
+/// </summary>
+[XUnitCollection("QueryTests")]
+public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
+{
+    public class Person
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public ObjectId? ReferrerId { get; set; }
+        public Employee? Referrer { get; set; }
+        public Badge Badge { get; set; } = null!;
+    }
+
+    public class Employee : Person
+    {
+        public int Level { get; set; }
+        public GeoPoint Desk { get; set; }
+    }
+
+    public class Badge
+    {
+        public string Code { get; set; } = null!;
+    }
+
+    private sealed class PeopleContext(DbContextOptions options, string collection) : DbContext(options)
+    {
+        public DbSet<Person> People => Set<Person>();
+
+        protected override void OnModelCreating(ModelBuilder mb)
+        {
+            mb.Entity<Employee>().HasBaseType<Person>();
+            mb.Entity<Person>(b =>
+            {
+                b.ToCollection(collection);
+                b.HasDiscriminator<string>("_t").HasValue<Person>("P").HasValue<Employee>("E");
+                b.HasOne(p => p.Referrer).WithMany().HasForeignKey(p => p.ReferrerId);
+                b.ComplexProperty(p => p.Badge);
+            });
+            mb.Entity<Employee>().ComplexProperty(e => e.Desk);
+        }
+    }
+
+    private static readonly ObjectId BossId = ObjectId.GenerateNewId();
+
+    private string Seed(string name)
+    {
+        var collectionName = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + Guid.NewGuid().ToString("N")[..8];
+        database.MongoDatabase.GetCollection<BsonDocument>(collectionName).InsertMany(
+        [
+            new BsonDocument
+            {
+                { "_id", BossId }, { "_t", "E" }, { "Name", "Boss" }, { "Level", 9 }, { "ReferrerId", BsonNull.Value },
+                { "Badge", new BsonDocument("Code", "B-boss") }, { "Desk", new BsonDocument { { "Lat", 9.0 }, { "Lon", 9.5 } } }
+            },
+            new BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "_t", "E" }, { "Name", "Dev" }, { "Level", 2 }, { "ReferrerId", BossId },
+                { "Badge", new BsonDocument("Code", "B-dev") }, { "Desk", new BsonDocument { { "Lat", 2.0 }, { "Lon", 2.5 } } }
+            },
+            new BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "_t", "P" }, { "Name", "Guest" }, { "ReferrerId", BossId },
+                { "Badge", new BsonDocument("Code", "B-guest") }
+            }
+        ]);
+        return collectionName;
+    }
+
+    private PeopleContext Create(string collection, MongoQueryMode mode)
+    {
+        var builder = new DbContextOptionsBuilder<PeopleContext>()
+            .UseMongoDB(database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName)
+            .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+            .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+        new MongoDbContextOptionsBuilder(builder).UseQueryMode(mode);
+        return new PeopleContext(builder.Options, collection);
+    }
+
+    private List<string> Outcome(string collection, MongoQueryMode mode, Func<PeopleContext, IEnumerable<string>> query)
+    {
+        using var db = Create(collection, mode);
+        return query(db).ToList();
+    }
+
+    // Every mode answers the hand-written rows, or (a shape some mode can't serve) the modes that do serve it must all
+    // answer exactly them: a wrong-document read is a VALUE difference, which this catches in whichever mode serves it.
+    private void AssertNoModeReadsTheWrongDocument(string collection, Func<PeopleContext, IEnumerable<string>> query, string[] expected)
+    {
+        var served = 0;
+        var failures = new List<string>();
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            List<string> rows;
+            try
+            {
+                rows = Outcome(collection, mode, query);
+            }
+            catch (Exception e) when (e is not Xunit.Sdk.XunitException)
+            {
+                failures.Add($"{mode}: {e.GetType().Name}: {e.Message.Split('\n')[0]}");
+                continue;
+            }
+
+            served++;
+            Assert.True(expected.SequenceEqual(rows), $"{mode}: expected [{string.Join("; ", expected)}], got [{string.Join("; ", rows)}]");
+        }
+
+        Assert.True(served > 0, "no mode served the query: " + string.Join(" || ", failures));
+    }
+
+    [Fact]
+    public void Mixed_projection_through_a_derived_reference_reads_the_joined_document()
+    {
+        var collection = Seed(nameof(Mixed_projection_through_a_derived_reference_reads_the_joined_document));
+        AssertNoModeReadsTheWrongDocument(collection,
+            db => db.People.Where(p => p.ReferrerId != null).OrderBy(p => p.Name)
+                .Select(p => new { p, R = p.Referrer!.Name, L = p.Referrer.Level }).ToList()
+                .Select(x => $"{x.p.Name}|{x.p.Badge.Code}|{x.R}|{x.L}"),
+            ["Dev|B-dev|Boss|9", "Guest|B-guest|Boss|9"]);
+    }
+
+    [Fact]
+    public void Mixed_projection_of_a_derived_reference_entity_reads_its_complex_values_from_the_joined_document()
+    {
+        var collection = Seed(nameof(Mixed_projection_of_a_derived_reference_entity_reads_its_complex_values_from_the_joined_document));
+        AssertNoModeReadsTheWrongDocument(collection,
+            db => db.People.Where(p => p.ReferrerId != null).OrderBy(p => p.Name)
+                .Select(p => new { p.Name, p.Referrer, D = p.Referrer!.Desk }).ToList()
+                .Select(x => $"{x.Name}|{x.Referrer!.Name}|{x.Referrer.Badge.Code}|{x.Referrer.Desk.Lat}|{x.D.Lat}"),
+            ["Dev|Boss|B-boss|9|9", "Guest|Boss|B-boss|9|9"]);
+    }
+
+    [Fact]
+    public void Explicit_self_join_mixed_projection_of_inner_members_is_a_known_pre_existing_wrong_read()
+    {
+        // PRE-EXISTING (reproduced at 040cecdf, before complex-type materialization, with an OWNED Badge instead of a
+        // complex one): a same-type self-join whose mixed projection holds the whole outer entity beside an inner-side hop
+        // leaf reads it off the OUTER document on the driver-LINQ path (`x.e.Badge.Code` answers empty, at HEAD also
+        // `x.e.Name` answered the outer name). Not caused by this slice; pinned so a fix is noticed. Proposed Jira (not
+        // filed). Without the whole outer entity, or with the inner side projected whole, the inner members read correctly.
+        var collection = Seed(nameof(Explicit_self_join_mixed_projection_of_inner_members_is_a_known_pre_existing_wrong_read));
+        IEnumerable<string> Run(PeopleContext db, int shape)
+        {
+            var joined = db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e }).OrderBy(x => x.p.Name);
+            return shape switch
+            {
+                0 => joined.Select(x => new { x.p, x.e.Badge.Code }).ToList().Select(x => x.p.Name + "|" + x.Code),
+                1 => joined.Select(x => new { x.p.Name, E = x.e.Name, x.e.Badge.Code }).ToList().Select(x => x.Name + "|" + x.E + "|" + x.Code),
+                _ => joined.Select(x => new { x.p, x.e }).ToList().Select(x => x.p.Name + "|" + x.e.Name + "|" + x.e.Badge.Code + "|" + (x.e as Employee)?.Desk.Lat)
+            };
+        }
+
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            Assert.NotEqual(["Dev|B-boss", "Guest|B-boss"], Outcome(collection, mode, db => Run(db, 0)));
+        }
+
+        AssertNoModeReadsTheWrongDocument(collection, db => Run(db, 1), ["Dev|Boss|B-boss", "Guest|Boss|B-boss"]);
+        NativeModeAssert.NativeAndExpected(m => Outcome(collection, m, db => Run(db, 2)), ["Dev|Boss|B-boss|9", "Guest|Boss|B-boss|9"]);
+    }
+
+    [Fact]
+    public void Explicit_join_to_an_OfType_set_is_not_served()
+    {
+        // Pre-existing: a Join whose inner source is OfType<TDerived>() is neither native nor expressible by the driver
+        // ("Expression not supported"). Pinned so it never returns rows unnoticed.
+        var collection = Seed(nameof(Explicit_join_to_an_OfType_set_is_not_served));
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            Assert.ThrowsAny<Exception>(() => Outcome(collection, mode,
+                db => db.People.Join(db.People.OfType<Employee>(), p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
+                    .Select(x => new { x.p, x.e.Level }).ToList().Select(x => x.p.Name + x.Level)));
+        }
+    }
+
+    [Fact]
+    public void Derived_shaper_with_complex_values_in_a_non_join_query_reads_the_root_document()
+    {
+        // The non-join case the derived-shaper arm exists for: after OfType<Employee>() the root shaper is the derived type,
+        // and the mixed (fallback) reader must resolve its declared complex value off the root document.
+        var collection = Seed(nameof(Derived_shaper_with_complex_values_in_a_non_join_query_reads_the_root_document));
+        Assert.Equal(["2", "9"], NativeModeAssert.DeclinesCleanly(m => Outcome(collection, m,
+            db => db.People.OfType<Employee>().Select(e => e.Desk).ToList().Select(d => d.Lat.ToString()).Order())));
+        NativeModeAssert.NativeAndExpected(m => Outcome(collection, m,
+                db => db.People.OfType<Employee>().OrderBy(e => e.Name).ToList().Select(e => $"{e.Name}|{e.Badge.Code}|{e.Desk.Lat}")),
+            ["Boss|B-boss|9", "Dev|B-dev|2"]);
+    }
+}

@@ -210,6 +210,71 @@ public class NativeBareDottedLeafTests(TemporaryDatabaseFixture database) : ICla
         NativeModeAssert.NativeAndExpected(m => RunBlogs(collection, m, run), [.. expected]);
     }
 
+    // ── Missing owned parent (closes Task 9's deferred minor) ──────────────────────────────────────────────────
+
+    // Row "a" has Home, row "m" has none (an optional owned reference, absent from the stored document).
+    private IMongoCollection<Blog> SeedWithMissingHome(string name)
+    {
+        var raw = database.MongoDatabase.GetCollection<BsonDocument>(Unique(name));
+        raw.InsertMany(
+        [
+            new BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Title", "a" },
+                { "Home", new BsonDocument { { "City", "Bristol" }, { "Floor", 3 }, { "Code", "30" }, { "Geo", new BsonDocument { { "Country", "UK" } } } } }
+            },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Title", "m" } }
+        ]);
+        return database.MongoDatabase.GetCollection<Blog>(raw.CollectionNamespace.CollectionName);
+    }
+
+    // A leaf under a missing owned parent is MISSING: a reference-typed leaf reads null and a value-typed one reads default
+    // (D-F10, as driver-LINQ's $project push-down did), in every spelling. Hand-written answers, all three modes.
+    public static readonly Dictionary<string, (Func<IQueryable<Blog>, IEnumerable<string>> Run, string[] Expected)> MissingParentSpellings = new()
+    {
+        ["member_bare_city"] = (q => q.OrderBy(b => b.Title).Select(b => b.Home.City).ToList().Select(x => x ?? "<null>"), ["Bristol", "<null>"]),
+        ["member_bare_floor"] = (q => q.OrderBy(b => b.Title).Select(b => b.Home.Floor).ToList().Select(x => x.ToString()), ["3", "0"]),
+        ["member_anon_floor"] = (q => q.OrderBy(b => b.Title).Select(b => new { b.Home.Floor }).ToList().Select(x => x.Floor.ToString()), ["3", "0"]),
+        ["member_multi_hop"] = (q => q.OrderBy(b => b.Title).Select(b => b.Home.Geo.Country).ToList().Select(x => x ?? "<null>"), ["UK", "<null>"]),
+        ["efprop_anon_member_receiver"] = (q => q.OrderBy(b => b.Title).Select(b => new { C = EF.Property<string>(b.Home, "City") }).ToList()
+            .Select(x => x.C ?? "<null>"), ["Bristol", "<null>"]),
+        ["efprop_anon_nested"] = (q => q.OrderBy(b => b.Title).Select(b => new { C = EF.Property<string>(EF.Property<Home>(b, "Home"), "City") }).ToList()
+            .Select(x => x.C ?? "<null>"), ["Bristol", "<null>"]),
+        ["efprop_bare_nested"] = (q => q.OrderBy(b => b.Title).Select(b => EF.Property<string>(EF.Property<Home>(b, "Home"), "City")).ToList()
+            .Select(x => x ?? "<null>"), ["Bristol", "<null>"]),
+        ["efprop_anon_floor"] = (q => q.OrderBy(b => b.Title).Select(b => new { F = EF.Property<int>(EF.Property<Home>(b, "Home"), "Floor") }).ToList()
+            .Select(x => x.F.ToString()), ["3", "0"]),
+    };
+
+    [Fact]
+    public void Widening_cast_of_a_hop_leaf_under_a_missing_owned_parent_throws_in_every_mode()
+    {
+        // `(long)…Floor` is a $toLong cast, read strictly (Query AGENTS.md: a `$toX` cast over a missing field throws, as
+        // driver-LINQ's deserializer does), so the missing parent throws rather than reading 0. Exception type is not contract.
+        var collection = SeedWithMissingHome(nameof(Widening_cast_of_a_hop_leaf_under_a_missing_owned_parent_throws_in_every_mode));
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            var ex = Assert.ThrowsAny<Exception>(() => RunBlogs(collection, mode, q => q.OrderBy(b => b.Title)
+                .Select(b => new { F = (long)EF.Property<int>(EF.Property<Home>(b, "Home"), "Floor") }).ToList().Select(x => x.F.ToString())));
+            Assert.True(ex is InvalidOperationException or FormatException, $"{mode}: {ex}");
+        }
+
+        // Present parent: the cast reads the value.
+        NativeModeAssert.NativeAndExpected(m => RunBlogs(collection, m, q => q.Where(b => b.Title == "a")
+            .Select(b => new { F = (long)EF.Property<int>(EF.Property<Home>(b, "Home"), "Floor") }).ToList().Select(x => x.F.ToString())), ["3"]);
+    }
+
+    public static TheoryData<string> MissingParentSpellingNames => [.. MissingParentSpellings.Keys];
+
+    [Theory]
+    [MemberData(nameof(MissingParentSpellingNames))]
+    public void Hop_leaf_under_a_missing_owned_parent(string shape)
+    {
+        var collection = SeedWithMissingHome(nameof(Hop_leaf_under_a_missing_owned_parent) + shape);
+        var (run, expected) = MissingParentSpellings[shape];
+        NativeModeAssert.NativeAndExpected(m => RunBlogs(collection, m, run), [.. expected]);
+    }
+
     [Fact]
     public void Entity_beside_an_EF_Property_owned_hop_leaf()
     {

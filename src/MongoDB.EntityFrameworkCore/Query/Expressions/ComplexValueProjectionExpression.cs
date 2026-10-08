@@ -48,6 +48,35 @@ internal sealed class ComplexValueProjectionExpression(ProjectionBindingExpressi
     /// <inheritdoc />
     protected override Expression VisitChildren(ExpressionVisitor visitor) => this;
 
+    /// <summary>Whether <paramref name="shaper"/> holds a <see cref="ComplexValueProjectionExpression"/> at any depth.</summary>
+    internal static bool IsContainedIn(Expression shaper)
+    {
+        var finder = new Finder();
+        finder.Visit(shaper);
+        return finder.Found;
+    }
+
+    private sealed class Finder : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        public override Expression? Visit(Expression? node)
+        {
+            if (Found || node is null)
+            {
+                return node;
+            }
+
+            if (node is ComplexValueProjectionExpression)
+            {
+                Found = true;
+                return node;
+            }
+
+            return node is ProjectionBindingExpression or StructuralTypeShaperExpression ? node : base.Visit(node);
+        }
+    }
+
     void IPrintableExpression.Print(ExpressionPrinter expressionPrinter)
     {
         expressionPrinter.Append($"ComplexValue({ComplexProperty.DeclaringType.DisplayName()}.{ComplexProperty.Name}, ");

@@ -315,40 +315,91 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
             ["Paris", "Rome"]);
     }
 
-    public static TheoryData<string> ValueReadingOperatorShapes => ["distinct_bare", "distinct_anon", "concat", "union"];
+    public static TheoryData<string> ValueReadingOperatorShapes =>
+    [
+        "distinct_bare", "distinct_anon", "distinct_nested_anon", "distinct_count", "distinct_after_source_ops",
+        "concat_bare", "union_bare", "union_anon", "intersect_bare", "except_bare", "concat_struct"
+    ];
+
+    // Every mode's outcome as one line, so a failure reports all three at once.
+    private static string Outcomes(Func<MongoQueryMode, List<string>> run)
+        => string.Join(" || ", new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq }.Select(mode =>
+        {
+            try
+            {
+                return $"{mode}: rows [{string.Join("; ", run(mode))}]";
+            }
+            catch (Exception e)
+            {
+                return $"{mode}: {e.GetType().Name}: {e.Message}";
+            }
+        }));
+
+    private const string ComplexOperandRefusal = "cannot be the operand of";
+
+    private static void AssertRefusedInEveryMode(Func<MongoQueryMode, List<string>> run, string operatorName)
+    {
+        var outcomes = Outcomes(run);
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            Assert.True(outcomes.Contains($"{mode}: NotSupportedException: ") && outcomes.Split(" || ").Single(o => o.StartsWith(mode + ":"))
+                    .Contains($"'{operatorName}'") && outcomes.Contains(ComplexOperandRefusal),
+                $"expected a NotSupportedException naming '{operatorName}' in every mode, got: {outcomes}");
+        }
+    }
 
     [Theory]
     [MemberData(nameof(ValueReadingOperatorShapes))]
-    public void Operators_that_read_a_projected_complex_value_decline_natively(string shape)
+    public void Operators_that_read_a_projected_complex_value_are_refused_in_every_mode(string shape)
     {
-        // A projected complex value is its STORED subdocument (element order, unmapped elements included), not the CLR
-        // value, so a later Distinct or set op over it declines natively (HasComplexValueProjectionLeaf): it would dedupe or
-        // combine stored forms. The fallback serves the anonymous shapes (it groups whole projected documents; correct here
-        // because every row differs by Name) and fails loudly on the bare ones (it can't read back a pushed-down bare
-        // complex value; same under explicit DriverLinq, no oracle) — never wrong rows.
-        var collection = SeedCustomers(nameof(Operators_that_read_a_projected_complex_value_decline_natively) + shape);
-        Func<IQueryable<MCustomer>, IEnumerable<string>> query = shape switch
+        // A projected complex value is its STORED subdocument, not the CLR value, and no path reads it back correctly as an
+        // operand: the native pipeline would dedupe/combine stored forms, and the driver-LINQ push-down can't deserialize a
+        // complex value at all (ComplexTypeSerializer). So a value-reading operator over it is refused with a clear message
+        // in every mode (ruling R7), never answered from the reader's missing-element rule.
+        var collection = SeedCustomers(nameof(Operators_that_read_a_projected_complex_value_are_refused_in_every_mode) + shape);
+        var (query, op) = shape switch
         {
-            "distinct_bare" => q => q.Select(c => c.Address).Distinct().ToList().Select(Fmt),
-            "distinct_anon" => q => q.Select(c => new { c.Name, c.Address }).Distinct().ToList().Select(x => x.Name),
-            "concat" => q => q.Select(c => c.Address).Concat(q.Select(c => c.Address)).ToList().Select(Fmt),
-            "union" => q => q.Select(c => new { c.Name, c.Address }).Union(q.Select(c => new { c.Name, c.Address })).ToList().Select(x => x.Name),
+            "distinct_bare" => ((Func<IQueryable<MCustomer>, IEnumerable<string>>)(q => q.Select(c => c.Address).Distinct().ToList().Select(Fmt)), "Distinct"),
+            "distinct_anon" => (q => q.Select(c => new { c.Name, c.Address }).Distinct().ToList().Select(x => x.Name), "Distinct"),
+            "distinct_nested_anon" => (q => q.Select(c => new { c.Name, Inner = new { c.Address } }).Distinct().ToList().Select(x => x.Name), "Distinct"),
+            "distinct_count" => (q => new[] { q.Select(c => c.Address).Distinct().Count().ToString() }, "Distinct"),
+            "distinct_after_source_ops" => (q => q.Where(c => c.Rank > 0).OrderBy(c => c.Name).Select(c => c.Address).Distinct().ToList().Select(Fmt), "Distinct"),
+            "concat_bare" => (q => q.Select(c => c.Address).Concat(q.Select(c => c.Address)).ToList().Select(Fmt), "Concat"),
+            "union_bare" => (q => q.Select(c => c.Address).Union(q.Select(c => c.Address)).ToList().Select(Fmt), "Union"),
+            "union_anon" => (q => q.Select(c => new { c.Name, c.Address }).Union(q.Select(c => new { c.Name, c.Address })).ToList().Select(x => x.Name), "Union"),
+            "intersect_bare" => (q => q.Select(c => c.Address).Intersect(q.Select(c => c.Address)).ToList().Select(Fmt), "Intersect"),
+            "except_bare" => (q => q.Select(c => c.Address).Except(q.Select(c => c.Address)).ToList().Select(Fmt), "Except"),
+            "concat_struct" => (q => q.Select(c => c.Pin).Concat(q.Select(c => c.Pin)).ToList().Select(Fmt), "Concat"),
             _ => throw new ArgumentOutOfRangeException(nameof(shape))
         };
 
-        Assert.Throws<NativeTranslationNotSupportedException>(() => Customers(collection, MongoQueryMode.NativeOnly, query));
-        if (shape is "distinct_anon" or "union")
+        AssertRefusedInEveryMode(m => Customers(collection, m, q => query(q).ToList()), op);
+    }
+
+    [Fact]
+    public void GroupBy_after_a_complex_value_projection_never_returns_rows()
+    {
+        // EF folds `Select(c => c.Address).GroupBy(a => a.City)` into a grouping of the SOURCE with the complex value as its
+        // element selector, which the provider's grouping support doesn't serve (not native; the fallback fails in EF, as
+        // for any element-selector grouping without an aggregate). Pinned so it can't start returning rows unnoticed.
+        var collection = SeedCustomers(nameof(GroupBy_after_a_complex_value_projection_never_returns_rows));
+        Assert.Throws<NativeTranslationNotSupportedException>(
+            () => Customers(collection, MongoQueryMode.NativeOnly, q => q.Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key).ToList()));
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
         {
-            Assert.Equal(["Ann", "Bob", "Cid"], NativeModeAssert.DeclinesCleanly(m => Customers(collection, m, q => query(q).Order())));
+            Assert.Throws<InvalidOperationException>(
+                () => Customers(collection, mode, q => q.Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key).ToList()));
         }
-        else
-        {
-            foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
-            {
-                var ex = Assert.Throws<InvalidOperationException>(() => Customers(collection, mode, query));
-                Assert.Contains("is missing for required complex property", ex.Message);
-            }
-        }
+    }
+
+    [Fact]
+    public void Projected_value_free_operators_over_a_complex_value_stay_native()
+    {
+        var collection = SeedCustomers(nameof(Projected_value_free_operators_over_a_complex_value_stay_native));
+        NativeModeAssert.NativeAndExpected(m => Customers(collection, m, q => new[] { q.Select(c => c.Address).Count().ToString() }), ["3"]);
+        NativeModeAssert.NativeAndExpected(m => Customers(collection, m, q => new[] { q.Select(c => c.Address).Any().ToString() }), ["True"]);
+        NativeModeAssert.NativeAndExpected(
+            m => Customers(collection, m, q => q.OrderBy(c => c.Name).Select(c => c.Address).Skip(1).Take(1).ToList().Select(a => a.City)), ["London"]);
     }
 
     [Fact]
@@ -1180,6 +1231,45 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
             m => Run(collection, m, q => q.OrderBy(h => h.Name).Select(h => new { h.Name, h.Address }).ToList()
                 .Select(x => x.Name + "|" + Fmt(x.Address)), ConfigureOptional),
             ["a-missing|<null>", "b-null|<null>", "c-empty|<null>", "d-value|s|c|1,2|1|-|Bronze"]);
+    }
+
+    public static TheoryData<string> OptionalAndCollectionOperatorShapes =>
+        ["optional_distinct", "optional_union", "optional_concat", "collection_concat", "collection_distinct", "collection_union"];
+
+    [Theory]
+    [MemberData(nameof(OptionalAndCollectionOperatorShapes))]
+    public void Operators_over_an_optional_or_collection_complex_value_are_refused_in_every_mode(string shape)
+    {
+        // Every row holds a NON-null value, so reading null (optional) or empty (required collection) would be silently
+        // wrong rows: the reader's missing-element rule must never answer for a pushed-down operand (review Critical).
+        var optional = database.CreateCollection<OptionalHolder>(Unique(nameof(Operators_over_an_optional_or_collection_complex_value_are_refused_in_every_mode) + shape));
+        Raw(optional).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "a" }, { "Bits", new BsonDocument { { "Note", "n1" }, { "Count", 1 } } }, { "Address", GoodAddress() } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "b" }, { "Bits", new BsonDocument { { "Note", "n2" }, { "Count", 2 } } }, { "Address", GoodAddress() } }
+        ]);
+        var carts = database.CreateCollection<Cart>(Unique(nameof(Operators_over_an_optional_or_collection_complex_value_are_refused_in_every_mode) + shape + "c"));
+        Raw(carts).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "a" }, { "Lines", new BsonArray { new BsonDocument { { "Sku", "s1" }, { "Qty", 1 } } } }, { "Watch", new BsonArray() } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "b" }, { "Lines", new BsonArray { new BsonDocument { { "Sku", "s2" }, { "Qty", 2 } } } }, { "Watch", new BsonArray() } }
+        ]);
+
+        static string FmtBits(Bits? b) => b == null ? "<null>" : b.Note ?? "-";
+
+        Func<MongoQueryMode, List<string>> run = shape switch
+        {
+            "optional_distinct" => m => Run(optional, m, q => q.Select(h => h.Bits).Distinct().ToList().Select(FmtBits), ConfigureOptional),
+            "optional_union" => m => Run(optional, m, q => q.Select(h => h.Address).Union(q.Select(h => h.Address)).ToList().Select(Fmt), ConfigureOptional),
+            "optional_concat" => m => Run(optional, m, q => q.Select(h => h.Bits).Concat(q.Select(h => h.Bits)).ToList().Select(FmtBits), ConfigureOptional),
+            "collection_concat" => m => Run(carts, m, q => q.Select(c => c.Lines).Concat(q.Select(c => c.Lines)).ToList().Select(FmtLines), ConfigureCart),
+            "collection_distinct" => m => Run(carts, m, q => q.Select(c => c.Lines).Distinct().ToList().Select(FmtLines), ConfigureCart),
+            "collection_union" => m => Run(carts, m, q => q.Select(c => new { c.Name, c.Lines }).Union(q.Select(c => new { c.Name, c.Lines })).ToList().Select(x => FmtLines(x.Lines)), ConfigureCart),
+            _ => throw new ArgumentOutOfRangeException(nameof(shape))
+        };
+        var op = shape.EndsWith("distinct") ? "Distinct" : shape.EndsWith("union") ? "Union" : "Concat";
+
+        AssertRefusedInEveryMode(run, op);
     }
 
     [Fact]
