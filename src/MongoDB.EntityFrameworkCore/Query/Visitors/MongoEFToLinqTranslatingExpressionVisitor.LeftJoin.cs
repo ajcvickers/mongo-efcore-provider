@@ -373,31 +373,13 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
     /// <summary>
     /// Resolves the dotted BSON field path of a join key selector that reads one property off its parameter, directly or
     /// through owned-navigation / complex-property hops (<c>o =&gt; o.Ship.City</c> is <c>Ship.City</c>), via
-    /// <see cref="NativeTranslation.StructuralPath"/>. Resolving by the leaf's simple name alone would answer the entity's
+    /// <see cref="NativeTranslation.StructuralPath.TryResolveSelectorLeaf"/> (a composite-key leaf is <c>_id.&lt;element&gt;</c>).
+    /// Resolving by the leaf's simple name alone would answer the entity's
     /// own same-named property. Returns <see langword="null"/> for shapes we don't handle (composite/anonymous keys,
     /// conversions, computed keys, a hop into an array).
     /// </summary>
     private static string? TryGetKeyFieldPath(LambdaExpression keySelector, IEntityType entityType)
-    {
-        var names = new List<string>();
-        var current = keySelector.Body.RemoveConvert();
-        while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
-        {
-            names.Insert(0, name);
-            current = receiver.RemoveConvert();
-        }
-
-        if (names.Count == 0
-            || !ReferenceEquals(current, keySelector.Parameters[0])
-            || !NativeTranslation.StructuralPath.TryResolve(entityType, names, names.Count - 1, out var path)
-            || path.Leaf is not IProperty)
-        {
-            return null;
-        }
-
-        // StructuralPath builds a composite-key leaf as `_id.<element>` (GetPropertyFieldPath), as before.
-        return string.Join(".", path.Segments);
-    }
+        => NativeTranslation.StructuralPath.TryResolveSelectorLeaf(keySelector, entityType, out _, out var path) ? path : null;
 
     /// <summary>
     /// Appends a single raw aggregation stage via <see cref="MongoQueryable.AppendStage"/>, keeping the

@@ -45,6 +45,12 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   derived OUTER root (`People.OfType<Employee>()` with a self-reference to `Employee`) reads its own members from the root
   document: the mixed projection `new { e, e.Name, R = e.Referrer!.Name }` read `e.Name` off the joined referrer at 040cecdf
   (`Dev|Boss|Boss`, observed) and now answers `Dev|Dev|Boss`. A wrong-rows fix needed for derived complex values.
+- (d) (ruling R13, Task 11) Join and sort keys read through an owned/complex HOP are resolved structurally, never by the
+  leaf's simple name, and the mixed reader's `_outer` redirect covers hop sources. Non-complex cases corrected (silent wrong
+  rows before): an owned-hop join key beside a same-named root property (now declines; fallback correct); an inner-side hop
+  key named like the navigation's principal key (`a => a.Tag.Id`, kept the `_id` navigation `$lookup`); the bridge's
+  whole-entity `LeftJoin` on an owned-hop key; a filtered-Include `OrderBy` through an owned hop (sorted by the root
+  property); an owned hop leaf beside a whole joined entity (read null). Same bug class as the complex shapes; one fix.
 
 ## Constraints
 

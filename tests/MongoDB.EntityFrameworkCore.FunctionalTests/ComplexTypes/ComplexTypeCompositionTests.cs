@@ -276,4 +276,23 @@ public class ComplexTypeCompositionTests(TemporaryDatabaseFixture database) : IC
             // o4's client doesn't exist: its Lon is missing and sorts first.
             "3", "1", "2", "5", "4");
     }
+
+    [Fact]
+    public void Filtered_Include_ordered_by_a_complex_leaf_sorts_by_the_leaf_not_a_same_named_root_property()
+    {
+        // Order has a root City AND Ship.City. The filtered-Include $lookup's $sort resolved the key by simple name and
+        // sorted by the root `City` (silent wrong order, every mode). Ann's orders, with o2 re-seeded so the two orders
+        // disagree: o1 (rank 1) City Paris / Ship Rome, o2 (rank 2) City Lima -> Zurich / Ship Paris. By Ship.City
+        // ascending: o2 (Paris), o1 (Rome) = 2,1; by root City: o1 (Paris), o2 (Zurich) = 1,2.
+        var collections = Seed(database, nameof(Filtered_Include_ordered_by_a_complex_leaf_sorts_by_the_leaf_not_a_same_named_root_property));
+        database.MongoDatabase.GetCollection<MongoDB.Bson.BsonDocument>(collections.Orders).UpdateOne(
+            new MongoDB.Bson.BsonDocument("City", "Lima"), new MongoDB.Bson.BsonDocument("$set", new MongoDB.Bson.BsonDocument("City", "Zurich")));
+        Native(mode =>
+            {
+                using var db = Create(database, collections, mode);
+                return [.. db.Clients.Where(c => c.Name == "Ann").Include(c => c.Orders.OrderBy(o => o.Ship.City)).ToList()
+                    .Select(c => string.Join(",", c.Orders.Select(o => o.Rank)))];
+            },
+            "2,1");
+    }
 }
