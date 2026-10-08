@@ -218,6 +218,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (source is ShapedQueryExpression shapedQueryExpression)
         {
             var methodDefinition = method.IsGenericMethod ? method.GetGenericMethodDefinition() : method;
+            // A set operation's second source has the same element type, which holds a complex value only if it is a
+            // complex-value projection too, so checking the first source covers both.
+            ThrowIfComplexValueOperand(shapedQueryExpression, methodDefinition);
+
             var sourceHasCaseMappingLeaf =
                 ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.HasClientCaseMappingProjectionLeaf;
             var sourceHasClientEvaluatedLeaf =
@@ -344,6 +348,26 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
            || methodDefinition == QueryableMethods.CountWithoutPredicate
            || methodDefinition == QueryableMethods.LongCountWithoutPredicate
            || methodDefinition == QueryableMethods.AnyWithoutPredicate;
+
+    /// <summary>
+    /// Refuses, in every query mode, a value-reading operator (<c>Distinct</c>, a set operation, <c>GroupBy</c>, a later
+    /// <c>Select</c>, ...) over a source whose shaper reads a whole complex value (<see cref="MongoSelectDefinition.HasComplexValueShaperLeaf"/>;
+    /// ruling R7). No path answers it correctly: natively the operator would dedupe/combine the STORED subdocuments, and
+    /// the driver-LINQ push-down can't read a complex value back (<c>ComplexTypeSerializer</c> can't deserialize; the
+    /// shaper would see a missing element and read null/empty for an optional property or a collection). Paging and
+    /// predicate-less cardinality/count terminals don't read the values (<see cref="IsProjectedValueFreeOperator"/>).
+    /// </summary>
+    private static void ThrowIfComplexValueOperand(ShapedQueryExpression source, MethodInfo methodDefinition)
+    {
+        if (((MongoQueryExpression)source.QueryExpression).Select.HasComplexValueShaperLeaf
+            && !IsProjectedValueFreeOperator(methodDefinition))
+        {
+            throw new NotSupportedException(
+                $"A projected whole complex value cannot be the operand of '{methodDefinition.Name}': the MongoDB provider "
+                + "can't compare or combine complex values. Project the complex type's properties you need instead, or apply "
+                + "the operator after 'AsEnumerable()'.");
+        }
+    }
 
     private static bool IsSetOperation(MethodInfo methodDefinition)
         => methodDefinition == QueryableMethods.Union
@@ -748,6 +772,13 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             leafSource => ReplacingExpressionVisitor.Replace(selector.Parameters.Single(), source.ShaperExpression, leafSource));
 
         var newShaper = _projectionBindingExpressionVisitor.Translate(mongoQueryExpression, newSelectorBody);
+
+        // Recorded from the bound shaper, so it holds in every mode and at any depth (`new { c.Name, Inner = new { c.Address } }`):
+        // VisitMethodCall refuses a later value-reading operator over it (ThrowIfComplexValueOperand).
+        if (ComplexValueProjectionExpression.IsContainedIn(newShaper))
+        {
+            mongoQueryExpression.Select.HasComplexValueShaperLeaf = true;
+        }
 
         // A selector node the binder couldn't bind became a default(T) stand-in; running that natively would silently
         // read default (null rows). Decline so the query takes the driver-LINQ path (NativeOnly throws).

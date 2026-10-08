@@ -179,9 +179,15 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             // is bound to (see VisitBinary).
             case ComplexPropertyMaterializationExpression complexProperty:
                 {
+                    if (!_materializationContextBindings.TryGetValue(complexProperty.MaterializationContext, out var entityAccess))
+                    {
+                        throw new InvalidOperationException(
+                            $"The complex property '{complexProperty.ComplexProperty.DeclaringType.DisplayName()}.{complexProperty.ComplexProperty.Name}' "
+                            + "could not be materialized: its entity's document was not bound in the shaper.");
+                    }
+
                     var entityDocument = CreateGetValueExpression(
-                        _materializationContextBindings[complexProperty.MaterializationContext], (string?)null, true,
-                        typeof(BsonDocument), complexProperty.ComplexProperty.DeclaringType);
+                        entityAccess, (string?)null, true, typeof(BsonDocument), complexProperty.ComplexProperty.DeclaringType);
                     return ComplexTypeMaterializationBuilder.Build(
                             complexProperty.ComplexProperty,
                             ComplexTypeMaterializationBuilder.CreateGetElement(entityDocument, complexProperty.ComplexProperty.GetElementName()))
@@ -1385,9 +1391,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         // entity's shaper here to resolve the property and use its own element name instead of the projected alias.
         if (expression is StructuralTypeShaperExpression { StructuralType: IEntityType shaperEntityType })
         {
-            // A derived type of the root (after OfType<TDerived>) lives in the same document; resolving against it finds
-            // the members it declares.
-            if (shaperEntityType == _rootEntityType || _rootEntityType.IsAssignableFrom(shaperEntityType))
+            if (shaperEntityType == _rootEntityType)
             {
                 return (shaperEntityType, DocParameter);
             }
@@ -1413,6 +1417,15 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                     var lookupDocument = CreateGetValueExpression(DocParameter, joinField, false, typeof(BsonDocument));
                     return (shaperEntityType, lookupDocument);
                 }
+            }
+
+            // Outside a join, a type derived from the root (the shaper after OfType<TDerived>) is the root document itself;
+            // resolving against the derived type finds the members it declares (a derived complex value read by the mixed
+            // shaper). Never inside a join: there a derived shaper may be the joined side (a reference to a subtype in the
+            // root's own hierarchy), whose members live in the joined sub-document, not the outer root.
+            else if (_rootEntityType.IsAssignableFrom(shaperEntityType))
+            {
+                return (shaperEntityType, DocParameter);
             }
         }
 

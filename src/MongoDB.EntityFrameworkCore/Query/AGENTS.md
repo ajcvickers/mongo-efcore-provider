@@ -232,8 +232,15 @@ Rendering (null/missing/dialect semantics):
   throws ("... is missing/null for required complex property ..."), never a null instance or default struct; an OPTIONAL
   one (EF10) reads null; `{}` is an instance; leaves use the entity-member read (`BsonBinding.CreateGetValueExpression`);
   a required collection missing/null reads empty; a wrong BSON type throws `FormatException`. The projected document is
-  the STORED form, so `HasComplexValueProjectionLeaf` declines every later value-reading operator (Distinct, set ops) at
-  `VisitMethodCall` and in `IsPlainProjectedSelect` (Where/OrderBy after the Select are folded onto the source by EF).
+  the STORED form and the driver can't read a complex value back, so a value-reading operator over a shaper holding one
+  anywhere (`HasComplexValueShaperLeaf`, set from the bound shaper in every mode: Distinct, Union/Concat/Intersect/Except,
+  incl. inside an anonymous/nested construction) throws `NotSupportedException` in EVERY mode (ruling R7,
+  `ThrowIfComplexValueOperand`): no path answers it, and the shaper's missing rule would otherwise read null/empty for an
+  optional value or a collection. Paging and predicate-less Count/Any/First stay native. Where/OrderBy after the Select are
+  folded onto the source by EF; `Select(c => c.Address).GroupBy(...)` becomes an element-selector grouping, which isn't
+  served. `HasComplexValueProjectionLeaf` (native) also keeps it out of `IsPlainProjectedSelect` (defence in depth).
+  A root-derived shaper (after `OfType`) resolves to the root document only OUTSIDE a join (`TryResolveFieldAccessSource`):
+  in a join a derived shaper may be the joined side.
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

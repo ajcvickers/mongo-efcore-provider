@@ -900,11 +900,22 @@ internal sealed class MongoSelectDefinition
     /// </summary>
     /// <remarks>
     /// The projected document holds the STORED form (element order, unmapped elements, null vs missing members), not the
-    /// CLR value, so no server operator may read it: <c>MongoQueryableMethodTranslatingExpressionVisitor.VisitMethodCall</c>
-    /// declines every operator that reads projected values (Distinct, set ops, a later Select/Where/OrderBy over it), as
-    /// for <see cref="HasClientCaseMappingProjectionLeaf"/>. Paging and predicate-less cardinality stay native.
+    /// CLR value. Every operator that reads projected values over it is refused in every mode via
+    /// <see cref="HasComplexValueShaperLeaf"/>; this native flag additionally keeps such a projection out of a native set
+    /// operation (<c>IsPlainProjectedSelect</c>) as defence in depth. Paging and predicate-less cardinality/count stay
+    /// native. <c>Where</c>/<c>OrderBy</c> written after <c>Select(c =&gt; c.Address)</c> never see the projection: EF
+    /// folds them onto the source before translation.
     /// </remarks>
     internal bool HasComplexValueProjectionLeaf { get; set; }
+
+    /// <summary>
+    /// <see langword="true"/> when the current shaper reads a whole complex value anywhere (bare, inside an anonymous type
+    /// or a nested construction, beside the entity), set from the bound shaper in every query mode.
+    /// <c>MongoQueryableMethodTranslatingExpressionVisitor.ThrowIfComplexValueOperand</c> refuses a later value-reading
+    /// operator over it with <see cref="System.NotSupportedException"/> (ruling R7): no path, native or driver-LINQ,
+    /// answers it correctly.
+    /// </summary>
+    internal bool HasComplexValueShaperLeaf { get; set; }
 
     private HashSet<string>? _clientConditionalMembers;
 
