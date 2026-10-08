@@ -378,7 +378,9 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
 
         // Only a joined navigation target. A root-entity property (select new { o, o.CustomerID }) is read from
         // "_outer" by TryResolveFieldAccess; reading it from "_inner" would return the joined document's value.
-        if (property == null || shaper.StructuralType == _rootEntityType)
+        // Also the root's own shaper typed as a derived type after OfType<TDerived>() (structural, by binding: a joined
+        // side of the root's own hierarchy may have the same type).
+        if (property == null || shaper.StructuralType == _rootEntityType || IsRootProjectionShaper(shaper))
         {
             return false;
         }
@@ -592,6 +594,10 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
     // The document a resolved field access reads from: its own document, else the root. When using the driver's
     // native Join, scalar properties read from the root entity live in the "_outer" sub-document, not at the
     // document root; the resolver returns the root doc parameter for such accesses, so redirect it to "_outer".
+    /// <inheritdoc />
+    protected override Expression ResolveWholeDocumentSource(Expression documentExpression)
+        => ResolveSourceDocument(documentExpression);
+
     private Expression ResolveSourceDocument(Expression? documentExpression)
     {
         var docExpr = documentExpression ?? _docParameter;

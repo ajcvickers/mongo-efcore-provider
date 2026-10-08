@@ -339,14 +339,149 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
 
     private static void AssertRefusedInEveryMode(Func<MongoQueryMode, List<string>> run, string operatorName)
     {
-        var outcomes = Outcomes(run);
+        var outcomes = Outcomes(run).Split(" || ");
         foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
         {
-            Assert.True(outcomes.Contains($"{mode}: NotSupportedException: ") && outcomes.Split(" || ").Single(o => o.StartsWith(mode + ":"))
-                    .Contains($"'{operatorName}'") && outcomes.Contains(ComplexOperandRefusal),
-                $"expected a NotSupportedException naming '{operatorName}' in every mode, got: {outcomes}");
+            var outcome = outcomes.Single(o => o.StartsWith(mode + ":"));
+            Assert.True(
+                outcome.StartsWith($"{mode}: NotSupportedException: ")
+                && outcome.Contains($"cannot be the operand of '{operatorName}'"),
+                $"{mode}: expected the R7 NotSupportedException for '{operatorName}', got: {outcome}");
         }
     }
+
+    public record PairRecord(string Name, MAddress Address);
+
+    public class PairCtor(string name, MAddress address)
+    {
+        public string Name { get; } = name;
+        public MAddress Address { get; } = address;
+    }
+
+    public class PairDto
+    {
+        public string Name { get; set; } = null!;
+        public MAddress Address { get; set; } = null!;
+    }
+
+    public static TheoryData<string, string> ConstructionOperatorShapes()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var construction in new[] { "ctor", "record", "memberinit", "anon", "nested_anon" })
+        foreach (var op in new[] { "Distinct", "Union", "Concat", "Intersect", "Except" })
+        {
+            data.Add(construction, op);
+        }
+
+        return data;
+    }
+
+    private static IEnumerable<string> ApplyOperator<T>(IQueryable<T> left, IQueryable<T> right, string op)
+        => (op switch
+        {
+            "Distinct" => left.Distinct(),
+            "Union" => left.Union(right),
+            "Concat" => left.Concat(right),
+            "Intersect" => left.Intersect(right),
+            "Except" => left.Except(right),
+            _ => throw new ArgumentOutOfRangeException(nameof(op))
+        }).ToList().Select(x => x!.ToString()!);
+
+    [Theory]
+    [MemberData(nameof(ConstructionOperatorShapes))]
+    public void Operators_over_a_construction_holding_a_complex_value_are_refused_in_every_mode(string construction, string op)
+    {
+        // Every construction arm of the projection binder (positional ctor, record, member-init, anonymous, nested) must
+        // set the refusal flag (fix round 2: the positional-ctor arm used to bypass it and fall back unguarded).
+        var collection = SeedCustomers(nameof(Operators_over_a_construction_holding_a_complex_value_are_refused_in_every_mode) + construction + op);
+        AssertRefusedInEveryMode(m => Customers(collection, m, q => construction switch
+        {
+            "ctor" => ApplyOperator(q.Select(c => new PairCtor(c.Name, c.Address)), q.Select(c => new PairCtor(c.Name, c.Address)), op),
+            "record" => ApplyOperator(q.Select(c => new PairRecord(c.Name, c.Address)), q.Select(c => new PairRecord(c.Name, c.Address)), op),
+            "memberinit" => ApplyOperator(q.Select(c => new PairDto { Name = c.Name, Address = c.Address }),
+                q.Select(c => new PairDto { Name = c.Name, Address = c.Address }), op),
+            "anon" => ApplyOperator(q.Select(c => new { c.Name, c.Address }), q.Select(c => new { c.Name, c.Address }), op),
+            _ => ApplyOperator(q.Select(c => new { c.Name, Inner = new { c.Address } }), q.Select(c => new { c.Name, Inner = new { c.Address } }), op)
+        }), op);
+    }
+
+    [Fact]
+    public void Member_init_and_anonymous_constructions_holding_a_complex_value_materialize()
+    {
+        var collection = SeedCustomers(nameof(Member_init_and_anonymous_constructions_holding_a_complex_value_materialize));
+        NativeModeAssert.NativeAndExpected(m => Customers(collection, m, q => q.OrderBy(c => c.Name)
+            .Select(c => new PairDto { Name = c.Name, Address = c.Address }).ToList().Select(x => x.Name + "|" + Fmt(x.Address))),
+            ["Ann|Main|Paris|1.5,10|2|7|Gold", "Bob|High|London|0.5,20|5|-|Bronze", "Cid|Low|Rome|2.5,30|1|-|Silver"]);
+        // A nested construction only admits plain top-level fields natively (TryGetDocumentConstructionLeaf), so it declines;
+        // the mixed shaper reads the complex value off the whole document.
+        Assert.Equal(["Ann|Paris", "Bob|London", "Cid|Rome"], NativeModeAssert.DeclinesCleanly(m => Customers(collection, m, q => q.OrderBy(c => c.Name)
+            .Select(c => new { c.Name, Inner = new { c.Address } }).ToList().Select(x => x.Name + "|" + x.Inner.Address.City))));
+    }
+
+    [Fact]
+    public void Positional_constructor_with_a_complex_argument_is_refused_clearly_in_every_mode()
+    {
+        // The native positional-ctor shaper reads arguments by index through a driver class map, which would misread a
+        // complex value (model element names ignored; FormatException on unmapped elements), so the positional arm declines
+        // a complex argument (NativeProjectionBinder.IsScalarPositionalConstruction). The fallback then refuses the
+        // memberless construction with its existing clear message. Never rows. Follow-up: positional ctors over complex values.
+        var collection = SeedCustomers(nameof(Positional_constructor_with_a_complex_argument_is_refused_clearly_in_every_mode));
+        foreach (var run in new Func<MongoQueryMode, List<string>>[]
+                 {
+                     m => Customers(collection, m, q => q.Select(c => new PairCtor(c.Name, c.Address)).ToList().Select(x => x.Name)),
+                     m => Customers(collection, m, q => q.Select(c => new PairRecord(c.Name, c.Address)).ToList().Select(x => x.Name))
+                 })
+        {
+            Assert.Throws<NativeTranslationNotSupportedException>(() => run(MongoQueryMode.NativeOnly));
+            foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+            {
+                var ex = Assert.Throws<InvalidOperationException>(() => run(mode));
+                Assert.Contains("from arguments that can't each be read from the document", ex.Message);
+            }
+        }
+    }
+
+    public static TheoryData<string> OtherValueReadingOperatorShapes => ["contains", "all", "max_selector", "cast_distinct", "groupby_complex_key", "distinct_count"];
+
+    [Theory]
+    [MemberData(nameof(OtherValueReadingOperatorShapes))]
+    public void Other_value_reading_operators_over_a_complex_value_never_return_wrong_rows(string shape)
+    {
+        // Outcomes measured and pinned per mode (clear and loud; never rows built from a missing element).
+        var collection = SeedCustomers(nameof(Other_value_reading_operators_over_a_complex_value_never_return_wrong_rows) + shape);
+        var outcome = Outcomes(m => Customers(collection, m, q => shape switch
+        {
+            "contains" => new[] { q.Select(c => c.Address).Contains(new MAddress()).ToString() },
+            "all" => new[] { q.Select(c => c.Address).All(a => a.Floor > 0).ToString() },
+            "max_selector" => new[] { q.Select(c => c.Address).Max(a => a.Floor).ToString() },
+            "cast_distinct" => q.Select(c => c.Address).Cast<object>().Distinct().ToList().Select(x => x.ToString()!),
+            "groupby_complex_key" => q.GroupBy(c => c.Address).Select(g => g.Count()).ToList().Select(x => x.ToString()),
+            _ => new[] { q.Select(c => c.Address).Distinct().Count().ToString() }
+        }));
+        ExpectedOtherOperatorOutcomes.TryGetValue(shape, out var expected);
+        Assert.True(expected != null && expected.All(e => outcome.Contains(e)), $"{shape}: {outcome}");
+    }
+
+    // Per-shape fragments every mode's outcome must contain, measured (fix round 2): EF folds All/Max(selector) over the
+    // source (correct rows); Cast is folded away so Distinct is refused; a complex GroupBy KEY is not native and its
+    // fallback fails inside EF (never rows).
+    private static readonly Dictionary<string, string[]> ExpectedOtherOperatorOutcomes = new()
+    {
+        ["contains"] = R7("Contains"),
+        ["cast_distinct"] = R7("Distinct"),
+        ["distinct_count"] = R7("Distinct"),
+        ["all"] = ["NativeOnly: rows [True]", "Native: rows [True]", "DriverLinq: rows [True]"],
+        ["max_selector"] = ["NativeOnly: rows [5]", "Native: rows [5]", "DriverLinq: rows [5]"],
+        ["groupby_complex_key"] =
+        [
+            "NativeOnly: NativeTranslationNotSupportedException: Query groups without a supported aggregate projection",
+            "Native: InvalidOperationException: Calling 'ShapedQueryExpression.VisitChildren' is not allowed",
+            "DriverLinq: InvalidOperationException: Calling 'ShapedQueryExpression.VisitChildren' is not allowed"
+        ],
+    };
+
+    private static string[] R7(string op)
+        => [.. new[] { "NativeOnly", "Native", "DriverLinq" }.Select(m => $"{m}: NotSupportedException: A projected whole complex value cannot be the operand of '{op}'")];
 
     [Theory]
     [MemberData(nameof(ValueReadingOperatorShapes))]
@@ -383,12 +518,15 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         // element selector, which the provider's grouping support doesn't serve (not native; the fallback fails in EF, as
         // for any element-selector grouping without an aggregate). Pinned so it can't start returning rows unnoticed.
         var collection = SeedCustomers(nameof(GroupBy_after_a_complex_value_projection_never_returns_rows));
+        // Measured: not native (NativeOnly declines); the fallback fails inside EF's own grouping translation
+        // (`ShapedQueryExpression.VisitChildren`), as for any element-selector grouping without an aggregate.
         Assert.Throws<NativeTranslationNotSupportedException>(
             () => Customers(collection, MongoQueryMode.NativeOnly, q => q.Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key).ToList()));
         foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
         {
-            Assert.Throws<InvalidOperationException>(
+            var ex = Assert.Throws<InvalidOperationException>(
                 () => Customers(collection, mode, q => q.Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key).ToList()));
+            Assert.Contains("VisitChildren", ex.Message);
         }
     }
 
@@ -1269,6 +1407,58 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         };
         var op = shape.EndsWith("distinct") ? "Distinct" : shape.EndsWith("union") ? "Union" : "Concat";
 
+        AssertRefusedInEveryMode(run, op);
+    }
+
+    public record OptionalPair(string Name, Bits? Bits);
+
+    public class CartDto
+    {
+        public string Name { get; set; } = null!;
+        public List<Line> Lines { get; set; } = null!;
+    }
+
+    public static TheoryData<string, string> OptionalAndCollectionConstructionShapes()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var construction in new[] { "optional_record", "optional_anon", "collection_memberinit", "collection_anon" })
+        foreach (var op in new[] { "Distinct", "Union", "Concat", "Intersect", "Except" })
+        {
+            data.Add(construction, op);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalAndCollectionConstructionShapes))]
+    public void Operators_over_a_construction_holding_an_optional_or_collection_complex_value_are_refused_in_every_mode(string construction, string op)
+    {
+        var name = nameof(Operators_over_a_construction_holding_an_optional_or_collection_complex_value_are_refused_in_every_mode) + construction + op;
+        var optional = database.CreateCollection<OptionalHolder>(Unique(name));
+        Raw(optional).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "a" }, { "Bits", new BsonDocument { { "Note", "n1" }, { "Count", 1 } } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "b" }, { "Bits", new BsonDocument { { "Note", "n2" }, { "Count", 2 } } } }
+        ]);
+        var carts = database.CreateCollection<Cart>(Unique(name + "c"));
+        Raw(carts).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "a" }, { "Lines", new BsonArray { new BsonDocument { { "Sku", "s1" }, { "Qty", 1 } } } }, { "Watch", new BsonArray() } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "b" }, { "Lines", new BsonArray { new BsonDocument { { "Sku", "s2" }, { "Qty", 2 } } } }, { "Watch", new BsonArray() } }
+        ]);
+
+        Func<MongoQueryMode, List<string>> run = construction switch
+        {
+            "optional_record" => m => Run(optional, m, q => ApplyOperator(q.Select(h => new OptionalPair(h.Name, h.Bits)), q.Select(h => new OptionalPair(h.Name, h.Bits)), op), ConfigureOptional),
+            "optional_anon" => m => Run(optional, m, q => ApplyOperator(q.Select(h => new { h.Name, h.Bits }), q.Select(h => new { h.Name, h.Bits }), op), ConfigureOptional),
+            "collection_memberinit" => m => Run(carts, m, q => ApplyOperator(q.Select(c => new CartDto { Name = c.Name, Lines = c.Lines }),
+                q.Select(c => new CartDto { Name = c.Name, Lines = c.Lines }), op), ConfigureCart),
+            _ => m => Run(carts, m, q => ApplyOperator(q.Select(c => new { c.Name, c.Lines }), q.Select(c => new { c.Name, c.Lines }), op), ConfigureCart)
+        };
+
+        // optional_record: a positional ctor with a complex argument declines natively (IsScalarPositionalConstruction), so
+        // the operator meets the same R7 refusal in every mode.
         AssertRefusedInEveryMode(run, op);
     }
 

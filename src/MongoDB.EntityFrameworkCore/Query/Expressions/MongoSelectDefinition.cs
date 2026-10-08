@@ -900,20 +900,19 @@ internal sealed class MongoSelectDefinition
     /// </summary>
     /// <remarks>
     /// The projected document holds the STORED form (element order, unmapped elements, null vs missing members), not the
-    /// CLR value. Every operator that reads projected values over it is refused in every mode via
-    /// <see cref="HasComplexValueShaperLeaf"/>; this native flag additionally keeps such a projection out of a native set
-    /// operation (<c>IsPlainProjectedSelect</c>) as defence in depth. Paging and predicate-less cardinality/count stay
-    /// native. <c>Where</c>/<c>OrderBy</c> written after <c>Select(c =&gt; c.Address)</c> never see the projection: EF
-    /// folds them onto the source before translation.
+    /// CLR value. It feeds <see cref="HasComplexValueShaperLeaf"/> (one predicate, set after every <c>TranslateSelect</c>
+    /// arm), through which every value-reading later operator is refused in every mode; see that property. This native
+    /// flag also keeps such a projection out of a native set operation (<c>IsPlainProjectedSelect</c>) as defence in depth.
     /// </remarks>
     internal bool HasComplexValueProjectionLeaf { get; set; }
 
     /// <summary>
-    /// <see langword="true"/> when the current shaper reads a whole complex value anywhere (bare, inside an anonymous type
-    /// or a nested construction, beside the entity), set from the bound shaper in every query mode.
-    /// <c>MongoQueryableMethodTranslatingExpressionVisitor.ThrowIfComplexValueOperand</c> refuses a later value-reading
-    /// operator over it with <see cref="System.NotSupportedException"/> (ruling R7): no path, native or driver-LINQ,
-    /// answers it correctly.
+    /// <see langword="true"/> when the current projection reads a whole complex value anywhere (bare, inside an anonymous
+    /// type, member-init DTO or nested construction, beside the entity), set in every query mode by
+    /// <c>MongoQueryableMethodTranslatingExpressionVisitor.RecordComplexValueShaperLeaf</c> after every <c>TranslateSelect</c>
+    /// arm. <c>ThrowIfComplexValueOperand</c> then refuses EVERY later operator except the projected-value-free ones (Take,
+    /// Skip, predicate-less First/Single/Last(OrDefault)/Count/LongCount/Any) with <see cref="System.NotSupportedException"/>
+    /// (ruling R7): no path, native or driver-LINQ, answers it correctly. Complex types are new, so nothing released changes.
     /// </summary>
     internal bool HasComplexValueShaperLeaf { get; set; }
 
