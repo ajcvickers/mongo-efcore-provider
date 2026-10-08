@@ -232,15 +232,22 @@ Rendering (null/missing/dialect semantics):
   throws ("... is missing/null for required complex property ..."), never a null instance or default struct; an OPTIONAL
   one (EF10) reads null; `{}` is an instance; leaves use the entity-member read (`BsonBinding.CreateGetValueExpression`);
   a required collection missing/null reads empty; a wrong BSON type throws `FormatException`. The projected document is
-  the STORED form and the driver can't read a complex value back, so a value-reading operator over a shaper holding one
-  anywhere (`HasComplexValueShaperLeaf`, set from the bound shaper in every mode: Distinct, Union/Concat/Intersect/Except,
-  incl. inside an anonymous/nested construction) throws `NotSupportedException` in EVERY mode (ruling R7,
-  `ThrowIfComplexValueOperand`): no path answers it, and the shaper's missing rule would otherwise read null/empty for an
-  optional value or a collection. Paging and predicate-less Count/Any/First stay native. Where/OrderBy after the Select are
-  folded onto the source by EF; `Select(c => c.Address).GroupBy(...)` becomes an element-selector grouping, which isn't
-  served. `HasComplexValueProjectionLeaf` (native) also keeps it out of `IsPlainProjectedSelect` (defence in depth).
-  A root-derived shaper (after `OfType`) resolves to the root document only OUTSIDE a join (`TryResolveFieldAccessSource`):
-  in a join a derived shaper may be the joined side.
+  the STORED form and the driver can't read a complex value back, so EVERY value-reading operator over a projection that
+  reads a whole complex value anywhere throws `NotSupportedException` ("... cannot be the operand of '<Op>' ...") in every
+  mode (ruling R7; `ThrowIfComplexValueOperand` in `VisitMethodCall`): Distinct (incl. `Distinct().Count()`), Union,
+  Concat, Intersect, Except, Contains, Cast, Select/Where/OrderBy written after a paging operator, Min/Max/Sum/Average
+  without a selector, Join, etc. Only `IsProjectedValueFreeOperator` passes: Take, Skip, predicate-less
+  First/Single/Last(OrDefault), Count, LongCount, Any. EF folds Where/OrderBy/All/Min/Max(selector) written directly after
+  the Select onto the source, so those never see the projection (native, correct). The flag
+  (`HasComplexValueShaperLeaf`) is set by ONE predicate (`RecordComplexValueShaperLeaf`) on the result of every
+  `TranslateSelect` arm (shaper holds a `ComplexValueProjectionExpression`, or the native projection staged a complex
+  value). A positional-ctor/container projection never stages a complex argument (`IsScalarPositionalConstruction`: its
+  index shaper would read it through a class map); it declines and the fallback refuses the memberless construction.
+  GroupBy over a complex projection or KEY fails inside EF (`VisitChildren`) in every mode. Complex types are new in this
+  slice, so none of this changes released behaviour.
+  The query root's own shaper (bound to the empty projection member) resolves to the root document even when typed as a
+  derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other derived
+  shaper does only outside a join (in a join it may be the joined side of the root's own hierarchy).
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

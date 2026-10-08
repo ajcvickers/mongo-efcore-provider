@@ -1397,8 +1397,17 @@ internal static class NativeProjectionBinder
         MongoQueryExpression mongoQ, Expression body, IReadOnlyList<(string MemberName, Expression Value)> members,
         ParameterExpression outerParameter)
         => !members.Any(m => ClassifyClientWholeEntityOperand(mongoQ, m.Value.RemoveConvert(), outerParameter)
-                             == ClientWholeEntityOperand.WholeEntity)
+                             == ClientWholeEntityOperand.WholeEntity
+                             // A whole complex value is not a scalar: the index-based positional shaper would read it
+                             // through a driver class map (wrong element names, FormatException on unmapped elements)
+                             // instead of ComplexTypeMaterializationBuilder.
+                             || IsWholeComplexValue(mongoQ, m.Value, outerParameter))
            && !IsClientOnlyWholeEntityExpression(mongoQ, body, outerParameter);
+
+    // Whether `value` reads a whole complex value of the selector's entity (MongoExpressionTranslator.TryTranslateComplexValue).
+    private static bool IsWholeComplexValue(MongoQueryExpression mongoQ, Expression value, ParameterExpression outerParameter)
+        => new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType, outerParameter)
+            .TryTranslateComplexValue(UnwrapContainerElementBoxing(value), out _, out _);
 
     /// <summary>
     /// Strips the boxing <c>Convert</c>-to-<see cref="object"/> layers a container adds around an element

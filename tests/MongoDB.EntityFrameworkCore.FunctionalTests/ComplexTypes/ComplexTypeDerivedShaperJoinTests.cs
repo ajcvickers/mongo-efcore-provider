@@ -112,52 +112,66 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
         return query(db).ToList();
     }
 
-    // Every mode answers the hand-written rows, or (a shape some mode can't serve) the modes that do serve it must all
-    // answer exactly them: a wrong-document read is a VALUE difference, which this catches in whichever mode serves it.
-    private void AssertNoModeReadsTheWrongDocument(string collection, Func<PeopleContext, IEnumerable<string>> query, string[] expected)
+    private const string Serves = "serves";
+
+    // Pins EACH mode: either it serves the hand-written rows (`Serves`), or it throws an exception whose message contains
+    // the given fragment. A mode that starts throwing where it served, or serving where it threw, fails the test; a
+    // wrong-document read is a value difference in a serving mode.
+    private void AssertPerMode(
+        string collection, Func<PeopleContext, IEnumerable<string>> query, string[] expected,
+        string nativeOnly, string native, string driverLinq)
     {
-        var served = 0;
-        var failures = new List<string>();
-        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        foreach (var (mode, want) in new[] { (MongoQueryMode.NativeOnly, nativeOnly), (MongoQueryMode.Native, native), (MongoQueryMode.DriverLinq, driverLinq) })
         {
-            List<string> rows;
+            List<string>? rows = null;
+            Exception? error = null;
             try
             {
                 rows = Outcome(collection, mode, query);
             }
             catch (Exception e) when (e is not Xunit.Sdk.XunitException)
             {
-                failures.Add($"{mode}: {e.GetType().Name}: {e.Message.Split('\n')[0]}");
-                continue;
+                error = e;
             }
 
-            served++;
-            Assert.True(expected.SequenceEqual(rows), $"{mode}: expected [{string.Join("; ", expected)}], got [{string.Join("; ", rows)}]");
+            if (want == Serves)
+            {
+                Assert.True(error == null, $"{mode}: expected rows, got {error}");
+                Assert.True(expected.SequenceEqual(rows!), $"{mode}: expected [{string.Join("; ", expected)}], got [{string.Join("; ", rows!)}]");
+            }
+            else
+            {
+                Assert.True(error != null && error.Message.Contains(want),
+                    $"{mode}: expected an exception containing '{want}', got {(error == null ? $"rows [{string.Join("; ", rows!)}]" : error.ToString())}");
+            }
         }
-
-        Assert.True(served > 0, "no mode served the query: " + string.Join(" || ", failures));
     }
+
+    private const string NotNative = "forbids the driver-LINQ fallback";
+
+    // A NativeOnly decline (either the gate's or the lowerer's NativeTranslationNotSupportedException message).
+    private const string NotNativeAny = "Native";
 
     [Fact]
     public void Mixed_projection_through_a_derived_reference_reads_the_joined_document()
     {
         var collection = Seed(nameof(Mixed_projection_through_a_derived_reference_reads_the_joined_document));
-        AssertNoModeReadsTheWrongDocument(collection,
+        AssertPerMode(collection,
             db => db.People.Where(p => p.ReferrerId != null).OrderBy(p => p.Name)
                 .Select(p => new { p, R = p.Referrer!.Name, L = p.Referrer.Level }).ToList()
                 .Select(x => $"{x.p.Name}|{x.p.Badge.Code}|{x.R}|{x.L}"),
-            ["Dev|B-dev|Boss|9", "Guest|B-guest|Boss|9"]);
+            ["Dev|B-dev|Boss|9", "Guest|B-guest|Boss|9"], NotNativeAny, Serves, Serves);
     }
 
     [Fact]
     public void Mixed_projection_of_a_derived_reference_entity_reads_its_complex_values_from_the_joined_document()
     {
         var collection = Seed(nameof(Mixed_projection_of_a_derived_reference_entity_reads_its_complex_values_from_the_joined_document));
-        AssertNoModeReadsTheWrongDocument(collection,
+        AssertPerMode(collection,
             db => db.People.Where(p => p.ReferrerId != null).OrderBy(p => p.Name)
                 .Select(p => new { p.Name, p.Referrer, D = p.Referrer!.Desk }).ToList()
                 .Select(x => $"{x.Name}|{x.Referrer!.Name}|{x.Referrer.Badge.Code}|{x.Referrer.Desk.Lat}|{x.D.Lat}"),
-            ["Dev|Boss|B-boss|9|9", "Guest|Boss|B-boss|9|9"]);
+            ["Dev|Boss|B-boss|9|9", "Guest|Boss|B-boss|9|9"], NotNativeAny, Serves, Serves);
     }
 
     [Fact]
@@ -185,15 +199,16 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
             Assert.NotEqual(["Dev|B-boss", "Guest|B-boss"], Outcome(collection, mode, db => Run(db, 0)));
         }
 
-        AssertNoModeReadsTheWrongDocument(collection, db => Run(db, 1), ["Dev|Boss|B-boss", "Guest|Boss|B-boss"]);
+        AssertPerMode(collection, db => Run(db, 1), ["Dev|Boss|B-boss", "Guest|Boss|B-boss"], NotNativeAny, Serves, Serves);
         NativeModeAssert.NativeAndExpected(m => Outcome(collection, m, db => Run(db, 2)), ["Dev|Boss|B-boss|9", "Guest|Boss|B-boss|9"]);
     }
 
     [Fact]
     public void Explicit_join_to_an_OfType_set_is_not_served()
     {
-        // Pre-existing: a Join whose inner source is OfType<TDerived>() is neither native nor expressible by the driver
-        // ("Expression not supported"). Pinned so it never returns rows unnoticed.
+        // PRE-EXISTING (not caused by this slice): a Join whose inner source is OfType<TDerived>() is neither native nor
+        // expressible by the driver ("Expression not supported"). Jira candidate (proposed to the owner, not filed): support
+        // a discriminator-narrowed join inner. Pinned so it never returns rows unnoticed.
         var collection = Seed(nameof(Explicit_join_to_an_OfType_set_is_not_served));
         foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
         {
@@ -201,6 +216,26 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
                 db => db.People.Join(db.People.OfType<Employee>(), p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
                     .Select(x => new { x.p, x.e.Level }).ToList().Select(x => x.p.Name + x.Level)));
         }
+    }
+
+    [Fact]
+    public void Derived_outer_root_in_a_join_reads_its_own_members_from_the_root_document()
+    {
+        // Reverse direction: the OUTER root is the derived type (OfType<Employee>()) and the join's target is Employee too, so
+        // an outer member must not be resolved into the joined (referrer's) sub-document. Dev's referrer is Boss.
+        var collection = Seed(nameof(Derived_outer_root_in_a_join_reads_its_own_members_from_the_root_document));
+        AssertPerMode(collection,
+            db => db.People.OfType<Employee>().Where(e => e.ReferrerId != null)
+                .Select(e => new { e.Name, e.Level, R = e.Referrer!.Name }).ToList().Select(x => $"{x.Name}|{x.Level}|{x.R}"),
+            ["Dev|2|Boss"], NotNativeAny, Serves, Serves);
+        AssertPerMode(collection,
+            db => db.People.OfType<Employee>().Where(e => e.ReferrerId != null)
+                .Select(e => new { e.Name, e.Desk, R = e.Referrer!.Name }).ToList().Select(x => $"{x.Name}|{x.Desk.Lat}|{x.R}"),
+            ["Dev|2|Boss"], NotNativeAny, Serves, Serves);
+        AssertPerMode(collection,
+            db => db.People.OfType<Employee>().Where(e => e.ReferrerId != null)
+                .Select(e => new { e, R = e.Referrer!.Name }).ToList().Select(x => $"{x.e.Name}|{x.e.Desk.Lat}|{x.e.Badge.Code}|{x.R}"),
+            ["Dev|2|B-dev|Boss"], NotNativeAny, Serves, Serves);
     }
 
     [Fact]

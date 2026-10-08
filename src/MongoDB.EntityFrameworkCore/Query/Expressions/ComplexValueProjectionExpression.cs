@@ -73,7 +73,11 @@ internal sealed class ComplexValueProjectionExpression(ProjectionBindingExpressi
                 return node;
             }
 
-            return node is ProjectionBindingExpression or StructuralTypeShaperExpression ? node : base.Visit(node);
+            // Don't descend into nodes that can't be (or needn't be) walked: a nested query (ShapedQueryExpression throws
+            // on VisitChildren, e.g. a GroupByShaperExpression's element source) or an entity/binding leaf.
+            return node is ProjectionBindingExpression or StructuralTypeShaperExpression or ShapedQueryExpression
+                ? node
+                : base.Visit(node);
         }
     }
 

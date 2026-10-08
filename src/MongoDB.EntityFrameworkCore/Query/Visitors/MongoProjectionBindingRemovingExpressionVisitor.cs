@@ -1310,13 +1310,20 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             && owner.FindComplexProperty(name) is { } complexProperty)
         {
             return ComplexTypeMaterializationBuilder.CreateGetElement(
-                CreateGetValueExpression(ownerDocument, (string?)null, false, typeof(BsonDocument)),
+                CreateGetValueExpression(ResolveWholeDocumentSource(ownerDocument), (string?)null, false, typeof(BsonDocument)),
                 complexProperty.GetElementName());
         }
 
         throw new InvalidOperationException(
             $"The projected complex value '{bound.Print()}' could not be located in the document.");
     }
+
+    /// <summary>
+    /// The document a field access resolved to (<see cref="TryResolveFieldAccessSource"/>), as a whole-document reader reads
+    /// it; the mixed reader redirects the root to <c>"_outer"</c> under driver join fields.
+    /// </summary>
+    protected virtual Expression ResolveWholeDocumentSource(Expression documentExpression)
+        => documentExpression;
 
     protected ResolvedFieldAccess TryResolveFieldAccess(Expression? expression)
     {
@@ -1389,9 +1396,14 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
         // For `new { o.Prop }`, EF stores MemberExpr(STS_root, "Prop") in the projection mapping. Recognise the root
         // entity's shaper here to resolve the property and use its own element name instead of the projected alias.
-        if (expression is StructuralTypeShaperExpression { StructuralType: IEntityType shaperEntityType })
+        if (expression is StructuralTypeShaperExpression { StructuralType: IEntityType shaperEntityType } shaper)
         {
-            if (shaperEntityType == _rootEntityType)
+            // The query root's own shaper (bound to the root projection member), also when it is typed as a derived type
+            // after OfType<TDerived>(): its members live in the root document (DocParameter; a mixed reader redirects it to
+            // "_outer" under driver join fields). Decided by the binding, not the CLR type: in a join over the root's own
+            // hierarchy the joined side may have the same (derived) type.
+            if (shaperEntityType == _rootEntityType
+                || IsRootProjectionShaper(shaper) && _rootEntityType.IsAssignableFrom(shaperEntityType))
             {
                 return (shaperEntityType, DocParameter);
             }
@@ -1419,10 +1431,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                 }
             }
 
-            // Outside a join, a type derived from the root (the shaper after OfType<TDerived>) is the root document itself;
-            // resolving against the derived type finds the members it declares (a derived complex value read by the mixed
-            // shaper). Never inside a join: there a derived shaper may be the joined side (a reference to a subtype in the
-            // root's own hierarchy), whose members live in the joined sub-document, not the outer root.
+            // Outside a join, any shaper of a type derived from the root reads the root document (one document per row).
             else if (_rootEntityType.IsAssignableFrom(shaperEntityType))
             {
                 return (shaperEntityType, DocParameter);
@@ -1492,6 +1501,11 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
         return (null, null);
     }
+
+    // Whether `shaper` is the query root's own entity shaper: bound to the root (empty) projection member. A join's other
+    // side is bound by index or under its own member (TransparentIdentifier.Inner), never the empty root member.
+    protected static bool IsRootProjectionShaper(StructuralTypeShaperExpression shaper)
+        => shaper.ValueBufferExpression is ProjectionBindingExpression { ProjectionMember: { Last: null }, Index: null };
 
     /// <summary>
     /// Builds the nested-document read for an embedded (owned) *reference* navigation hop, or

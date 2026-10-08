@@ -377,6 +377,30 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
 
     protected override ShapedQueryExpression TranslateSelect(ShapedQueryExpression source, LambdaExpression selector)
     {
+        // Every arm below returns its shaper through here, so the complex-value refusal flag is set from ONE predicate
+        // whichever arm built the shaper (generic fold, positional-ctor, join scope, GroupBy, SelectMany, ...).
+        var translated = TranslateSelectCore(source, selector);
+        RecordComplexValueShaperLeaf(translated);
+        return translated;
+    }
+
+    /// <summary>
+    /// Sets <see cref="MongoSelectDefinition.HasComplexValueShaperLeaf"/> when the projection reads a whole complex value:
+    /// the shaper holds a <see cref="ComplexValueProjectionExpression"/> at any depth, or the native projection staged one
+    /// (<see cref="MongoSelectDefinition.HasComplexValueProjectionLeaf"/>, e.g. an index-built positional-ctor shaper).
+    /// The single source for <see cref="ThrowIfComplexValueOperand"/>.
+    /// </summary>
+    private static void RecordComplexValueShaperLeaf(ShapedQueryExpression translated)
+    {
+        var select = ((MongoQueryExpression)translated.QueryExpression).Select;
+        if (select.HasComplexValueProjectionLeaf || ComplexValueProjectionExpression.IsContainedIn(translated.ShaperExpression))
+        {
+            select.HasComplexValueShaperLeaf = true;
+        }
+    }
+
+    private ShapedQueryExpression TranslateSelectCore(ShapedQueryExpression source, LambdaExpression selector)
+    {
         // Handle .Select(p => p) no-op/pass-thru
         if (selector.Body == selector.Parameters[0])
         {
@@ -772,13 +796,6 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             leafSource => ReplacingExpressionVisitor.Replace(selector.Parameters.Single(), source.ShaperExpression, leafSource));
 
         var newShaper = _projectionBindingExpressionVisitor.Translate(mongoQueryExpression, newSelectorBody);
-
-        // Recorded from the bound shaper, so it holds in every mode and at any depth (`new { c.Name, Inner = new { c.Address } }`):
-        // VisitMethodCall refuses a later value-reading operator over it (ThrowIfComplexValueOperand).
-        if (ComplexValueProjectionExpression.IsContainedIn(newShaper))
-        {
-            mongoQueryExpression.Select.HasComplexValueShaperLeaf = true;
-        }
 
         // A selector node the binder couldn't bind became a default(T) stand-in; running that natively would silently
         // read default (null rows). Decline so the query takes the driver-LINQ path (NativeOnly throws).
