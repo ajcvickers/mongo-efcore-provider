@@ -1341,7 +1341,9 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
     /// <summary>
     /// The document a field access resolved to (<see cref="TryResolveFieldAccessSource"/>), as a whole-document reader reads
-    /// it; the mixed reader redirects the root to <c>"_outer"</c> under driver join fields.
+    /// it; the mixed reader redirects the root to <c>"_outer"</c> under driver join fields. Also applied to the source of
+    /// every owned/complex hop, so a root hop (<c>o.Ship.City</c>) reads <c>_outer.Ship</c>, not a root <c>Ship</c> that the
+    /// joined document doesn't have.
     /// </summary>
     protected virtual Expression ResolveWholeDocumentSource(Expression documentExpression)
         => documentExpression;
@@ -1545,7 +1547,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
         var elementName = navigation.TargetEntityType.GetContainingElementName() ?? navigation.Name;
         var navDocumentExpression =
-            CreateGetValueExpression(navSource.DocumentExpression, elementName, false, typeof(BsonDocument));
+            CreateGetValueExpression(ResolveWholeDocumentSource(navSource.DocumentExpression), elementName, false, typeof(BsonDocument));
         return (navigation.TargetEntityType, navDocumentExpression);
     }
 
@@ -1564,7 +1566,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         }
 
         var complexDocumentExpression =
-            CreateGetValueExpression(source.DocumentExpression, elementName, false, typeof(BsonDocument));
+            CreateGetValueExpression(ResolveWholeDocumentSource(source.DocumentExpression), elementName, false, typeof(BsonDocument));
         return (complexProperty.ComplexType, complexDocumentExpression);
     }
 
