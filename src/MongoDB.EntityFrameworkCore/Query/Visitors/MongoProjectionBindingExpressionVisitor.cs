@@ -221,6 +221,16 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                      && _queryExpression.Select.HasClientWrappedWholeEntityShaper:
                 return base.Visit(expression);
 
+            // A whole complex value (`c.Address`, `c.Address.Location`, `EF.Property<A>(c, "Address")`, a complex
+            // collection): bind it whole and materialize it in the shaper (ComplexTypeMaterializationBuilder), never
+            // through a serializer. Not inside a client-wrapped whole-entity body, whose member reads come off the
+            // materialized entity (the cases above).
+            case MemberExpression or MethodCallExpression
+                when !(_queryExpression.Select.Route == NativeRoute.WholeEntity
+                       && _queryExpression.Select.HasClientWrappedWholeEntityShaper)
+                     && ResolveComplexValueProperty(expression) is { } complexValueProperty:
+                return new ComplexValueProjectionExpression(BindWholeLeaf(expression), complexValueProperty);
+
             case MemberExpression memberExpression:
                 return BindWholeLeaf(memberExpression);
 
@@ -582,6 +592,18 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
     private static bool IsEntityShaperSource(Expression source)
         => source.RemoveConvert() is StructuralTypeShaperExpression;
+
+    /// <summary>
+    /// The complex property <paramref name="expression"/> reads whole (single or collection): a member or EF.Property
+    /// access, typed as the property, over an entity shaper or a hop chain (<see cref="ResolveHopType"/>); otherwise
+    /// <see langword="null"/>.
+    /// </summary>
+    internal static IComplexProperty ResolveComplexValueProperty(Expression expression)
+        => expression.TryGetMemberOrEFProperty(out var owner, out var name)
+           && ResolveHopType(owner)?.FindComplexProperty(name) is { } complexProperty
+           && complexProperty.ClrType == expression.Type
+            ? complexProperty
+            : null;
 
     // The structural type `source` denotes when it is a hop chain (embedded owned references and single complex
     // properties, member or EF.Property spelling) over an entity shaper; null otherwise.

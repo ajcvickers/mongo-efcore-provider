@@ -174,6 +174,27 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     {
         switch (extensionExpression)
         {
+            // A complex property of a materialized entity (ComplexTypeMaterializationBuilder.MarkComplexPropertyAssignments):
+            // materialize it from its own element of the entity's document, which the entity's materialization context
+            // is bound to (see VisitBinary).
+            case ComplexPropertyMaterializationExpression complexProperty:
+                {
+                    var entityDocument = CreateGetValueExpression(
+                        _materializationContextBindings[complexProperty.MaterializationContext], (string?)null, true,
+                        typeof(BsonDocument), complexProperty.ComplexProperty.DeclaringType);
+                    return ComplexTypeMaterializationBuilder.Build(
+                            complexProperty.ComplexProperty,
+                            ComplexTypeMaterializationBuilder.CreateGetElement(entityDocument, complexProperty.ComplexProperty.GetElementName()))
+                        .ConvertIfRequired(complexProperty.Type);
+                }
+
+            // A projected whole complex value (c.Address, c.Address.Location, a complex collection). The native $project
+            // (and a driver-LINQ push-down of the same Select) holds it under the alias; a whole-document reader resolves
+            // its natural path instead (ReadComplexValueElement).
+            case ComplexValueProjectionExpression complexValue:
+                return ComplexTypeMaterializationBuilder.Build(complexValue.ComplexProperty, ReadComplexValueElement(complexValue))
+                    .ConvertIfRequired(complexValue.Type);
+
             // The alias holds the whole computed value (native $project, or a driver-LINQ push-down of the same
             // Select), so read it once instead of re-applying the call over it. The mixed visitor overrides this
             // to evaluate ClientExpression over whole documents.
@@ -1259,6 +1280,38 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         }
     }
 
+    /// <summary>
+    /// The stored element of a projected whole complex value, as a <see cref="BsonValue"/> (or <see langword="null"/> when
+    /// missing): the projection alias, which the native <c>$project</c> and a driver-LINQ push-down of the same Select
+    /// both write, or, for a whole un-projected document (a late-fallback strip, the mixed shaper), the value's natural
+    /// path, resolved like a leaf's field access (<see cref="TryResolveFieldAccessSource"/>).
+    /// </summary>
+    private Expression ReadComplexValueElement(ComplexValueProjectionExpression complexValue)
+    {
+        if (!ReadsUnprojectedDocuments && GetProjection(complexValue.Binding).Alias is { } alias)
+        {
+            return ComplexTypeMaterializationBuilder.CreateGetElement(DocParameter, alias);
+        }
+
+        // A whole un-projected document (the mixed shaper): read the value at its natural path, resolving the hops as a
+        // leaf's field access does (TryResolveFieldAccessSource), so every segment is the model's element name.
+        var bound = complexValue.Binding.ProjectionMember is { } member
+                    && _queryExpression.GetMappedProjection(member) is not ConstantExpression { Value: int }
+            ? _queryExpression.GetMappedProjection(member)
+            : GetProjection(complexValue.Binding).Expression;
+        if (bound.RemoveConvert().TryGetMemberOrEFProperty(out var receiver, out var name)
+            && TryResolveFieldAccessSource(receiver) is { EntityType: { } owner, DocumentExpression: { } ownerDocument }
+            && owner.FindComplexProperty(name) is { } complexProperty)
+        {
+            return ComplexTypeMaterializationBuilder.CreateGetElement(
+                CreateGetValueExpression(ownerDocument, (string?)null, false, typeof(BsonDocument)),
+                complexProperty.GetElementName());
+        }
+
+        throw new InvalidOperationException(
+            $"The projected complex value '{bound.Print()}' could not be located in the document.");
+    }
+
     protected ResolvedFieldAccess TryResolveFieldAccess(Expression? expression)
     {
         if (expression == null) return default;
@@ -1332,7 +1385,9 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         // entity's shaper here to resolve the property and use its own element name instead of the projected alias.
         if (expression is StructuralTypeShaperExpression { StructuralType: IEntityType shaperEntityType })
         {
-            if (shaperEntityType == _rootEntityType)
+            // A derived type of the root (after OfType<TDerived>) lives in the same document; resolving against it finds
+            // the members it declares.
+            if (shaperEntityType == _rootEntityType || _rootEntityType.IsAssignableFrom(shaperEntityType))
             {
                 return (shaperEntityType, DocParameter);
             }

@@ -24,7 +24,8 @@ namespace MongoDB.EntityFrameworkCore.Query.Expressions;
 /// <c>$group</c> output (<c>_id</c>, <c>_id.&lt;Name&gt;</c>, accumulator fields) into top-level aliases.
 /// </summary>
 internal sealed class MongoElementRefExpression(
-    string path, Type clrType, bool nullSafe = false, IProperty? valueProperty = null, bool throwsOnNull = false)
+    string path, Type clrType, bool nullSafe = false, IProperty? valueProperty = null, bool throwsOnNull = false,
+    IComplexProperty? complexValue = null)
     : MongoExpression
 {
     /// <summary>
@@ -72,6 +73,14 @@ internal sealed class MongoElementRefExpression(
     /// opaque non-nullable element.
     /// </summary>
     public bool ThrowsOnNull { get; } = throwsOnNull;
+
+    /// <summary>
+    /// Set when the element is a whole complex value projected as its stored subdocument/array (<c>c.Address</c>,
+    /// <c>c.Address.Location</c>, a complex collection; <c>NativeProjectionBinder</c>), which the shaper materializes with
+    /// <c>ComplexTypeMaterializationBuilder</c>. Its stored form is not the CLR value, so the projection is flagged
+    /// <see cref="MongoSelectDefinition.HasComplexValueProjectionLeaf"/>.
+    /// </summary>
+    public IComplexProperty? ComplexValue { get; } = complexValue;
 
     /// <inheritdoc />
     public override Type Type { get; } = clrType;

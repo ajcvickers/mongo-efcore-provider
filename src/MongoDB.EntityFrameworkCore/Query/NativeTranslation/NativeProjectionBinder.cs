@@ -528,6 +528,8 @@ internal static class NativeProjectionBinder
             mongoQ.Select.HasPositionalCtorProjectionShaper = true;
         if (hasClientEvaluatedLeaf)
             mongoQ.Select.HasClientEvaluatedProjectionLeaf = true;
+        if (projections.Exists(p => p.Expression is MongoElementRefExpression { ComplexValue: not null }))
+            mongoQ.Select.HasComplexValueProjectionLeaf = true;
         foreach (var clientConditionalMember in clientConditionalMembers)
             mongoQ.Select.AddClientConditionalMember(clientConditionalMember);
         foreach (var clientConditionalReadAlias in clientConditionalReadAliases)
@@ -1077,6 +1079,17 @@ internal static class NativeProjectionBinder
         {
             result = new MongoElementRefExpression(ownedNavElementName, ownedNav.TargetEntityType.ClrType);
             isOwnedNavEntityLeaf = true;
+            return true;
+        }
+
+        // Whole complex value — `c.Address`, `c.Address.Location`, `EF.Property<A>(c, "Address")`, a complex collection —
+        // projected as its stored subdocument/array and materialized by the shaper (ComplexTypeMaterializationBuilder),
+        // never through a serializer. Bare or wrapped. The read side binds the same leaves
+        // (MongoProjectionBindingExpressionVisitor.ResolveComplexValueProperty); the projection is flagged
+        // (HasComplexValueProjectionLeaf) so no later server operator reads the stored form.
+        if (translator.TryTranslateComplexValue(leafExpression, out var complexValuePath, out var complexValueProperty))
+        {
+            result = new MongoElementRefExpression(complexValuePath, complexValueProperty.ClrType, complexValue: complexValueProperty);
             return true;
         }
 
@@ -1915,6 +1928,11 @@ internal static class NativeProjectionBinder
 
             // Gate 1e: constant/parameter. No subtree, and RenderProject $literal-wraps it.
             case MongoConstantExpression or MongoParameterExpression:
+                break;
+
+            // Gate 1g: a whole complex value at a dotted path (`c.Address.Location`, `b.Home.Spot`), read back from `_v` by
+            // the shaper (ComplexTypeMaterializationBuilder) exactly as gate 1f reads a dotted scalar.
+            case MongoElementRefExpression { ComplexValue: not null } complexValue when complexValue.Path.Contains('.'):
                 break;
 
             // Gate 1f: a stored field at a dotted path (an owned-reference or complex-property hop: `b.Home.City`,

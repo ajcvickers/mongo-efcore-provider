@@ -893,6 +893,19 @@ internal sealed class MongoSelectDefinition
     /// </remarks>
     internal bool HasClientEvaluatedProjectionLeaf { get; set; }
 
+    /// <summary>
+    /// <see langword="true"/> when a <see cref="Projection"/> leaf is a whole complex value (<c>c.Address</c>,
+    /// <c>c.Address.Location</c>, a complex collection), projected as its stored subdocument/array and materialized by
+    /// the shaper (<c>ComplexTypeMaterializationBuilder</c>).
+    /// </summary>
+    /// <remarks>
+    /// The projected document holds the STORED form (element order, unmapped elements, null vs missing members), not the
+    /// CLR value, so no server operator may read it: <c>MongoQueryableMethodTranslatingExpressionVisitor.VisitMethodCall</c>
+    /// declines every operator that reads projected values (Distinct, set ops, a later Select/Where/OrderBy over it), as
+    /// for <see cref="HasClientCaseMappingProjectionLeaf"/>. Paging and predicate-less cardinality stay native.
+    /// </remarks>
+    internal bool HasComplexValueProjectionLeaf { get; set; }
+
     private HashSet<string>? _clientConditionalMembers;
 
     /// <summary>

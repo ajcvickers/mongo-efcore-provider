@@ -666,6 +666,9 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
 #else
         var injectedBody = InjectStructuralTypeMaterializers(shaperBody);
 #endif
+        // EF builds each complex property inline, reading its leaves as columns of the entity's value buffer; both
+        // shapers below instead materialize it from its own stored element (ComplexTypeMaterializationBuilder).
+        injectedBody = ComplexTypeMaterializationBuilder.MarkComplexPropertyAssignments(injectedBody);
 
         var standAloneStateManager = QueryCompilationContext.QueryTrackingBehavior ==
                                      QueryTrackingBehavior.NoTrackingWithIdentityResolution;

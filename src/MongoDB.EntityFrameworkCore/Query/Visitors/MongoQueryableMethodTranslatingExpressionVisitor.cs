@@ -224,6 +224,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.HasClientEvaluatedProjectionLeaf;
             var sourceHasClientConditionalLeaf =
                 ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.HasClientConditionalProjectionLeaf;
+            var sourceHasComplexValueLeaf =
+                ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.HasComplexValueProjectionLeaf;
             switch (method.Name)
             {
                 // Operations that need tweaks
@@ -284,7 +286,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             // The native projection holds the raw receiver of a client-reapplied ToLower/ToUpper, so an operator that
             // reads projected values (e.g. Distinct) would see the wrong value. Marked after the switch because
             // base.VisitMethodCall re-translates the source into a new query expression.
-            if (sourceHasCaseMappingLeaf && !IsProjectedValueFreeOperator(methodDefinition))
+            // A projected whole complex value is its STORED subdocument/array (element order, unmapped elements), not the
+            // CLR value, so an operator that reads projected values (Distinct, a set op, a later Where/OrderBy/Select)
+            // would compare or read the wrong thing (HasComplexValueProjectionLeaf).
+            if ((sourceHasCaseMappingLeaf || sourceHasComplexValueLeaf) && !IsProjectedValueFreeOperator(methodDefinition))
             {
                 ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.MarkNotNativelyRepresentable();
             }
@@ -3577,6 +3582,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         => mongo.Select.Route == NativeRoute.Projection
            && mongo.Select.Projection.Count > 0
            && !mongo.Select.HasArrayProjectionLeaf
+           // A stored complex subdocument is not the CLR value the combine would dedup/compare.
+           && !mongo.Select.HasComplexValueProjectionLeaf
            // The raw case-mapping receiver would be what the combine dedups/compares.
            && !mongo.Select.HasClientCaseMappingProjectionLeaf
            // A client-evaluated leaf is never projected: the combine would dedup without it, and source1's shaper

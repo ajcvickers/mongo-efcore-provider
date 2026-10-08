@@ -220,6 +220,20 @@ Rendering (null/missing/dialect semantics):
   fields stay declined (gate 1f checks `HasDefaultKeySerialization`).
   A field under an optional complex parent is MISSING whenever the parent is null/absent: ordinary data, so a projected
   `Distinct` key over a required reference-typed scalar (`string`, `byte[]`, primitive collection) is marked (`NativeGroupByBinder.IsRequiredReferenceTypedFieldKey`).
+- **Complex values are materialized by one builder** (`Visitors/ComplexTypeMaterializationBuilder`). EF inlines each
+  complex property's construction into the entity materializer, reading its leaves as value-buffer columns;
+  `MarkComplexPropertyAssignments` replaces each with a `ComplexPropertyMaterializationExpression`, which the DOM shaper
+  and the one-pass rewriter both lower through `Build` over the property's own stored element (one-pass reads that element
+  whole off the reader into a `BsonValue` local, reset per pass). A projected whole complex value (`c.Address`,
+  `c.Address.Location`, a complex collection) is a `MongoElementRefExpression { ComplexValue }` leaf on the emit side
+  (`TryTranslateComplexValue`; a dotted one takes `_v`, gate 1g) and a `ComplexValueProjectionExpression` on the read side
+  (`ResolveComplexValueProperty`), which keeps it off the driver's typed push-down (`ComplexTypeSerializer` can't
+  deserialize). Read rules are strict, like a whole entity, not D-F10: a REQUIRED complex property missing or BSON null
+  throws ("... is missing/null for required complex property ..."), never a null instance or default struct; an OPTIONAL
+  one (EF10) reads null; `{}` is an instance; leaves use the entity-member read (`BsonBinding.CreateGetValueExpression`);
+  a required collection missing/null reads empty; a wrong BSON type throws `FormatException`. The projected document is
+  the STORED form, so `HasComplexValueProjectionLeaf` declines every later value-reading operator (Distinct, set ops) at
+  `VisitMethodCall` and in `IsPlainProjectedSelect` (Where/OrderBy after the Select are folded onto the source by EF).
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

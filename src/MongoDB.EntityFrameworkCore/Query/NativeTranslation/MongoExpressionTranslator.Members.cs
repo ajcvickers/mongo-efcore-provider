@@ -434,6 +434,32 @@ internal sealed partial class MongoExpressionTranslator
         return true;
     }
 
+    /// <summary>
+    /// Resolves a whole complex value (<c>c.Address</c>, <c>c.Address.Location</c>, <c>EF.Property&lt;A&gt;(c, "Address")</c>,
+    /// through owned references; single or, on EF10, a collection) to its stored element path, for a projection leaf the
+    /// shaper materializes (<c>ComplexTypeMaterializationBuilder</c>). Single-scope chains rooted on the selector
+    /// parameter only; a chain crossing an array, or any other leaf kind, declines.
+    /// </summary>
+    internal bool TryTranslateComplexValue(
+        Expression node, [NotNullWhen(true)] out string? path, [NotNullWhen(true)] out IComplexProperty? complexProperty)
+    {
+        path = null;
+        complexProperty = null;
+
+        if (!TryBeginOwnedHopWalk(node.RemoveConvert(), minimumHops: 1, out var names, out var scopeType, out var isOuter)
+            || isOuter
+            || !StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not IComplexProperty leaf
+            || leaf.ClrType != node.Type)
+        {
+            return false;
+        }
+
+        path = string.Join(".", resolved.Segments);
+        complexProperty = leaf;
+        return true;
+    }
+
     /// True when <paramref name="property"/> is a component of a composite primary key. The serializer nests such a
     /// key under an <c>_id</c> local to the declaring type — <c>{ _id: { Key1, Key2 } }</c> at the root, or
     /// <c>{ Author: { _id: { City, Country } } }</c> for an owned type with its own <c>HasKey</c> — at any depth.
