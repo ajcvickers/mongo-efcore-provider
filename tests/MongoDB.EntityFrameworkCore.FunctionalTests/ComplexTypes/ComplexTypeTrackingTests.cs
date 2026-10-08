@@ -28,8 +28,8 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// provider sends in the <c>update</c> command's <c>$set</c>, and what ends up stored.
 /// </summary>
 /// <remarks>
-/// Reading complex properties back (materialization) is not implemented yet, so every tracked entity here is
-/// Added and saved in the same context, then mutated; nothing is loaded by query.
+/// Every tracked entity here is Added and saved in the same context, then mutated. Loading by query, then mutating,
+/// detecting changes and deleting are covered by <c>ComplexTypeMaterializationTests</c>.
 /// </remarks>
 [XUnitCollection("UpdateTests")]
 public class ComplexTypeTrackingTests(TemporaryDatabaseFixture database)

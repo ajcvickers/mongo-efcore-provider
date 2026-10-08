@@ -34,8 +34,9 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// (proves it goes native) and is compared with the <see cref="MongoQueryMode.DriverLinq"/> oracle.
 /// </summary>
 /// <remarks>
-/// Materializing an entity or a whole complex value is not part of this slice, so every query projects scalars,
-/// anonymous types of scalars or aggregates. Documents are seeded as raw BSON so missing/null states can be expressed.
+/// Every query here projects scalars, anonymous types of scalars or aggregates; materializing entities and whole complex
+/// values is covered by <see cref="ComplexTypeMaterializationTests"/>. Documents are seeded as raw BSON so missing/null
+/// states can be expressed.
 /// </remarks>
 [XUnitCollection("QueryTests")]
 public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
@@ -739,9 +740,10 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
     [Fact]
     public void Optional_parent_EF_Property_leaf_over_a_member_hop_declines_cleanly()
     {
-        // `EF.Property<double>(c.Address!.Location, "Lat")` has no native field resolution yet (the member-hop receiver
-        // under EF.Property is not a chain TryResolveOwnedFieldPath accepts); it declines and the fallback reads default
-        // for the missing/null parent. Follow-up: Task 10 projection work.
+        // `EF.Property<double>(c.Address!.Location, "Lat")` has no native field resolution (the member-hop receiver under
+        // EF.Property is not a chain TryResolveOwnedFieldPath accepts); it declines and the fallback reads default for the
+        // missing/null parent. Task 10 decided to keep it declining (the decline is clean and the fallback right, and the
+        // member spelling `c.Address!.Location.Lat` is native); widening the emit-side resolver is a follow-up.
         var collection = SeedOptional(nameof(Optional_parent_EF_Property_leaf_over_a_member_hop_declines_cleanly));
         Assert.Equal(["A:1", "D:3", "Missing:0", "Null:0"], NativeModeAssert.DeclinesCleanly(m => Optional(collection, m,
             q => q.OrderBy(c => c.Name).Select(c => new { c.Name, Lat = EF.Property<double>(c.Address!.Location, "Lat") }).ToList()
@@ -762,18 +764,18 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
 #endif
 
     [Fact]
-    public void Entity_beside_an_EF_Property_complex_leaf_fails_loudly_until_entity_materialization()
+    public void Entity_beside_an_EF_Property_complex_leaf()
     {
-        // S2: whole-entity materialization of a complex-typed entity is Task 10, so this throws on every path, exactly as
-        // the member spelling does; it must never return null rows.
+        // S2 (Task 9): with complex properties materialized (Task 10) the entity beside the leaf reads correctly in every
+        // mode, in both spellings; it must never return null rows. The whole-entity matrix is in ComplexTypeMaterializationTests.
         var collection = SeedRich();
-        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
-        {
-            var ex = Assert.Throws<InvalidOperationException>(() => Rich(collection, mode, q => q.OrderBy(c => c.Name)
+        NativeModeAssert.NativeAndExpected(m => Rich(collection, m, q => q.OrderBy(c => c.Name)
                 .Select(c => new { c, City = EF.Property<string>(EF.Property<RichAddress>(c, "Address"), "City") }).ToList()
-                .Select(x => x.c.Name + ":" + x.City)));
-            Assert.Contains("missing for required non-nullable property", ex.Message);
-        }
+                .Select(x => x.c.Name + ":" + x.c.Address.Location.Lat + ":" + x.City)),
+            ["Ann:1.5:Paris", "Bob:0.5:London", "Cid:2.5:Paris", "Dee:3.5:Berlin", "Eve:1:Amsterdam"]);
+        NativeModeAssert.NativeAndExpected(m => Rich(collection, m, q => q.OrderBy(c => c.Name)
+                .Select(c => new { c, c.Address.City }).ToList().Select(x => x.c.Address.City + ":" + x.City)),
+            ["Paris:Paris", "London:London", "Paris:Paris", "Berlin:Berlin", "Amsterdam:Amsterdam"]);
     }
 
     private static string UniqueName(string name)

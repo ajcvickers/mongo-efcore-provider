@@ -30,8 +30,8 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// in the <c>update</c> command's <c>$set</c>, and what ends up stored.
 /// </summary>
 /// <remarks>
-/// Reading complex properties back is not implemented yet, so every tracked entity is Added and saved in the same
-/// context and then mutated; stored state is asserted on the raw <see cref="BsonDocument"/>.
+/// Every tracked entity here is Added and saved in the same context and then mutated; stored state is asserted on the
+/// raw <see cref="BsonDocument"/>. Loading by query and then mutating is covered by <c>ComplexTypeMaterializationTests</c>.
 /// </remarks>
 [XUnitCollection("UpdateTests")]
 public class ComplexTypeOptionalAndCollectionWriteTests(TemporaryDatabaseFixture database)
