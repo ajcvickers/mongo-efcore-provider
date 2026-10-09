@@ -278,6 +278,60 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
     }
 
     [Fact]
+    public void Self_referencing_setter_on_a_represented_leaf_is_refused()
+    {
+        // Measured at 5eece0ae: `SetProperty(c => c.Billing.Rep, c => c.Rank)` wrote the int 1 into "bill.Rep", stored
+        // everywhere else as a string (BsonRepresentation String). Now refused like the converter case.
+        var store = Seed();
+        using (var db = store.Context())
+        {
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.Rep, c => c.Rank)));
+            Assert.Contains("Self-referencing ExecuteUpdate on property 'Rep'", ex.Message);
+            Assert.Contains("BsonRepresentation", ex.Message);
+        }
+
+        store.AssertUnchanged();
+    }
+
+    public class RepRoot
+    {
+        public ObjectId Id { get; set; }
+        public int Rank { get; set; }
+        public int Rep { get; set; }
+    }
+
+    [Fact]
+    public void Self_referencing_setter_on_a_represented_ROOT_scalar_writes_the_computed_type_PRE_EXISTING()
+    {
+        // Characterization (pre-existing at 6740680c and before this task; unchanged; Jira candidate 18): a root scalar
+        // stored with BsonRepresentation(String) receives the computed value in its own BSON type (int 3, not "3"). Only the
+        // complex-leaf case is refused above, so root behaviour is untouched.
+        var collection = database.CreateCollection<RepRoot>(nameof(Self_referencing_setter_on_a_represented_ROOT_scalar_writes_the_computed_type_PRE_EXISTING) + Guid.NewGuid().ToString("N")[..6]);
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
+        var id = ObjectId.GenerateNewId();
+        raw.InsertOne(new BsonDocument { { "_id", id }, { "Rank", 3 }, { "Rep", "1" } });
+        using (var db = SingleEntityDbContext.Create(collection, mb => mb.Entity<RepRoot>().Property(r => r.Rep).Metadata.SetBsonRepresentation(BsonType.String, null, null)))
+        {
+            Assert.Equal(1, db.Entities.ExecuteUpdate(s => s.SetProperty(r => r.Rep, r => r.Rank)));
+        }
+
+        Assert.Equal(new BsonDocument { { "_id", id }, { "Rank", 3 }, { "Rep", 3 } }.ToJson(), raw.Find(FilterDefinition<BsonDocument>.Empty).Single().ToJson());
+    }
+
+    [Fact]
+    public void SetProperty_on_a_nullable_leaf_to_null_stores_BSON_null()
+    {
+        var store = Seed();
+        using (var db = store.Context())
+        {
+            Assert.Equal(1, db.Entities.Where(c => c.Name == "a").ExecuteUpdate(s => s.SetProperty(c => c.Billing.Street, (string?)null)));
+        }
+
+        store.AssertStored(null, ("a", d => d["bill"]["Street"] = BsonNull.Value));
+    }
+
+    [Fact]
     public void Self_referencing_setter_on_a_converted_leaf_is_refused()
     {
         var store = Seed();

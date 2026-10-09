@@ -216,8 +216,18 @@ internal static class ComplexElementNullGuardRefusal
         public override Expression? Visit(Expression? node)
             => Found is null ? base.Visit(node) : node;
 
-        // EF query roots, query parameters and navigation nodes: no lambda over a complex element lives inside them.
-        protected override Expression VisitExtension(Expression node) => node;
+        // EF query roots and query parameters hold no lambda (measured: the only extension nodes in a bulk plan's captured
+        // chain). Strict: any OTHER extension node might hide a lambda over complex elements this visitor can't see into, so
+        // it is refused rather than skipped (only when the model has complex collections: FindForBulk exits earlier).
+        protected override Expression VisitExtension(Expression node)
+        {
+            if (strict && node is not (Microsoft.EntityFrameworkCore.Query.QueryRootExpression or Microsoft.EntityFrameworkCore.Query.QueryParameterExpression))
+            {
+                Found = ($"an expression node of type '{node.GetType().Name}' the bulk check cannot inspect", "(any)");
+            }
+
+            return node;
+        }
 
         protected override Expression VisitLambda<T>(Expression<T> node)
         {
@@ -530,6 +540,16 @@ internal static class ComplexElementNullGuardRefusal
             if (collections.Count == 0 || collections.Any(c => c.IsOptional()))
             {
                 Found = ($"'{node.Method.Name}' over an optional complex collection", collectionName);
+                return false;
+            }
+
+            // The bridge coalesces a null/missing REQUIRED collection to [] only when a List<T> fits the property's CLR type
+            // (the same predicate, IsNormalizableToEmptyList). Otherwise (T[], ObservableCollection<T>, ...) the server's
+            // `$anyElementTrue`/`$size` over a null array errors MID-OPERATION, after earlier documents were written.
+            if (collections.Any(c => !c.ClrType.IsNormalizableToEmptyList(out _)))
+            {
+                Found = ($"'{node.Method.Name}' over a complex collection whose CLR type cannot hold a List<T> (declare it as List<T> "
+                    + "or IList<T> so a null or missing array reads as empty)", collectionName);
                 return false;
             }
 

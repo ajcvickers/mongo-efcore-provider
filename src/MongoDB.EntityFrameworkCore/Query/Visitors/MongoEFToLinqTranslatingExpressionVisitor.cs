@@ -965,9 +965,7 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
         }
 
         var fieldAccess = Visit(argument);
-        if (fieldAccess is null
-            || fieldAccess.Type.TryGetItemType() is not { } elementType
-            || !fieldAccess.Type.IsAssignableFrom(typeof(List<>).MakeGenericType(elementType)))
+        if (fieldAccess is null || !fieldAccess.Type.IsNormalizableToEmptyList(out var elementType))
         {
             return false;
         }

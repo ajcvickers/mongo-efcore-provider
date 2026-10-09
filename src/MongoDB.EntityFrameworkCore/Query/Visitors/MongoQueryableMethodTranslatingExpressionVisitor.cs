@@ -2046,6 +2046,20 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                     mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
         }
 
+        // A self-referencing value for a complex LEAF stored with a BsonRepresentation would be written in the value's own
+        // BSON type (an int into a field stored as a string), then miss every equality filter on the stored form. Refused for
+        // complex leaves only: root scalars have the same pre-existing behaviour, which is pinned and left unchanged.
+        if (isSelfReferencing && complexElementPath is not null && property is IProperty representedLeaf
+            && representedLeaf.GetBsonRepresentation() is not null)
+        {
+            AddTranslationErrorDetails(
+                $"Self-referencing ExecuteUpdate on property '{property.Name}' is not supported because it is stored with a "
+                + "BsonRepresentation, which the computed value would not be written in.");
+            throw new InvalidOperationException(
+                CoreStrings.NonQueryTranslationFailedWithDetails(
+                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+        }
+
         // A whole complex value computed from the row (`c.Billing = c.Shipping`) would copy the STORED subdocument, whose
         // element names, converters and representations belong to the source property, and the driver can't render a
         // complex value (ruling R1): refused rather than written in the wrong stored form.

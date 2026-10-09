@@ -55,16 +55,18 @@ Gate and fallback:
 - **Bulk `ExecuteUpdate`/`ExecuteDelete` (EF9+) also uses the driver-LINQ bridge** (`MongoEFToLinqTranslatingExpressionVisitor`).
   Retiring the query fallback does not retire it. Its filter and `SetProperty` values ALWAYS run on the driver, so over a
   complex collection's elements (EF10) it is guarded by a POSITIVE list, not R20's deny-list: every element read must be an
-  atom the driver answers like R17 (`member ==/!= v` with `v` non-null and not a `false` bool; a bare non-nullable bool member
+  atom the driver answers like R17 (`member ==/!= v` with `v` non-null and not a `false` bool; a bare non-nullable, default-serialized bool member
   and `!`; a list that can't hold null `.Contains(member)`; `&&`/`||`/`!` over those) under `Any`/`All`/`Count`/`LongCount`/
-  `Where`/`Skip`/`Take` over a REQUIRED collection; anything else (relational, null tests, `Select`, aggregates, an optional
+  `Where`/`Skip`/`Take` over a REQUIRED collection whose CLR type a `List<T>` fits (`IsNormalizableToEmptyList`, the bridge's own
+  coalesce condition: `T[]`/`ObservableCollection<T>` are refused, as are unknown extension nodes); anything else (relational, null tests, `Select`, aggregates, an optional
   collection's operators or null check: the driver's `{p: null}` also matches `[null]`, an element lambda the keying can't
   bind) is refused before any write (`ComplexElementNullGuardRefusal.ThrowIfBulkMisreadsNullElements`, called in every bulk
   plan delegate with this execution's parameter values; explicit `DriverLinq` opts out). A wrong bulk filter deletes data,
   so bulk takes the refusal cost where queries take R21's documented limits. Setters: a complex leaf through REQUIRED single
   complex hops (dotted stored path, `StructuralPath`), a whole complex property/collection from a captured value (serialized by
   `ComplexValueWriter`, as SaveChanges writes it; a required one can't be null); refused: a leaf under an optional complex
-  hop (the server's `$set` of a dotted path under a null parent errors mid-operation), a whole complex value read from the row.
+  hop (the server's `$set` of a dotted path under a null parent errors mid-operation), a whole complex value read from the row,
+  a self-referencing value for a BsonRepresentation leaf (root scalars keep their pre-existing behaviour).
 - **New native join shapes must be tested under explicit `DriverLinq`** too; the native path can mask a broken
   fallback (and the reverse).
 - **A recognizer that turns a correlated `DbSet` subquery into a navigation** (`db.Orders.Where(o => o.CustomerId ==
