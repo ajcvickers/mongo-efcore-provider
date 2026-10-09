@@ -310,8 +310,11 @@ internal sealed partial class MongoExpressionTranslator
 
             case ComplexComparand.Stored stored:
             {
+                // Each side keeps its OWN presence flag into the nested recursion (left: mayBeAbsent; right: carried on the
+                // Stored comparand, including this level's own optionality), so the answer can't depend on operand order.
                 var otherAbsent = stored.MayBeAbsent | stored.Property.IsOptional();
-                var members = TryBuildMemberEquality(complexProperty.ComplexType, path, mayBeAbsent || otherAbsent, stored);
+                var members = TryBuildMemberEquality(
+                    complexProperty.ComplexType, path, mayBeAbsent, stored with { MayBeAbsent = otherAbsent });
                 if (members is null)
                     return null;
 
@@ -382,6 +385,8 @@ internal sealed partial class MongoExpressionTranslator
                     when stored.Property.ComplexType.FindComplexProperty(nested.Name) is { IsCollection: false } otherNested
                          && otherNested.ClrType == nested.ClrType
                          && otherNested.GetElementName() is { Length: > 0 } otherElement
+                    // The right side's flag; TryBuildComplexEquality adds otherNested's own optionality (otherAbsent) before
+                    // recursing further, so an optional intermediate on the right reaches its grandchildren.
                     => new ComplexComparand.Stored(stored.Path + "." + otherElement, otherNested, stored.MayBeAbsent),
                 _ => null
             };
