@@ -105,6 +105,7 @@ public static class ComplexEqualityTranslationTests
         Assert.Equal("""{ "work" : { "$ne" : null } }""", Render(h => !(h.Work == null)));
         Assert.Equal("""{ "Home.Geo" : null }""", Render(h => null == (object)h.Home.Geo));
         Assert.Equal("""{ "Home" : null }""", Render(h => !(h.Home != null)));
+        Assert.Equal("""{ "Home.Geo.Lat" : 0.0, "Home.Geo.Lon" : 0.0 }""", Render(h => h.Home.Geo.Equals(new Pt())));
     }
 
     [Fact]
@@ -153,6 +154,81 @@ public static class ComplexEqualityTranslationTests
     [Fact]
     public static void Construction_reading_the_row_declines()
         => AssertDeclines(h => h.Home == new Addr { City = h.Work.City, Zip = 7, Geo = new Pt { Lat = 1, Lon = 2 } });
+
+    [Fact]
+    public static void Collection_typed_leaf_declines_for_a_constant_and_a_captured_comparand()
+    {
+        // Reaches the leaf guard (the list initializer form declines earlier, as an unbound/computed member).
+        var box = new LabelBox { Labels = ["a"] };
+        var parameter = Expression.Parameter(typeof(Holder), "h");
+        var constant = Expression.Equal(Expression.Property(parameter, nameof(Holder.Box)), Expression.Constant(box));
+        Assert.False(new MongoExpressionTranslator(Model(), parameter).TryTranslate(constant, out _));
+
+        var captured = Expression.Equal(Expression.Property(parameter, nameof(Holder.Box)), QueryParameter("__box_0", typeof(LabelBox)));
+        Assert.False(new MongoExpressionTranslator(Model(), parameter).TryTranslate(captured, out _));
+    }
+
+    [Fact]
+    public static void Captured_class_comparand_has_a_per_execution_null_branch()
+    {
+        // A captured class instance may be null at run time, so `h.Home == p` is (p is null AND Home is null/missing) OR
+        // (p is not null AND the members match): the two is-null tests are runtime-evaluated bool parameters ({ $expr: p }).
+        // Required, so no presence guard on the member branch. Correct; less index-friendly than a constant.
+        var parameter = Expression.Parameter(typeof(Holder), "h");
+        var body = Expression.Equal(Expression.Property(parameter, nameof(Holder.Home)), QueryParameter("__other_0", typeof(Addr)));
+        Assert.True(new MongoExpressionTranslator(Model(), parameter).TryTranslate(body, out var node));
+        var rendered = new MongoQueryLanguageRenderer().Render(node, new PlaceholderTable()).ToJson();
+        Assert.StartsWith("""{ "$or" : [{ "$and" : [{ "$expr" : { "__mongoef_param__" : 0 } }, { "Home" : null }] }, { "$and" : [{ "$expr" : { "__mongoef_param__" : 1 } }, """,
+            rendered);
+        Assert.Contains("\"Home.City\" : { \"__mongoef_param__\" : 2 }", rendered);
+
+        // A non-nullable struct comparand has no null branch.
+        var pin = Expression.Call(
+            Expression.Convert(Expression.Property(Expression.Property(parameter, nameof(Holder.Home)), nameof(Addr.Geo)), typeof(object)),
+            typeof(object).GetMethod(nameof(object.Equals), [typeof(object)])!,
+            Expression.Convert(QueryParameter("__pin_0", typeof(Pt)), typeof(object)));
+        Assert.True(new MongoExpressionTranslator(Model(), parameter).TryTranslate(pin, out var pinNode));
+        Assert.Equal("""{ "Home.Geo.Lat" : { "__mongoef_param__" : 0 }, "Home.Geo.Lon" : { "__mongoef_param__" : 1 } }""",
+            new MongoQueryLanguageRenderer().Render(pinNode, new PlaceholderTable()).ToJson());
+    }
+
+    [Fact]
+    public static void A_declining_equality_inside_a_disjunction_declines_the_whole_predicate_and_leaves_no_residue()
+    {
+        // The translator is stateless between nodes: a declined equality (an inline construction reading the row) leaves
+        // nothing behind, so the same translator then translates a supported predicate exactly as a fresh one does.
+        Expression<Func<Holder, bool>> declining
+            = h => h.Home == new Addr { City = "Paris", Zip = 7, Geo = new Pt() } || h.Home == new Addr { City = h.Work.City, Zip = 7, Geo = new Pt() };
+        var translator = new MongoExpressionTranslator(Model(), declining.Parameters[0]);
+        Assert.False(translator.TryTranslate(declining.Body, out _));
+
+        Expression<Func<Holder, bool>> supported = h => h.Home == new Addr { City = "Paris", Zip = 7, Geo = new Pt() } || h.Work == null;
+        translator.SelfParam = supported.Parameters[0];
+        Assert.True(translator.TryTranslate(supported.Body, out var reused));
+        Assert.Equal(Render(supported), new MongoQueryLanguageRenderer().Render(reused, new PlaceholderTable()).ToJson());
+    }
+
+    [Fact]
+    public static void Element_scope_leaves_are_null_safe_like_the_null_check()
+    {
+        // Inside a $filter/$map element scope a bare `$eq` against null is not $ifNull-normalized (owner ruling), so the
+        // member-wise leaves carry NullSafe: `{ $eq: [{ $ifNull: ["$$e.Home.Zip", null] }, null] }`, consistent with the
+        // null check's `{ $ifNull: ["$$e.Home", null] }` (R16).
+        var parameter = Expression.Parameter(typeof(Holder), "h");
+        var body = Expression.Equal(
+            Expression.Property(parameter, nameof(Holder.Home)),
+            Expression.Constant(new Addr { City = "Paris", Zip = null, Geo = new Pt() }));
+        Assert.True(new MongoExpressionTranslator(Model(), parameter).TryTranslate(body, out var node));
+        var rendered = MongoAggregationExpressionRenderer.Render(node, new PlaceholderTable(), elementVariable: "e").ToJson();
+        Assert.Contains("""{ "$eq" : [{ "$ifNull" : ["$$e.Home.Zip", null] }, null] }""", rendered);
+    }
+
+    private static Expression QueryParameter(string name, Type type)
+#if EF8 || EF9
+        => Expression.Parameter(type, Microsoft.EntityFrameworkCore.Query.QueryCompilationContext.QueryParameterPrefix + name);
+#else
+        => new Microsoft.EntityFrameworkCore.Query.QueryParameterExpression(name, type);
+#endif
 
     public class Lookalike
     {
