@@ -147,24 +147,6 @@ internal static class ComplexElementNullGuardRefusal
         return finder.Found;
     }
 
-    /// <summary>
-    /// <para>
-    /// Non-strict (queries, R20): finds the deny-listed null-guard-requiring node kinds in keyed element scopes.
-    /// </para>
-    /// <para>
-    /// Strict (bulk): additionally, every read of a keyed complex element parameter must sit in an ALLOWED ATOM, a node the
-    /// driver evaluates over a null element exactly as R17 does: <c>member ==/!= v</c> with <c>v</c> non-null and element-free
-    /// (not over a bool member: R19 reads a null element's bool as false, the driver's <c>$eq</c> misses it); a bare
-    /// non-nullable bool member (a lambda body, an <c>&amp;&amp;</c>/<c>||</c> operand, a <c>!</c> operand); and
-    /// <c>list.Contains(member)</c> over a local list whose item type can't hold null. Each atom gives the same truth value
-    /// on both paths, so every <c>&amp;&amp;</c>/<c>||</c>/<c>!</c> combination of them does too. Any other read (a
-    /// relational comparison, arithmetic, a string method, a nested collection, a <c>Select</c>/<c>OrderBy</c> body, a
-    /// comparison with another member), an element-typed lambda parameter the keying can't bind (e.g. through a
-    /// navigation), and an operator over an OPTIONAL complex collection (which the bridge doesn't normalize, so the server
-    /// errors mid-operation on a null one) are refused. A positive list, so a shape nobody classified is refused rather
-    /// than served: the R21 limits of the query net don't apply to bulk.
-    /// </para>
-    /// </summary>
     // Every complex type and complex collection of a (read-only, finalized) model, computed once per model.
     private sealed class ModelComplexTypes
     {
@@ -200,6 +182,24 @@ internal static class ComplexElementNullGuardRefusal
         public static ModelComplexTypes For(IModel model) => Cache.GetValue(model, m => new ModelComplexTypes(m));
     }
 
+    /// <summary>
+    /// <para>
+    /// Non-strict (queries, R20): finds the deny-listed null-guard-requiring node kinds in keyed element scopes.
+    /// </para>
+    /// <para>
+    /// Strict (bulk): additionally, every read of a keyed complex element parameter must sit in an ALLOWED ATOM, a node the
+    /// driver evaluates over a null element exactly as R17 does: <c>member ==/!= v</c> with <c>v</c> non-null and element-free
+    /// (not over a bool member: R19 reads a null element's bool as false, the driver's <c>$eq</c> misses it); a bare
+    /// non-nullable bool member (a lambda body, an <c>&amp;&amp;</c>/<c>||</c> operand, a <c>!</c> operand); and
+    /// <c>list.Contains(member)</c> over a local list whose item type can't hold null. Each atom gives the same truth value
+    /// on both paths, so every <c>&amp;&amp;</c>/<c>||</c>/<c>!</c> combination of them does too. Any other read (a
+    /// relational comparison, arithmetic, a string method, a nested collection, a <c>Select</c>/<c>OrderBy</c> body, a
+    /// comparison with another member), an element-typed lambda parameter the keying can't bind (e.g. through a
+    /// navigation), and an operator over an OPTIONAL complex collection (which the bridge doesn't normalize, so the server
+    /// errors mid-operation on a null one) are refused. A positive list, so a shape nobody classified is refused rather
+    /// than served: the R21 limits of the query net don't apply to bulk.
+    /// </para>
+    /// </summary>
     private sealed class Finder(IModel model, bool strict, Func<string, object?>? parameterValue) : ExpressionVisitor
     {
         private HashSet<Type>? _complexElementClrTypes;
@@ -239,7 +239,7 @@ internal static class ComplexElementNullGuardRefusal
                 // element's lambda was already bound by its operator.
                 if (strict && !_scopes.ContainsKey(parameter) && ComplexElementClrTypes.Contains(parameter.Type))
                 {
-                    Found = ($"a lambda over complex collection elements ('{node}') that the bulk check cannot bind to its collection",
+                    Found = ($"a lambda over complex collection elements ('{ExpressionShapePrinter.Print(node)}') that the bulk check cannot bind to its collection",
                         parameter.Type.Name);
                     return node;
                 }
@@ -302,7 +302,7 @@ internal static class ComplexElementNullGuardRefusal
                                 _complexElementCollections[parameter] = collectionName!;
                                 if (strict && !IsBulkSafePredicate(lambda.Body))
                                 {
-                                    Found = ($"the element predicate '{lambda}'", collectionName!);
+                                    Found = ($"the element predicate '{ExpressionShapePrinter.Print(lambda)}'", collectionName!);
                                     return node;
                                 }
                             }

@@ -606,6 +606,12 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
             var ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.City.Trim(), "x")));
             Assert.Contains("Only mapped root scalar properties can be updated", ex.Message);
+
+            // The setter target is printed as its shape: an inlined literal is replaced by `?`.
+            ex = Assert.Throws<InvalidOperationException>(
+                () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.City.Substring(0, 3) + "secret-suffix", "x")));
+            Assert.DoesNotContain("secret-suffix", ex.Message);
+            Assert.Contains(".Billing.City.Substring(?, ?) + ?", ex.Message);
         }
 
         store.AssertUnchanged();

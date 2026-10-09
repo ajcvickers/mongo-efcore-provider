@@ -2048,7 +2048,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         {
             AddTranslationErrorDetails(
                 "Only mapped root scalar properties can be updated by a bulk update, and, through complex properties, their scalar "
-                + $"properties and whole complex properties. The setter target '{propertySelector.Body}' is not a mapped scalar "
+                + $"properties and whole complex properties. The setter target '{ExpressionShapePrinter.Print(propertySelector.Body)}' is not a mapped scalar "
                 + $"property of '{entityType.DisplayName()}'.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
@@ -2166,7 +2166,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             if (hop.IsOptional())
             {
                 AddTranslationErrorDetails(
-                    $"ExecuteUpdate cannot set '{propertySelector.Body}' because '{hop.DeclaringType.DisplayName()}.{hop.Name}' is an "
+                    $"ExecuteUpdate cannot set '{ExpressionShapePrinter.Print(propertySelector.Body)}' because '{hop.DeclaringType.DisplayName()}.{hop.Name}' is an "
                     + "optional complex property, which may be null in a stored document: the server cannot set a member of a null "
                     + "value. Set the whole optional complex property instead (SetProperty(e => e.Optional, value)).");
                 throw new InvalidOperationException(
