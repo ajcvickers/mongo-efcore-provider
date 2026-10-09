@@ -226,7 +226,7 @@ internal sealed partial class MongoExpressionTranslator
             if (dateTimeIsOuter)
                 return false;
 
-            receiverExpr = new MongoFieldExpression(property, fieldPath!);
+            receiverExpr = ScopeField(property, fieldPath!);
         }
         else if (TryTranslateDateTimeMember(receiver, out var nestedDateTimeExpr))
         {
@@ -929,7 +929,7 @@ internal sealed partial class MongoExpressionTranslator
                 if (itemNode is null)
                     return null; // e.g. a value-converted array, or a CLR/element type mismatch — decline.
 
-                var arrayFieldExpr = new MongoFieldExpression(arrayProperty, arrayFieldPath);
+                var arrayFieldExpr = ScopeField(arrayProperty, arrayFieldPath);
                 return new MongoArrayContainsExpression(arrayFieldExpr, itemNode, negated: false);
             }
 
@@ -962,7 +962,7 @@ internal sealed partial class MongoExpressionTranslator
                     if (valuesNode is null)
                         return null;
 
-                    var fieldExpr2 = new MongoFieldExpression(property, fieldPath);
+                    var fieldExpr2 = ScopeField(property, fieldPath);
                     return new MongoInExpression(fieldExpr2, valuesNode, negated: false);
                 }
 
@@ -1037,7 +1037,7 @@ internal sealed partial class MongoExpressionTranslator
                         return null;
 
                     property = receiverProperty;
-                    fieldNode = new MongoFieldExpression(receiverProperty, fieldPath!);
+                    fieldNode = ScopeField(receiverProperty, fieldPath!);
                 }
                 else if (TryResolveFlattenedAlias(Unwrap(receiver), out var aliasFieldRef)
                          && aliasFieldRef.Type == typeof(string))
@@ -1204,7 +1204,7 @@ internal sealed partial class MongoExpressionTranslator
 
                 return new MongoBinaryExpression(
                     MongoBinaryOperator.NotEqual,
-                    new MongoFieldExpression(nullableProperty, nullablePath),
+                    ScopeField(nullableProperty, nullablePath),
                     new MongoConstantExpression(null, nullableProperty));
             }
 
@@ -1235,7 +1235,7 @@ internal sealed partial class MongoExpressionTranslator
                     // query-dialect-renderable and would be truthiness-tested via $expr instead of serialized.
                     return boolIsOuter && _innerPrefix is null
                         ? new MongoOuterFieldExpression(boolProp, boolPath!)
-                        : new MongoFieldExpression(boolProp, boolPath!);
+                        : ScopeField(boolProp, boolPath!);
                 }
 
                 return null;
@@ -1258,6 +1258,15 @@ internal sealed partial class MongoExpressionTranslator
     /// </remarks>
     private static bool RequiresAggregationElementScope(ITypeBase elementType)
         => elementType is IComplexType;
+
+    /// <summary>
+    /// A field read in this translator's scope. Inside a complex collection's element scope (ruling R17) every leaf is
+    /// <see cref="MongoFieldExpression.NullSafe"/>: a NULL element (EF10 writes them) reads each member as null, as C# and
+    /// EF's null propagation do (R14), so `== null`/`!= null` are $ifNull-normalized and a relational comparison gets the
+    /// null guard (MayBeNull). Owned element scopes and the document root are unchanged (<paramref name="nullSafe"/> only).
+    /// </summary>
+    private MongoFieldExpression ScopeField(IProperty property, string path, bool nullSafe = false)
+        => new(property, path, nullSafe || _scopeType is IComplexType);
 
     /// <summary>
     /// Translates a comparison <see cref="BinaryExpression"/> into a <see cref="MongoBinaryExpression"/>.
@@ -1433,7 +1442,7 @@ internal sealed partial class MongoExpressionTranslator
                     && nodeType is ExpressionType.Equal or ExpressionType.NotEqual;
                 MongoExpression leftField = leftIsOuter && _innerPrefix is null
                     ? new MongoOuterFieldExpression(leftProperty, leftPath!)
-                    : new MongoFieldExpression(leftProperty, leftPath!, leftNullSafe);
+                    : ScopeField(leftProperty, leftPath!, leftNullSafe);
                 return new MongoBinaryExpression(mongoOp.Value, leftField, valueExpr);
             }
         }
@@ -1472,7 +1481,7 @@ internal sealed partial class MongoExpressionTranslator
                     && nodeType is ExpressionType.Equal or ExpressionType.NotEqual;
                 MongoExpression rightField = rightIsOuter && _innerPrefix is null
                     ? new MongoOuterFieldExpression(rightProperty, rightPath!)
-                    : new MongoFieldExpression(rightProperty, rightPath!, rightNullSafe);
+                    : ScopeField(rightProperty, rightPath!, rightNullSafe);
                 return new MongoBinaryExpression(mongoOp.Value, rightField, valueExpr);
             }
         }
@@ -1853,7 +1862,7 @@ internal sealed partial class MongoExpressionTranslator
             // NativeSelectManyBinderTests.
             return operandIsOuter
                 ? new MongoOuterFieldExpression(property, fieldPath!)
-                : new MongoFieldExpression(property, fieldPath!);
+                : ScopeField(property, fieldPath!);
         }
 
         // A flattened alias with no backing IProperty (a post-Distinct computed key part, or any output alias of a

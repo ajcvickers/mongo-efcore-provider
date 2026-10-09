@@ -277,12 +277,15 @@ Rendering (null/missing/dialect semantics):
   type folds) are gated on `IsSelfParamTheEntity`, false in a complex scope. EF10 stores a null ELEMENT as BSON null, and
   `$elemMatch` never matches a non-document element, so a complex-collection quantifier always renders in an aggregation
   element scope (`$anyElementTrue`/`$allElementsTrue` over `$map`, `RequiresAggregationElementScope`); owned collections keep
-  `$elemMatch`. A null element reads its members as null/MISSING (ruling R14: an element may be absent), and the RenderBinary
-  element-scope rule applies unchanged (`a.Zip != null` is true over a null element's missing leaf, as on driver-LINQ).
+  `$elemMatch`. Ruling R17: a null complex element reads every leaf as null, so leaves in a complex element scope are
+  `NullSafe` (`ScopeField`: `== null`/`!= null` are `$ifNull`-normalized and relational comparisons get the null guard);
+  owned element scopes keep the RenderBinary no-`$ifNull` rule (a missing owned leaf is malformed data, a null complex element
+  is EF-written). Driver-LINQ answers such rows differently (pinned per mode).
   `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value
   (`MongoCurrentElementNullCheckExpression`, `$$e`), `!Contains` its exact `All` complement. The bridge coalesces a REQUIRED
   complex collection used as an operator source to `[]` (`TryRewriteRequiredComplexCollectionSource`; it reads empty, and
-  the driver's `$size`/`$map` over null is a server error); an optional one is not coalesced. EF-337's walker resolves an
+  the driver's `$size`/`$map` over null is a server error; it also serves bulk ExecuteUpdate/Delete); an optional one, or a
+  `T[]`-typed one (no `List<T>` fits), is not coalesced and stays a loud server error on the fallback. EF-337's walker resolves an
   element parameter of a complex collection to its complex type (`ComplexCollectionElementExpression`), so a relational
   comparison over a converted element leaf is refused on the bridge.
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized

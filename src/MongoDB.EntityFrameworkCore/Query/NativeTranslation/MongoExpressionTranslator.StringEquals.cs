@@ -68,7 +68,7 @@ internal sealed partial class MongoExpressionTranslator
                     return false;
 
                 result = new MongoRegexExpression(
-                    new MongoFieldExpression(property, fieldPath), MongoRegexKind.Exact, term, negated: false,
+                    ScopeField(property, fieldPath), MongoRegexKind.Exact, term, negated: false,
                     caseInsensitive: true);
                 return true;
 

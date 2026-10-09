@@ -152,7 +152,7 @@ internal sealed partial class MongoExpressionTranslator
             return false;
         }
 
-        field = new MongoFieldExpression(property, fieldPath);
+        field = ScopeField(property, fieldPath);
         return true;
     }
 
