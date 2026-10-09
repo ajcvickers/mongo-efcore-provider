@@ -89,7 +89,7 @@ internal sealed partial class MongoExpressionTranslator
             return true;
         }
 
-        if (TryResolveOwnedCollectionPath(node, out var collectionPath, out _, out var collectionIsOuter) && !collectionIsOuter)
+        if (TryResolveEmbeddedCollectionPath(node, out var collectionPath, out _, out var collectionIsOuter) && !collectionIsOuter)
         {
             path = collectionPath;
             mayBeArray = true;

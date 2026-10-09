@@ -15,6 +15,7 @@
 
 using System;
 using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Extensions; // IsInHierarchy()
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 
@@ -43,10 +44,10 @@ internal sealed partial class MongoExpressionTranslator
             return false;
 
         // A hierarchy needs a discriminator predicate, not a constant.
-        if (_entityType.IsInHierarchy())
+        if (ScopeEntityType.IsInHierarchy())
             return TryTranslateHierarchyTypeTest(typeBinary.TypeOperand, exact: false, negated: false, out result);
 
-        var matches = typeBinary.TypeOperand.IsAssignableFrom(_entityType.ClrType);
+        var matches = typeBinary.TypeOperand.IsAssignableFrom(_scopeType.ClrType);
         result = new MongoConstantExpression(matches, forSerialization: null);
         return true;
     }
@@ -62,18 +63,19 @@ internal sealed partial class MongoExpressionTranslator
 
         // Root-level, one-scope only: an element ($filter/$map) or flattened Distinct scope reads a different document,
         // and the discriminator field path is the document root's.
-        if (_outerParam is not null || _innerPrefix is not null || DistinctAliasScope is not null)
+        if (_scopeType is not IEntityType entityType
+            || _outerParam is not null || _innerPrefix is not null || DistinctAliasScope is not null)
             return false;
 
         // Every row is _entityType or a subtype, so a supertype operand (object, an unmapped CLR base) is always true.
-        if (!exact && operand.IsAssignableFrom(_entityType.ClrType))
+        if (!exact && operand.IsAssignableFrom(entityType.ClrType))
         {
             result = new MongoConstantExpression(true, forSerialization: null);
             return true;
         }
 
-        var operandType = _entityType.Model.FindEntityType(operand);
-        if (operandType is null || !ReferenceEquals(operandType.GetRootType(), _entityType.GetRootType()))
+        var operandType = entityType.Model.FindEntityType(operand);
+        if (operandType is null || !ReferenceEquals(operandType.GetRootType(), entityType.GetRootType()))
         {
             // Rows are always some mapped member of this hierarchy, so GetType() == typeof(NotInHierarchy) is false. For
             // `is`, a non-entity operand (an interface some subtype implements) can't be decided here: decline.

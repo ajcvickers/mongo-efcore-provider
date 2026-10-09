@@ -16,6 +16,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using Microsoft.EntityFrameworkCore;
@@ -109,8 +110,11 @@ internal sealed partial class MongoExpressionTranslator
                 _ => new MongoBinaryExpression(MongoBinaryOperator.OrElse, left, right)
             };
 
+        // The current element of an aggregation element scope (CurrentElementPath) has no path: its own sibling node.
         public static EqualityPair IsNull(string path)
-            => new(new MongoElementNullCheckExpression(path, isNotNull: false), new MongoElementNullCheckExpression(path, isNotNull: true));
+            => path.Length == 0
+                ? new(new MongoCurrentElementNullCheckExpression(isNotNull: false), new MongoCurrentElementNullCheckExpression(isNotNull: true))
+                : new(new MongoElementNullCheckExpression(path, isNotNull: false), new MongoElementNullCheckExpression(path, isNotNull: true));
 
         public static EqualityPair Comparison(MongoExpression left, MongoExpression right)
             => new(
@@ -202,6 +206,75 @@ internal sealed partial class MongoExpressionTranslator
             return null;
 
         return isNotEqual ? pair.Value.NotEqual : pair.Value.Equal;
+    }
+
+    /// <summary>
+    /// <c>c.Lines.Contains(item)</c> over a complex collection (EF also rewrites <c>c.Lines.Any(l =&gt; l == item)</c> to
+    /// it): "some element equals <paramref name="item"/>", each element compared member-wise with the comparand exactly as
+    /// a single complex value is (<see cref="TryBuildComplexEquality"/>), with the element itself as the compared value.
+    /// Rendered as an <c>Any</c> quantifier over the array (an aggregation element scope, like every complex-collection
+    /// quantifier: see <see cref="RequiresAggregationElementScope"/>).
+    /// </summary>
+    /// <remarks>
+    /// The element may be null (EF10 stores null elements), so it is a value that may be absent: a null element equals a
+    /// null comparand and never an instance; a present one equals an instance member-wise. The comparand is a constant, a
+    /// captured instance (read per execution) or an inline construction, as for a single value; a stored comparand (another
+    /// complex value of the row) would need a two-scope element predicate and declines. Pure until it returns: a decline
+    /// leaves nothing behind.
+    /// </remarks>
+    private bool TryTranslateComplexCollectionContains(MethodCallExpression call, [NotNullWhen(true)] out MongoExpression? result)
+        => TryTranslateComplexCollectionContains(call, negated: false, out result);
+
+    /// <summary>
+    /// <see cref="TryTranslateComplexCollectionContains(MethodCallExpression, out MongoExpression?)"/>, or with
+    /// <paramref name="negated"/> its exact complement <c>!c.Lines.Contains(item)</c>: "every element differs", the
+    /// <c>All</c> dual over each element's exact <c>!=</c> (<see cref="EqualityPair"/>), so negation never wraps.
+    /// </summary>
+    private bool TryTranslateComplexCollectionContains(
+        MethodCallExpression call, bool negated, [NotNullWhen(true)] out MongoExpression? result)
+    {
+        result = null;
+        if (!TryMatchComplexCollectionContains(call, out var collection, out var item)
+            || !TryResolveEmbeddedCollectionPath(UnwrapAsQueryable(Unwrap(collection)), out var arrayPath, out var elementType, out var isOuter)
+            || isOuter
+            || elementType is not IComplexType elementComplexType
+            || elementComplexType.ComplexProperty is not { IsCollection: true } collectionProperty
+            || !TryClassifyComplexComparand(Unwrap(item), collectionProperty, out var comparand)
+            || comparand is ComplexComparand.Stored)
+        {
+            return false;
+        }
+
+        // mayBeAbsent: an element can be null. (TryBuildComplexEquality also ORs in the property's own optionality, which
+        // for a collection describes the array, not an element; already implied here.)
+        var pair = TryBuildComplexEquality(collectionProperty, CurrentElementPath, mayBeAbsent: true, comparand);
+        var elementPredicate = negated ? pair?.NotEqual : pair?.Equal;
+        if (elementPredicate is null || !MongoAggregationExpressionRenderer.CanRender(elementPredicate))
+            return false;
+
+        result = new MongoQuantifierExpression(
+            new MongoElementRefExpression(arrayPath, collection.Type), elementPredicate,
+            negated ? MongoQuantifierKind.All : MongoQuantifierKind.Any);
+        return true;
+    }
+
+    /// <summary>
+    /// <c>source.Contains(item)</c> in the spellings EF hands over for a complex collection: <c>Queryable.Contains</c>
+    /// over <c>AsQueryable(c.Lines)</c> (what EF produces, also for <c>Any(l =&gt; l == item)</c>), plus the
+    /// <see cref="TryMatchContainsMethod"/> spellings. Whether the source is a complex collection is the caller's check.
+    /// </summary>
+    private static bool TryMatchComplexCollectionContains(
+        MethodCallExpression call, [NotNullWhen(true)] out Expression? collection, [NotNullWhen(true)] out Expression? item)
+    {
+        if (call is { Method: { Name: nameof(Queryable.Contains), IsStatic: true, DeclaringType: var declaring }, Arguments: [var source, var value] }
+            && declaring == typeof(Queryable))
+        {
+            collection = source;
+            item = value;
+            return true;
+        }
+
+        return TryMatchContainsMethod(call, out collection, out item);
     }
 
     /// <summary>
@@ -340,6 +413,17 @@ internal sealed partial class MongoExpressionTranslator
     private static readonly EqualityPair Never = new(
         new MongoConstantExpression(false, forSerialization: null), new MongoConstantExpression(true, forSerialization: null));
 
+    /// <summary>
+    /// The path of the compared value when it is an element scope's CURRENT element (a complex collection element compared
+    /// whole: <c>c.Lines.Contains(line)</c>): members are element-relative, and its own null check is
+    /// <see cref="MongoCurrentElementNullCheckExpression"/>. Only ever built inside an aggregation element scope.
+    /// </summary>
+    private const string CurrentElementPath = "";
+
+    // `path.member`, or `member` under the current element.
+    private static string JoinPath(string path, string member)
+        => path.Length == 0 ? member : path + "." + member;
+
     private static EqualityPair WhenPresent(string path, bool mayBeAbsent, EqualityPair members)
         => mayBeAbsent ? EqualityPair.And(EqualityPair.IsNull(path).Negate(), members) : members;
 
@@ -371,7 +455,7 @@ internal sealed partial class MongoExpressionTranslator
             if (nested.IsCollection || nested.GetElementName() is not { Length: > 0 } nestedElement)
                 return null;
 
-            var nestedPath = path + "." + nestedElement;
+            var nestedPath = JoinPath(path, nestedElement);
             ComplexComparand? nestedComparand = comparand switch
             {
                 ComplexComparand.Known known
@@ -415,7 +499,7 @@ internal sealed partial class MongoExpressionTranslator
             return null;
         }
 
-        var leafPath = path + "." + element;
+        var leafPath = JoinPath(path, element);
         // NullSafe so a missing and a null member compare alike in every dialect, as the null check does: the query
         // dialect's `{ f: null }` already does; inside a $filter/$map element scope, where a bare field's `$eq` against
         // null is deliberately not $ifNull-normalized, this keeps member-wise equality and `== null` consistent (R16).

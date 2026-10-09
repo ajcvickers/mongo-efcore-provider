@@ -182,13 +182,24 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
             .OfType<IProperty>();
 
     // The complex types `expression` denotes when it is a (possibly nested) single complex-property hop over a mapped
-    // entity; empty otherwise. A complex collection is an array, whose elements are reached by an operator, not a hop.
+    // entity, or a value that is an ELEMENT of a complex collection (a lambda parameter ranging over `c.Lines`, resolved
+    // through ParameterSources), or a hop below such an element; empty otherwise. A complex collection itself is an array,
+    // whose elements are reached by an operator, not a hop.
     private IReadOnlyList<IComplexType> FindComplexHopTypes(Expression expression)
     {
         string hopName;
         Expression hopOwner;
         switch (StripConverts(expression))
         {
+            case ComplexCollectionElementExpression element:
+                return element.ElementTypes;
+
+            case ParameterExpression parameter when !IsMappedEntityType(parameter.Type):
+                return FindParameterElements(parameter) is { Count: > 0 } elements
+                       && elements.All(e => e is ComplexCollectionElementExpression)
+                    ? [.. elements.OfType<ComplexCollectionElementExpression>().SelectMany(e => e.ElementTypes)]
+                    : [];
+
             case MemberExpression { Expression: { } owner } member:
                 hopOwner = owner;
                 hopName = member.Member.Name;
@@ -214,6 +225,26 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
             .ToList();
     }
 
+    // The element complex types of `sequence` when it is a complex collection read off a mapped entity or a complex hop.
+    private IReadOnlyList<IComplexType> FindComplexCollectionElementTypes(Expression sequence)
+    {
+        if (!StripConverts(sequence).TryGetMemberOrEFProperty(out var owner, out var name))
+        {
+            return [];
+        }
+
+        var ownerType = StripConverts(owner).Type;
+        IEnumerable<ITypeBase> owners = IsMappedEntityType(ownerType)
+            ? _queryContext.Context.Model.FindEntityTypes(ownerType)
+            : FindComplexHopTypes(owner);
+
+        return owners
+            .Select(t => t.FindComplexProperty(name))
+            .Where(p => p is { IsCollection: true })
+            .Select(p => p!.ComplexType)
+            .ToList();
+    }
+
     private Dictionary<ParameterExpression, Expression[]> ParameterSources
         => _storedOrderingParameterSources ??= LambdaParameterSourceCollector.Collect(_storedOrderingQueryRoots);
 
@@ -233,6 +264,13 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
         if (sequence.Type.TryGetItemType() is { } itemType && IsMappedEntityType(itemType))
         {
             return [];
+        }
+
+        // A complex collection (`c.Lines`, `c.Address.Lines`, EF.Property spellings): its elements are complex values,
+        // whose leaves are stored scalars to check (FindComplexHopTypes resolves a member of one).
+        if (FindComplexCollectionElementTypes(sequence) is { Count: > 0 } complexElementTypes)
+        {
+            return [new ComplexCollectionElementExpression(complexElementTypes, sequence.Type.TryGetItemType()!)];
         }
 
         // A mapped primitive collection (`x.Scores`, EF.Property(x, "Scores")): its elements are stored values of that
@@ -822,6 +860,18 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
             finder.Visit(expression);
             return finder.Found;
         }
+    }
+
+    // An element of a complex collection (`c.Lines`): a complex value whose leaves are stored scalars of these types.
+    private sealed class ComplexCollectionElementExpression(IReadOnlyList<IComplexType> elementTypes, Type elementType) : Expression
+    {
+        public IReadOnlyList<IComplexType> ElementTypes { get; } = elementTypes;
+
+        public override ExpressionType NodeType => ExpressionType.Extension;
+
+        public override Type Type { get; } = elementType;
+
+        protected override Expression VisitChildren(System.Linq.Expressions.ExpressionVisitor visitor) => this;
     }
 
     // The element of a mapped primitive collection (`x.Scores`): a stored value of that property.
