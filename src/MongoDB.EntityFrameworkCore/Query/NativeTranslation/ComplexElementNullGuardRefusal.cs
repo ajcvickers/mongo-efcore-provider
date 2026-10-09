@@ -18,7 +18,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Infrastructure;
 
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -82,13 +84,126 @@ internal static class ComplexElementNullGuardRefusal
             return null;
         }
 
-        var finder = new Finder(model);
+        var finder = new Finder(model, strict: false, parameterValue: null);
         finder.Visit(captured);
         return finder.Found;
     }
 
-    private sealed class Finder(IModel model) : ExpressionVisitor
+    /// <summary>
+    /// Bulk <c>ExecuteUpdate</c>/<c>ExecuteDelete</c> (task 14): the filter and every <c>SetProperty</c> value always run
+    /// on the driver-LINQ bridge, so a complex-element read the driver evaluates differently from ruling R17 would update
+    /// or DELETE rows the equivalent query excludes. Throws <see cref="NativeTranslationNotSupportedException"/> unless every
+    /// read of a complex collection's element in <paramref name="expressions"/> is one the driver provably answers like R17
+    /// (the strict allow-list, <see cref="Finder"/>); a no-op under explicit <see cref="MongoQueryMode.DriverLinq"/>, where
+    /// the matching query runs on the driver too.
+    /// </summary>
+    /// <param name="expressions">The bulk source chain and each setter value.</param>
+    /// <param name="model">The model.</param>
+    /// <param name="mode">The context's query mode.</param>
+    /// <param name="parameterValue">
+    /// The value of a query parameter for this execution (by name), so a comparand known non-null at run time is admitted.
+    /// </param>
+    internal static void ThrowIfBulkMisreadsNullElements(
+        IEnumerable<Expression?> expressions, IModel model, MongoQueryMode mode, Func<string, object?> parameterValue)
     {
+        if (mode == MongoQueryMode.DriverLinq || FindForBulk(expressions, model, parameterValue) is not { } found)
+        {
+            return;
+        }
+
+        throw new NativeTranslationNotSupportedException(
+            $"ExecuteUpdate and ExecuteDelete run their filter and SetProperty values on driver-LINQ, which evaluates {found.Shape} "
+            + $"over an element of the complex collection '{found.Collection}' differently from a query when the element is null "
+            + "(the members of a null element are missing, which the server orders below every value and does not equate with "
+            + "null) or when the collection is null, so the operation could update or delete rows the same query does not "
+            + "return. No document was modified. Inside a complex collection's element predicate a bulk operation supports "
+            + "'==' and '!=' between a member and a non-null value, a bool member and its negation, a non-nullable local "
+            + "list's Contains of a member, and '&&', '||' and '!' over those; select the keys with a query and update or "
+            + "delete by key, or use MongoQueryMode.DriverLinq to opt in to the driver-LINQ evaluation.");
+    }
+
+    /// <summary>The strict (bulk) scan of <see cref="ThrowIfBulkMisreadsNullElements"/>. Exposed for unit tests.</summary>
+    internal static (string Shape, string Collection)? FindForBulk(
+        IEnumerable<Expression?> expressions, IModel model, Func<string, object?>? parameterValue = null)
+    {
+        // A model with no complex collection has nothing to refuse: one cached lookup, no walk (the strict no-op for every
+        // non-complex-collection bulk operation).
+        if (ModelComplexTypes.For(model).Collections.Count == 0)
+        {
+            return null;
+        }
+
+        var finder = new Finder(model, strict: true, parameterValue);
+        foreach (var expression in expressions)
+        {
+            if (expression is not null && finder.Found is null)
+            {
+                // A SetProperty value is a bare body over the setter's (free) entity parameter: bind it like a lambda's.
+                finder.BindFreeEntityParameters(expression);
+                finder.Visit(expression);
+            }
+        }
+
+        return finder.Found;
+    }
+
+    /// <summary>
+    /// <para>
+    /// Non-strict (queries, R20): finds the deny-listed null-guard-requiring node kinds in keyed element scopes.
+    /// </para>
+    /// <para>
+    /// Strict (bulk): additionally, every read of a keyed complex element parameter must sit in an ALLOWED ATOM, a node the
+    /// driver evaluates over a null element exactly as R17 does: <c>member ==/!= v</c> with <c>v</c> non-null and element-free
+    /// (not over a bool member: R19 reads a null element's bool as false, the driver's <c>$eq</c> misses it); a bare
+    /// non-nullable bool member (a lambda body, an <c>&amp;&amp;</c>/<c>||</c> operand, a <c>!</c> operand); and
+    /// <c>list.Contains(member)</c> over a local list whose item type can't hold null. Each atom gives the same truth value
+    /// on both paths, so every <c>&amp;&amp;</c>/<c>||</c>/<c>!</c> combination of them does too. Any other read (a
+    /// relational comparison, arithmetic, a string method, a nested collection, a <c>Select</c>/<c>OrderBy</c> body, a
+    /// comparison with another member), an element-typed lambda parameter the keying can't bind (e.g. through a
+    /// navigation), and an operator over an OPTIONAL complex collection (which the bridge doesn't normalize, so the server
+    /// errors mid-operation on a null one) are refused. A positive list, so a shape nobody classified is refused rather
+    /// than served: the R21 limits of the query net don't apply to bulk.
+    /// </para>
+    /// </summary>
+    // Every complex type and complex collection of a (read-only, finalized) model, computed once per model.
+    private sealed class ModelComplexTypes
+    {
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IModel, ModelComplexTypes> Cache = new();
+
+        private ModelComplexTypes(IModel model)
+        {
+            var types = new List<IReadOnlyComplexType>();
+            var collections = new List<IReadOnlyComplexProperty>();
+            var pending = new Stack<IReadOnlyTypeBase>(model.GetEntityTypes());
+            while (pending.Count > 0)
+            {
+                foreach (var complexProperty in pending.Pop().GetComplexProperties())
+                {
+                    types.Add(complexProperty.ComplexType);
+                    if (complexProperty.IsCollection)
+                    {
+                        collections.Add(complexProperty);
+                    }
+
+                    pending.Push(complexProperty.ComplexType);
+                }
+            }
+
+            Types = types;
+            Collections = collections;
+        }
+
+        public IReadOnlyList<IReadOnlyComplexType> Types { get; }
+
+        public IReadOnlyList<IReadOnlyComplexProperty> Collections { get; }
+
+        public static ModelComplexTypes For(IModel model) => Cache.GetValue(model, m => new ModelComplexTypes(m));
+    }
+
+    private sealed class Finder(IModel model, bool strict, Func<string, object?>? parameterValue) : ExpressionVisitor
+    {
+        private HashSet<Type>? _complexElementClrTypes;
+
         // A lambda parameter -> the structural type(s) it ranges over (an entity for a query root or a join side, an
         // element type for an embedded collection's element). More than one when a CLR type maps to several entity types.
         private readonly Dictionary<ParameterExpression, IReadOnlyList<ITypeBase>> _scopes = new();
@@ -108,6 +223,17 @@ internal static class ComplexElementNullGuardRefusal
         {
             foreach (var parameter in node.Parameters)
             {
+                // Strict: a lambda over complex collection elements the keying couldn't bind (reached through a navigation,
+                // a join, an operator nobody classified) can't be checked, so it is refused. Checked before the entity-type
+                // binding below, so a CLR type that is also an (owned) entity type isn't taken for a root; an owned
+                // element's lambda was already bound by its operator.
+                if (strict && !_scopes.ContainsKey(parameter) && ComplexElementClrTypes.Contains(parameter.Type))
+                {
+                    Found = ($"a lambda over complex collection elements ('{node}') that the bulk check cannot bind to its collection",
+                        parameter.Type.Name);
+                    return node;
+                }
+
                 if (!_scopes.ContainsKey(parameter) && model.FindEntityTypes(parameter.Type).ToList() is { Count: > 0 } entityTypes)
                 {
                     _scopes[parameter] = entityTypes;
@@ -117,33 +243,77 @@ internal static class ComplexElementNullGuardRefusal
             return base.VisitLambda(node);
         }
 
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (strict)
+            {
+                // `c.Lines.Count`: a required collection reads empty for a null/missing array, as the bridge's coalesce to
+                // `[]` does; an optional one's `$size` over null is a server error, possibly after earlier writes.
+                if (node is { Member.Name: nameof(List<int>.Count), Expression: { } countReceiver }
+                    && ResolveCollectionReads(countReceiver.RemoveConvert()!) is { Count: > 0 } counted
+                    && counted.All(c => !c.IsOptional()))
+                {
+                    _approvedCollectionReads.Add(countReceiver.RemoveConvert()!);
+                }
+
+                if (IsComplexCollectionRead(node) && !_approvedCollectionReads.Contains(node))
+                {
+                    Found = ("a read of the collection other than as the source of Any, All, Count, LongCount, Where, Skip or Take",
+                        DescribeCollectionRead(node));
+                    return node;
+                }
+            }
+
+            return base.VisitMember(node);
+        }
+
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             // Bind each single-parameter lambda of a sequence operator to the elements of its source.
             if ((node.Method.DeclaringType == typeof(Queryable) || node.Method.DeclaringType == typeof(Enumerable))
-                && node.Arguments.Count >= 2)
+                && node.Arguments.Count >= (strict ? 1 : 2))
             {
-                var elementScopes = ResolveElementScopes(node.Arguments[0], out var collectionName);
+                var elementScopes = ResolveElementScopes(node.Arguments[0], out var collectionName, out var collectionRead, out var collections);
+                var isComplexElementScope = collectionName is not null && elementScopes.Count > 0 && elementScopes.All(s => s is IComplexType);
+                if (strict && isComplexElementScope && !IsBulkSafeOperator(node, collectionRead!, collections, collectionName!))
+                {
+                    return node;
+                }
+
                 if (elementScopes.Count > 0)
                 {
                     for (var i = 1; i < node.Arguments.Count; i++)
                     {
-                        if (node.Arguments[i].UnwrapQuote() is LambdaExpression { Parameters: [var parameter] })
+                        if (node.Arguments[i].UnwrapQuote() is LambdaExpression { Parameters: [var parameter] } lambda)
                         {
                             _scopes[parameter] = elementScopes;
-                            if (collectionName is not null && elementScopes.All(s => s is IComplexType))
+                            if (isComplexElementScope)
                             {
-                                _complexElementCollections[parameter] = collectionName;
+                                _complexElementCollections[parameter] = collectionName!;
+                                if (strict && !IsBulkSafePredicate(lambda.Body))
+                                {
+                                    Found = ($"the element predicate '{lambda}'", collectionName!);
+                                    return node;
+                                }
                             }
                         }
                     }
                 }
             }
 
+            if (strict && IsComplexCollectionRead(node) && !_approvedCollectionReads.Contains(node))
+            {
+                Found = ("a read of the collection other than as the source of Any, All, Count, LongCount, Where, Skip or Take",
+                    DescribeCollectionRead(node));
+                return node;
+            }
+
             // `list.Contains(s.Zip)` (Enumerable/Queryable, a List<T> instance method, or the C# 14 span lowering
             // MemoryExtensions.Contains(span, value[, comparer])): the needle is a MEMBER of the element. The element itself
             // as the needle (`list.Contains(s)`) is Task 12's member-wise equality, owned elsewhere.
-            if (_complexElementCollections.Count > 0 && node.Method.Name == nameof(Enumerable.Contains)
+            // (Strict: the positive list in IsBulkSafePredicate decides instead, so a deny-listed node kind it admits, e.g.
+            // a non-nullable list's Contains, isn't refused here.)
+            if (!strict && _complexElementCollections.Count > 0 && node.Method.Name == nameof(Enumerable.Contains)
                 && TryGetContainsOperands(node, out var sequence, out var value)
                 && value.RemoveConvert() is not ParameterExpression
                 && FindComplexElementRead(value) is { } containsElement
@@ -158,7 +328,7 @@ internal static class ComplexElementNullGuardRefusal
 
         protected override Expression VisitBinary(BinaryExpression node)
         {
-            if (_complexElementCollections.Count > 0)
+            if (!strict && _complexElementCollections.Count > 0)
             {
                 switch (node.NodeType)
                 {
@@ -243,8 +413,17 @@ internal static class ComplexElementNullGuardRefusal
         // The element structural type(s) of a sequence operator's source: a member chain (owned / complex hops, then
         // an embedded collection) rooted on a bound parameter, under pass-through operators. Empty when unknown.
         private IReadOnlyList<ITypeBase> ResolveElementScopes(Expression source, out string? collectionName)
+            => ResolveElementScopes(source, out collectionName, out _, out _);
+
+        // As above; also the collection read the chain starts from (`r.Stops`, under pass-through operators) and the
+        // collection member(s) it resolves to.
+        private IReadOnlyList<ITypeBase> ResolveElementScopes(
+            Expression source, out string? collectionName, out Expression? collectionRead, out IReadOnlyList<IReadOnlyComplexProperty> collections)
         {
             collectionName = null;
+            collectionRead = null;
+            var resolvedCollections = new List<IReadOnlyComplexProperty>();
+            collections = resolvedCollections;
             source = source.RemoveConvert()!;
             while (source is MethodCallExpression
                    {
@@ -259,6 +438,7 @@ internal static class ComplexElementNullGuardRefusal
                 source = passThrough.Arguments[0].RemoveConvert()!;
             }
 
+            collectionRead = source;
             var names = new List<string>();
             var current = source;
             while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
@@ -279,10 +459,289 @@ internal static class ComplexElementNullGuardRefusal
                 {
                     elementScopes.Add(collection.ElementType);
                     collectionName ??= $"{collection.Collection.DeclaringType.DisplayName()}.{collection.Collection.Name}";
+                    if (collection.Collection is IReadOnlyComplexProperty complexCollection)
+                    {
+                        resolvedCollections.Add(complexCollection);
+                    }
                 }
             }
 
             return elementScopes;
+        }
+
+        // ---- Strict (bulk) allow-list ----
+
+        internal void BindFreeEntityParameters(Expression expression)
+        {
+            foreach (var parameter in ParameterCollector.Collect(expression))
+            {
+                if (!_scopes.ContainsKey(parameter) && model.FindEntityTypes(parameter.Type).ToList() is { Count: > 0 } entityTypes)
+                {
+                    _scopes[parameter] = entityTypes;
+                }
+            }
+        }
+
+        // The FREE parameters of an expression (a setter value's entity parameter), never one a lambda inside it declares.
+        private sealed class ParameterCollector : ExpressionVisitor
+        {
+            private readonly HashSet<ParameterExpression> _parameters = [];
+            private readonly HashSet<ParameterExpression> _declared = [];
+
+            public static IReadOnlyCollection<ParameterExpression> Collect(Expression expression)
+            {
+                var collector = new ParameterCollector();
+                collector.Visit(expression);
+                return [.. collector._parameters.Except(collector._declared)];
+            }
+
+            protected override Expression VisitLambda<T>(Expression<T> node)
+            {
+                _declared.UnionWith(node.Parameters);
+                return base.VisitLambda(node);
+            }
+
+            protected override Expression VisitParameter(ParameterExpression node)
+            {
+                _parameters.Add(node);
+                return node;
+            }
+
+            protected override Expression VisitExtension(Expression node) => node;
+        }
+
+        // Collection reads a consumer has approved (the source of an allowed operator, a required collection's `.Count`).
+        // Approval happens when the consumer is visited, before its children. An optional collection's null check
+        // (`r.Opt == null`) is NOT approved: the driver renders `{Opt: null}`, which also matches an array that CONTAINS a
+        // null element (measured: [null] matched), so the operation would select a non-null collection.
+        private readonly HashSet<Expression> _approvedCollectionReads = new(ReferenceEqualityComparer.Instance);
+
+        // The CLR types of every complex collection's element in the model (for the unbound-lambda check).
+        private HashSet<Type> ComplexElementClrTypes
+            => _complexElementClrTypes ??= [.. ModelComplexTypes.For(model).Collections.Select(c => c.ComplexType.ClrType)];
+
+        // The operators over complex collection elements a bulk filter/setter may use: quantifiers and counts (whose
+        // predicates are checked by IsBulkSafePredicate) and the pass-throughs that don't read an element. An operator over
+        // an OPTIONAL collection is refused: the bridge does not normalize a null optional array, so the server errors
+        // (deleteMany/updateMany are not atomic: documents before the failing one are already written).
+        private bool IsBulkSafeOperator(
+            MethodCallExpression node, Expression collectionRead, IReadOnlyList<IReadOnlyComplexProperty> collections, string collectionName)
+        {
+            if (collections.Count == 0 || collections.Any(c => c.IsOptional()))
+            {
+                Found = ($"'{node.Method.Name}' over an optional complex collection", collectionName);
+                return false;
+            }
+
+            if (node.Method.Name is not (nameof(Enumerable.Any) or nameof(Enumerable.All) or nameof(Enumerable.Count)
+                or nameof(Enumerable.LongCount) or nameof(Enumerable.Where) or nameof(Enumerable.Skip) or nameof(Enumerable.Take)
+                or nameof(Queryable.AsQueryable) or nameof(Enumerable.ToList) or nameof(Enumerable.ToArray)))
+            {
+                Found = ($"the operator '{node.Method.Name}'", collectionName);
+                return false;
+            }
+
+            _approvedCollectionReads.Add(collectionRead);
+            return true;
+        }
+
+        // Whether `expression` (a lambda body over complex elements) is built only from atoms the driver evaluates over a
+        // null element (and a missing member) exactly as R17 does. Parts that read no complex element are left to the
+        // outer visit (which checks nested lambdas over other collections when it reaches them).
+        private bool IsBulkSafePredicate(Expression expression)
+        {
+            if (!ReadsComplexElement(expression))
+            {
+                return true;
+            }
+
+            switch (expression)
+            {
+                case BinaryExpression { NodeType: ExpressionType.AndAlso or ExpressionType.OrElse } logical:
+                    return IsBulkSafePredicate(logical.Left) && IsBulkSafePredicate(logical.Right);
+
+                case UnaryExpression { NodeType: ExpressionType.Not, Type: var notType } not when notType == typeof(bool):
+                    return IsBulkSafePredicate(not.Operand);
+
+                // `member == v` / `!= v`, v a non-null value: a null element's member is MISSING, `$eq` false and `$ne` true
+                // in every dialect the driver renders, which is R17's `null == v` / `null != v`. Not over a non-nullable bool
+                // (R19 reads it false, so `== false` is true there) unless v is true.
+                case BinaryExpression { NodeType: ExpressionType.Equal or ExpressionType.NotEqual } equality:
+                    return (IsElementLeafRead(equality.Left, out var leftLeaf) && TryGetKnownValue(equality.Right, out var rightValue)
+                               && IsSafeEqualityValue(leftLeaf, rightValue))
+                           || (IsElementLeafRead(equality.Right, out var rightLeaf) && TryGetKnownValue(equality.Left, out var leftValue)
+                               && IsSafeEqualityValue(rightLeaf, leftValue));
+
+                // `list.Contains(member)`: `$in` of a MISSING value is false, R17's `list.Contains(null)` for a list that
+                // can't hold null (a non-nullable item type, or a runtime value without null). Not over a bool member (R19).
+                case MethodCallExpression { Method.Name: nameof(Enumerable.Contains) } contains
+                    when TryGetContainsOperands(contains, out var sequence, out var value):
+                    return IsElementLeafRead(value, out var needle)
+                           && needle.ClrType != typeof(bool)
+                           && TryGetKnownValue(sequence, out var list)
+                           && list is System.Collections.IEnumerable items
+                           && (sequence.Type.TryGetItemType() is { IsValueType: true } itemType && Nullable.GetUnderlyingType(itemType) is null
+                               || !items.Cast<object?>().Any(i => i is null));
+
+                // A bare non-nullable, default-serialized bool member: the driver's truthiness of MISSING is false, R19's
+                // read of a null element's bool.
+                default:
+                    return expression.Type == typeof(bool)
+                           && IsElementLeafRead(expression, out var flag)
+                           && flag.ClrType == typeof(bool)
+                           && HasDefaultSerialization(flag);
+            }
+        }
+
+        private static bool IsSafeEqualityValue(IReadOnlyProperty leaf, object? value)
+            => value is not null && (leaf.ClrType != typeof(bool) || value is true);
+
+        private static bool HasDefaultSerialization(IReadOnlyProperty property)
+            => property.GetValueConverter() is null
+               && (property as IProperty)?.FindTypeMapping()?.Converter is null
+               && property.GetBsonRepresentation() is null;
+
+        // A mapped scalar (not a collection) read off a keyed complex element parameter, directly or through single complex
+        // hops of the element (`s.City`, `s.Location.Lat`, EF.Property spellings), under converts. Resolved structurally
+        // against the element's complex type(s).
+        private bool IsElementLeafRead(Expression expression, out IReadOnlyProperty leaf)
+        {
+            leaf = null!;
+            var names = new List<string>();
+            var current = expression.RemoveConvert()!;
+            while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
+            {
+                names.Insert(0, name);
+                current = receiver.RemoveConvert()!;
+            }
+
+            if (names.Count == 0
+                || current is not ParameterExpression parameter
+                || !_complexElementCollections.ContainsKey(parameter)
+                || !_scopes.TryGetValue(parameter, out var scopes))
+            {
+                return false;
+            }
+
+            IReadOnlyProperty? resolvedLeaf = null;
+            foreach (var scope in scopes)
+            {
+                if (!StructuralPath.TryResolve(scope, names, names.Count - 1, out var resolved)
+                    || resolved.Leaf is not IReadOnlyProperty property
+                    || (property.ClrType != typeof(string) && property.ClrType.TryGetItemType() is not null))
+                {
+                    return false;
+                }
+
+                resolvedLeaf ??= property;
+            }
+
+            leaf = resolvedLeaf!;
+            return resolvedLeaf is not null;
+        }
+
+        // A value known when the operation runs: a constant or a query parameter (under converts and the span lowering's
+        // implicit conversion). Never a read of the row.
+        private bool TryGetKnownValue(Expression expression, out object? value)
+        {
+            value = null;
+            var current = expression.RemoveConvert()!;
+            if (current is MethodCallExpression { Method.Name: "op_Implicit", Object: null, Arguments: [var converted] })
+            {
+                current = converted.RemoveConvert()!;
+            }
+
+            switch (current)
+            {
+                case ConstantExpression constant:
+                    value = constant.Value;
+                    return true;
+
+                // An inline array of constants (EF parameterizes it in a real query; kept for completeness).
+                case NewArrayExpression { NodeType: ExpressionType.NewArrayInit } array
+                    when array.Expressions.All(e => e.RemoveConvert() is ConstantExpression):
+                    var items = Array.CreateInstance(array.Type.GetElementType()!, array.Expressions.Count);
+                    for (var i = 0; i < array.Expressions.Count; i++)
+                    {
+                        items.SetValue(((ConstantExpression)array.Expressions[i].RemoveConvert()!).Value, i);
+                    }
+
+                    value = items;
+                    return true;
+
+                case Microsoft.EntityFrameworkCore.Query.QueryParameterExpression parameter when parameterValue is not null:
+                    value = parameterValue(parameter.Name);
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        // Whether `expression` reads a complex element (a keyed element parameter, or any parameter of a complex element's
+        // CLR type) that is not declared inside it.
+        private bool ReadsComplexElement(Expression expression)
+        {
+            var finder = new FreeElementReadFinder(this);
+            finder.Visit(expression);
+            return finder.Found;
+        }
+
+        // Keyed to a complex element scope, or unbound and of a complex element's CLR type (a parameter bound to another
+        // scope, e.g. an owned element sharing the CLR type, is not a complex element).
+        private bool IsComplexElementParameter(ParameterExpression parameter)
+            => _complexElementCollections.ContainsKey(parameter)
+               || (!_scopes.ContainsKey(parameter) && ComplexElementClrTypes.Contains(parameter.Type));
+
+        // A member read naming a complex COLLECTION on its receiver's type(s), resolved by CLR type (an over-approximation,
+        // so it catches reads the structural keying can't bind: navigation and join roots).
+        private bool IsComplexCollectionRead(Expression expression)
+            => ResolveCollectionReads(expression).Count > 0;
+
+        private IReadOnlyList<IReadOnlyComplexProperty> ResolveCollectionReads(Expression expression)
+        {
+            if (!expression.TryGetMemberOrEFProperty(out var receiver, out var name))
+            {
+                return [];
+            }
+
+            var receiverType = receiver.RemoveConvert()!.Type;
+            IEnumerable<IReadOnlyTypeBase> owners = model.FindEntityTypes(receiverType);
+            owners = owners.Concat(ModelComplexTypes.For(model).Types.Where(t => t.ClrType == receiverType));
+            return [.. owners.Select(t => t.FindComplexProperty(name)).OfType<IReadOnlyComplexProperty>().Where(p => p.IsCollection)];
+        }
+
+        private string DescribeCollectionRead(Expression expression)
+            => ResolveCollectionReads(expression) is [var first, ..]
+                ? $"{first.DeclaringType.DisplayName()}.{first.Name}"
+                : expression.ToString();
+
+        private sealed class FreeElementReadFinder(Finder owner) : ExpressionVisitor
+        {
+            private readonly HashSet<ParameterExpression> _declared = [];
+
+            public bool Found { get; private set; }
+
+            public override Expression? Visit(Expression? node)
+                => Found ? node : base.Visit(node);
+
+            protected override Expression VisitLambda<T>(Expression<T> node)
+            {
+                _declared.UnionWith(node.Parameters);
+                return base.VisitLambda(node);
+            }
+
+            protected override Expression VisitParameter(ParameterExpression node)
+            {
+                if (!_declared.Contains(node) && owner.IsComplexElementParameter(node))
+                {
+                    Found = true;
+                }
+
+                return node;
+            }
+
+            protected override Expression VisitExtension(Expression node) => node;
         }
 
         // Whether an operand reads a keyed complex element parameter DIRECTLY (not from inside a nested lambda): a
