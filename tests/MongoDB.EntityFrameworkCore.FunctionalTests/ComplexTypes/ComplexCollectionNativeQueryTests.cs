@@ -1378,6 +1378,201 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         Assert.Contains("complex value type collections are not supported", ex.Message);
     }
 
+
+    // ── Known limits of the R20 net (ruling R21): characterization pins ─────────────────────────────────────────
+
+    public class StoreTag
+    {
+        public string? Label { get; set; }
+        public int Rank { get; set; }
+    }
+
+    public class Store
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public List<StoreTag> Tags { get; set; } = [];
+        public List<Receipt> Receipts { get; set; } = [];
+    }
+
+    public class Receipt
+    {
+        public ObjectId Id { get; set; }
+        public ObjectId StoreId { get; set; }
+        public Store Store { get; set; } = null!;
+        public int Amount { get; set; }
+    }
+
+    private sealed class StoreContext(DbContextOptions options, string stores, string receipts) : DbContext(options)
+    {
+        public DbSet<Store> Stores => Set<Store>();
+        public DbSet<Receipt> Receipts => Set<Receipt>();
+
+        protected override void OnModelCreating(ModelBuilder mb)
+        {
+            mb.Entity<Store>(b =>
+            {
+                b.ToCollection(stores);
+                b.ComplexCollection(s => s.Tags);
+                b.HasMany(s => s.Receipts).WithOne(s => s.Store).HasForeignKey(s => s.StoreId);
+            });
+            mb.Entity<Receipt>().ToCollection(receipts);
+        }
+    }
+
+    /// <summary>
+    /// s1 Tags [hot(rank 5)] with a receipt of 5; s2 Tags [] with a receipt of 7; s3 Tags [null] (a null element only) with a
+    /// receipt of 9.
+    /// </summary>
+    private Func<MongoQueryMode, List<string>> Receipts(
+        Func<StoreContext, IEnumerable<string>> query, [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var stores = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + suffix + "_s";
+        var receipts = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + suffix + "_r";
+        var s1 = ObjectId.GenerateNewId();
+        var s2 = ObjectId.GenerateNewId();
+        var s3 = ObjectId.GenerateNewId();
+        database.MongoDatabase.GetCollection<BsonDocument>(stores).InsertMany(
+        [
+            new BsonDocument { { "_id", s1 }, { "Name", "s1" }, { "Tags", new BsonArray { new BsonDocument { { "Label", "hot" }, { "Rank", 5 } } } } },
+            new BsonDocument { { "_id", s2 }, { "Name", "s2" }, { "Tags", new BsonArray() } },
+            new BsonDocument { { "_id", s3 }, { "Name", "s3" }, { "Tags", new BsonArray { BsonNull.Value } } }
+        ]);
+        database.MongoDatabase.GetCollection<BsonDocument>(receipts).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "StoreId", s1 }, { "Amount", 5 } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "StoreId", s2 }, { "Amount", 7 } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "StoreId", s3 }, { "Amount", 9 } }
+        ]);
+        return mode =>
+        {
+            var builder = new DbContextOptionsBuilder<StoreContext>()
+                .UseMongoDB(database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName)
+                .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+                .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+            new MongoDbContextOptionsBuilder(builder).UseQueryMode(mode);
+            using var db = new StoreContext(builder.Options, stores, receipts);
+            return query(db).ToList();
+        };
+    }
+
+    private static IEnumerable<string> Amounts(IQueryable<Receipt> q) => q.Select(s => s.Amount.ToString()).ToList().Order(StringComparer.Ordinal);
+
+    public class AliasedRoute
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public string? Alias { get; set; }
+        public List<Stop> Stops { get; set; } = [];
+    }
+
+    /// <summary>The Route seed (r-null, r-mixed, r-full) with a nullable root member <c>Alias</c> that is null on every row.</summary>
+    private Func<MongoQueryMode, List<string>> AliasedRoutes(
+        Func<IQueryable<AliasedRoute>, IEnumerable<string>> query, [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+    {
+        var collection = database.CreateCollection<AliasedRoute>(Unique(name));
+        Raw(collection).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "r-null" }, { "Alias", BsonNull.Value }, { "Stops", new BsonArray { BsonNull.Value } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "r-mixed" }, { "Alias", BsonNull.Value }, { "Stops", new BsonArray { StopDoc("Oslo", 5, true, "x"), BsonNull.Value } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "r-full" }, { "Alias", BsonNull.Value }, { "Stops", new BsonArray { StopDoc("Oslo", 5, true, "x") } } }
+        ]);
+        return mode => Run(collection, mode, mb => mb.Entity<AliasedRoute>().ComplexCollection(r => r.Stops, s =>
+        {
+            s.ComplexProperty(x => x.Location);
+            s.ComplexCollection(x => x.Tags);
+        }), query);
+    }
+
+    /// <summary>
+    /// A KNOWN LIMIT of the R20 net (ruling R21): the native path declines, the scanner doesn't key the shape, and the default
+    /// mode serves the DRIVER's rows, which differ from the hand-written R17 answer. Pinned to the exact measured rows so the
+    /// test breaks loudly when the behaviour changes (the shape becomes native, refused, or the driver changes).
+    /// </summary>
+    private static void KnownLimit(Func<MongoQueryMode, List<string>> run, string[] r17Rows, string[] measuredRows)
+    {
+        Assert.False(r17Rows.SequenceEqual(measuredRows), "not a limit: the measured rows equal R17's; pin it as correct instead");
+        PerMode(run, measuredRows, NotNative, Serves, Serves);
+    }
+
+    [Fact]
+    public void Known_limits_of_the_R20_refusal_net_serve_driver_rows_in_default_mode()
+    {
+        // Ruling R21: the R20 scanner is a BEST-EFFORT net for structurally keyable shapes, not a guarantee. Each row below is
+        // "known limit (R21): default mode serves driver rows that differ from R17" unless its comment says otherwise. The R17
+        // answer is in the comment; the pin is the MEASURED rows.
+
+        // I1: element predicates reached through a NAVIGATION root. The scanner binds lambda roots by FindEntityTypes(param.Type)
+        // and never keys the join's TransparentIdentifier parameter, so `s.Store.Tags` isn't resolved to an element scope; the
+        // bridge coalesces the joined array and the driver evaluates the predicate with missing semantics. s3's only element is
+        // null: R17 excludes 9 (`null != null` false; `null < 1` false); the driver includes it in both.
+        KnownLimit(Receipts(db => Amounts(db.Receipts.Where(s => s.Store.Tags.Any(t => t.Label != null)))), ["5"], ["5", "9"]);
+        KnownLimit(Receipts(db => Amounts(db.Receipts.Where(s => s.Store.Tags.Any(t => t.Rank < 1)))), [], ["9"]);
+        // Control: an equality through the same navigation needs no guard and the fallback is correct.
+        Declines(Receipts(db => Amounts(db.Receipts.Where(s => s.Store.Tags.Any(t => t.Label == "hot")))), "5");
+
+        // I2: element-leaf Select chains. `Select(s => s.Floor).Any(f => f < 1)` is served NATIVELY (correct: R17 []; the
+        // driver's unguarded $lt over the $map'd missing Floor includes the null-element rows): pinned as correct, not a limit.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Select(s => s.Floor).Any(f => f < 1)))), [], ["r-mixed", "r-null"]);
+        // `Select(s => s.Verified).Contains(false)`: R19 says a null element's Verified reads false ([r-mixed, r-null]); the
+        // projected list holds MISSING for the null element, which the driver's $in never equates with false: [].
+        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Select(s => s.Verified).Contains(false)))), ["r-mixed", "r-null"], []);
+
+        // Null tests NOT spelled `== null` inside a declined predicate (the date part over a date-add declines; the disjunct is
+        // never true). The scanner looks for `==`/`!=` against a null CONSTANT only.
+        // `Zip.HasValue`: R17 [r-full, r-mixed] (the null element's Zip is null); the driver's `$ne: [missing, null]` adds r-null.
+        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip.HasValue || s.When.AddDays(1).Year == 1999)))),
+            ["r-full", "r-mixed"], ["r-full", "r-mixed", "r-null"]);
+        // `Zip == none` (a null PARAMETER): R17 [r-mixed, r-null]; the driver's `$eq` isn't missing-safe: [].
+        int? none = null;
+        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip == none || s.When.AddDays(1).Year == 1999)))), ["r-mixed", "r-null"], []);
+        // `string.IsNullOrEmpty(Note)`: R17 [r-mixed, r-null] (Oslo's Note is "n"); the driver: [].
+        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => string.IsNullOrEmpty(s.Note) || s.When.AddDays(1).Year == 1999)))),
+            ["r-mixed", "r-null"], []);
+        // `Note == r.Alias` (a null ROOT member): R17 [r-mixed, r-null] (null == null); the driver: [].
+        KnownLimit(AliasedRoutes(q => q.Where(r => r.Stops.Any(s => s.Note == r.Alias || s.When.AddDays(1).Year == 1999)).Select(r => r.Name).ToList().Order(StringComparer.Ordinal)),
+            ["r-mixed", "r-null"], []);
+
+        // Indexed overloads: EF itself refuses `Where((s, i) => ...)` over the collection in EVERY mode (loud, never rows), so
+        // the unkeyed indexed lambda can't serve wrong rows today. Already refused; pinned.
+        PerMode(Routes(q => RNames(q.Where(r => r.Stops.Where((s, i) => s.Floor < 1).Any()))), [], NotTranslated, NotTranslated, NotTranslated);
+
+        // `SelectMany(r => r.Stops)` over a complex collection (untested before this round): EF refuses it in EVERY mode (bare,
+        // with a leaf Select, with Count(), with a relational Where): "could not be translated". Already refused; pinned.
+        PerMode(Routes(q => q.SelectMany(r => r.Stops).ToList().Select(s => s == null ? "<null>" : s.City)), [], NotTranslated, NotTranslated, NotTranslated);
+        PerMode(Routes(q => q.SelectMany(r => r.Stops).Select(s => s.City).ToList()), [], NotTranslated, NotTranslated, NotTranslated);
+        PerMode(Routes(q => [q.SelectMany(r => r.Stops).Count().ToString()]), [], NotTranslated, NotTranslated, NotTranslated);
+        PerMode(Routes(q => q.SelectMany(r => r.Stops).Where(s => s.Floor < 1).Select(s => s.City).ToList()), [], NotTranslated, NotTranslated, NotTranslated);
+    }
+
+    [Fact]
+    public void Relational_over_a_nested_element_lambda_count_is_not_refused()
+    {
+        // M1 (round 5): the scanner's operand check stops at a NESTED lambda. A relational whose operand is a COUNT over a nested
+        // lambda that merely reads the outer element (`s.City`) compares the count, never a member of the element, so the
+        // driver's rows equal R17's and the fallback serves them. (A bare `Count(s => s.City == "Oslo") > 0` at the root was
+        // never refused: the element parameter is keyed only inside its own lambda.)
+        // r-full [Oslo]: 1 Oslo >= 1. r-mixed [Oslo, null]: for Oslo 1 >= 1; for the null element `null == null` counts the null
+        // element itself. r-null [null]: the same. R17 and the driver: [all 3].
+        Declines(Routes(q => RNames(q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) >= 1)))), "r-full", "r-mixed", "r-null");
+        // `> 1`: no element's City appears twice (the null element's null City matches only itself): R17 [] = the driver.
+        Declines(Routes(q => RNames(q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) > 1)))));
+        Declines(Routes(q => RNames(q.Where(r => r.Stops.Any(s => r.Stops.Where(s2 => s2.City == s.City).Count() >= 1)))), "r-full", "r-mixed", "r-null");
+        // NOT M1's case: a count over the element's OWN nested collection (`s.Tags.Count(...)`) reads the element directly (the
+        // receiver `s.Tags`, outside any lambda), so it is still refused although a count is never null and the rows (R17 and
+        // the driver: [all 3], `0 >= 0`) would be right: the structural cost of R20 (narrowing by operand kind is deferred, M2).
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Tags.Count(t => t.Label == s.City) >= 0)))), ["r-full", "r-mixed", "r-null"]);
+        // Control: a relational that reads the element DIRECTLY on one side (the count on the other) is still refused: R17
+        // [] (`1 > 5` false for Oslo; `1 > null` false for the null element); the driver reads the missing Floor as lowest.
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) > s.Floor)))), ["r-mixed", "r-null"]);
+        // The cost of M1 (a known limit, R21): an element member read INSIDE the nested lambda whose RESULT is the relational's
+        // operand (`Select(s2 => s.Floor).First() < 1`) is no longer found. R17 [] (Oslo's Floor is 5; the null element's is
+        // null); the driver projects MISSING and reads it as below every value.
+        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => r.Stops.Select(s2 => s.Floor).First() < 1)))), [], ["r-mixed", "r-null"]);
+    }
+
     // ── Plumbing ────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static List<string> Run<TEntity>(

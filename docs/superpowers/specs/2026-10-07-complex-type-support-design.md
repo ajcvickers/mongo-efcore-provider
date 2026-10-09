@@ -51,6 +51,17 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   key named like the navigation's principal key (`a => a.Tag.Id`, kept the `_id` navigation `$lookup`); the bridge's
   whole-entity `LeftJoin` on an owned-hop key; a filtered-Include `OrderBy` through an owned hop (sorted by the root
   property); an owned hop leaf beside a whole joined entity (read null). Same bug class as the complex shapes; one fix.
+- (e) (rulings R18/R22, Task 13) At the ROOT (entity scope), a relational comparison over a null-propagating date-add,
+  conditional or coalesce whose operand may be null now gets the same null guard as every other relational comparison
+  (`MayBeNull` is structural for those three nodes), so rows whose operand is null no longer match `<`/`<=`; the direction
+  matches the existing relational-guard policy (driver-LINQ/main order null below every value and include them). Measured
+  at b4ddcf95 vs HEAD and pinned per mode in `NativeRootNullPropagatingOperandGuardTests`; the concrete queries whose
+  native rows changed: `x.Date.AddDays(x.Amount!.Value) < c` ([f, m, n, v] → [v]);
+  `x.Date.AddDays(x.Flag ? 1 : x.Amount!.Value) < c` and `(x.Flag ? x.Date : x.NullableDate!.Value).AddDays(1) < c`
+  ([f, h, m, n, v] → [h, m, n, v]); `(x.Flag ? 0 : x.Score!.Value) < 5` and `(x.Flag ? x.Rank : x.Score!.Value) < 5`
+  ([f, h, m, n, v] → [h, m, n, v]); `(x.A ?? x.Label!.Length) < 5` ([f, m, n, v] → [v]);
+  `(x.A ?? (x.Flag ? 0 : x.B!.Value)) < 5` ([f, h, m, n, v] → [h, m, n, v]). Already-guarded shapes (a nullable-typed
+  date-add/coalesce, a conditional whose nullable branch gives it its type) and every `>` are unchanged.
 
 ## Decisions
 

@@ -88,6 +88,10 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["nested under &&", Query(q => q.Where(r => r.Stops.Any(s => s.City == "X" && s.Floor < 1))), "a relational comparison"];
         yield return ["nested under !", Query(q => q.Where(r => r.Stops.Any(s => !(s.Floor > 9)))), "a relational comparison"];
         yield return ["correlated with the root", Query(q => q.Where(r => r.Stops.Any(s => s.When < r.Departs))), "a relational comparison"];
+        // The element read is DIRECT on one side of the relational (the nested count is the other side).
+        yield return ["nested count compared with an element member", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) > s.Floor))), "a relational comparison"];
+        // The guard-requiring shape sits INSIDE the nested lambda; the outer Finder visits its body.
+        yield return ["relational inside a nested element lambda", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.Floor < s.Floor) >= 1))), "a relational comparison"];
     }
 
     [Theory]
@@ -111,6 +115,10 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["OWNED element == null", Query(q => q.Where(r => r.Owned.Any(s => s.Note == null)))];
         yield return ["relational on the root inside the element lambda only", Query(q => q.Where(r => r.Stops.Any(s => r.Departs < DateTime.UnixEpoch)))];
         yield return ["Contains of the element itself (member-wise equality, not a leaf)", Query(q => q.Where(r => r.Stops.Any(s => new List<Stop>().Contains(s))))];
+        // A relational over a COUNT whose nested lambda merely reads the element (`s.City`, an equality): the compared
+        // value is the count, never the element's member, so no guard is needed (ParameterReadFinder stops at lambdas).
+        yield return ["relational over a nested count that reads the element only inside its lambda", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) >= 1)))];
+        yield return ["relational over a nested Where(...).Count() reading the element inside its lambda", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Where(s2 => s2.City == s.City).Count() > 1)))];
     }
 
     [Fact]
