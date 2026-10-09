@@ -683,6 +683,27 @@ internal sealed partial class MongoExpressionTranslator
 
             // --- Comparison binary operators ---
 
+            // A whole complex value compared with null, an instance or another stored complex value: member-wise. Owns
+            // the comparison outright (no other arm can translate a complex value), so its decline is final. See
+            // MongoExpressionTranslator.ComplexEquality.cs.
+            case BinaryExpression { NodeType: ExpressionType.Equal or ExpressionType.NotEqual } complexEq
+                when IsComplexEquality(complexEq.Left, complexEq.Right):
+                return TranslateComplexEquality(
+                    complexEq.Left, complexEq.Right, complexEq.NodeType == ExpressionType.NotEqual);
+
+            // `c.Address.Equals(other)` / `c.Pin.Equals(pin)` (object.Equals or a type's own Equals(T)): the same
+            // member-wise equality as `==`.
+            case MethodCallExpression { Method.Name: nameof(object.Equals), Object: { } complexReceiver, Arguments.Count: 1 } complexEqualsCall
+                when IsComplexEquality(complexReceiver, complexEqualsCall.Arguments[0].RemoveObjectConvert()):
+                return TranslateComplexEquality(
+                    complexReceiver, complexEqualsCall.Arguments[0].RemoveObjectConvert(), isNotEqual: false);
+
+            // `!(c.Address == other)`: the exact complement built with the equality, never the generic Not wrap
+            // (which renders in the aggregation dialect).
+            case UnaryExpression { NodeType: ExpressionType.Not, Operand: var negatedComplex }
+                when TryGetComplexEqualityOperands(Unwrap(negatedComplex), out var negatedLeft, out var negatedRight, out var negatedIsNotEqual):
+                return TranslateComplexEquality(negatedLeft, negatedRight, !negatedIsNotEqual);
+
             // Root-entity structural equality (`c == local`, `c == null`); must precede the ordinary comparison
             // dispatch, which has no coverage for it.
             case BinaryExpression { NodeType: ExpressionType.Equal or ExpressionType.NotEqual } eq
@@ -1128,6 +1149,13 @@ internal sealed partial class MongoExpressionTranslator
             //
             // Built as `x.A != null`, so the renderer and negator need nothing new; $ne selects null and missing,
             // matching LINQ. Must precede the bare-boolean-member default, which would fail to resolve "HasValue".
+            // An optional struct complex value (`c.Pin.HasValue`): its stored element is present. Must precede the
+            // scalar arm below, which only resolves properties.
+            case MemberExpression { Member.Name: nameof(Nullable<int>.HasValue), Expression: { } complexHasValueReceiver }
+                when Nullable.GetUnderlyingType(complexHasValueReceiver.Type) is not null
+                     && TryTranslateComplexHasValue(complexHasValueReceiver, out var complexHasValue):
+                return complexHasValue;
+
             case MemberExpression { Member.Name: nameof(Nullable<int>.HasValue), Expression: { } hasValueReceiver }
                 when Nullable.GetUnderlyingType(hasValueReceiver.Type) is not null:
             {

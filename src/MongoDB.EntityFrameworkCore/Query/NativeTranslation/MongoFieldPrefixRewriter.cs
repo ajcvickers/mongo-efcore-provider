@@ -110,6 +110,7 @@ internal static class MongoFieldPrefixRewriter
             // and `d.Ship == null` in a prefixed scope loses rows.
             MongoElementRefExpression er => new MongoElementRefExpression(
                 prefix + "." + er.Path, er.Type, er.NullSafe, er.ValueProperty, er.ThrowsOnNull),
+            MongoElementNullCheckExpression nc => new MongoElementNullCheckExpression(prefix + "." + nc.Path, nc.IsNotNull),
             // Root-anchored by definition, so prefixing would be wrong.
             MongoOuterFieldExpression => expr,
             MongoConcatExpression concat => new MongoConcatExpression(

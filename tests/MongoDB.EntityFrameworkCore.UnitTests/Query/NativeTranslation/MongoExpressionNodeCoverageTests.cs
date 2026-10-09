@@ -131,6 +131,7 @@ public class MongoExpressionNodeCoverageTests
             new MongoOuterFieldExpression(rank, "Rank"),
             new MongoElementRefExpression("Total", typeof(int)),
             new MongoLookupNullCheckExpression("_lookup_Manager", isNotNull: false),
+            new MongoElementNullCheckExpression("Address", isNotNull: false),
             new MongoNumericTypeBracketExpression(rankField),
             rankConstant,
             new MongoParameterExpression("p0", rank),
@@ -565,6 +566,16 @@ public class MongoExpressionNodeCoverageTests
         ["MongoInExpression|PrefixRewriter.Rewrite"] = "rendered",
         ["MongoInExpression|QL.IsQueryDialectRenderable"] = "true",
         ["MongoInExpression|QL.Render"] = "rendered",
+
+        // Null-or-missing test of a stored element (complex value == null): both dialects, exact flip, prefixable.
+        ["MongoElementNullCheckExpression|Agg.CanRender"] = "true",
+        ["MongoElementNullCheckExpression|Agg.Render"] = "rendered",
+        ["MongoElementNullCheckExpression|AllFieldsDefaultSerialized"] = "true",
+        ["MongoElementNullCheckExpression|AllFieldsDefaultSerialized(converted)"] = "true",
+        ["MongoElementNullCheckExpression|Negator.TryNegate"] = "true",
+        ["MongoElementNullCheckExpression|PrefixRewriter.Rewrite"] = "rendered",
+        ["MongoElementNullCheckExpression|QL.IsQueryDialectRenderable"] = "true",
+        ["MongoElementNullCheckExpression|QL.Render"] = "rendered",
 
         // Has a query-dialect form (Where position, TryMatchInnerNullCheck) and an aggregation form (Select
         // conditional Test, TryMatchScopeNullCheck). Never nested under Not/a quantifier/$elemMatch.

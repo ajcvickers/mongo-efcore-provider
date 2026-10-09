@@ -460,6 +460,52 @@ internal sealed partial class MongoExpressionTranslator
         return true;
     }
 
+    /// <summary>
+    /// Resolves a single (non-collection) complex value used as a comparison operand (<c>c.Address</c>,
+    /// <c>c.Address.Location</c>, an optional struct's <c>c.Pin.Value</c>, through owned references) to its stored
+    /// element path and complex property, for <c>MongoExpressionTranslator.ComplexEquality.cs</c>.
+    /// </summary>
+    /// <remarks>
+    /// Single-scope chains rooted on a parameter of this translator's entity type only: an outer-scoped chain (two-scope
+    /// mode) or one rooted on a projected row (after a projected <c>Distinct</c>, whose parameter is not the entity)
+    /// declines, so a member name shared with the row can't resolve against the entity.
+    /// </remarks>
+    private bool TryResolveComplexOperand(
+        Expression node, [NotNullWhen(true)] out string? path, [NotNullWhen(true)] out IComplexProperty? complexProperty)
+    {
+        path = null;
+        complexProperty = null;
+
+        node = Unwrap(node);
+        while (node is MemberExpression { Member.Name: nameof(Nullable<int>.Value), Expression: { } nullableReceiver }
+               && Nullable.GetUnderlyingType(nullableReceiver.Type) is not null)
+        {
+            node = Unwrap(nullableReceiver);
+        }
+
+        var root = node;
+        while (root.TryGetMemberOrEFProperty(out var receiver, out _))
+        {
+            root = Unwrap(receiver);
+        }
+
+        if (root is not ParameterExpression rootParameter
+            || DistinctAliasScope is not null
+            || !_entityType.ClrType.IsAssignableFrom(rootParameter.Type)
+            || !TryBeginOwnedHopWalk(node, minimumHops: 1, out var names, out var scopeType, out var isOuter)
+            || isOuter
+            || !StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not IComplexProperty { IsCollection: false } leaf
+            || node.Type.UnwrapNullableType() != leaf.ComplexType.ClrType)
+        {
+            return false;
+        }
+
+        path = string.Join(".", resolved.Segments);
+        complexProperty = leaf;
+        return true;
+    }
+
     /// True when <paramref name="property"/> is a component of a composite primary key. The serializer nests such a
     /// key under an <c>_id</c> local to the declaring type — <c>{ _id: { Key1, Key2 } }</c> at the root, or
     /// <c>{ Author: { _id: { City, Country } } }</c> for an owned type with its own <c>HasKey</c> — at any depth.

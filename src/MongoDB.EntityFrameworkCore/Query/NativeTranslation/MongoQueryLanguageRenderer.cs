@@ -53,6 +53,7 @@ internal sealed class MongoQueryLanguageRenderer
             MongoUnaryExpression unary => RenderUnary(unary, placeholders),
             MongoFieldExpression field => RenderBareField(field, placeholders),
             MongoLookupNullCheckExpression lookupNullCheck => RenderLookupNullCheck(lookupNullCheck),
+            MongoElementNullCheckExpression elementNullCheck => RenderElementNullCheck(elementNullCheck),
             MongoNumericTypeBracketExpression bracket => RenderNumericTypeBracket(bracket),
             MongoInExpression inExpr => RenderIn(inExpr, placeholders),
             MongoArrayContainsExpression arrayContains => RenderArrayContains(arrayContains, placeholders),
@@ -146,6 +147,15 @@ internal sealed class MongoQueryLanguageRenderer
         => node.IsNotNull
             ? new BsonDocument(node.LookupAlias, new BsonDocument("$ne", BsonNull.Value))
             : new BsonDocument(node.LookupAlias, BsonNull.Value);
+
+    /// <summary>
+    /// <c>{ path: null }</c> / <c>{ path: { $ne: null } }</c>: null and missing alike, as C# reads them; the two forms
+    /// partition every document. See <see cref="MongoElementNullCheckExpression"/>.
+    /// </summary>
+    private static BsonDocument RenderElementNullCheck(MongoElementNullCheckExpression node)
+        => node.IsNotNull
+            ? new BsonDocument(node.Path, new BsonDocument("$ne", BsonNull.Value))
+            : new BsonDocument(node.Path, BsonNull.Value);
 
     /// <summary>
     /// Renders <c>{ field: { $type: "number" } }</c>; see <see cref="MongoNumericTypeBracketExpression"/>.
@@ -389,6 +399,8 @@ internal sealed class MongoQueryLanguageRenderer
             // { field: { $type: "number" } }. Only produced beside an $expr sibling (so its AndAlso answers false),
             // but true on its own merits.
             MongoNumericTypeBracketExpression => true,
+            // { path: null } / { path: { $ne: null } }; legal inside $elemMatch.
+            MongoElementNullCheckExpression => true,
             // No query-dialect form; listed explicitly rather than left to the catch-all.
             MongoConvertExpression => false,
             MongoConditionalExpression => false,

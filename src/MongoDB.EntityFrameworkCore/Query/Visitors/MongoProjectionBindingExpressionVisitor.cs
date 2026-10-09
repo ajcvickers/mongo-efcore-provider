@@ -555,7 +555,10 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                or MongoConvertExpression
                // A translate-time fold of a computed node (`x.S.ToLower() == "Seattle"` is false): the alias holds
                // the folded value, not the receiver the client form would read.
-               or MongoConstantExpression;
+               or MongoConstantExpression
+               // A complex value's null check (`c.Address != null`): the client form would materialize the complex value
+               // from the alias, which holds the bool.
+               or MongoElementNullCheckExpression;
 
     /// <summary>
     /// True for a computed scalar leaf that the mixed reader can re-evaluate client-side over document reads (see

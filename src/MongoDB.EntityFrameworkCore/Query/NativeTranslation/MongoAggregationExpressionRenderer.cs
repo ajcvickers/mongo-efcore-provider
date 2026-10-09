@@ -73,6 +73,11 @@ internal static class MongoAggregationExpressionRenderer
                         IfNull(FieldRef(lookupNullCheck.LookupAlias, elementVariable: null), BsonNull.Value),
                         BsonNull.Value
                     }),
+            // $ifNull-wrapped for the same reason: $eq/$ne don't equate a missing element with null. Element-relative
+            // inside a $filter/$map scope (MongoFieldPrefixRewriter prefixes the path for a SelectMany scope).
+            MongoElementNullCheckExpression elementNullCheck
+                => new BsonDocument(elementNullCheck.IsNotNull ? "$ne" : "$eq",
+                    new BsonArray { IfNull(FieldRef(elementNullCheck.Path, elementVariable), BsonNull.Value), BsonNull.Value }),
             MongoConstantExpression or MongoParameterExpression => MongoValueRenderer.RenderValue(node, placeholders),
             // Aggregation form of the query dialect's { field: { $type: "number" } }; see
             // MongoNumericTypeBracketExpression. $and short-circuits, so a following $toX never sees a non-number.
@@ -185,6 +190,7 @@ internal static class MongoAggregationExpressionRenderer
         => node switch
         {
             MongoFieldExpression or MongoElementRefExpression or MongoOuterFieldExpression or MongoLookupNullCheckExpression => true,
+            MongoElementNullCheckExpression => true,
             MongoNumericTypeBracketExpression => true,
             MongoConstantExpression or MongoParameterExpression => true,
             // $and/$or test a bare operand by truthiness, so a value-converted bool field (e.g. stored as "N",

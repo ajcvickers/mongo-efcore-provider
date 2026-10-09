@@ -52,6 +52,20 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   whole-entity `LeftJoin` on an owned-hop key; a filtered-Include `OrderBy` through an owned hop (sorted by the root
   property); an owned hop leaf beside a whole joined entity (read null). Same bug class as the complex shapes; one fix.
 
+## Decisions
+
+- **Complex-value equality is member-wise and native** (Task 12; resolves the open question below). `==`, `!=`, `!(...)` and
+  `.Equals(...)` between a whole single complex value and `null`, a constant/captured/inline-constructed instance, or another
+  stored complex value of the same CLR type translate to a conjunction of leaf equalities, recursing into nested complex
+  values; never a by-example match of the stored subdocument (element order and unmapped elements are irrelevant).
+  Null semantics are C#'s: BSON null and MISSING read alike (`{p: null}` / `{p: {$ne: null}}` in the query dialect,
+  `$ifNull`-normalized in `$expr`); `{}` is present; an optional value equals an instance only when present; a captured
+  comparand's null-ness and members are read per execution. `!=` is the exact De Morgan complement built with the equality.
+  Declines (fallback refuses: the complex serializer, ruling R1, or the driver's "serialized differently"): complex
+  collections, primitive-collection/`byte[]` leaves, shadow leaves against an instance (EF8/EF9), an inline construction
+  leaving a member unbound or reading the row, two stored values whose leaves are not `StoredSerialization.StoredAlike`,
+  out-of-scope chains (outer/element scope, after a projected `Distinct`), and an optional struct's `.Value.Leaf`.
+
 ## Constraints
 
 - No new driver-LINQ query paths. `MongoQueryMode.NativeOnly` is the oracle for every query test.
@@ -176,7 +190,7 @@ other for complex-type logic; both depend on the metadata extensions and seriali
 
 - **EF per-version feature matrix** (struct, optional, collections on EF8/9/10) is from memory of EF release notes
   and is verified in the Phase 0 probe; the matrix above is a plan input, not a fact.
-- **Complex-to-complex equality** semantics (member-wise vs decline) need a ruling once the renderer cost is clear.
+- **Complex-to-complex equality**: decided, member-wise (see Decisions).
 - **Partial update granularity** for complex properties depends on what `IUpdateEntry` exposes for complex
   leaves on each EF version; the writer falls back to whole-subdocument replacement where it does not.
 - **`StructuralPath` blast radius:** replacing the entity-only walk touches many binders; it is introduced behind

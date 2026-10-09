@@ -53,7 +53,7 @@ internal static class MongoExpressionNegator
     /// <summary>
     /// Flips the <c>Negated</c> flag of a node whose rendered negated/un-negated pair are exact complements:
     /// <c>$in</c>/<c>$nin</c>, computed-needle <c>$in</c>, array-contains (<c>{f: v}</c> vs <c>{f: {$ne: v}}</c>),
-    /// regex, and <c>$elemMatch</c>.
+    /// regex, <c>$elemMatch</c>, and a stored element's null check (<c>{p: null}</c> vs <c>{p: {$ne: null}}</c>).
     /// </summary>
     /// <remarks>
     /// Shared with <see cref="MongoExpressionTranslator"/>'s <c>Not</c> case, which can't call
@@ -69,6 +69,8 @@ internal static class MongoExpressionNegator
             MongoArrayContainsExpression e => new MongoArrayContainsExpression(e.Field, e.Value, !e.Negated),
             MongoRegexExpression e => new MongoRegexExpression(e.Field, e.Kind, e.Term, !e.Negated, e.CaseInsensitive, e.PatternOptions),
             MongoElemMatchExpression e => new MongoElemMatchExpression(e.ArrayPath, e.ElementPredicate, !e.Negated),
+            // Null-or-missing vs present partition every document, in both dialects.
+            MongoElementNullCheckExpression e => e.Negate(),
             _ => null
         };
 

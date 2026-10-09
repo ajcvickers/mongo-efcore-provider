@@ -448,7 +448,7 @@ public static class StructuralPathTests
     }
 
     [Fact]
-    public static void Translator_still_resolves_owned_null_check_and_declines_complex_null_check()
+    public static void Translator_resolves_owned_and_complex_null_checks_to_their_own_nodes()
     {
         var root = EntityType<TranslatorNullCheckHolder>(mb =>
         {
@@ -461,9 +461,12 @@ public static class StructuralPathTests
         var binary = Assert.IsType<MongoBinaryExpression>(owned);
         Assert.Equal("Owned", Assert.IsType<MongoElementRefExpression>(binary.Left).Path);
 
-        // A complex-property null check has null-vs-missing semantics of its own (Task 12); it is not an
-        // entity-typed operand, so it declines here rather than reading as an owned navigation.
-        Assert.False(translator.TryTranslate(Predicate<TranslatorNullCheckHolder>(e => e.Address == null), out _));
+        // A complex-property null check is not an entity-typed operand (no owned-navigation $$ROOT/element-ref path): it
+        // is the complex value's own null-or-missing test, `{ Address: null }` (Task 12).
+        Assert.True(translator.TryTranslate(Predicate<TranslatorNullCheckHolder>(e => e.Address == null), out var complex));
+        var nullCheck = Assert.IsType<MongoElementNullCheckExpression>(complex);
+        Assert.Equal("Address", nullCheck.Path);
+        Assert.False(nullCheck.IsNotNull);
     }
 
     [Fact]

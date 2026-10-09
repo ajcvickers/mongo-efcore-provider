@@ -264,6 +264,10 @@ Rendering (null/missing/dialect semantics):
   reference unwind, which has no driver-LINQ fallback; the native path binds by scope depth and reads by alias; an owned
   element type is never in the root's hierarchy). Pinned per mode in `ComplexTypeDerivedSelectManyItemTests`; if a
   reference-unwind fallback is ever added, distinguish the item shaper first.
+- **A whole complex value in `==`/`!=`/`.Equals` is owned by `MongoExpressionTranslator.ComplexEquality.cs`** (its decline is
+  final): member-wise, never by example. Null/missing of a value is `MongoElementNullCheckExpression` (`{p: null}`, `$ifNull`
+  in `$expr`; flips exactly); each comparison is built with its complement (`EqualityPair`), so negation never wraps; stored
+  pairs need `StoredAlike` leaves; a captured comparand is read per execution (`RuntimeEvaluator` parameters).
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.
