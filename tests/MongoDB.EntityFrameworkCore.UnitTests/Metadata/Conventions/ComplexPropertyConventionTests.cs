@@ -112,6 +112,24 @@ public static class ComplexPropertyConventionTests
     }
 
     [Fact]
+    public static void Camel_casing_that_makes_a_complex_property_collide_with_a_scalar_fails_validation()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var db = new TestContext<CamelCollisionHolder>(
+                mb =>
+                {
+                    mb.Entity<CamelCollisionHolder>().Property(e => e.Id).Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "_id");
+                    mb.Entity<CamelCollisionHolder>().ComplexProperty(e => e.Home);
+                },
+                camelCase: true);
+            _ = db.Model;
+        });
+
+        AssertMessage(ex, "Home", "home", "home", nameof(CamelCollisionHolder));
+    }
+
+    [Fact]
     public static void Column_on_complex_property_sets_element_name()
     {
         using var db = new TestContext<ColumnHolder>(mb => mb.Entity<ColumnHolder>().ComplexProperty(e => e.Address));
@@ -311,6 +329,7 @@ public static class ComplexPropertyConventionTests
 
     class CamelHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
     class PlainHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
+    class CamelCollisionHolder { public int Id { get; set; } public Addr Home { get; set; } public string home { get; set; } }
     class FluentCamelHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
     class NestedHolder { public int Id { get; set; } public NestedAddr HomeAddress { get; set; } }
 

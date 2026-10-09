@@ -37,6 +37,12 @@ Only Storage may call the driver client/collection/session types directly.
   Bulk `ExecuteUpdate`/`ExecuteDelete` crosses as behavior: `MongoBulkOperationExecutor` runs a `MongoBulkPlan` whose
   translation delegates are invoked per execution (translation is parameter-value-dependent);
   `TranslateBulkOrThrow` maps failures to EF's canonical "could not be translated".
+- **Complex properties are written by `ComplexValueWriter`, beside (not inside) `WriteOwnedEntities`**
+  (`WriteEntity` calls both). A change to any member at any depth rewrites the whole TOP-LEVEL complex property in `$set`
+  (ruling R5: last-writer-wins per complex property; per-member dotted `$set` is a deferred optimization); unchanged complex
+  properties are skipped, inserts write everything. Bulk setters serialize a client value through
+  `SerializeDetachedComplexValue`, the same code path, so bulk and `SaveChanges` store the same shape. Concurrency tokens
+  are read from the entity type's own properties only; the model validator rejects tokens inside complex types.
 - **Serializers come from `BsonSerializerFactory`** (`MongoUpdate.WriteProperty`); a `BsonWriter`/`BsonReader` here is
   almost certainly a layering mistake. Storage reads metadata, never writes annotations.
 - **Queryable Encryption auto-schema is injected at client construction** in `MongoClientWrapper`;

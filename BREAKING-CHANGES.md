@@ -4,6 +4,66 @@ Please note that this provider **does not follow traditional semantic versioning
 
 In order to evolve the provider as we introduce new features, we will be using the minor version number for breaking and significant changes to our EF Core provider. Please bear this in mind when upgrading to newer versions of the MongoDB EF Core Provider and ensure you read the release notes and this document for the latest in breaking change information.
 
+### Complex properties are now stored, read and queried (EF-168)
+
+#### Old behavior
+
+Measured against the published packages 8.4.4 (EF Core 8.0.30), 9.1.4 (EF Core 9.0.19) and 10.0.4 (EF Core 10.0.11) on
+MongoDB 8, with a model `C { Id, Name, Home: Addr { City } }` and `ComplexProperty(c => c.Home)`, identically on all three:
+
+- `SaveChanges` silently did not write the complex property: the stored document was `{ _id, Name }` (`{ _id, name }` with
+  `CamelCaseElementNameConvention`).
+- Reading the entity back (`Find`, `ToList`) threw `InvalidOperationException: Document element is missing for required
+  non-nullable property 'City'`.
+- Querying a complex member (`Where(c => c.Home.City == "Oslo")`) threw the driver's `ExpressionNotSupportedException`.
+- The model built without validation errors for a complex property whose element name duplicated a scalar's, started with
+  `$`, or contained `.`, and for an element name collision introduced by camel-casing (`Home` and a property `home`).
+
+#### New behavior
+
+- A complex property is stored as an embedded subdocument under its element name (`Home`, or `home` with
+  `CamelCaseElementNameConvention`; `[BsonElement]`, `[Column]` and the `Mongo:ElementName` annotation are honored), a complex
+  collection (EF10) as an array of subdocuments. Complex values are materialized, tracked and queryable. See
+  [docs/complex-types.md](docs/complex-types.md).
+- The model validator rejects duplicate, `$`-prefixed and `.`-containing element names on complex properties and on the
+  members of complex types, including a duplicate produced by camel-casing.
+- The model validator rejects encryption annotations (Queryable Encryption or client-side field level encryption) on a
+  complex property or on any member of a complex type. They were previously ignored, so the value was written as plaintext
+  (this could only be configured through the metadata API: the `IsEncrypted*` builder methods do not apply to complex types).
+- The model validator rejects a concurrency token or row version on a member of a complex type. It was previously accepted
+  and ignored, so a conflicting `SaveChanges` succeeded and overwrote the other change. A token on the entity itself guards
+  the whole document, including its complex properties.
+
+Additive, not breaking: `ExecuteUpdate`/`ExecuteDelete` over complex properties (EF9+), native translation of complex-type
+queries, and a public `ProcessComplexPropertyAdded` method (with `IComplexPropertyAddedConvention`) on
+`CamelCaseElementNameConvention`, `BsonElementAttributeConvention` and `ColumnAttributeConvention`.
+
+#### Why
+
+Complex types are EF Core's mapping for value objects; the provider previously accepted them in the model but neither wrote
+nor read them, so any model using them lost data on save.
+
+#### Mitigations
+
+- Documents written by an earlier version lack the complex property's element. Reading such a document throws for a required
+  complex property (as before, but now naming the complex property). Backfill the element (for example with an
+  `updateMany` that `$set`s a default subdocument) before reading, or make the complex property optional (EF10).
+- If you worked around the earlier behavior with `Ignore(c => c.Home)` nothing changes. If you kept a parallel property
+  (for example a shadow property or a separately mapped owned type) under the same element name, the model validator now
+  reports the collision; give one of them a different element name.
+- Remove encryption annotations from complex types, or map the value as a property of an entity type or owned entity type
+  to encrypt it. Move a concurrency token from a complex type to the entity.
+
+For transparency (not breaking changes under this project's rules, since results on released query paths are unchanged or
+corrected, and which internal path a query takes is not contract): to support complex types the native query translator
+also (a) translates a bare projection of a dotted owned field natively; (b) reads a projected `Distinct` over a missing
+required `string` as `null`, as the driver-LINQ path in released versions did; (c) reads a derived outer root's own members
+in a join correctly; (d) resolves join and sort keys through owned hops structurally instead of by the member's simple name;
+and (e) applies the existing relational null guard to date-add, conditional and coalesce operands that may be null, so
+`<`/`<=` no longer match rows whose operand is null. (a), (c) and (d) correct wrong answers on the unreleased native path;
+(b) restores the released driver-LINQ answer; (e) follows EF's null semantics and the native path's existing guard policy
+(driver-LINQ includes those null-operand rows, as it already did for the shapes the guard covered before).
+
 ### A missing or `null` embedded array now materializes as an empty collection, not `null`
 
 #### Old behavior

@@ -1,6 +1,7 @@
 # Complex type support — design
 
-Branch `EF-168a` (from `EF-322c`). Status: draft for owner review.
+Branch `EF-168a` (from `EF-322c`). Status: implemented (Tasks 1-16); user docs in `docs/complex-types.md`, breaking-change
+entry in `BREAKING-CHANGES.md`. The sections below the Decisions summary are the original design, kept as written.
 
 ## Goal
 
@@ -64,6 +65,27 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   date-add/coalesce, a conditional whose nullable branch gives it its type) and every `>` are unchanged.
 
 ## Decisions
+
+Final summary (the rulings are recorded in the SDD ledger; the ones that changed or completed the design):
+
+- **R1** The complex serializer is for member lookup only: whole-value `Serialize` throws (never match by example).
+- **R5** Any member change rewrites the whole top-level complex property (`$set`): last-writer-wins per complex property;
+  per-member `$set` is a deferred optimization.
+- **R7/R8** A whole complex value is refused (clear `NotSupportedException`, every mode) as the operand of value-reading
+  operators (Distinct, set operations, Contains, Cast, Join, selector-less aggregates, operators after paging) and in
+  GroupBy (key, key part, grouped elements); R10 accepts two residual GroupBy shapes that fail like their scalar analogues.
+- **R14-R16** Complex equality: a presence guard whenever the compared path has ANY optional ancestor; stored pairs need a
+  bijection of mapped members; element-scope equality agrees with the element's null check.
+- **R17-R22** Complex collections (EF10): a null element reads every member as null (R17); `MayBeNull` is structural for
+  date-add/conditional/coalesce (R18; captured non-nullable operands are not "may be null", so root MQL over captured values
+  is unchanged); a non-nullable bool member of a null element reads false (R19); default mode serves correct rows or refuses
+  (R20) through a best-effort structural net with documented limits (R21); the root-visible R18 change is accepted (R22,
+  exception (e)).
+- **R23** Explicit `DriverLinq` stays an opt-out of the bulk complex-collection refusal (documented as a data-loss warning).
+- **R24** EF8/EF9: complex projections from an entity that also has an owned navigation fall back (whole values fail
+  loudly); accepted as a documented limitation.
+- Task 16: encryption annotations and concurrency tokens inside complex types are rejected by the model validator (both
+  were silently ignored); bulk setters whose stored paths overlap are refused at translation.
 
 - **Complex-value equality is member-wise and native** (Task 12; resolves the open question below). `==`, `!=`, `!(...)` and
   `.Equals(...)` between a whole single complex value and `null`, a constant/captured/inline-constructed instance, or another
@@ -208,3 +230,37 @@ other for complex-type logic; both depend on the metadata extensions and seriali
   leaves on each EF version; the writer falls back to whole-subdocument replacement where it does not.
 - **`StructuralPath` blast radius:** replacing the entity-only walk touches many binders; it is introduced behind
   the existing predicate with owned-type behavior pinned by the existing suite before and after.
+
+## Known limitations and follow-ups
+
+Candidate Jira tickets (NOT filed; owner to decide), numbered as in the SDD ledger:
+
+1. Explicit BSON null in a required `string`: native throws, driver-LINQ reads null (D-F10).
+2. Same-type self-join projecting the whole outer entity and an inner-side hop leaf returns wrong rows on driver-LINQ (pinned).
+3. Explicit join to an `OfType<T>()` set is unserved.
+4. Owned `SelectMany` fallback fails loudly for a whole outer/element beside a member.
+5. Reference-collection `SelectMany` has no fallback.
+6. GroupJoin on non-FK keys answers FK counts (known main bug M35).
+7. Joins/set operations over converted values compare stored forms.
+8. The fallback misreads members in a join between two shared-type entities of one CLR type.
+9. Driver-LINQ: projected complex equality always `false`.
+10. Driver-LINQ: `c.Opt == null ? ...` treats a missing optional complex value as present.
+11. Driver-LINQ misses a missing element inside an owned collection in `Any/Count(i => i.Pos == null)`.
+12. Root comparisons on members of a null/missing `DateTimeOffset?` match those rows in every mode (pre-existing).
+13. Driver-LINQ `$strLenCP` error on field-to-field string operators over null.
+14. Driver-LINQ misses a missing complex value in `$map`.
+15. Upstream EF: `Any(a => a == null)` over a complex collection throws `ArgumentException`.
+16. Driver-LINQ element-scope missing-vs-null semantics (general).
+17. `optionalCollection == null` on the Native fallback also returns rows whose array is `[null]`.
+18. Root `BsonRepresentation` self-referencing bulk setter writes the computed CLR type into a string-stored field.
+19. Driver-LINQ `byte[].Length == 0` returns no rows.
+20. Driver-LINQ `Distinct` over collection-typed properties returns a duplicate `<null>` row (explicit null vs missing).
+
+(CSHARP-5296, driver-LINQ DateTimeOffset members, is an existing upstream driver ticket.)
+
+Other follow-ups: R24 (peel the EF8/EF9 owned `IncludeExpression` in the hop walk); native joins/reference navigations
+through complex or owned hops; native element-member projections, indexers and element aggregates over complex
+collections; native constructor/record projections of complex values; native GroupBy/Distinct over whole complex values
+(structural equality); per-member `$set` (R5); index-friendly `$elemMatch` for positive complex-collection `Any`; narrower
+R20/bulk refusals (relational upper side, `== true`, non-nullable `Contains`) and making the R20 scanner call the
+R17-R19 predicates instead of restating them; DatePart-over-DateAdd native translation (removes one R20 refusal).

@@ -66,7 +66,9 @@ Gate and fallback:
   complex hops (dotted stored path, `StructuralPath`), a whole complex property/collection from a captured value (serialized by
   `ComplexValueWriter`, as SaveChanges writes it; a required one can't be null); refused: a leaf under an optional complex
   hop (the server's `$set` of a dotted path under a null parent errors mid-operation), a whole complex value read from the row,
-  a self-referencing value for a BsonRepresentation leaf (root scalars keep their pre-existing behaviour).
+  a self-referencing value for a BsonRepresentation leaf (root scalars keep their pre-existing behaviour), and two setters
+  whose stored paths contain one another (`ThrowIfSetterPathsOverlap`: the server rejects such a `$set`). Refusal messages
+  print expressions through `ExpressionShapePrinter` (constants as `?`), never `Expression.ToString()`.
 - **New native join shapes must be tested under explicit `DriverLinq`** too; the native path can mask a broken
   fallback (and the reverse).
 - **A recognizer that turns a correlated `DbSet` subquery into a navigation** (`db.Orders.Where(o => o.CustomerId ==
@@ -231,6 +233,19 @@ Rendering (null/missing/dialect semantics):
   Whole-entity reads stay strict ("Document element ... is missing"). The exception TYPE for malformed stored data
   (native `InvalidOperationException` vs the driver's `FormatException`/converter exceptions) is not contract; the
   outcome (value vs throw) is.
+- **`StructuralPath` is the ONLY walker of mixed owned/complex hop chains** (`TryResolve`; `TryResolveCollection` for a chain
+  ending in an owned or complex collection; `TryResolveSelectorLeaf` for selector-addressed keys). Don't add a second
+  walker or resolve a hop by simple name; a failed resolve's partial segments are not usable. Collection hops without a
+  quantifier decline.
+- **A binder that can't bind a selector node fails the translation, never `default(T)`**:
+  `MongoProjectionBindingExpressionVisitor.TranslationFailed` (set where `MatchTypes` receives a null binding and substitutes
+  a default stand-in; reset per `Translate`) makes `TranslateSelect` decline (NativeOnly throws, Native falls back). Silent null rows were the
+  bug class it closes (Task 9).
+- **A new `MongoExpression` node must be handled in every consumer switch** (both renderers, `IsQueryDialectRenderable`,
+  `CanRender`, the negator, `MongoFieldPrefixRewriter`, projection-binder gates); `MongoExpressionNodeCoverageTests` fails
+  for an unhandled node (complex types added `MongoElementNullCheckExpression` and `MongoCurrentElementNullCheckExpression`).
+  The read-side EF extension nodes `ComplexValueProjectionExpression` and `ComplexPropertyMaterializationExpression` are
+  outside that matrix: every shaper visitor that walks a shaper (DOM, one-pass, mixed reader) must lower or reject them.
 - **Complex-property leaves are stored scalars at a dotted path** (`StructuralPath`). The read side resolves the same
   hops (`MongoProjectionBindingRemovingExpressionVisitor.TryResolveComplexPropertyDocument`), so a leaf reads through its
   `IProperty` (D-F10, serializer); the EF-337 bridge refusal walks them too (`FindComplexLeafProperties`). A bare dotted
@@ -296,7 +311,9 @@ Rendering (null/missing/dialect semantics):
   DateTimeOffset `$dateAdd` reconstruction and the array inputs read raw paths, safe because they propagate null / are
   `$ifNull`'d to `[]`. `MayBeNull` is structural for the null-propagating nodes (NullSafe fields/refs, arithmetic, convert,
   math, date part, DTO local, and per R18 date-add: start or amount; coalesce: both sides; conditional: either branch)
-  with the CLR-type check as fallback, so relational comparisons over them get the null guard. R19: a non-nullable,
+  with the CLR-type check as fallback, so relational comparisons over them get the null guard. R18's operands are judged
+  by `MayBeNullOperand` (a captured non-nullable parameter is never null), so root queries over captured values render
+  the base MQL. R19: a non-nullable,
   default-serialized bool leaf compared as a value reads `$ifNull: [f, false]` (`ScopeValue`), so `== false`/`!= true`/
   `== p` agree with `!a.Verified` (true for a null element; two-valued; no owned pin exists); a `bool?` keeps null semantics;
   owned element scopes keep the RenderBinary no-`$ifNull` rule (a missing owned leaf is malformed data, a null complex element
@@ -305,7 +322,9 @@ Rendering (null/missing/dialect semantics):
   `Contains` of a member, non-nullable bool equality) is refused at the compile-time gate under `Native` instead of falling
   back to those wrong rows (`ComplexElementNullGuardRefusal`, called where the gate commits to the fallback; structural,
   so it refuses even over data with no null element; explicit `DriverLinq` runs the driver; owned scopes untouched).
-  It is a BEST-EFFORT net for structurally keyable shapes, not a guarantee (ruling R21). Documented limits, pinned as
+  It is a BEST-EFFORT net for structurally keyable shapes, not a guarantee (ruling R21). The scanner RESTATES the node kinds
+  that need R17-R19's guards (`ScopeField`/`MayBeNull`/`ScopeValue`) rather than calling those predicates (design debt): a
+  new null-guard-requiring node kind must be added to both, and to the bulk allow-list's refusal side. Documented limits, pinned as
   characterization in `ComplexCollectionNativeQueryTests.Known_limits_of_the_R20_refusal_net_...`: element predicates
   reached through a navigation/join root (`s.Store.Tags.Any(t => t.Rank < 1)`: lambda roots are keyed by
   `FindEntityTypes(param.Type)`, never a `TransparentIdentifier`); element-leaf `Select` chains
