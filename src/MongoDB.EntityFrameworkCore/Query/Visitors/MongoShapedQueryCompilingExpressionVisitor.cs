@@ -143,12 +143,10 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                     ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
                     return BuildFilter<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
                 }),
+            // BuildUpdate needs no check of its own: the executor always calls BuildFilter (single command) or
+            // BuildTargetIdQuery (two-phase) first, and that check covers the setter values too.
             BuildUpdate = isUpdate
-                ? qc => TranslateBulkOrThrow(nonQuery, () =>
-                {
-                    ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
-                    return BuildUpdate<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
-                })
+                ? qc => TranslateBulkOrThrow(nonQuery, () => BuildUpdate<TSource>(qc, entityType, bsonSerializerFactory, nonQuery))
                 : null,
             BuildTargetIdQuery = isTwoPhase
                 ? qc =>
@@ -167,8 +165,9 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     /// <summary>
     /// Task 14: a bulk filter and its <c>SetProperty</c> values always run on the driver-LINQ bridge, so a read of a complex
     /// collection's element that the driver evaluates differently from a query (R17) is refused before any document is
-    /// written (the strict allow-list of <c>ComplexElementNullGuardRefusal</c>). Runs in every plan delegate, each of which
-    /// runs before the first write, with this execution's parameter values. A no-op on EF9 (no complex collections) and
+    /// written (the strict allow-list of <c>ComplexElementNullGuardRefusal</c>). Runs in <c>BuildFilter</c> and
+    /// <c>BuildTargetIdQuery</c>, one of which <c>MongoBulkOperationExecutor</c> calls before anything else for every plan
+    /// (and before <c>BuildUpdate</c>), with this execution's parameter values. A no-op on EF9 (no complex collections) and
     /// under explicit <see cref="MongoQueryMode.DriverLinq"/>.
     /// </summary>
     private static void ThrowIfBulkMisreadsNullElements(

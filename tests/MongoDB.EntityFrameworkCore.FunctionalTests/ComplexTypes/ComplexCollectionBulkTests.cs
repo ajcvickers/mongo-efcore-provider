@@ -633,5 +633,288 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
 
         Assert.Equal(sale.ToJson(), rawSales.Find(FilterDefinition<BsonDocument>.Empty).Single().ToJson());
     }
+    // ── Fix round 1: collection CLR types the bridge cannot normalise (I1) ───────────────────────────────────────────
+
+    public class Crate
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public int Rank { get; set; }
+        public Tag[] Items { get; set; } = [];
+    }
+
+    public class ObservableCrate
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public int Rank { get; set; }
+        public System.Collections.ObjectModel.ObservableCollection<Tag> Items { get; set; } = [];
+    }
+
+    public class IListCrate
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public int Rank { get; set; }
+        public IList<Tag> Items { get; set; } = [];
+    }
+
+    // The first scanned document matches, a LATER one has a null array: measured at 5eece0ae, ExecuteUpdate over a T[] /
+    // ObservableCollection<T> wrote a-match (Rank 1) and then failed on b-null ("$anyElementTrue's argument must be an
+    // array, but is null"): a partial operation. IList<T> is normalised by the bridge and correct.
+    private static BsonDocument[] CrateSeed() =>
+    [
+        new() { { "_id", ObjectId.GenerateNewId() }, { "Name", "a-match" }, { "Rank", 0 }, { "Items", new BsonArray { new BsonDocument("Label", "l") } } },
+        new() { { "_id", ObjectId.GenerateNewId() }, { "Name", "b-null" }, { "Rank", 0 }, { "Items", BsonNull.Value } },
+        new() { { "_id", ObjectId.GenerateNewId() }, { "Name", "c-match" }, { "Rank", 0 }, { "Items", new BsonArray { new BsonDocument("Label", "l") } } }
+    ];
+
+    private (IMongoCollection<BsonDocument> Raw, SingleEntityDbContext<T> Db, BsonDocument[] Seed) Crates<T>(string name, Action<ModelBuilder> configure)
+        where T : class
+    {
+        var collection = database.CreateCollection<T>(name + Guid.NewGuid().ToString("N")[..6]);
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
+        var seed = CrateSeed();
+        raw.InsertMany(seed.Select(d => d.DeepClone().AsBsonDocument));
+        var db = SingleEntityDbContext.Create(collection, configure, null,
+            b => b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
+        return (raw, db, seed);
+    }
+
+    private static void AssertSeedUnchanged(IMongoCollection<BsonDocument> raw, BsonDocument[] seed)
+        => Assert.Equal(seed.OrderBy(d => d["_id"]).Select(d => d.ToJson()),
+            raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().OrderBy(d => d["_id"]).Select(d => d.ToJson()));
+
+    [Fact]
+    public void Operators_over_an_array_typed_collection_are_refused_and_write_nothing()
+    {
+        var (raw, db, seed) = Crates<Crate>(nameof(Operators_over_an_array_typed_collection_are_refused_and_write_nothing),
+            mb => mb.Entity<Crate>().ComplexCollection(c => c.Items));
+        using (db)
+        {
+            const string shape = "whose CLR type cannot hold a List<T>";
+            AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)), shape);
+            AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteDelete(), shape);
+            AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).OrderBy(c => c.Name).Take(5).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)), shape);
+            AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).OrderBy(c => c.Name).Take(5).ExecuteDelete(), shape);
+            // `Count()` / `Length` (the `$size` form): EF lowers both to the Count operator.
+            AssertRefused(() => db.Entities.Where(c => c.Items.Count() > 0).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)), shape);
+            AssertRefused(() => db.Entities.Where(c => c.Items.Length > 0).ExecuteDelete(), shape);
+        }
+
+        AssertSeedUnchanged(raw, seed);
+    }
+
+    [Fact]
+    public void Operators_over_an_ObservableCollection_typed_collection_are_refused_and_write_nothing()
+    {
+        var (raw, db, seed) = Crates<ObservableCrate>(nameof(Operators_over_an_ObservableCollection_typed_collection_are_refused_and_write_nothing),
+            mb => mb.Entity<ObservableCrate>().ComplexCollection(c => c.Items));
+        using (db)
+        {
+            AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)), "whose CLR type cannot hold a List<T>");
+            AssertRefused(() => db.Entities.Where(c => c.Items.Count == 0).ExecuteDelete(), "whose CLR type cannot hold a List<T>");
+        }
+
+        AssertSeedUnchanged(raw, seed);
+    }
+
+    [Fact]
+    public void An_IList_typed_collection_is_normalised_and_served()
+    {
+        var (raw, db, _) = Crates<IListCrate>(nameof(An_IList_typed_collection_is_normalised_and_served),
+            mb => mb.Entity<IListCrate>().ComplexCollection(c => c.Items));
+        using (db)
+        {
+            Assert.Equal(2, db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)));
+            Assert.Equal(1, db.Entities.Where(c => c.Items.Count == 0).ExecuteDelete());
+        }
+
+        Assert.Equal(["a-match:1", "c-match:1"], raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => $"{d["Name"]}:{d["Rank"]}").Order(StringComparer.Ordinal));
+    }
+
+    // ── Fix round 1: model-level query filters (M2) ───────────────────────────────────────────────────────────────
+
+    private SingleEntityDbContext<Route> FilteredContext(Store store, Expression<Func<Route, bool>> filter, MongoQueryMode mode = MongoQueryMode.Native)
+        => SingleEntityDbContext.Create(
+            store.Raw.Database.GetCollection<Route>(store.Raw.CollectionNamespace.CollectionName),
+            mb => { Configure(mb); mb.Entity<Route>().HasQueryFilter(filter); }, null, b =>
+            {
+                b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+                new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
+            });
+
+    [Fact]
+    public void A_query_filter_with_an_unsafe_element_predicate_is_refused_unless_ignored()
+    {
+        // EF applies the model filter to the bulk source before the provider translates it, so the scanner sees it.
+        var store = Seed();
+        using (var db = FilteredContext(store, r => r.Stops.Any(s => s.Floor < 1)))
+        {
+            AssertRefused(() => db.Entities.ExecuteDelete(), "the element predicate");
+            AssertRefused(() => db.Entities.Where(r => r.Rank > 0).ExecuteUpdate(s => s.SetProperty(r => r.Rank, -1)), "the element predicate");
+            AssertRefused(() => db.Entities.OrderBy(r => r.Name).Take(3).ExecuteDelete(), "the element predicate");
+        }
+
+        store.AssertUnchanged();
+
+        // IgnoreQueryFilters removes the filter: a plain update of every row.
+        using (var db = FilteredContext(store, r => r.Stops.Any(s => s.Floor < 1)))
+        {
+            Assert.Equal(7, db.Entities.IgnoreQueryFilters().ExecuteUpdate(s => s.SetProperty(r => r.Rank, -1)));
+        }
+
+        Assert.All(store.Stored(), d => Assert.Equal(-1, d["Rank"].AsInt32));
+    }
+
+    [Fact]
+    public void A_query_filter_with_a_safe_element_predicate_selects_the_query_rows()
+    {
+        var queryStore = Seed();
+        using (var db = FilteredContext(queryStore, r => r.Stops.Any(s => s.City == "Oslo"), MongoQueryMode.NativeOnly))
+        {
+            Assert.Equal(["r-full", "r-mixed"], db.Entities.AsNoTracking().Select(r => r.Name).ToList().Order(StringComparer.Ordinal));
+            Assert.Equal(AllRows, db.Entities.IgnoreQueryFilters().AsNoTracking().Select(r => r.Name).ToList().Order(StringComparer.Ordinal));
+        }
+
+        var store = Seed();
+        using (var db = FilteredContext(store, r => r.Stops.Any(s => s.City == "Oslo")))
+        {
+            Assert.Equal(2, db.Entities.ExecuteUpdate(s => s.SetProperty(r => r.Rank, -1)));
+            Assert.Equal(2, db.Entities.ExecuteDelete());
+        }
+
+        Assert.Equal(["r-empty", "r-emptyelem", "r-missing", "r-null", "r-nullarr"], store.Names());
+
+        var ignored = Seed();
+        using (var db = FilteredContext(ignored, r => r.Stops.Any(s => s.City == "Oslo")))
+        {
+            Assert.Equal(7, db.Entities.IgnoreQueryFilters().ExecuteDelete());
+        }
+
+        Assert.Empty(ignored.Names());
+    }
+
+    // ── Fix round 1: two-phase with an unsafe SETTER value (unverified check b) ───────────────────────────────────
+
+    [Fact]
+    public void A_two_phase_update_whose_setter_value_reads_elements_unsafely_writes_nothing()
+    {
+        // Two-phase: the executor calls BuildTargetIdQuery (which runs the check over filter AND setter values) inside the
+        // transaction before reading any target id or writing; the refusal aborts before UpdateMany.
+        var store = Seed();
+        using (var db = store.Context())
+        {
+            AssertRefused(() => db.Entities.OrderBy(r => r.Name).Take(3)
+                .ExecuteUpdate(s => s.SetProperty(r => r.Rank, r => r.Stops.Count(st => st.Floor < 1))), "the element predicate");
+            AssertRefused(() => db.Entities.Where(r => r.Stops.Any(st => st.City == "Oslo")).OrderBy(r => r.Name).Skip(0)
+                .ExecuteUpdate(s => s.SetProperty(r => r.Rank, r => r.Stops.Count(st => st.Zip != null))), "the element predicate");
+        }
+
+        store.AssertUnchanged();
+    }
+
+    // ── Fix round 1: a required collection under an OPTIONAL complex hop (M4) ─────────────────────────────────────
+
+    public class Hop
+    {
+        public List<Stop> Stops { get; set; } = [];
+    }
+
+    public class HopRoute
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public int Rank { get; set; }
+        public Hop? Opt { get; set; }
+    }
+
+    [Fact]
+    public void A_required_collection_under_an_optional_hop_is_served_when_the_predicate_is_safe()
+    {
+        // Admitted by the allow-list: the collection itself is REQUIRED (the bridge coalesces it to [], and under an absent
+        // parent the driver reads the missing path as empty too), and the predicate is an allowed atom. Measured at 5eece0ae
+        // and now: the query (NativeOnly) and both bulk operations select the same rows, including h-null (Opt BSON null),
+        // h-missing (no Opt) and h-empty (Opt {}).
+        BsonDocument Row(string name, BsonValue? opt)
+        {
+            var d = new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", name }, { "Rank", 0 } };
+            if (opt is not null)
+            {
+                d["Opt"] = opt;
+            }
+
+            return d;
+        }
+
+        BsonDocument Rome()
+        {
+            var rome = StopDoc();
+            rome["city"] = "Rome";
+            return rome;
+        }
+
+        BsonDocument[] Seed() =>
+        [
+            Row("h-val", new BsonDocument("Stops", new BsonArray { StopDoc(), BsonNull.Value })),
+            Row("h-null", BsonNull.Value), Row("h-missing", null), Row("h-empty", new BsonDocument()),
+            Row("h-rome", new BsonDocument("Stops", new BsonArray { Rome() }))
+        ];
+
+        void Check(Expression<Func<HopRoute, bool>> predicate, string[] expected)
+        {
+            IMongoCollection<HopRoute> New()
+            {
+                var collection = database.CreateCollection<HopRoute>("hop" + Guid.NewGuid().ToString("N")[..8]);
+                collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName).InsertMany(Seed());
+                return collection;
+            }
+
+            SingleEntityDbContext<HopRoute> Ctx(IMongoCollection<HopRoute> c, MongoQueryMode mode)
+                => SingleEntityDbContext.Create(c, mb => mb.Entity<HopRoute>().ComplexProperty(r => r.Opt, o => o.ComplexCollection(x => x.Stops, st =>
+                {
+                    st.Property(x => x.City).Metadata.SetElementName("city");
+                    st.Property(x => x.Code).HasConversion<string>();
+                    st.ComplexProperty(x => x.Location);
+                    st.ComplexCollection(x => x.Tags);
+                })), null, b =>
+                {
+                    b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+                    new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
+                });
+
+            using (var db = Ctx(New(), MongoQueryMode.NativeOnly))
+            {
+                Assert.Equal(expected, db.Entities.AsNoTracking().Where(predicate).Select(r => r.Name).ToList().Order(StringComparer.Ordinal));
+            }
+
+            var update = New();
+            using (var db = Ctx(update, MongoQueryMode.Native))
+            {
+                Assert.Equal(expected.Length, db.Entities.Where(predicate).ExecuteUpdate(s => s.SetProperty(r => r.Rank, 1)));
+            }
+
+            var raw = update.Database.GetCollection<BsonDocument>(update.CollectionNamespace.CollectionName);
+            Assert.Equal(expected, raw.Find(new BsonDocument("Rank", 1)).ToList().Select(d => d["Name"].AsString).Order(StringComparer.Ordinal));
+            // Only Rank changed: every Opt (null, missing, {}, populated) is stored exactly as seeded.
+            Assert.Equal(Seed().Select(d => d.Contains("Opt") ? d["Opt"].ToJson() : "<missing>").Order(StringComparer.Ordinal),
+                raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => d.Contains("Opt") ? d["Opt"].ToJson() : "<missing>").Order(StringComparer.Ordinal));
+
+            var delete = New();
+            using (var db = Ctx(delete, MongoQueryMode.Native))
+            {
+                Assert.Equal(expected.Length, db.Entities.Where(predicate).ExecuteDelete());
+            }
+
+            Assert.Equal(new[] { "h-empty", "h-missing", "h-null", "h-rome", "h-val" }.Except(expected),
+                delete.Database.GetCollection<BsonDocument>(delete.CollectionNamespace.CollectionName).Find(FilterDefinition<BsonDocument>.Empty).ToList()
+                    .Select(d => d["Name"].AsString).Order(StringComparer.Ordinal));
+        }
+
+        Check(r => r.Opt!.Stops.Any(s => s.City == "Oslo"), ["h-val"]);
+        Check(r => r.Opt!.Stops.Any(s => s.City != "Oslo"), ["h-rome", "h-val"]);
+        Check(r => r.Opt!.Stops.Any(), ["h-rome", "h-val"]);
+        Check(r => r.Opt!.Stops.Count() == 0, ["h-empty", "h-missing", "h-null"]);
+    }
 }
 #endif

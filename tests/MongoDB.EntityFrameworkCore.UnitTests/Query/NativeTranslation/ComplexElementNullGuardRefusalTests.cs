@@ -189,6 +189,100 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["unbound element lambda", Scalar(q => (Expression<Func<Stop, bool>>)(s => s.Floor < 1)), "cannot bind to its collection"];
     }
 
+    // ── Fix round 1: collection CLR types (I1) and unknown extension nodes ─────────────────────────────────────────
+
+    public class Tag
+    {
+        public string Label { get; set; } = null!;
+    }
+
+    public class ArrayHolder { public int Id { get; set; } public Tag[] Items { get; set; } = []; }
+    public class ListHolder { public int Id { get; set; } public List<Tag> Items { get; set; } = []; }
+    public class IListHolder { public int Id { get; set; } public IList<Tag> Items { get; set; } = []; }
+    public class ObservableHolder { public int Id { get; set; } public System.Collections.ObjectModel.ObservableCollection<Tag> Items { get; set; } = []; }
+
+    private sealed class HolderContext<T>(Action<ModelBuilder> configure) : DbContext where T : class
+    {
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+            => optionsBuilder
+                .UseMongoDB("mongodb://localhost:27017", "UnitTests")
+                .ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, PerInstanceModelCacheKeyFactory>()
+                .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder) => configure(modelBuilder);
+    }
+
+    private sealed class PerInstanceModelCacheKeyFactory : Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory
+    {
+        public object Create(DbContext context, bool designTime) => (context.GetType(), designTime);
+    }
+
+    private static IModel HolderModel<T>(Action<ModelBuilder> configure) where T : class
+    {
+        using var db = new HolderContext<T>(configure);
+        return db.Model;
+    }
+
+    [Fact]
+    public void Bulk_refuses_operators_over_collection_types_the_bridge_cannot_normalise()
+    {
+        // Normalised by the bridge (a List<T> is assignable): List<T>, IList<T> (and IEnumerable<T>/ICollection<T>/
+        // IReadOnlyList<T>, which EF10 rejects for complex collections at model/serializer level: measured). Not normalised:
+        // T[], ObservableCollection<T> (and any other concrete type a List<T> doesn't fit).
+        Assert.Null(ComplexElementNullGuardRefusal.FindForBulk(
+            [(Expression<Func<IQueryable<ListHolder>, IQueryable<ListHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
+            HolderModel<ListHolder>(mb => mb.Entity<ListHolder>().ComplexCollection(h => h.Items))));
+        Assert.Null(ComplexElementNullGuardRefusal.FindForBulk(
+            [(Expression<Func<IQueryable<IListHolder>, IQueryable<IListHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
+            HolderModel<IListHolder>(mb => mb.Entity<IListHolder>().ComplexCollection(h => h.Items))));
+
+        var array = ComplexElementNullGuardRefusal.FindForBulk(
+            [(Expression<Func<IQueryable<ArrayHolder>, IQueryable<ArrayHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
+            HolderModel<ArrayHolder>(mb => mb.Entity<ArrayHolder>().ComplexCollection(h => h.Items)));
+        Assert.Contains("whose CLR type cannot hold a List<T>", array!.Value.Shape);
+
+        var observable = ComplexElementNullGuardRefusal.FindForBulk(
+            [(Expression<Func<IQueryable<ObservableHolder>, IQueryable<ObservableHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
+            HolderModel<ObservableHolder>(mb => mb.Entity<ObservableHolder>().ComplexCollection(h => h.Items)));
+        Assert.Contains("whose CLR type cannot hold a List<T>", observable!.Value.Shape);
+    }
+
+    [Theory]
+    [InlineData(typeof(List<Tag>), true)]
+    [InlineData(typeof(IList<Tag>), true)]
+    [InlineData(typeof(ICollection<Tag>), true)]
+    [InlineData(typeof(IEnumerable<Tag>), true)]
+    [InlineData(typeof(IReadOnlyList<Tag>), true)]
+    [InlineData(typeof(IReadOnlyCollection<Tag>), true)]
+    [InlineData(typeof(Tag[]), false)]
+    [InlineData(typeof(HashSet<Tag>), false)]
+    [InlineData(typeof(System.Collections.ObjectModel.ObservableCollection<Tag>), false)]
+    [InlineData(typeof(System.Collections.ObjectModel.Collection<Tag>), false)]
+    public void The_shared_normalisation_predicate_per_collection_type(Type type, bool normalised)
+        => Assert.Equal(normalised, type.IsNormalizableToEmptyList(out _));
+
+    private sealed class OpaqueExtension(Expression inner) : Expression
+    {
+        public Expression Inner { get; } = inner;
+
+        public override ExpressionType NodeType => ExpressionType.Extension;
+
+        public override Type Type => Inner.Type;
+    }
+
+    [Fact]
+    public void Bulk_refuses_an_unknown_extension_node_that_could_hide_an_element_lambda()
+    {
+        Expression<Func<Route, bool>> elementLambdaHolder = r => r.Stops.Any(s => s.Floor < 1);
+        var hidden = Expression.Lambda<Func<Route, bool>>(new OpaqueExtension(elementLambdaHolder.Body), elementLambdaHolder.Parameters);
+        var captured = Query(q => q.Where(r => true));
+        var wrapped = Expression.Call(((MethodCallExpression)captured).Method, ((MethodCallExpression)captured).Arguments[0], Expression.Quote(hidden));
+        var found = ComplexElementNullGuardRefusal.FindForBulk([wrapped], Model);
+        Assert.Contains("of type 'OpaqueExtension' the bulk check cannot inspect", found!.Value.Shape);
+        // Query mode (non-strict) is unchanged: it skips extension nodes.
+        Assert.Null(ComplexElementNullGuardRefusal.Find(wrapped, Model));
+    }
+
     private sealed class RouteContext : DbContext
     {
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
