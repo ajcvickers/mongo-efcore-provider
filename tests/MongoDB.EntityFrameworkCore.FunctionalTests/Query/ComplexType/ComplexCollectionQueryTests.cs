@@ -234,6 +234,22 @@ public class ComplexCollectionQueryTests(TemporaryDatabaseFixture database) : IC
     }
 
     [Fact]
+    public void Whole_entity_read_via_dom_shaper_declines_under_native_mode_too()
+    {
+        // Three-mode rule: the DOM decline has no driver-LINQ oracle (materialization always runs through the
+        // provider's shaper), so it must decline under default Native mode as well — the binding-remover throw
+        // sits outside the streaming rewriter's NativeTranslationNotSupportedException catch, so nothing falls back.
+        var collection = database.CreateCollection<Order>(values: ["domnat"]);
+        SeedOrders(database.GetCollection<BsonDocument>(collection.CollectionNamespace));
+
+        using var domContext = CreateContext(collection, MongoQueryMode.Native, OrderModel);
+
+        var decline = Assert.Throws<NativeTranslationNotSupportedException>(
+            () => domContext.Entities.Single(o => o.Name == "match"));
+        Assert.Contains("complex collection", decline.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SelectMany_over_complex_collection_declines_cleanly()
     {
         // Whole-element re-rooting ($unwind + $replaceRoot) for complex elements is not built: it needs a

@@ -199,6 +199,46 @@ public static class EntitySerializerComplexPropertyTests
 
 #if EF10
     [Fact]
+    public static void Nullable_struct_complex_property_serializes_through_the_metadata_serializer()
+    {
+        using var db = new NullableStructShippingContext();
+        var complexProperty = db.Model.FindEntityType(typeof(StructCustomer))!
+            .FindComplexProperty(nameof(StructCustomer.Address))!;
+        Assert.True(complexProperty.IsNullable);
+
+        var serializer = new BsonSerializerFactory().GetComplexPropertySerializer(complexProperty);
+
+        // The value must serialize through the EF-metadata-driven ComplexTypeSerializer — element names
+        // honored — not through a driver class map, which would rename Id to _id.
+        var valueDocument = SerializeValue(serializer, new AddressPoint { Id = "A-1", City = "Seattle", Street = "1 Main" });
+        Assert.Equal("A-1", valueDocument["Id"].AsString);
+        Assert.False(valueDocument.Contains("_id"));
+        Assert.Equal("Seattle", valueDocument["City"].AsString);
+        Assert.Equal("1 Main", valueDocument["Street"].AsString);
+
+        // And it round-trips through the nullable wrapper.
+        using var reader = new BsonDocumentReader(valueDocument);
+        var readContext = BsonDeserializationContext.CreateRoot(reader);
+        var roundTripped = (AddressPoint?)serializer.Deserialize(readContext, new BsonDeserializationArgs());
+        Assert.Equal("A-1", roundTripped?.Id);
+        Assert.Equal("Seattle", roundTripped?.City);
+
+        // A null value, written the way a parent-level writer will, serializes as a BSON null element.
+        var nullDocument = new BsonDocument();
+        using (var writer = new BsonDocumentWriter(nullDocument))
+        {
+            var context = BsonSerializationContext.CreateRoot(writer);
+            writer.WriteStartDocument();
+            writer.WriteName(complexProperty.GetElementName());
+            serializer.Serialize(
+                context, new BsonSerializationArgs { NominalType = serializer.ValueType }, null);
+            writer.WriteEndDocument();
+        }
+
+        Assert.Equal(BsonType.Null, nullDocument["shipping"].BsonType);
+    }
+
+    [Fact]
     public static void Collection_complex_property_serializes_as_array()
     {
         using var db = new OrderContext();
@@ -281,6 +321,37 @@ public static class EntitySerializerComplexPropertyTests
     {
         public string Sku { get; set; } = null!;
         public int Quantity { get; set; }
+    }
+
+    private class StructCustomer
+    {
+        public int Id { get; set; }
+        public AddressPoint? Address { get; set; }
+    }
+
+    private struct AddressPoint
+    {
+        public string Id { get; set; }
+        public string? City { get; set; }
+        public string? Street { get; set; }
+    }
+
+    private class NullableStructShippingContext : DbContext
+    {
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+            => optionsBuilder.UseMongoDB("mongodb://localhost:12345", "unitTests");
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<StructCustomer>().ComplexProperty(c => c.Address);
+
+            // ComplexPropertyBuilder exposes no HasAnnotation in any EF version we target, so set the
+            // annotation on the mutable complex property directly (it survives FinalizeModel).
+            var complexProperty = modelBuilder.Model
+                .FindEntityType(typeof(StructCustomer))!
+                .FindComplexProperty(nameof(StructCustomer.Address))!;
+            complexProperty.SetAnnotation(MongoAnnotationNames.ElementName, "shipping");
+        }
     }
 #endif
 

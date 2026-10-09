@@ -88,7 +88,7 @@ public sealed class BsonSerializerFactory
         }
 
         return complexProperty.IsNullable && complexProperty.ComplexType.ClrType.IsValueType
-            ? GetNullableSerializer(complexProperty.ComplexType.ClrType, null)
+            ? CreateGenericSerializer(typeof(NullableSerializer<>), [complexProperty.ComplexType.ClrType], elementSerializer)
             : elementSerializer;
     }
 
