@@ -184,6 +184,10 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["Max", Query(q => q.Where(r => r.Stops.Max(s => s.Floor) > 1)), "the operator 'Max'"];
         yield return ["OrderBy", Query(q => q.Where(r => r.Stops.OrderBy(s => s.Floor).Any())), "the operator 'OrderBy'"];
         yield return ["collection read outside an operator", Query(q => q.Where(r => r.Stops != null)), "a read of the collection"];
+        // The EF.Property spelling of the same read reaches the method-call arm, not the member arm (Task 15: without this
+        // row the method-call arm's check survived mutation).
+        yield return ["EF.Property collection read outside an operator",
+            Query(q => q.Where(r => EF.Property<List<Stop>>(r, nameof(Route.Stops)) != null)), "a read of the collection"];
         // A lambda over complex elements the keying cannot bind (its source unknown, e.g. reached through a navigation) is
         // refused rather than trusted.
         yield return ["unbound element lambda", Scalar(q => (Expression<Func<Stop, bool>>)(s => s.Floor < 1)), "cannot bind to its collection"];

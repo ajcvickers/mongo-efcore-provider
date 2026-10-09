@@ -339,6 +339,8 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
             AssertRefused(() => db.Entities.Where(r => r.Stops[0].Floor < 1).ExecuteDelete(), "the operator 'Select'");
             AssertRefused(() => db.Entities.Where(r => r.Stops.First().Floor < 1).ExecuteDelete(), "the operator 'Select'");
             AssertRefused(() => db.Entities.Where(r => r.Stops.Select(s => s.Verified).Contains(false)).ExecuteDelete(), "the operator 'Select'");
+            // The EF.Property spelling of a collection read outside an operator (Task 15: the method-call arm of the check).
+            AssertRefused(() => db.Entities.Where(r => EF.Property<List<Stop>>(r, nameof(Route.Stops)) == null).ExecuteDelete(), "a read of the collection");
         }
 
         store.AssertUnchanged();
