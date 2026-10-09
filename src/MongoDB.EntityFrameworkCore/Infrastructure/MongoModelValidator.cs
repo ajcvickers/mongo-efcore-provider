@@ -198,6 +198,8 @@ public class MongoModelValidator : ModelValidator
     {
         foreach (var entityType in model.GetEntityTypes())
         {
+            ValidateNoConcurrencyTokensInsideComplexTypes(entityType);
+
             if (entityType.IsDocumentRoot()) continue;
 
             var concurrencyToken = entityType.GetProperties().FirstOrDefault(p => p.IsConcurrencyToken);
@@ -209,6 +211,34 @@ public class MongoModelValidator : ModelValidator
                     " Concurrency tokens are only supported on the document-root entity, where they" +
                     " guard the whole document including its owned entities.");
             }
+        }
+    }
+
+    /// <summary>
+    /// Validate that no property of a complex type (nested and complex collections included) is a concurrency token or
+    /// row version.
+    /// </summary>
+    /// <remarks>
+    /// The update filter is built only from the entity type's own properties (<c>MongoUpdate.WriteConcurrencyTokens</c>)
+    /// and a row version is only generated for them, so a token inside a complex type would be silently ignored: a
+    /// conflicting save would succeed and overwrite the other change. Measured on EF8, EF9 and EF10 before this check.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">When a concurrency token is configured inside a complex type.</exception>
+    private static void ValidateNoConcurrencyTokensInsideComplexTypes(ITypeBase type)
+    {
+        foreach (var complexProperty in type.GetDeclaredComplexProperties())
+        {
+            var concurrencyToken = complexProperty.ComplexType.GetDeclaredProperties().FirstOrDefault(p => p.IsConcurrencyToken);
+            if (concurrencyToken != null)
+            {
+                throw new NotSupportedException(
+                    MemberOnType(concurrencyToken) +
+                    " is configured as a concurrency token or row version, but it belongs to a complex type." +
+                    " Concurrency tokens are only supported on the document-root entity, where they" +
+                    " guard the whole document including its complex properties.");
+            }
+
+            ValidateNoConcurrencyTokensInsideComplexTypes(complexProperty.ComplexType);
         }
     }
 
