@@ -186,6 +186,12 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     {
         Native(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Location.Lat > 1)))), "a-two", "e-one", "f-nullelem");
         Native(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Location.Lat > 2)))), "e-one");
+        // R17: f-nullelem's null element reads Lat null, so `< 1` is false for it (and its Oslo is 2): excluded. a-two's Rome
+        // has 0.5. Driver-LINQ's unguarded `$lt` reads the missing Lat as below every value and includes f-nullelem.
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Location.Lat < 1)))), ["a-two"], ["a-two", "f-nullelem"]);
+        // All: the null element fails `Lat < 5`, so f-nullelem is excluded; empty/null/missing are vacuously true.
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.All(a => a.Location.Lat < 5)))),
+            ["a-two", "b-empty", "c-null", "d-missing", "e-one"], ["a-two", "b-empty", "c-null", "d-missing", "e-one", "f-nullelem"]);
     }
 
     [Fact]
@@ -194,12 +200,10 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // a-two's Rome has Zip null; f-nullelem's Oslo has Zip null; e-one's Paris has 9.
         Native(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Zip == null)))), "a-two", "f-nullelem");
         Native(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Street == null)))), "a-two", "e-one", "f-nullelem");
-        // EXISTING owner-ruled element-scope divergence (Query AGENTS.md: RenderBinary's `$eq`/`$ne` against null is not
-        // $ifNull'd inside a $filter/$map scope, matching driver-LINQ): over the null element's MISSING leaf `$ne: [missing,
-        // null]` is true, so f-nullelem is included although C# answers `null != null` false (C# rows: a-two, e-one for Zip;
-        // none for Street). All three modes agree; the null element is the only row that differs.
-        Native(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Zip != null)))), "a-two", "e-one", "f-nullelem");
-        Native(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Street != null)))), "f-nullelem");
+        // R17: the null element's leaves read null, so `!= null` is false for it (C#'s answer). Driver-LINQ's element-scope
+        // `$ne` against null is not missing-safe and still includes it (known driver behaviour, pinned).
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Zip != null)))), ["a-two", "e-one"], ["a-two", "e-one", "f-nullelem"]);
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.Street != null)))), [], ["f-nullelem"]);
     }
 
     [Fact]
@@ -211,6 +215,157 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         Native(Customers(q => Names(q.Where(c => c.Addresses.All(a => a.City == "Oslo")))), "b-empty", "c-null", "d-missing");
         Native(Customers(q => Names(q.Where(c => c.Addresses.All(a => a.Location.Lat >= 1)))), "b-empty", "c-null", "d-missing", "e-one");
         Native(Customers(q => Names(q.Where(c => !c.Addresses.All(a => a.City == "Paris")))), "a-two", "f-nullelem");
+    }
+
+    // ── Null elements (ruling R17): every leaf of a NULL element reads null ─────────────────────────────────────
+
+    public class Stop
+    {
+        public string City { get; set; } = null!;
+        public string? Note { get; set; }
+        public int Floor { get; set; }
+        public int? Zip { get; set; }
+        public double Lat { get; set; }
+        public decimal Fee { get; set; }
+        public DateTime When { get; set; }
+        public bool Verified { get; set; }
+        public GeoPoint Location { get; set; }
+        public List<Tag> Tags { get; set; } = [];
+    }
+
+    public class Route
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public string Home { get; set; } = null!;
+        public List<Stop> Stops { get; set; } = [];
+    }
+
+    private static readonly DateTime May = new(2024, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private static BsonDocument StopDoc(string city, int floor, bool verified, params string[] tags)
+        => new()
+        {
+            { "City", city }, { "Note", "n" }, { "Floor", floor }, { "Zip", floor }, { "Lat", (double)floor }, { "Fee", new BsonDecimal128(floor) },
+            { "When", May.AddDays(floor) }, { "Verified", verified }, { "Location", new BsonDocument { { "Lat", (double)floor }, { "Lon", 0.0 } } },
+            { "Tags", new BsonArray(tags.Select(t => new BsonDocument("Label", t))) }
+        };
+
+    /// <summary>
+    /// r-null: [null] (only a null element). r-mixed: [Oslo(floor 5, verified, tag x), null]. r-full: [Oslo(floor 5, verified,
+    /// tag x)] (the same present element, no null: the control). Home is Oslo everywhere.
+    /// </summary>
+    private Func<MongoQueryMode, List<string>> Routes(
+        Func<IQueryable<Route>, IEnumerable<string>> query, [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+    {
+        var collection = database.CreateCollection<Route>(Unique(name));
+        Raw(collection).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "r-null" }, { "Home", "Oslo" }, { "Stops", new BsonArray { BsonNull.Value } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "r-mixed" }, { "Home", "Oslo" }, { "Stops", new BsonArray { StopDoc("Oslo", 5, true, "x"), BsonNull.Value } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "r-full" }, { "Home", "Oslo" }, { "Stops", new BsonArray { StopDoc("Oslo", 5, true, "x") } } }
+        ]);
+        return mode => Run(collection, mode, mb => mb.Entity<Route>().ComplexCollection(r => r.Stops, s =>
+        {
+            s.ComplexProperty(x => x.Location);
+            s.ComplexCollection(x => x.Tags);
+        }), query);
+    }
+
+    private static IEnumerable<string> RNames(IQueryable<Route> q) => q.Select(r => r.Name).ToList().Order(StringComparer.Ordinal);
+
+    private static IEnumerable<string> RPerRow<T>(IQueryable<Route> q, System.Linq.Expressions.Expression<Func<Route, T>> value)
+        => q.OrderBy(r => r.Name).Select(value).ToList().Select(v => v?.ToString() ?? "<null>");
+
+    // Rule (R17, from R14 "an absent parent reads its children as null"): a null element's every leaf reads null. So for it
+    // `== v` is false, `!= v` true, `== null` true, `!= null` false, every relational comparison false and its negation true,
+    // string operators false, a non-nullable bool reads false (null-as-false, as the repo reads a bool under an absent
+    // parent: `!a.Verified` is true), a nested collection reads empty. Any(p) includes a row iff SOME element satisfies p;
+    // All(p) iff EVERY element does (the null element included); Count(p) counts the null element iff p holds for it.
+
+    [Fact]
+    public void Null_element_relational_comparisons_are_false_and_their_negations_true()
+    {
+        // r-mixed's Oslo has 5 everywhere; only the null element could satisfy `< 1`. Every leaf type: int, double,
+        // decimal, DateTime, a nested struct hop, int?.
+        string[] driverReadsMissingAsLowest = ["r-mixed", "r-null"];
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Floor < 1)))), [], driverReadsMissingAsLowest);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Lat < 1)))), [], driverReadsMissingAsLowest);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Fee < 1)))), [], driverReadsMissingAsLowest);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When < May)))), [], driverReadsMissingAsLowest);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Location.Lat < 1)))), [], driverReadsMissingAsLowest);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip < 1)))), [], driverReadsMissingAsLowest);
+
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => !(s.Floor > 9))))), ["r-full", "r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.Location.Lat < 9)))), ["r-full"], ["r-full", "r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => !(s.Location.Lat > 9))))), ["r-full", "r-mixed", "r-null"]);
+    }
+
+    [Fact]
+    public void Null_element_equality_and_null_checks()
+    {
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.City == "Oslo")))), ["r-full", "r-mixed"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.City != "Oslo")))), ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip == null)))), ["r-mixed", "r-null"], []);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip != null)))), ["r-full", "r-mixed"], ["r-full", "r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Note == null)))), ["r-mixed", "r-null"], []);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.Note != null)))), ["r-full"], ["r-full", "r-mixed", "r-null"]);
+        NullElement(Routes(q => RPerRow(q, r => r.Stops.Count(s => s.Zip == null))), ["0", "1", "1"], ["0", "0", "0"]);
+        NullElement(Routes(q => RPerRow(q, r => r.Stops.Count(s => s.Floor < 1))), ["0", "0", "0"], ["0", "1", "1"]);
+        // Correlated: the null element's City (null) never equals the row's Home.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.City == r.Home)))), ["r-full", "r-mixed"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.City == r.Home)))), ["r-full"]);
+    }
+
+    [Fact]
+    public void Null_element_bool_leaf_reads_false()
+    {
+        // r-mixed's Oslo is verified: only the null element makes `!Verified` true there.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => !s.Verified)))), ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Verified)))), ["r-full", "r-mixed"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.Verified)))), ["r-full"]);
+    }
+
+    [Fact]
+    public void Null_element_string_operators_are_false()
+    {
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => !s.City.StartsWith("O"))))), ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.City.Contains("s"))))), ["r-full"]);
+        // The driver's $strLenCP over the missing City is a server error (known driver behaviour, loud).
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.City.Length == 4)))), ["r-full", "r-mixed"],
+            driverError: "$strLenCP requires a string argument");
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.City.Length == 4)))), ["r-full"],
+            driverError: "$strLenCP requires a string argument");
+    }
+
+    [Fact]
+    public void Null_element_nested_collection_reads_empty()
+    {
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => !s.Tags.Any())))), ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.Tags.Any(t => t.Label == "x"))))), ["r-full"]);
+        NullElement(Routes(q => RPerRow(q, r => r.Stops.Count(s => s.Tags.Count == 0))), ["0", "1", "1"]);
+    }
+
+    // Native modes serve the R17 rows; driver-LINQ is pinned to its own measured rows (known driver behaviour: its element-scope
+    // `$eq`/`$ne` against null don't equate MISSING with null, and its relational operators carry no null guard, so it
+    // reads a null element's missing leaves as below every value). Breaks loudly when the driver changes.
+    private static void NullElement(Func<MongoQueryMode, List<string>> run, string[] expected, string[]? driverRows = null, string? driverError = null)
+    {
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native })
+        {
+            Assert.True(expected.SequenceEqual(run(mode)), $"{mode}: expected [{string.Join("; ", expected)}], got [{string.Join("; ", run(mode))}]");
+        }
+
+        if (driverError is not null)
+        {
+            var e = Assert.ThrowsAny<Exception>(() => run(MongoQueryMode.DriverLinq));
+            Assert.Contains(driverError, e.Message);
+            return;
+        }
+
+        var driver = run(MongoQueryMode.DriverLinq);
+        var want = driverRows ?? expected;
+        Assert.True(want.SequenceEqual(driver), $"DriverLinq: expected [{string.Join("; ", want)}], got [{string.Join("; ", driver)}]");
     }
 
     // ── Counts ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -230,8 +385,11 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     public void Count_with_a_predicate()
     {
         Native(Customers(q => Names(q.Where(c => c.Addresses.Count(a => a.City == "Paris") == 1))), "a-two", "e-one");
-        // A null element's members read null: it is not counted by a member predicate.
-        Native(Customers(q => PerRow(q, c => c.Addresses.Count(a => a.Zip == null))), "1", "0", "0", "0", "0", "1");
+        // A null element's members read null (R17): `a.Zip == null` holds for it, so f-nullelem counts its Oslo (Zip null)
+        // AND its null element: 2. Driver-LINQ's `$eq` against null misses the missing Zip and counts 1 (known driver
+        // behaviour, pinned).
+        NullElement(Customers(q => PerRow(q, c => c.Addresses.Count(a => a.Zip == null))), ["1", "0", "0", "0", "0", "2"],
+            ["1", "0", "0", "0", "0", "1"]);
     }
 
     [Fact]
@@ -792,6 +950,69 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
             "The argument to $size must be an array");
         Native(m => Run(collection, m, Configure, q => q.OrderBy(i => i.Name).Select(i => i.Extra!.Count).ToList().Select(n => n.ToString())),
             "0", "0", "0", "1");
+    }
+
+    // ── Array-typed complex collection (T[]) ────────────────────────────────────────────────────────────────────
+
+    public class Crate
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public Tag[] Items { get; set; } = [];
+    }
+
+    [Fact]
+    public void Array_typed_collection_quantifiers_are_native_and_the_fallback_stays_loud_on_a_null_array()
+    {
+        // Native $ifNull's the null/missing array. The bridge's `?? new List<T>()` normalization only applies to collection
+        // types a List<T> is assignable to, so a T[] property keeps the raw field on driver-LINQ: a server error on a null
+        // array (loud, never rows).
+        var collection = database.CreateCollection<Crate>(Unique(nameof(Array_typed_collection_quantifiers_are_native_and_the_fallback_stays_loud_on_a_null_array)));
+        Raw(collection).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "x" }, { "Items", new BsonArray { new BsonDocument("Label", "l") } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "y" }, { "Items", BsonNull.Value } }
+        ]);
+        static void Configure(ModelBuilder mb) => mb.Entity<Crate>().ComplexCollection(c => c.Items);
+        IEnumerable<string> N(IQueryable<Crate> q) => q.Select(c => c.Name).ToList().Order();
+        PerMode(m => Run(collection, m, Configure, q => N(q.Where(c => c.Items.Any(i => i.Label == "l")))), ["x"],
+            Serves, Serves, "$anyElementTrue's argument must be an array");
+    }
+
+    // ── Bulk operations: the bridge normalization also serves ExecuteUpdate/ExecuteDelete (smoke; full coverage Task 14) ──
+
+    [Fact]
+    public void ExecuteUpdate_and_ExecuteDelete_filter_on_a_complex_collection_quantifier()
+    {
+        // Bulk ops run on the driver-LINQ bridge. Rows: one match, a null array, a missing array, a null element only.
+        BsonDocument[] Seed() =>
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "u-match" }, { "Spots", new BsonArray { S("Rome", 1, 1) } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "u-null" }, { "Spots", BsonNull.Value } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "u-missing" } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "u-nullelem" }, { "Spots", new BsonArray { BsonNull.Value } } }
+        ];
+
+        var update = database.CreateCollection<Traveller>(Unique(nameof(ExecuteUpdate_and_ExecuteDelete_filter_on_a_complex_collection_quantifier) + "u"));
+        Raw(update).InsertMany(Seed());
+        using (var db = Context(update, MongoQueryMode.Native, ConfigureTraveller))
+        {
+            // Required collection: null/missing arrays read empty (Any() false) instead of aborting the server-side $size.
+            Assert.Equal(1, db.Entities.Where(t => t.Spots.Any(s => s.City == "Rome")).ExecuteUpdate(s => s.SetProperty(t => t.Name, t => t.Name + "!")));
+            Assert.Equal(2, db.Entities.Where(t => !t.Spots.Any()).ExecuteUpdate(s => s.SetProperty(t => t.Name, t => t.Name + "?")));
+        }
+
+        Assert.Equal(["u-match!", "u-missing?", "u-null?", "u-nullelem"],
+            Raw(update).Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => d["Name"].AsString).Order().ToArray());
+
+        var delete = database.CreateCollection<Traveller>(Unique(nameof(ExecuteUpdate_and_ExecuteDelete_filter_on_a_complex_collection_quantifier) + "d"));
+        Raw(delete).InsertMany(Seed());
+        using (var db = Context(delete, MongoQueryMode.Native, ConfigureTraveller))
+        {
+            Assert.Equal(3, db.Entities.Where(t => t.Spots.Count == 0 || t.Spots.Any(s => s.City == "Rome")).ExecuteDelete());
+        }
+
+        Assert.Equal(["u-nullelem"], Raw(delete).Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => d["Name"].AsString).ToArray());
     }
 
     // ── Model limits (measured) ─────────────────────────────────────────────────────────────────────────────────
