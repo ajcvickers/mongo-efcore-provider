@@ -277,8 +277,11 @@ Rendering (null/missing/dialect semantics):
   type folds) are gated on `IsSelfParamTheEntity`, false in a complex scope. EF10 stores a null ELEMENT as BSON null, and
   `$elemMatch` never matches a non-document element, so a complex-collection quantifier always renders in an aggregation
   element scope (`$anyElementTrue`/`$allElementsTrue` over `$map`, `RequiresAggregationElementScope`); owned collections keep
-  `$elemMatch`. Ruling R17: a null complex element reads every leaf as null, so leaves in a complex element scope are
-  `NullSafe` (`ScopeField`: `== null`/`!= null` are `$ifNull`-normalized and relational comparisons get the null guard);
+  `$elemMatch`. Ruling R17: a null complex element reads every leaf as null. Every field the translator builds in a complex
+  element scope is `NullSafe` (`ScopeField`), and every renderer read of such a field goes through `Render(field)`
+  (`$ifNull`): comparisons, `$in` needles, string operators, `UtcDateTime`; `MayBeNull` treats a NullSafe field and a
+  DateTimeOffset local reconstruction over one as possibly null, so relational comparisons get the null guard. A
+  non-nullable bool leaf of a null element reads false, so `!a.Verified` is true (two-valued negation; no owned pin exists);
   owned element scopes keep the RenderBinary no-`$ifNull` rule (a missing owned leaf is malformed data, a null complex element
   is EF-written). Driver-LINQ answers such rows differently (pinned per mode).
   `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value

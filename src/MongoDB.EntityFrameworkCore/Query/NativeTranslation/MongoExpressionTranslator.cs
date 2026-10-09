@@ -246,8 +246,10 @@ internal sealed partial class MongoExpressionTranslator
                         return false;
                     // The DateTimeOffset property backs the value; it carries no DateTimeKind, so the kind-aware read-back
                     // (NativeDateTimeKindReadBack) classifies it as kind-free rather than untraceable.
+                    // Carries the field's NullSafe (a complex element scope, R17): a null element's value reads null, and
+                    // MayBeNull then guards a relational comparison over it.
                     result = new MongoElementRefExpression(
-                        utcField.ElementName + ".DateTime", typeof(DateTime), valueProperty: utcField.Property);
+                        utcField.ElementName + ".DateTime", typeof(DateTime), nullSafe: utcField.NullSafe, valueProperty: utcField.Property);
                     return true;
 
                 case nameof(DateTimeOffset.DateTime):

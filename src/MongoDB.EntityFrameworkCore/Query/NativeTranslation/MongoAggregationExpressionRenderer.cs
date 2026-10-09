@@ -771,7 +771,9 @@ internal static class MongoAggregationExpressionRenderer
     // unlike the query dialect's { field: { $nin: ... } }).
     private static BsonValue RenderIn(MongoInExpression inExpr, PlaceholderTable placeholders, string? elementVariable)
     {
-        var needle = FieldRef(inExpr.Field.ElementName, elementVariable);
+        // Through Render, so a NullSafe field (a complex element scope, ruling R17) is $ifNull'd like every other read:
+        // aggregation $in doesn't equate MISSING with a null list member. A plain field renders the same FieldRef.
+        var needle = Render(inExpr.Field, placeholders, elementVariable);
         var haystack = new BsonDocument("$literal", MongoValueRenderer.RenderInValues(inExpr.Values, placeholders));
         return NotIf(inExpr.Negated, new BsonDocument("$in", new BsonArray { needle, haystack }));
     }
@@ -956,6 +958,9 @@ internal static class MongoAggregationExpressionRenderer
             // $toX, $year/$month/..., and the math operators all return null for a null input.
             MongoConvertExpression convert => IsNullableClrType(convert.Type) || MayBeNull(convert.Operand),
             MongoDatePartExpression datePart => MayBeNull(datePart.Operand),
+            // The $dateAdd local reconstruction of a stored DateTimeOffset: null when its subdocument is absent, which a
+            // NullSafe operand (a complex element scope, R17) says it may be; otherwise judged by type as before.
+            MongoDateTimeOffsetLocalExpression local => local.Operand.NullSafe || IsNullableClrType(local.Type),
             MongoMathExpression math => IsNullableClrType(math.Type) || math.Operands.Any(MayBeNull),
             // Null-guarded or null-propagating over a possibly-null string (see NullPropagating), so null where
             // EF answers null.
