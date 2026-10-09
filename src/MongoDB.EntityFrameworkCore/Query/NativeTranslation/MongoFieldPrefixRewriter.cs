@@ -54,7 +54,9 @@ internal static class MongoFieldPrefixRewriter
     private static MongoExpression Rewrite(MongoExpression expr, string prefix)
         => expr switch
         {
-            MongoFieldExpression f => new MongoFieldExpression(f.Property, prefix + "." + f.ElementName),
+            // Carry NullSafe, as the element-ref arm below does (owned fields are never NullSafe, so owned output is
+            // unchanged; a NullSafe complex leaf must keep its $ifNull when re-targeted).
+            MongoFieldExpression f => new MongoFieldExpression(f.Property, prefix + "." + f.ElementName, f.NullSafe),
             MongoBinaryExpression b => new MongoBinaryExpression(
                 b.Operator, Rewrite(b.Left, prefix), Rewrite(b.Right, prefix)),
             MongoUnaryExpression u => new MongoUnaryExpression(u.Operator, Rewrite(u.Operand, prefix)),

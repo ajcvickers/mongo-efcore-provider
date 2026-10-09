@@ -14,6 +14,7 @@
  */
 
 #if !EF8 && !EF9
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -349,7 +350,9 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     // Native modes serve the R17 rows; driver-LINQ is pinned to its own measured rows (known driver behaviour: its element-scope
     // `$eq`/`$ne` against null don't equate MISSING with null, and its relational operators carry no null guard, so it
     // reads a null element's missing leaves as below every value). Breaks loudly when the driver changes.
-    private static void NullElement(Func<MongoQueryMode, List<string>> run, string[] expected, string[]? driverRows = null, string? driverError = null)
+    private static void NullElement(
+        Func<MongoQueryMode, List<string>> run, string[] expected, string[]? driverRows = null, string? driverError = null,
+        Type? driverErrorType = null)
     {
         foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native })
         {
@@ -361,12 +364,64 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         {
             var e = Assert.ThrowsAny<Exception>(() => run(MongoQueryMode.DriverLinq));
             Assert.Contains(driverError, e.Message);
+            if (driverErrorType is not null)
+            {
+                Assert.IsType(driverErrorType, e);
+            }
             return;
         }
 
         var driver = run(MongoQueryMode.DriverLinq);
         var want = driverRows ?? expected;
         Assert.True(want.SequenceEqual(driver), $"DriverLinq: expected [{string.Join("; ", want)}], got [{string.Join("; ", driver)}]");
+    }
+
+    // R18: a computed value fed by a null element's leaf is null, so a relational comparison over it is false.
+    [Fact]
+    public void Null_element_date_add_coalesce_and_conditional_read_null()
+    {
+        // r-full [Oslo(When May+5d, Floor=Zip=5)], r-mixed [Oslo, null], r-null [null].
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1) < May)))), [], ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RPerRow(q, r => r.Stops.Count(s => s.When.AddDays(1) < May))), ["0", "0", "0"], ["0", "1", "1"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(-10) < May)))), ["r-full", "r-mixed"], ["r-full", "r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddMonths(1) < May)))), [], ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddHours(1) < May)))), [], ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddMinutes(1) < May)))), [], ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddYears(1) < May)))), [], ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => !(s.When.AddDays(1) < May))))), ["r-full", "r-mixed", "r-null"], ["r-full", "r-mixed"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.When.AddDays(1) > May)))), ["r-full"]);
+        // A date part over a date-add has no native translation (declines); the fallback is driver-LINQ, whose unguarded
+        // `$lt` reads the null element's missing value as below every value: wrong rows on Native and DriverLinq
+        // (pre-existing driver behaviour, pinned; R17 answer [r-full, r-mixed]).
+        PerMode(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed", "r-null"],
+            NotNative, Serves, Serves);
+
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.Zip ?? s.Floor) < 1)))), [], ["r-mixed", "r-null"]);
+        // A constant fallback: the null element's Zip reads null and coalesces to 0, so `0 < 1` holds.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.Zip ?? 0) < 1)))), ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.Zip ?? s.Floor) + 1 < 2)))), [], ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => (s.Zip ?? s.Floor) > 1)))), ["r-full"]);
+
+        // A null element's test reads false (City null != "X"), so the false branch (Floor, null) is taken.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.City == "X" ? 0 : s.Floor) < 1)))), [], ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.City != "X" ? s.Floor : 0) < 1)))), [], ["r-mixed", "r-null"]);
+        // Constant branch taken by the null element (City == "Oslo" is false for it): `0 < 1`.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.City == "Oslo" ? s.Floor : 0) < 1)))), ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => (s.City == "X" ? 0 : s.Floor) > 1)))), ["r-full"]);
+    }
+
+    [Fact]
+    public void Null_element_bool_leaf_reads_false_in_every_spelling()
+    {
+        // R19: a missing non-nullable bool reads false, so every spelling agrees with `!s.Verified`.
+        var no = false;
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Verified == false)))), ["r-mixed", "r-null"], []);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Verified != true)))), ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Verified == no)))), ["r-mixed", "r-null"], []);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Verified == true)))), ["r-full", "r-mixed"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Verified && s.City == "Oslo")))), ["r-full", "r-mixed"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => !(s.Verified || s.City == "X"))))), ["r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.Verified == true)))), ["r-full"]);
     }
 
     [Fact]
@@ -390,6 +445,8 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         NullElement(Customers(q => Names(q.Where(c => c.Addresses.Any(a => streets.Contains(a.Street))))), ["a-two", "e-one", "f-nullelem"]);
         int?[] onlyNull = [null];
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => onlyNull.Contains(s.Zip))))), ["r-mixed", "r-null"], []);
+        // Discriminating: r-mixed's Oslo has Zip 5 (not in the list), so only its null element can match {null, 7}.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => withNull.Contains(s.Zip))))), ["r-mixed", "r-null"], []);
     }
 
     public class Clock
@@ -428,14 +485,132 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // Driver-LINQ can't translate a DateTimeOffset member here at all (CSHARP-5296: its serializer exposes no member
         // fields; the bridge's rewrite only covers entity/complex-hop receivers): loud in every row.
         const string DriverDto = "does not represent members as fields";
-        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.UtcDateTime < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto);
-        NullElement(run(q => N(q.Where(s => s.Clocks.All(c => c.At.UtcDateTime < cutoff)))), ["d-full"], driverError: DriverDto);
-        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.UtcDateTime > cutoff)))), [], driverError: DriverDto);
-        NullElement(run(q => N(q.Where(s => s.Clocks.All(c => c.At.Year == 2024)))), ["d-full"], driverError: DriverDto);
-        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Year != 2024)))), ["d-mixed", "d-null"], driverError: DriverDto);
-        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Year < 2030)))), ["d-full", "d-mixed"], driverError: DriverDto);
-        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.DateTime < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto);
-        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Date < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto);
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.UtcDateTime < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        NullElement(run(q => N(q.Where(s => s.Clocks.All(c => c.At.UtcDateTime < cutoff)))), ["d-full"], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.UtcDateTime > cutoff)))), [], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        NullElement(run(q => N(q.Where(s => s.Clocks.All(c => c.At.Year == 2024)))), ["d-full"], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Year != 2024)))), ["d-mixed", "d-null"], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Year < 2030)))), ["d-full", "d-mixed"], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.DateTime < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Date < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        // R18: a date-add over the (null) UtcDateTime and a date part over it.
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.UtcDateTime.AddDays(1) < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto, driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+    }
+
+    [System.Flags]
+    public enum Mark
+    {
+        None = 0,
+        A = 1
+    }
+
+    public class Probe
+    {
+        public string City { get; set; } = null!;
+        public string? Note { get; set; }
+        public bool? Opt { get; set; }
+        public int? Zip { get; set; }
+        public Mark Marks { get; set; }
+        public DateTimeOffset At { get; set; }
+        public List<string> Labels { get; set; } = [];
+    }
+
+    public class ProbeHolder
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public List<Probe> Ps { get; set; } = [];
+    }
+
+    [Fact]
+    public void Null_element_remaining_shapes_per_mode()
+    {
+        // full [Oslo/Note "lo"/Opt false/Zip 5/Marks A/At 2024-05-10+02:00/Labels [x]], mixed [same, null], null [null].
+        // Seeded through SaveChanges (EF10 writes the null element as BSON null).
+        var collection = database.CreateCollection<ProbeHolder>(Unique(nameof(Null_element_remaining_shapes_per_mode)));
+        static void Configure(ModelBuilder mb) => mb.Entity<ProbeHolder>().ComplexCollection(h => h.Ps);
+        var at = new DateTimeOffset(2024, 5, 10, 0, 0, 0, TimeSpan.FromHours(2));
+        Probe P() => new() { City = "Oslo", Note = "lo", Opt = false, Zip = 5, Marks = Mark.A, At = at, Labels = ["x"] };
+        using (var db = Context(collection, MongoQueryMode.Native, Configure))
+        {
+            db.Entities.AddRange(
+                new ProbeHolder { Name = "full", Ps = [P()] }, new ProbeHolder { Name = "mixed", Ps = [P(), null!] },
+                new ProbeHolder { Name = "null", Ps = [null!] });
+            db.SaveChanges();
+        }
+
+        Func<MongoQueryMode, List<string>> Q(Func<IQueryable<ProbeHolder>, IEnumerable<string>> query) => m => Run(collection, m, Configure, query);
+        IEnumerable<string> N(IQueryable<ProbeHolder> q) => q.Select(h => h.Name).ToList().Order(StringComparer.Ordinal);
+        var cutoff = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var pattern = "^O";
+
+        // A NULLABLE bool leaf keeps three-valued semantics: null == false is false, null == null true, null != true true.
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => p.Opt == false)))), ["full", "mixed"]);
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => p.Opt == null)))), ["mixed", "null"], []);
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => p.Opt != true)))), ["full", "mixed", "null"]);
+        // Field-to-field string operators: a null receiver is false.
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => p.City.IndexOf(p.Note!) >= 0)))), ["full", "mixed"]);
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => p.City.Contains(p.Note!))))), ["full", "mixed"]);
+        // D5: field-to-field EndsWith: $strLenCP over the null element's missing strings is a server error in every mode
+        // (native renders the driver's shape; loud, never rows).
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.City.EndsWith(p.Note!))))), [],
+            "$strLenCP requires a string argument", "$strLenCP requires a string argument", "$strLenCP requires a string argument");
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => Regex.IsMatch(p.City, pattern))))), ["full", "mixed"]);
+        // A null field PATTERN reads null: no match (C# would throw; the driver can't translate it).
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => Regex.IsMatch("Oslo", p.Note!))))), ["full", "mixed"],
+            driverError: "Expression not supported", driverErrorType: typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException));
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => p.Marks == Mark.None)))), []);
+        // A direct DateTimeOffset comparison: native compares the stored form with the null guard; driver-LINQ's
+        // unguarded comparison includes the null element (pinned).
+        NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => p.At < cutoff)))), ["full", "mixed"], ["full", "mixed", "null"]);
+
+        // Declined natively; the fallback answers or refuses loudly (never rows that differ from R17):
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Zip.GetValueOrDefault() < 1)))), [], NotNative,
+            "Expression not supported", "Expression not supported");
+        PerMode(Q(q => N(q.Where(h => h.Ps.Select(p => p.City).Contains("Oslo")))), ["full", "mixed"], NotNative, Serves, Serves);
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.At.Offset == TimeSpan.FromHours(2))))), [], NotNative,
+            "does not represent members as fields", "does not represent members as fields");
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.At.Ticks < 1)))), [], NotNative,
+            "does not represent members as fields", "does not represent members as fields");
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Marks.HasFlag(Mark.A))))), [], NotNative, "Expression not supported", "Expression not supported");
+        // A primitive-collection leaf on an element: no native element-scope rendering ($in over an array field is
+        // query-dialect only); the fallback's $in/$size over the null element's missing array is a server error.
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x"))))), [], NotNative, "Command aggregate failed", "Command aggregate failed");
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Count == 0)))), [], NotNative, "Command aggregate failed", "Command aggregate failed");
+        // Sum over an element leaf: refused in every mode.
+        PerMode(Q(q => q.OrderBy(h => h.Name).Select(h => h.Ps.Sum(p => p.Zip)).ToList().Select(x => x?.ToString() ?? "<null>")), [],
+            NotTranslated, NotTranslated, NotTranslated);
+    }
+
+    public class Stamped
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public DateTimeOffset? Dto { get; set; }
+    }
+
+    [Fact]
+    public void Root_nullable_DateTimeOffset_member_comparisons_match_null_rows_PRE_EXISTING()
+    {
+        // CHARACTERIZATION of a PRE-EXISTING root wrong-rows case (measured identically at e8d8bafd; NOT changed by this
+        // task; Jira candidate): over a null/missing DateTimeOffset?, `.Value.DateTime < d` / `.Value.Year < y` /
+        // `.Value.UtcDateTime < d` match the null and missing rows natively (the root reconstruction is judged
+        // non-nullable by its CLR type, so no null guard), where C# would throw and the absent-reads-null rule says false.
+        // Driver-LINQ is wrong for DateTime/Year too and right for UtcDateTime. Pinned so it breaks loudly when fixed.
+        var collection = database.CreateCollection<Stamped>(Unique(nameof(Root_nullable_DateTimeOffset_member_comparisons_match_null_rows_PRE_EXISTING)));
+        using (var db = Context(collection, MongoQueryMode.Native, _ => { }))
+        {
+            db.Entities.AddRange(new Stamped { Name = "v", Dto = new DateTimeOffset(2024, 5, 1, 0, 0, 0, TimeSpan.Zero) }, new Stamped { Name = "n" });
+            db.SaveChanges();
+        }
+
+        Raw(collection).InsertOne(new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "m" } });
+        var d = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        Func<MongoQueryMode, List<string>> Q(System.Linq.Expressions.Expression<Func<Stamped, bool>> predicate)
+            => m => Run(collection, m, _ => { }, q => q.Where(predicate).Select(e => e.Name).ToList().Order(StringComparer.Ordinal));
+        PerMode(Q(e => e.Dto!.Value.DateTime < d), ["m", "n", "v"], Serves, Serves, Serves);
+        PerMode(Q(e => e.Dto!.Value.Year < 2030), ["m", "n", "v"], Serves, Serves, Serves);
+        NullElement(Q(e => e.Dto!.Value.UtcDateTime < d), ["m", "n", "v"], ["v"]);
     }
 
     // ── Counts ──────────────────────────────────────────────────────────────────────────────────────────────────

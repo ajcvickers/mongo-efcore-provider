@@ -1069,6 +1069,20 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     private static IEnumerable<string> Names(IQueryable<ItemHolder> q) => q.Select(c => c.Name).ToList().Order(StringComparer.Ordinal);
 
     [Fact]
+    public void Complex_equality_inside_an_owned_SelectMany_inner_filter_declines_and_leaves_are_prefixed()
+    {
+        // Reachability of MongoFieldPrefixRewriter's NullSafe carry (Task 13 round 3): an owned SelectMany inner filter
+        // holding a whole complex-value equality declines natively (the SelectMany inner translator doesn't admit it), and
+        // the fallback refuses the whole value (R1); so no NullSafe member-wise leaf reaches the prefix rewriter today. The
+        // rewriter carries NullSafe anyway (defensive; owned fields are never NullSafe, so owned output is unchanged).
+        PerMode(Items(q => q.SelectMany(h => h.Items.Where(i => i.Pos == new Pos { Zip = null, Tag = null }), (h, i) => h.Name).ToList()
+                .Order(StringComparer.Ordinal)), [], NotNative, WholeValueRefused, WholeValueRefused);
+        // The leaf spelling through the complex hop declines too (the fallback serves it).
+        PerMode(Items(q => q.SelectMany(h => h.Items.Where(i => i.Pos.Zip == 1 && i.Pos.Tag == "t"), (h, i) => h.Name).ToList()
+                .Order(StringComparer.Ordinal)), ["h-value"], NotNative, Serves, Serves);
+    }
+
+    [Fact]
     public void Complex_null_check_and_all_null_instance_agree_inside_element_scopes()
     {
         // Pos is REQUIRED with no optional ancestor: a missing/null Pos is malformed and reads its members as null, as at the
