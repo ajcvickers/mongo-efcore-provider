@@ -35,8 +35,9 @@ MongoDB 8, with a model `C { Id, Name, Home: Addr { City } }` and `ComplexProper
   the whole document, including its complex properties.
 
 Additive, not breaking: `ExecuteUpdate`/`ExecuteDelete` over complex properties (EF9+), native translation of complex-type
-queries, and a public `ProcessComplexPropertyAdded` method (with `IComplexPropertyAddedConvention`) on
-`CamelCaseElementNameConvention`, `BsonElementAttributeConvention` and `ColumnAttributeConvention`.
+queries, a public `ProcessComplexPropertyAdded` method (with `IComplexPropertyAddedConvention`) on
+`CamelCaseElementNameConvention`, and overrides of EF's `ProcessComplexPropertyAdded` on `BsonElementAttributeConvention`
+and `ColumnAttributeConvention`.
 
 #### Why
 
