@@ -30,8 +30,10 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// <see cref="NativeTranslationNotSupportedException"/> and falls back to driver LINQ under Native mode, and
 /// driver LINQ has no complex-type oracle for comparisons — the fallback would surface a bare
 /// <c>ExpressionNotSupportedException</c> instead of a clear message. DOM-route materialization declines throw
-/// <see cref="NativeTranslationNotSupportedException"/>: there driver LINQ (via the entity serializer's complex
-/// member bindings) IS a working oracle, so the fallback reads correct values.
+/// <see cref="NativeTranslationNotSupportedException"/> because nothing catches it there: driver LINQ has no
+/// whole-entity complex-collection materialization oracle (materialization always runs through the provider's
+/// shaper in every mode — driver LINQ supplies MQL only), so the fallback's shaper rethrows the identical
+/// decline and the query fails loudly in every mode.
 /// </para>
 /// <para>
 /// None of these messages include rendered MQL or connection details — only model metadata (type and member
