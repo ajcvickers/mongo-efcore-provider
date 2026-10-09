@@ -2279,8 +2279,9 @@ internal static class NativeProjectionBinder
             // Gate 1c4: string predicates, Length/IndexOf, comparisons, and logical and/or/not, rendered as operator
             // documents. CanRender because a predicate node can hold shapes the aggregation dialect declines.
             case MongoRegexExpression or MongoStringLengthExpression or MongoStringIndexOfExpression
-                    or MongoBinaryExpression or MongoUnaryExpression
-                when (leaf is not (MongoBinaryExpression or MongoUnaryExpression) || IsProjectablePredicate(leaf))
+                    or MongoBinaryExpression or MongoUnaryExpression or MongoElementNullCheckExpression
+                when (leaf is not (MongoBinaryExpression or MongoUnaryExpression or MongoElementNullCheckExpression)
+                      || IsProjectablePredicate(leaf))
                      && IsArrayFreeComputedSubtree(leaf) && MongoAggregationExpressionRenderer.CanRender(leaf):
                 break;
 
@@ -2340,6 +2341,8 @@ internal static class NativeProjectionBinder
             MongoBinaryExpression { Operator: MongoBinaryOperator.AndAlso or MongoBinaryOperator.OrElse } logical
                 => IsProjectablePredicateOperand(logical.Left) && IsProjectablePredicateOperand(logical.Right),
             MongoUnaryExpression { Operator: MongoUnaryOperator.Not } not => IsProjectablePredicateOperand(not.Operand),
+            // A complex value's null check: $ifNull-normalized, so it answers null and missing alike.
+            MongoElementNullCheckExpression => true,
             _ => false
         };
 
@@ -2430,6 +2433,8 @@ internal static class NativeProjectionBinder
             MongoFieldExpression or MongoConstantExpression or MongoParameterExpression => true,
             // A $type/$isNumber test on its field; never touches an array.
             MongoNumericTypeBracketExpression => true,
+            // A null/missing test of a stored element (a complex value): a plain path read.
+            MongoElementNullCheckExpression => true,
             // Includes the size kinds, deliberately excluded by the catch-all.
             _ => false
         };
