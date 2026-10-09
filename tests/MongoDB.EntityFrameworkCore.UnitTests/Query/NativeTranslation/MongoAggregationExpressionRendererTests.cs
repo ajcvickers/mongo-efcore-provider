@@ -1346,6 +1346,29 @@ public class MongoAggregationExpressionRendererTests
         Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoSizeExpression("Posts", typeof(int))));
     }
 
+    // R18 judges the operands of a date-add, coalesce and conditional structurally, but a captured NON-nullable value
+    // (`x.Date.AddDays(days)`, `x.Flag ? x.Rank : other`) is never null, so the node is not "may be null" at the root;
+    // a nullable or untyped parameter and a NullSafe (complex element) leaf still are.
+    [Fact]
+    public void MayBeNull_judges_a_captured_operand_of_a_date_add_coalesce_or_conditional_by_its_clr_type()
+    {
+        var date = new MongoElementRefExpression("D", typeof(DateTime));
+        var rank = new MongoElementRefExpression("R", typeof(int));
+        var flag = new MongoElementRefExpression("F", typeof(bool));
+        MongoParameterExpression Param(Type? type) => new("p", forSerialization: null, valueType: type);
+
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(date, MongoDateAddUnit.Day, Param(typeof(int)))));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoConditionalExpression(flag, rank, Param(typeof(int)))));
+        // (A conditional whose TRUE branch is the parameter takes the parameter's node type, `object` when it has no
+        // property to serialize through, so the CLR-type fallback answers there, as at the base.)
+
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(date, MongoDateAddUnit.Day, Param(typeof(int?)))));
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(date, MongoDateAddUnit.Day, Param(null))));
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoConditionalExpression(flag, rank, Param(typeof(int?)))));
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(
+            date, MongoDateAddUnit.Day, new MongoElementRefExpression("N", typeof(int), nullSafe: true))));
+    }
+
     // `o.OrderDate.Value.Year` over a null OrderDate: $year answers null, which a non-nullable read would take as 0.
     [Fact]
     public void ClassifyNonNullableValueRead_throws_on_null_for_a_date_part_over_a_nullable_date()
