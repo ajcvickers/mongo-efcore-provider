@@ -345,6 +345,50 @@ public class MongoExpressionNodeCoverageTests
     }
 
     /// <summary>
+    /// Ruling R18: <see cref="MongoAggregationExpressionRenderer.MayBeNull"/> is structural for the nodes that take their CLR
+    /// type from one operand but are null when an operand that feeds them is (a null complex element's NullSafe leaf); the
+    /// CLR-type check stays as the fallback, so the same nodes over non-NullSafe operands are judged exactly as before.
+    /// </summary>
+    [Fact]
+    public void MayBeNull_is_structural_for_date_add_coalesce_and_conditional()
+    {
+        var rank = PostProperty(nameof(Post.Rank), valueConverted: false);
+        var when = PostProperty(nameof(Post.When), valueConverted: false);
+        var flag = PostProperty(nameof(Post.Flag), valueConverted: false);
+        var safeRank = new MongoFieldExpression(rank, "Rank", nullSafe: true);
+        var plainRank = new MongoFieldExpression(rank, "Rank");
+        var safeWhen = new MongoFieldExpression(when, "When", nullSafe: true);
+        var plainWhen = new MongoFieldExpression(when, "When");
+        var five = new MongoConstantExpression(5, null);
+        var test = new MongoFieldExpression(flag, "Flag");
+
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(safeWhen, MongoDateAddUnit.Day, five)));
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(plainWhen, MongoDateAddUnit.Day, safeRank)));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(plainWhen, MongoDateAddUnit.Day, five)));
+
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoCoalesceExpression(safeRank, safeRank)));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoCoalesceExpression(safeRank, five)));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoCoalesceExpression(plainRank, plainRank)));
+
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoConditionalExpression(test, five, safeRank)));
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoConditionalExpression(test, safeRank, five)));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoConditionalExpression(test, plainRank, five)));
+    }
+
+    [Fact]
+    public void Prefix_rewriter_carries_a_fields_NullSafe()
+    {
+        // Defensive (no native shape reaches it today: an owned SelectMany inner filter over a complex hop declines): a
+        // re-targeted NullSafe field must keep its $ifNull, as the element-ref arm does. A plain field stays plain.
+        var rank = PostProperty(nameof(Post.Rank), valueConverted: false);
+        Assert.True(MongoFieldPrefixRewriter.TryRewrite(new MongoFieldExpression(rank, "Rank", nullSafe: true), "pfx", out var safe));
+        Assert.True(Assert.IsType<MongoFieldExpression>(safe).NullSafe);
+        Assert.Equal("pfx.Rank", ((MongoFieldExpression)safe).ElementName);
+        Assert.True(MongoFieldPrefixRewriter.TryRewrite(new MongoFieldExpression(rank, "Rank"), "pfx", out var plain));
+        Assert.False(Assert.IsType<MongoFieldExpression>(plain).NullSafe);
+    }
+
+    /// <summary>
     /// Pins the four dispatcher answers for a field-to-field <see cref="MongoRegexExpression"/> (Term is a
     /// <see cref="MongoFieldExpression"/>, e.g. <c>c.ContactName.StartsWith(c.ContactName)</c>). The matrix holds
     /// one sample per node type (constant-term), but this node's behavior depends on the shape of its

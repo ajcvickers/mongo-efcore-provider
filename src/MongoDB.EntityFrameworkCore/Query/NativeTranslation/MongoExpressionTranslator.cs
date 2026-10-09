@@ -1271,6 +1271,21 @@ internal sealed partial class MongoExpressionTranslator
         => new(property, path, nullSafe || _scopeType is IComplexType);
 
     /// <summary>
+    /// A field used as a compared VALUE in this scope. Inside a complex collection's element scope a non-nullable,
+    /// default-serialized <see cref="bool"/> leaf of a null element reads <see langword="false"/> (ruling R19, the
+    /// provider's bool null-as-false read rule), so `== false`, `!= true`, `== p` and leaf-to-leaf comparisons agree with
+    /// `!x`: <c>{ $ifNull: [ "$$e.Flag", false ] }</c>. Every other field (and every field outside a complex element scope)
+    /// is returned unchanged; a converted bool keeps null semantics (its stored form isn't a bool to default to).
+    /// </summary>
+    private MongoExpression ScopeValue(MongoFieldExpression field)
+        => _scopeType is IComplexType
+           && field.Property.ClrType == typeof(bool)
+           && NativeGroupByBinder.HasDefaultKeySerialization(field.Property)
+            ? new MongoCoalesceExpression(
+                new MongoFieldExpression(field.Property, field.ElementName), new MongoConstantExpression(false, field.Property))
+            : field;
+
+    /// <summary>
     /// Translates a comparison <see cref="BinaryExpression"/> into a <see cref="MongoBinaryExpression"/>.
     /// </summary>
     /// <remarks>
@@ -1444,7 +1459,7 @@ internal sealed partial class MongoExpressionTranslator
                     && nodeType is ExpressionType.Equal or ExpressionType.NotEqual;
                 MongoExpression leftField = leftIsOuter && _innerPrefix is null
                     ? new MongoOuterFieldExpression(leftProperty, leftPath!)
-                    : ScopeField(leftProperty, leftPath!, leftNullSafe);
+                    : ScopeValue(ScopeField(leftProperty, leftPath!, leftNullSafe));
                 return new MongoBinaryExpression(mongoOp.Value, leftField, valueExpr);
             }
         }
@@ -1483,7 +1498,7 @@ internal sealed partial class MongoExpressionTranslator
                     && nodeType is ExpressionType.Equal or ExpressionType.NotEqual;
                 MongoExpression rightField = rightIsOuter && _innerPrefix is null
                     ? new MongoOuterFieldExpression(rightProperty, rightPath!)
-                    : ScopeField(rightProperty, rightPath!, rightNullSafe);
+                    : ScopeValue(ScopeField(rightProperty, rightPath!, rightNullSafe));
                 return new MongoBinaryExpression(mongoOp.Value, rightField, valueExpr);
             }
         }
@@ -1864,7 +1879,7 @@ internal sealed partial class MongoExpressionTranslator
             // NativeSelectManyBinderTests.
             return operandIsOuter
                 ? new MongoOuterFieldExpression(property, fieldPath!)
-                : ScopeField(property, fieldPath!);
+                : ScopeValue(ScopeField(property, fieldPath!));
         }
 
         // A flattened alias with no backing IProperty (a post-Distinct computed key part, or any output alias of a

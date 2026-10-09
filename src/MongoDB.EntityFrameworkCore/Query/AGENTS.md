@@ -277,11 +277,14 @@ Rendering (null/missing/dialect semantics):
   type folds) are gated on `IsSelfParamTheEntity`, false in a complex scope. EF10 stores a null ELEMENT as BSON null, and
   `$elemMatch` never matches a non-document element, so a complex-collection quantifier always renders in an aggregation
   element scope (`$anyElementTrue`/`$allElementsTrue` over `$map`, `RequiresAggregationElementScope`); owned collections keep
-  `$elemMatch`. Ruling R17: a null complex element reads every leaf as null. Every field the translator builds in a complex
-  element scope is `NullSafe` (`ScopeField`), and every renderer read of such a field goes through `Render(field)`
-  (`$ifNull`): comparisons, `$in` needles, string operators, `UtcDateTime`; `MayBeNull` treats a NullSafe field and a
-  DateTimeOffset local reconstruction over one as possibly null, so relational comparisons get the null guard. A
-  non-nullable bool leaf of a null element reads false, so `!a.Verified` is true (two-valued negation; no owned pin exists);
+  `$elemMatch`. Ruling R17: a null complex element reads every leaf as null. Field reads in a complex element scope are
+  `NullSafe` (`ScopeField`) and rendered through `Render(field)` (`$ifNull`), incl. `$in` needles and `UtcDateTime`; the
+  DateTimeOffset `$dateAdd` reconstruction and the array inputs read raw paths, safe because they propagate null / are
+  `$ifNull`'d to `[]`. `MayBeNull` is structural for the null-propagating nodes (NullSafe fields/refs, arithmetic, convert,
+  math, date part, DTO local, and per R18 date-add: start or amount; coalesce: both sides; conditional: either branch)
+  with the CLR-type check as fallback, so relational comparisons over them get the null guard. R19: a non-nullable,
+  default-serialized bool leaf compared as a value reads `$ifNull: [f, false]` (`ScopeValue`), so `== false`/`!= true`/
+  `== p` agree with `!a.Verified` (true for a null element; two-valued; no owned pin exists); a `bool?` keeps null semantics;
   owned element scopes keep the RenderBinary no-`$ifNull` rule (a missing owned leaf is malformed data, a null complex element
   is EF-written). Driver-LINQ answers such rows differently (pinned per mode).
   `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value

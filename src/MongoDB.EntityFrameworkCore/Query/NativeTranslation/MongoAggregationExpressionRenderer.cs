@@ -958,6 +958,16 @@ internal static class MongoAggregationExpressionRenderer
             // $toX, $year/$month/..., and the math operators all return null for a null input.
             MongoConvertExpression convert => IsNullableClrType(convert.Type) || MayBeNull(convert.Operand),
             MongoDatePartExpression datePart => MayBeNull(datePart.Operand),
+            // Structural (ruling R18): these take their CLR type from one operand, but are null whenever the operands that
+            // feed them are, e.g. a null complex element's NullSafe leaf. The type check stays as the fallback, so a node
+            // over non-NullSafe operands (owned scopes, the root) is judged as before.
+            // $dateAdd is null for a null start date or amount.
+            MongoDateAddExpression dateAdd => IsNullableClrType(dateAdd.Type) || MayBeNull(dateAdd.StartDate) || MayBeNull(dateAdd.Amount),
+            // $ifNull is null only when its fallback is too.
+            MongoCoalesceExpression coalesce => IsNullableClrType(coalesce.Type) || (MayBeNull(coalesce.Left) && MayBeNull(coalesce.Right)),
+            // $cond yields either branch (a null test reads false and takes the false branch, which is covered).
+            MongoConditionalExpression conditional
+                => IsNullableClrType(conditional.Type) || MayBeNull(conditional.IfTrue) || MayBeNull(conditional.IfFalse),
             // The $dateAdd local reconstruction of a stored DateTimeOffset: null when its subdocument is absent, which a
             // NullSafe operand (a complex element scope, R17) says it may be; otherwise judged by type as before.
             MongoDateTimeOffsetLocalExpression local => local.Operand.NullSafe || IsNullableClrType(local.Type),
