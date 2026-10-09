@@ -419,14 +419,7 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     private const string R20Refusal = "incorrectly when the element is null";
 
     private static void Refused(Func<MongoQueryMode, List<string>> run, string[] driverRows)
-    {
-        Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => run(MongoQueryMode.NativeOnly)));
-        var native = Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => run(MongoQueryMode.Native)));
-        Assert.Contains(R20Refusal, native.Message);
-        Assert.Contains("MongoQueryMode.DriverLinq", native.Message);
-        var driver = run(MongoQueryMode.DriverLinq);
-        Assert.True(driverRows.SequenceEqual(driver), $"DriverLinq: expected [{string.Join("; ", driverRows)}], got [{string.Join("; ", driver)}]");
-    }
+        => CompositionAssert.Refused(run, driverRows, R20Refusal, "MongoQueryMode.DriverLinq");
 
     [Fact]
     public void Null_element_shapes_the_native_path_declines_are_refused_rather_than_served_wrong()

@@ -212,7 +212,18 @@ internal static class CompositionAssert
     public const string Serves = "serves";
     public const string NotNative = "<NativeTranslationNotSupportedException>";
 
-    public static void PerMode(Func<MongoQueryMode, List<string>> run, string[] expected, string nativeOnly, string native, string driverLinq)
+    /// <param name="run">Runs the query under a mode.</param>
+    /// <param name="expected">The hand-written rows a <see cref="Serves"/> mode must return.</param>
+    /// <param name="nativeOnly">The NativeOnly outcome.</param>
+    /// <param name="native">The Native outcome.</param>
+    /// <param name="driverLinq">The DriverLinq outcome.</param>
+    /// <param name="fragmentExceptionTypes">
+    /// When given, the exception TYPE of each message fragment is pinned too (a fragment alone could match an unrelated
+    /// exception); a matched fragment missing from the map fails the test.
+    /// </param>
+    public static void PerMode(
+        Func<MongoQueryMode, List<string>> run, string[] expected, string nativeOnly, string native, string driverLinq,
+        IReadOnlyDictionary<string, Type>? fragmentExceptionTypes = null)
     {
         var failures = new List<string>();
         foreach (var (mode, want) in new[] { (MongoQueryMode.NativeOnly, nativeOnly), (MongoQueryMode.Native, native), (MongoQueryMode.DriverLinq, driverLinq) })
@@ -234,6 +245,9 @@ internal static class CompositionAssert
                 Serves => error == null && expected.SequenceEqual(rows!),
                 NotNative => error is NativeTranslationNotSupportedException,
                 _ => error != null && want.Split("||").Any(error.Message.Contains)
+                     && (fragmentExceptionTypes is null
+                         || (fragmentExceptionTypes.TryGetValue(want.Split("||").First(error.Message.Contains), out var type)
+                             && error.GetType() == type))
             };
             if (!ok)
             {
@@ -251,4 +265,22 @@ internal static class CompositionAssert
     /// <summary>A clean decline: NativeOnly refuses, Native falls back and, like DriverLinq, serves the hand-written answer.</summary>
     public static void Declines(Func<MongoQueryMode, List<string>> run, params string[] expected)
         => PerMode(run, expected, NotNative, Serves, Serves);
+
+    /// <summary>
+    /// A refusal (ruling R20): NativeOnly declines, Native refuses with a <see cref="NativeTranslationNotSupportedException"/>
+    /// whose message contains every one of <paramref name="nativeMessageFragments"/> (instead of falling back to wrong rows),
+    /// and explicit DriverLinq runs the driver, pinned to its measured <paramref name="driverRows"/>.
+    /// </summary>
+    public static void Refused(Func<MongoQueryMode, List<string>> run, string[] driverRows, params string[] nativeMessageFragments)
+    {
+        Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => run(MongoQueryMode.NativeOnly)));
+        var native = Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => run(MongoQueryMode.Native)));
+        foreach (var fragment in nativeMessageFragments)
+        {
+            Assert.Contains(fragment, native.Message);
+        }
+
+        var driver = run(MongoQueryMode.DriverLinq);
+        Assert.True(driverRows.SequenceEqual(driver), $"DriverLinq: expected [{string.Join("; ", driverRows)}], got [{string.Join("; ", driver)}]");
+    }
 }

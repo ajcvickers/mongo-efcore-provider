@@ -255,6 +255,26 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     // ── A. The data-loss shapes: refused (measured RED at 6740680c: the bulk operation deleted/updated the rows in the
     //    comment; the query's rows are asserted beside the refusal) ─────────────────────────────────────────────────
 
+    // The refusal prints the predicate's SHAPE: an inlined literal is replaced by `?` (it may be sensitive; exception text is
+    // not gated by EnableSensitiveDataLogging), while member names and the collection stay in the message.
+    [Fact]
+    public void Refusal_message_does_not_print_inlined_literals()
+    {
+        var store = Seed();
+        using (var db = store.Context())
+        {
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => db.Entities.Where(r => r.Stops.Any(s => s.Note!.StartsWith("hunter2-secret") || s.Floor < 1)).ExecuteDelete());
+            var refusal = Assert.IsType<NativeTranslationNotSupportedException>(ex.InnerException);
+            Assert.DoesNotContain("hunter2-secret", refusal.Message);
+            Assert.Contains(".Note.StartsWith(?)", refusal.Message);
+            Assert.Contains(".Floor < ?", refusal.Message);
+            Assert.Contains("Route.Stops", refusal.Message);
+        }
+
+        store.AssertUnchanged();
+    }
+
     [Fact]
     public void Relational_comparisons_over_element_leaves_are_refused()
     {

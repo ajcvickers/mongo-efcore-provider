@@ -92,6 +92,26 @@ public static class ComplexPropertyConventionTests
     }
 
     [Fact]
+    public static void Explicit_element_names_on_complex_property_and_leaf_win_over_camel_case()
+    {
+        using var db = new TestContext<FluentCamelHolder>(
+            mb =>
+            {
+                mb.Entity<FluentCamelHolder>().Property(e => e.Id).Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "_id");
+                mb.Entity<FluentCamelHolder>().ComplexProperty(e => e.HomeAddress, a =>
+                {
+                    a.HasPropertyAnnotation(MongoAnnotationNames.ElementName, "Home_Address");
+                    a.Property(x => x.StreetName).Metadata.SetElementName("Street_Name");
+                });
+            },
+            camelCase: true);
+
+        var complexProperty = db.Model.FindEntityType(typeof(FluentCamelHolder))!.FindComplexProperty(nameof(FluentCamelHolder.HomeAddress))!;
+        Assert.Equal("Home_Address", complexProperty.GetElementName());
+        Assert.Equal("Street_Name", complexProperty.ComplexType.FindProperty(nameof(Addr.StreetName))!.GetElementName());
+    }
+
+    [Fact]
     public static void Column_on_complex_property_sets_element_name()
     {
         using var db = new TestContext<ColumnHolder>(mb => mb.Entity<ColumnHolder>().ComplexProperty(e => e.Address));
@@ -291,6 +311,7 @@ public static class ComplexPropertyConventionTests
 
     class CamelHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
     class PlainHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
+    class FluentCamelHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
     class NestedHolder { public int Id { get; set; } public NestedAddr HomeAddress { get; set; } }
 
     class BsonElementHolder { public int Id { get; set; } [BsonElement("addr")] public Addr Address { get; set; } }

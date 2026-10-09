@@ -152,8 +152,8 @@ public class ComplexTypeDerivedSelectManyItemTests(TemporaryDatabaseFixture data
 
     // ── Per-mode pins ──────────────────────────────────────────────────────────────────────────────────────────
 
-    private const string Serves = "serves";
-    private const string NotNativeAny = "<NativeTranslationNotSupportedException>";
+    private const string Serves = CompositionAssert.Serves;
+    private const string NotNativeAny = CompositionAssert.NotNative;
     private const string CrossDbSet = "Unsupported cross-DbSet query";
     private const string NotTranslated = "could not be translated";
     private const string DriverNotSupported = "Expression not supported";
@@ -182,42 +182,13 @@ public class ComplexTypeDerivedSelectManyItemTests(TemporaryDatabaseFixture data
         Func<MongoQueryMode, TContext> create, Func<TContext, IEnumerable<string>> query, string[] expected,
         string nativeOnly, string native, string driverLinq)
         where TContext : DbContext
-    {
-        foreach (var (mode, want) in new[] { (MongoQueryMode.NativeOnly, nativeOnly), (MongoQueryMode.Native, native), (MongoQueryMode.DriverLinq, driverLinq) })
-        {
-            List<string>? rows = null;
-            Exception? error = null;
-            try
+        => CompositionAssert.PerMode(
+            mode =>
             {
                 using var db = create(mode);
-                rows = query(db).ToList();
-            }
-            catch (Exception e) when (e is not Xunit.Sdk.XunitException)
-            {
-                error = e;
-            }
-
-            var got = error == null ? $"rows [{string.Join("; ", rows!)}]" : error.ToString();
-            if (want == Serves)
-            {
-                Assert.True(error == null, $"{mode}: expected rows, got {got}");
-                Assert.True(expected.SequenceEqual(rows!), $"{mode}: expected [{string.Join("; ", expected)}], got {got}");
-            }
-            else if (want == NotNativeAny)
-            {
-                Assert.True(error is NativeTranslationNotSupportedException, $"{mode}: expected NativeTranslationNotSupportedException, got {got}");
-            }
-            else
-            {
-                Assert.True(error != null && want.Split("||").Any(error.Message.Contains), $"{mode}: expected an exception containing '{want}', got {got}");
-                // The fragment alone could match an unrelated exception; each fragment's exception TYPE is pinned too
-                // (measured identical on EF8/EF9/EF10).
-                var matched = want.Split("||").First(error!.Message.Contains);
-                Assert.True(FragmentExceptionTypes.TryGetValue(matched, out var type) && error.GetType() == type,
-                    $"{mode}: '{matched}' expected {(type?.Name ?? "<unpinned fragment>")}, got {error.GetType().Name}");
-            }
-        }
-    }
+                return query(db).ToList();
+            },
+            expected, nativeOnly, native, driverLinq, FragmentExceptionTypes);
 
     // ── Derived item (Reports: List<Employee>) ─────────────────────────────────────────────────────────────────
 
