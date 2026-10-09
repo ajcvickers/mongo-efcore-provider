@@ -1980,7 +1980,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             selectorBody = convert.Operand;
         }
 
-        IProperty? property = null;
+        IPropertyBase? property = null;
+        string? complexElementPath = null;
         if (selectorBody is MemberExpression { Expression: var memberSource } member
             && memberSource != null
             && propertySelector.Parameters.Count == 1
@@ -1999,11 +2000,22 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             property = entityType.FindProperty(efPropertyName);
         }
 
+        // A complex target: a scalar leaf through single complex hops (`c => c.Address.City`, `c.Address.Location.Lat`), or
+        // a whole complex property / collection (`c => c.Address`). Resolved structurally to the stored path, so element-name
+        // overrides apply; a hop with an OPTIONAL ancestor is refused (see TryResolveComplexSetterTarget).
+        if (property == null
+            && TryResolveComplexSetterTarget(mongoQueryExpression, entityType, propertySelector, selectorBody, out var complexTarget, out var complexPath))
+        {
+            property = complexTarget;
+            complexElementPath = complexPath;
+        }
+
         if (property == null)
         {
             AddTranslationErrorDetails(
-                "Only mapped root scalar properties can be updated by a bulk update. The setter target "
-                + $"'{propertySelector.Body}' is not a mapped scalar property of '{entityType.DisplayName()}'.");
+                "Only mapped root scalar properties can be updated by a bulk update, and, through complex properties, their scalar "
+                + $"properties and whole complex properties. The setter target '{propertySelector.Body}' is not a mapped scalar "
+                + $"property of '{entityType.DisplayName()}'.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
                     mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
@@ -2025,7 +2037,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             isSelfReferencing = ParameterFinder.ContainsAny(value, propertySelector.Parameters);
         }
 
-        if (isSelfReferencing && property.GetTypeMapping().Converter != null)
+        if (isSelfReferencing && property is IProperty scalar && scalar.GetTypeMapping().Converter != null)
         {
             AddTranslationErrorDetails(
                 $"Self-referencing ExecuteUpdate on property '{property.Name}' is not supported because it uses a value converter.");
@@ -2034,7 +2046,92 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                     mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
         }
 
-        return new MongoNonQueryExpression.Setter(property, value, isSelfReferencing);
+        // A whole complex value computed from the row (`c.Billing = c.Shipping`) would copy the STORED subdocument, whose
+        // element names, converters and representations belong to the source property, and the driver can't render a
+        // complex value (ruling R1): refused rather than written in the wrong stored form.
+        if (isSelfReferencing && property is IComplexProperty selfReferencedComplex)
+        {
+            AddTranslationErrorDetails(
+                $"ExecuteUpdate cannot set the complex property '{selfReferencedComplex.DeclaringType.DisplayName()}.{selfReferencedComplex.Name}' "
+                + "from a value that reads the entity being updated. Set its scalar properties individually "
+                + "(SetProperty(e => e.Complex.Member, e => ...)), or set it to a value computed on the client.");
+            throw new InvalidOperationException(
+                CoreStrings.NonQueryTranslationFailedWithDetails(
+                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+        }
+
+        return new MongoNonQueryExpression.Setter(property, value, isSelfReferencing, complexElementPath);
+    }
+
+    /// <summary>
+    /// Resolves a <c>SetProperty</c> target reached through complex properties: a scalar leaf of a (nested) complex property
+    /// or a whole complex property / complex collection, to the property and its dotted stored path
+    /// (<see cref="StructuralPath.TryResolve"/>, so element-name overrides apply). Leaves of complex COLLECTION elements are
+    /// not addressable by one path and are not resolved here.
+    /// </summary>
+    /// <remarks>
+    /// A target below an OPTIONAL complex property (EF10) is refused: the server's <c>$set</c> of a dotted path under a null
+    /// parent is an error ("Cannot create field ... in element {Opt: null}") raised mid-operation (documents before it are
+    /// already written), and the pipeline form silently creates a parent holding only that member (its other required
+    /// members then read as missing). Setting the optional property itself is supported.
+    /// </remarks>
+    private bool TryResolveComplexSetterTarget(
+        MongoQueryExpression mongoQueryExpression,
+        IEntityType entityType,
+        LambdaExpression propertySelector,
+        Expression selectorBody,
+        [NotNullWhen(true)] out IPropertyBase? target,
+        [NotNullWhen(true)] out string? path)
+    {
+        target = null;
+        path = null;
+        if (propertySelector.Parameters.Count != 1)
+        {
+            return false;
+        }
+
+        var names = new List<string>();
+        var current = selectorBody.RemoveConvert()!;
+        while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
+        {
+            names.Insert(0, name);
+            current = receiver.RemoveConvert()!;
+        }
+
+        if (names.Count == 0 || !ReferenceEquals(current, propertySelector.Parameters[0])
+            || !StructuralPath.TryResolve(entityType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not (IProperty or IComplexProperty))
+        {
+            return false;
+        }
+
+        // Every hop must be a complex property (an owned navigation hop is not a bulk-update target; complex properties
+        // directly on the entity have no hop).
+        ITypeBase hopScope = entityType;
+        for (var i = 0; i < names.Count - 1; i++)
+        {
+            if (hopScope.FindComplexProperty(names[i]) is not { IsCollection: false } hop)
+            {
+                return false;
+            }
+
+            if (hop.IsOptional())
+            {
+                AddTranslationErrorDetails(
+                    $"ExecuteUpdate cannot set '{propertySelector.Body}' because '{hop.DeclaringType.DisplayName()}.{hop.Name}' is an "
+                    + "optional complex property, which may be null in a stored document: the server cannot set a member of a null "
+                    + "value. Set the whole optional complex property instead (SetProperty(e => e.Optional, value)).");
+                throw new InvalidOperationException(
+                    CoreStrings.NonQueryTranslationFailedWithDetails(
+                        mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+            }
+
+            hopScope = hop.ComplexType;
+        }
+
+        target = (IPropertyBase)resolved.Leaf;
+        path = string.Join(".", resolved.Segments);
+        return true;
     }
 
     private static bool IsQuotedLambda(Expression expression)

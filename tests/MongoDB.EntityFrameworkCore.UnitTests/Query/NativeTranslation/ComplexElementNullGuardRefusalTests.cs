@@ -135,6 +135,60 @@ public class ComplexElementNullGuardRefusalTests
             () => ComplexElementNullGuardRefusal.ThrowIfDriverLinqMisreadsNullElements(captured, Model, MongoQueryMode.NativeOnly));
     }
 
+    // ── Strict (bulk ExecuteUpdate/ExecuteDelete) allow-list ──────────────────────────────────────────────────────
+
+    [Theory]
+    [MemberData(nameof(BulkAllowedShapes))]
+    public void Bulk_allow_list_admits_only_shapes_the_driver_answers_like_R17(string label, Expression captured)
+        => Assert.True(ComplexElementNullGuardRefusal.FindForBulk([captured], Model) is null, label);
+
+    public static IEnumerable<object[]> BulkAllowedShapes()
+    {
+        yield return ["== constant", Query(q => q.Where(r => r.Stops.Any(s => s.City == "Oslo")))];
+        yield return ["!= constant, constant on the left", Query(q => q.Where(r => r.Stops.Any(s => "Oslo" != s.City)))];
+        yield return ["nullable == non-null constant", Query(q => q.Where(r => r.Stops.Any(s => s.Zip == 5)))];
+        yield return ["bool == true", Query(q => q.Where(r => r.Stops.Any(s => s.Verified == true)))];
+        yield return ["bare bool and its negation under && / ||", Query(q => q.Where(r => r.Stops.Any(s => s.Verified && !(s.Verified || s.City == "X"))))];
+        yield return ["non-nullable list Contains", Query(q => q.Where(r => r.Stops.Any(s => new[] { 1, 2 }.Contains(s.Floor))))];
+        yield return ["nullable list without null Contains", Query(q => q.Where(r => r.Stops.Any(s => new int?[] { 1, 2 }.Contains(s.Zip))))];
+        yield return ["All", Query(q => q.Where(r => r.Stops.All(s => s.City == "Oslo")))];
+        yield return ["Count(pred) compared", Query(q => q.Where(r => r.Stops.Count(s => s.City == "Oslo") > 1))];
+        yield return ["Where(pred).Skip(1).Any()", Query(q => q.Where(r => r.Stops.Where(s => s.City == "Oslo").Skip(1).Any()))];
+        yield return ["bare Any / Count / LongCount", Query(q => q.Where(r => r.Stops.Any() && r.Stops.Count > 0 && r.Stops.LongCount() > 0))];
+        yield return ["root predicate only", Query(q => q.Where(r => r.Departs < DateTime.UnixEpoch && r.Name == "x"))];
+        yield return ["owned collection relational (owned scopes untouched)", Query(q => q.Where(r => r.Owned.Any(s => s.Floor < 1)))];
+    }
+
+    [Theory]
+    [MemberData(nameof(BulkRefusedShapes))]
+    public void Bulk_allow_list_refuses_everything_else(string label, Expression captured, string shape)
+    {
+        var found = ComplexElementNullGuardRefusal.FindForBulk([captured], Model);
+        Assert.True(found is not null, label);
+        Assert.Contains(shape, found!.Value.Shape);
+    }
+
+    public static IEnumerable<object[]> BulkRefusedShapes()
+    {
+        yield return ["relational", Query(q => q.Where(r => r.Stops.Any(s => s.Floor > 1))), "the element predicate"];
+        yield return ["== null", Query(q => q.Where(r => r.Stops.Any(s => s.Note == null))), "the element predicate"];
+        yield return ["HasValue", Query(q => q.Where(r => r.Stops.Any(s => s.Zip.HasValue))), "the element predicate"];
+        yield return ["bool == false", Query(q => q.Where(r => r.Stops.Any(s => s.Verified == false))), "the element predicate"];
+        yield return ["bool != false (R19: a null element reads false; the driver's $ne is true)", Query(q => q.Where(r => r.Stops.Any(s => s.Verified != false))), "the element predicate"];
+        yield return ["list with null", Query(q => q.Where(r => r.Stops.Any(s => new int?[] { null }.Contains(s.Zip)))), "the element predicate"];
+        yield return ["member vs member", Query(q => q.Where(r => r.Stops.Any(s => s.City == s.Note))), "the element predicate"];
+        yield return ["member vs root member", Query(q => q.Where(r => r.Stops.Any(s => s.City == r.Name))), "the element predicate"];
+        yield return ["string method", Query(q => q.Where(r => r.Stops.Any(s => s.City.StartsWith("O")))), "the element predicate"];
+        yield return ["arithmetic in equality", Query(q => q.Where(r => r.Stops.Any(s => s.Floor + 1 == 2))), "the element predicate"];
+        yield return ["Select", Query(q => q.Where(r => r.Stops.Select(s => s.Floor).Contains(1))), "the operator 'Select'"];
+        yield return ["Max", Query(q => q.Where(r => r.Stops.Max(s => s.Floor) > 1)), "the operator 'Max'"];
+        yield return ["OrderBy", Query(q => q.Where(r => r.Stops.OrderBy(s => s.Floor).Any())), "the operator 'OrderBy'"];
+        yield return ["collection read outside an operator", Query(q => q.Where(r => r.Stops != null)), "a read of the collection"];
+        // A lambda over complex elements the keying cannot bind (its source unknown, e.g. reached through a navigation) is
+        // refused rather than trusted.
+        yield return ["unbound element lambda", Scalar(q => (Expression<Func<Stop, bool>>)(s => s.Floor < 1)), "cannot bind to its collection"];
+    }
+
     private sealed class RouteContext : DbContext
     {
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

@@ -31,7 +31,22 @@ internal sealed class MongoNonQueryExpression : Expression
 
     public enum BulkStrategy { SingleCommand, TwoPhase }
 
-    public sealed record Setter(IProperty Property, Expression ValueExpression, bool IsSelfReferencing);
+    /// <summary>One <c>SetProperty</c> of a bulk update.</summary>
+    /// <param name="Property">
+    /// The target: a mapped scalar property (of the root entity or, through single complex-property hops, of a complex
+    /// type), or a whole complex property / complex collection.
+    /// </param>
+    /// <param name="ValueExpression">The value (a constant/parameter, or an expression over the entity).</param>
+    /// <param name="IsSelfReferencing">Whether <paramref name="ValueExpression"/> reads the entity being updated.</param>
+    /// <param name="ElementPath">
+    /// The stored (dotted) path of the target, or <see langword="null"/> for a root scalar property, whose path is its
+    /// element name.
+    /// </param>
+    public sealed record Setter(IPropertyBase Property, Expression ValueExpression, bool IsSelfReferencing, string? ElementPath = null)
+    {
+        /// <summary>The stored path the update writes.</summary>
+        public string StoredPath => ElementPath ?? ((IReadOnlyProperty)Property).GetElementName();
+    }
 
     public MongoNonQueryExpression(MongoQueryExpression sourceQuery, BulkStrategy strategy = BulkStrategy.SingleCommand)
     {

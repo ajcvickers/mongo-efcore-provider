@@ -19,6 +19,7 @@ using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Update;
+using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using MongoDB.EntityFrameworkCore.Extensions;
@@ -129,7 +130,28 @@ internal static class ComplexValueWriter
         }
     }
 
-    private static void WriteComplexValue(IBsonWriter writer, IUpdateEntry entry, IComplexProperty complexProperty, object? value)
+    /// <summary>
+    /// The stored form of a whole complex value (a subdocument, an array of subdocuments, or BSON null), exactly as
+    /// <see cref="WriteComplexProperties"/> writes it, for a value not tracked by an entry: a bulk <c>ExecuteUpdate</c>
+    /// <c>SetProperty(e =&gt; e.Complex, value)</c>.
+    /// </summary>
+    /// <exception cref="NotSupportedException">
+    /// The complex type (or a nested one) has shadow properties (EF8/EF9 only): a detached value carries no value for them.
+    /// </exception>
+    internal static BsonValue SerializeDetachedComplexValue(IComplexProperty complexProperty, object? value)
+    {
+        var document = new BsonDocument();
+        using (var writer = new BsonDocumentWriter(document))
+        {
+            writer.WriteStartDocument();
+            WriteComplexValue(writer, entry: null, complexProperty, value);
+            writer.WriteEndDocument();
+        }
+
+        return document[0];
+    }
+
+    private static void WriteComplexValue(IBsonWriter writer, IUpdateEntry? entry, IComplexProperty complexProperty, object? value)
     {
         writer.WriteName(complexProperty.GetElementName());
 
@@ -165,7 +187,7 @@ internal static class ComplexValueWriter
         WriteSubdocument(writer, entry, complexProperty.ComplexType, value);
     }
 
-    private static void WriteSubdocument(IBsonWriter writer, IUpdateEntry entry, IComplexType complexType, object instance)
+    private static void WriteSubdocument(IBsonWriter writer, IUpdateEntry? entry, IComplexType complexType, object instance)
     {
         writer.WriteStartDocument();
 
@@ -192,10 +214,14 @@ internal static class ComplexValueWriter
     /// complex types) have no CLR getter, so they come from the owning entry, which tracks the leaves of a
     /// non-collection complex property. Complex collection elements (EF10) never reach the shadow branch.
     /// </summary>
-    private static object? GetValue(IUpdateEntry entry, IPropertyBase member, object instance)
-        => member.IsShadowProperty()
-            ? entry.GetCurrentValue(member)
-            : member.GetGetter().GetClrValue(instance);
+    private static object? GetValue(IUpdateEntry? entry, IPropertyBase member, object instance)
+        => !member.IsShadowProperty()
+            ? member.GetGetter().GetClrValue(instance)
+            : entry is not null
+                ? entry.GetCurrentValue(member)
+                : throw new NotSupportedException(
+                  $"The complex type '{member.DeclaringType.DisplayName()}' has the shadow property '{member.Name}', which a value "
+                  + "outside the change tracker does not carry, so it cannot be written by ExecuteUpdate.");
 
     /// <summary>
     /// Whether EF reports a change anywhere inside <paramref name="complexProperty"/> on <paramref name="entry"/>:
