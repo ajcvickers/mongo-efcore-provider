@@ -1,0 +1,145 @@
+﻿/* Copyright 2023-present MongoDB Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#if !EF8 && !EF9
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Metadata;
+using MongoDB.EntityFrameworkCore.Infrastructure;
+using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
+
+namespace MongoDB.EntityFrameworkCore.UnitTests.Query.NativeTranslation;
+
+/// <summary>
+/// Ruling R20 scanner: which captured chains name a null-guard-requiring shape inside a COMPLEX collection's element scope
+/// (refused on the Native-mode fallback), and which don't (owned elements, root predicates, guard-free predicates).
+/// </summary>
+public class ComplexElementNullGuardRefusalTests
+{
+    public class Stop
+    {
+        public string City { get; set; } = null!;
+        public string? Note { get; set; }
+        public int Floor { get; set; }
+        public int? Zip { get; set; }
+        public bool Verified { get; set; }
+        public DateTime When { get; set; }
+    }
+
+    public class Route
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = null!;
+        public DateTime Departs { get; set; }
+        public List<Stop> Stops { get; set; } = [];
+        public List<Stop> Owned { get; set; } = [];
+    }
+
+    private static readonly IModel Model = BuildModel();
+
+    private static IModel BuildModel()
+    {
+        using var db = new RouteContext();
+        return db.Model;
+    }
+
+    private static Expression Query(Expression<Func<IQueryable<Route>, IQueryable<Route>>> query) => query.Body;
+
+    private static Expression Scalar<T>(Expression<Func<IQueryable<Route>, T>> query) => query.Body;
+
+    [Theory]
+    [MemberData(nameof(RefusedShapes))]
+    public void Null_guard_requiring_shapes_in_a_complex_element_scope_are_found(string label, Expression captured, string shape)
+    {
+        var found = ComplexElementNullGuardRefusal.Find(captured, Model);
+        Assert.True(found is not null, label);
+        Assert.Equal(shape, found!.Value.Shape);
+        Assert.Equal("Route.Stops", found.Value.Collection);
+    }
+
+    public static IEnumerable<object[]> RefusedShapes()
+    {
+        yield return ["date part over date-add", Query(q => q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030))), "a relational comparison"];
+        yield return ["relational on a leaf", Query(q => q.Where(r => r.Stops.Any(s => s.Floor < 1))), "a relational comparison"];
+        yield return ["relational, element on the right", Query(q => q.Where(r => r.Stops.Any(s => 1 > s.Floor))), "a relational comparison"];
+        yield return ["All", Query(q => q.Where(r => r.Stops.All(s => s.When.AddDays(1).Year < 2030))), "a relational comparison"];
+        yield return ["Count(pred) projection", Scalar(q => q.Select(r => r.Stops.Count(s => s.Floor < 1))), "a relational comparison"];
+        yield return ["Where(pred).Any()", Query(q => q.Where(r => r.Stops.Where(s => s.Floor < 1).Any())), "a relational comparison"];
+        yield return ["== null", Query(q => q.Where(r => r.Stops.Any(s => s.Note == null))), "a comparison with null"];
+        yield return ["!= null", Query(q => q.Where(r => r.Stops.Any(s => s.Zip != null))), "a comparison with null"];
+        yield return ["local list Contains", Query(q => q.Where(r => r.Stops.Any(s => new int?[] { null, 7 }.Contains(s.Zip)))), "a membership test of a member value in a local collection"];
+        yield return ["bool == false", Query(q => q.Where(r => r.Stops.Any(s => s.Verified == false))), "an equality on a non-nullable bool member"];
+        yield return ["nested under &&", Query(q => q.Where(r => r.Stops.Any(s => s.City == "X" && s.Floor < 1))), "a relational comparison"];
+        yield return ["nested under !", Query(q => q.Where(r => r.Stops.Any(s => !(s.Floor > 9)))), "a relational comparison"];
+        yield return ["correlated with the root", Query(q => q.Where(r => r.Stops.Any(s => s.When < r.Departs))), "a relational comparison"];
+    }
+
+    [Theory]
+    [MemberData(nameof(NotRefusedShapes))]
+    public void Shapes_outside_the_category_are_not_found(string label, Expression captured)
+        => Assert.True(ComplexElementNullGuardRefusal.Find(captured, Model) is null, label);
+
+    public static IEnumerable<object[]> NotRefusedShapes()
+    {
+        yield return ["equality with a constant", Query(q => q.Where(r => r.Stops.Any(s => s.City == "Oslo")))];
+        yield return ["equality on the declined date part", Query(q => q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year == 2024)))];
+        yield return ["bare bool", Query(q => q.Where(r => r.Stops.Any(s => s.Verified)))];
+        yield return ["string operator", Query(q => q.Where(r => r.Stops.Any(s => s.City.StartsWith("O"))))];
+        yield return ["Length == constant (a null-propagating operator, no guard needed)", Query(q => q.Where(r => r.Stops.Any(s => s.Note!.Length == 2)))];
+        yield return ["bare Any", Query(q => q.Where(r => r.Stops.Any()))];
+        yield return ["Count comparison at the root", Query(q => q.Where(r => r.Stops.Count > 1))];
+        yield return ["indexer, no element lambda", Query(q => q.Where(r => r.Stops[0].City == "Oslo"))];
+        yield return ["root relational (no element scope)", Query(q => q.Where(r => r.Departs.AddDays(1).Year < 2030))];
+        yield return ["root relational over a complex-collection count", Query(q => q.Where(r => r.Stops.Count < 3))];
+        yield return ["OWNED element relational", Query(q => q.Where(r => r.Owned.Any(s => s.When.AddDays(1).Year < 2030)))];
+        yield return ["OWNED element == null", Query(q => q.Where(r => r.Owned.Any(s => s.Note == null)))];
+        yield return ["relational on the root inside the element lambda only", Query(q => q.Where(r => r.Stops.Any(s => r.Departs < DateTime.UnixEpoch)))];
+        yield return ["Contains of the element itself (member-wise equality, not a leaf)", Query(q => q.Where(r => r.Stops.Any(s => new List<Stop>().Contains(s))))];
+    }
+
+    [Fact]
+    public void Explicit_DriverLinq_is_never_refused()
+    {
+        var captured = Query(q => q.Where(r => r.Stops.Any(s => s.Floor < 1)));
+        ComplexElementNullGuardRefusal.ThrowIfDriverLinqMisreadsNullElements(captured, Model, MongoQueryMode.DriverLinq);
+        var native = Assert.Throws<NativeTranslationNotSupportedException>(
+            () => ComplexElementNullGuardRefusal.ThrowIfDriverLinqMisreadsNullElements(captured, Model, MongoQueryMode.Native));
+        Assert.Contains("'Route.Stops'", native.Message);
+        Assert.Contains("a relational comparison", native.Message);
+        Assert.Contains("MongoQueryMode.DriverLinq", native.Message);
+        Assert.Throws<NativeTranslationNotSupportedException>(
+            () => ComplexElementNullGuardRefusal.ThrowIfDriverLinqMisreadsNullElements(captured, Model, MongoQueryMode.NativeOnly));
+    }
+
+    private sealed class RouteContext : DbContext
+    {
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+            => optionsBuilder
+                .UseMongoDB("mongodb://localhost:27017", "UnitTests")
+                .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+            => modelBuilder.Entity<Route>(b =>
+            {
+                b.ComplexCollection(r => r.Stops);
+                b.OwnsMany(r => r.Owned);
+            });
+    }
+}
+#endif

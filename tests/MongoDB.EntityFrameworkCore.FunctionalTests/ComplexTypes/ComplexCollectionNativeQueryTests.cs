@@ -24,6 +24,7 @@ using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Infrastructure;
 using MongoDB.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Metadata.Conventions;
+using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.CompositionAssert;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
@@ -390,11 +391,11 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddYears(1) < May)))), [], ["r-mixed", "r-null"]);
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => !(s.When.AddDays(1) < May))))), ["r-full", "r-mixed", "r-null"], ["r-full", "r-mixed"]);
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.When.AddDays(1) > May)))), ["r-full"]);
-        // A date part over a date-add has no native translation (declines); the fallback is driver-LINQ, whose unguarded
-        // `$lt` reads the null element's missing value as below every value: wrong rows on Native and DriverLinq
-        // (pre-existing driver behaviour, pinned; R17 answer [r-full, r-mixed]).
-        PerMode(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed", "r-null"],
-            NotNative, Serves, Serves);
+        // A date part over a date-add has no native translation (declines). The fallback is driver-LINQ, whose unguarded
+        // `$lt` reads the null element's missing value as below every value (R17 answer [r-full, r-mixed]), so ruling R20
+        // REFUSES it in Native mode instead of serving wrong rows; explicit DriverLinq runs the driver (its rows pinned).
+        // See Null_element_shapes_the_native_path_declines_are_refused_rather_than_served_wrong.
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed", "r-null"]);
 
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.Zip ?? s.Floor) < 1)))), [], ["r-mixed", "r-null"]);
         // A constant fallback: the null element's Zip reads null and coalesces to 0, so `0 < 1` holds.
@@ -408,6 +409,96 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // Constant branch taken by the null element (City == "Oslo" is false for it): `0 < 1`.
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.City == "Oslo" ? s.Floor : 0) < 1)))), ["r-mixed", "r-null"]);
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => (s.City == "X" ? 0 : s.Floor) > 1)))), ["r-full"]);
+    }
+
+    // Ruling R20: the default mode serves correct rows or refuses. A shape the native path DECLINES inside a complex
+    // element scope, whose fallback (driver-LINQ) would read a null element's missing members as below every value or as
+    // unequal to null, is refused at the compile-time gate under Native (NativeTranslationNotSupportedException naming the
+    // collection and what to do); NativeOnly still throws its usual decline; explicit DriverLinq runs the driver, whose
+    // rows are pinned (known driver behaviour). Structural, so it refuses even when the data has no null element.
+    private const string R20Refusal = "incorrectly when the element is null";
+
+    private static void Refused(Func<MongoQueryMode, List<string>> run, string[] driverRows)
+    {
+        Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => run(MongoQueryMode.NativeOnly)));
+        var native = Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => run(MongoQueryMode.Native)));
+        Assert.Contains(R20Refusal, native.Message);
+        Assert.Contains("MongoQueryMode.DriverLinq", native.Message);
+        var driver = run(MongoQueryMode.DriverLinq);
+        Assert.True(driverRows.SequenceEqual(driver), $"DriverLinq: expected [{string.Join("; ", driverRows)}], got [{string.Join("; ", driver)}]");
+    }
+
+    [Fact]
+    public void Null_element_shapes_the_native_path_declines_are_refused_rather_than_served_wrong()
+    {
+        // r-full [Oslo(When May+5d, Floor = Zip = 5, verified)], r-mixed [Oslo, null], r-null [null]. R17 answers in the
+        // comments; the driver's measured rows are the pins.
+        // Date part over a date-add: R17 [r-full, r-mixed]; the driver includes r-null.
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed", "r-null"]);
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddMonths(1).Month < 13)))), ["r-full", "r-mixed", "r-null"]);
+        // Count(pred) PROJECTION with the same element predicate: the projection binder can't bind the declined element
+        // predicate and the fallback can't either: "could not be translated" in EVERY mode (loud, never rows; pre-existing
+        // outcome of an unbindable count leaf, not R20's category).
+        PerMode(Routes(q => RPerRow(q, r => r.Stops.Count(s => s.When.AddDays(1).Year < 2030))), [], NotTranslated, NotTranslated, NotTranslated);
+        // Count(pred) in a PREDICATE: R17 [r-full, r-mixed]; the driver counts the null element ([all 3]): refused.
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Count(s => s.When.AddDays(1).Year < 2030) > 0))), ["r-full", "r-mixed", "r-null"]);
+        // All with the same predicate: R17 [r-full]; the driver's missing-below-everything makes every element pass.
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed", "r-null"]);
+        // The declined computation beside a comparison with null: R17 [r-mixed, r-null]; the driver's `$eq` isn't
+        // missing-safe ([]).
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030 && s.Note == null)))), []);
+        // Element predicate under a pass-through operator before the quantifier (Where(...).Any()): same refusal, same
+        // driver rows.
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Where(s => s.When.AddDays(1).Year < 2030).Any()))), ["r-full", "r-mixed", "r-null"]);
+
+        // Controls (NOT refused):
+        // (1) the same date-add comparison WITHOUT the date part is native (R18): served correctly in every native mode.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1) < May)))), [], ["r-mixed", "r-null"]);
+        // (2) a declined shape whose predicate needs no null guard (equality with a constant over the declined date part):
+        // the fallback's answer equals R17's, so it falls back and serves.
+        PerMode(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year == 2024)))), ["r-full", "r-mixed"], NotNative, Serves, Serves);
+        // (3) a declined shape with no element LAMBDA (an indexer read) has no element scope to key on: falls back and serves
+        // (the null element's City reads missing, never "Oslo", in every mode).
+        PerMode(Routes(q => RNames(q.Where(r => r.Stops[0].City == "Oslo"))), ["r-full", "r-mixed"], NotNative, Serves, Serves);
+        // (4) the refusal is structural: the same shape over a collection with NO null element is refused too (compile time;
+        // the stored data isn't consulted). The cost of R20: a loud failure where the rows would have been right.
+        var collection = database.CreateCollection<Route>(Unique(nameof(Null_element_shapes_the_native_path_declines_are_refused_rather_than_served_wrong)));
+        Raw(collection).InsertOne(new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "r-full" }, { "Home", "Oslo" }, { "Stops", new BsonArray { StopDoc("Oslo", 5, true, "x") } } });
+        Refused(m => Run(collection, m, mb => mb.Entity<Route>().ComplexCollection(r => r.Stops, s =>
+        {
+            s.ComplexProperty(x => x.Location);
+            s.ComplexCollection(x => x.Tags);
+        }), q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full"]);
+    }
+
+    public class OwnedStop
+    {
+        public string City { get; set; } = null!;
+        public DateTime When { get; set; }
+    }
+
+    public class OwnedRoute
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public List<OwnedStop> Stops { get; set; } = [];
+    }
+
+    [Fact]
+    public void Owned_collection_element_shapes_are_not_refused_by_the_null_element_rule()
+    {
+        // The R20 refusal is keyed on a COMPLEX element scope. The same declined shape over an OWNED collection (an entity
+        // element; EF never stores a null owned element) keeps its pre-existing per-mode behaviour: declines natively and
+        // the fallback serves.
+        var collection = database.CreateCollection<OwnedRoute>(Unique(nameof(Owned_collection_element_shapes_are_not_refused_by_the_null_element_rule)));
+        Raw(collection).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "o-one" }, { "Stops", new BsonArray { new BsonDocument { { "City", "Oslo" }, { "When", May } } } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "o-empty" }, { "Stops", new BsonArray() } }
+        ]);
+        static void Configure(ModelBuilder mb) => mb.Entity<OwnedRoute>().OwnsMany(r => r.Stops);
+        IEnumerable<string> N(IQueryable<OwnedRoute> q) => q.Select(r => r.Name).ToList().Order(StringComparer.Ordinal);
+        PerMode(m => Run(collection, m, Configure, q => N(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["o-one"], NotNative, Serves, Serves);
     }
 
     [Fact]
@@ -564,14 +655,16 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // unguarded comparison includes the null element (pinned).
         NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => p.At < cutoff)))), ["full", "mixed"], ["full", "mixed", "null"]);
 
-        // Declined natively; the fallback answers or refuses loudly (never rows that differ from R17):
+        // Declined natively; the fallback answers or refuses loudly (never rows that differ from R17). A relational
+        // comparison over an element member is R20's category, so Native refuses it at the gate (before the driver's own
+        // "Expression not supported" would); explicit DriverLinq runs the driver.
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Zip.GetValueOrDefault() < 1)))), [], NotNative,
-            "Expression not supported", "Expression not supported");
+            R20Refusal, "Expression not supported");
         PerMode(Q(q => N(q.Where(h => h.Ps.Select(p => p.City).Contains("Oslo")))), ["full", "mixed"], NotNative, Serves, Serves);
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.At.Offset == TimeSpan.FromHours(2))))), [], NotNative,
             "does not represent members as fields", "does not represent members as fields");
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.At.Ticks < 1)))), [], NotNative,
-            "does not represent members as fields", "does not represent members as fields");
+            R20Refusal, "does not represent members as fields");
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Marks.HasFlag(Mark.A))))), [], NotNative, "Expression not supported", "Expression not supported");
         // A primitive-collection leaf on an element: no native element-scope rendering ($in over an array field is
         // query-dialect only); the fallback's $in/$size over the null element's missing array is a server error.
@@ -857,8 +950,11 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // has no first element: the fallback answers false for those rows.)
         PerMode(Customers(q => Names(q.Where(c => c.Addresses[0].City == "Paris"))), ["a-two", "e-one"], NotNative, Serves, Serves);
         PerMode(Customers(q => Names(q.Where(c => c.Addresses.ElementAt(0).City == "Paris"))), ["a-two", "e-one"], NotNative, Serves, Serves);
+        // `First(a => a.Zip != null)`: the element predicate holds a comparison with null (R20's category), so Native is
+        // refused at the gate although the driver's rows happen to equal R17's here (the null element's missing City is
+        // never "Paris"): the rule is structural. DriverLinq serves them.
         PerMode(Customers(q => Names(q.Where(c => c.Addresses.First(a => a.Zip != null).City == "Paris"))), ["a-two", "e-one"],
-            NotNative, Serves, Serves);
+            NotNative, R20Refusal, Serves);
     }
 
     // ── Projections ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -979,10 +1075,11 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         Native(m => Run(collection, m, Configure, q => N(q.Where(t => t.Inbound.Any(l => l.Seats == 4)))), "x");
         Native(m => Run(collection, m, Configure, q => N(q.Where(t => t.Outbound.Count(l => l.Seats > 1) == 1))), "x");
         // A relational comparison runs on the stored form: over a string-represented leaf it declines natively (EF-337);
-        // the fallback refuses it too.
+        // the fallback refuses it too. In Native mode the R20 gate refusal (a relational comparison in a complex element
+        // scope) fires first, at compile time; under explicit DriverLinq the bridge's EF-337 refusal fires.
         // (Before this task Native's fallback and DriverLinq compared the stored "4" with 100 and served `x`: wrong rows.)
         PerMode(m => Run(collection, m, Configure, q => N(q.Where(t => t.Inbound.Any(l => l.Seats > 100)))), [],
-            NotNative, "stored through a value converter or a BsonRepresentation", "stored through a value converter or a BsonRepresentation");
+            NotNative, R20Refusal, "stored through a value converter or a BsonRepresentation");
     }
 
     [Fact]

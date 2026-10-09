@@ -222,6 +222,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             ThrowIfNativeOnlyForbidsFallback(queryMode, "Query groups without a supported aggregate projection");
             ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+            ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, queryMode);
         }
 
         VerifyNoClientConstant(shapedQueryExpression.ShaperExpression);
@@ -326,6 +327,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // a coverage failure under NativeOnly.
         ThrowIfNativeOnlyForbidsFallback(queryMode, "Query projects a non-entity result");
         ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+        ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, queryMode);
 
         // HasStringSequenceProjectionLeaf restores what ProjectionAnalyzer.CanPushDown can no longer see: the
         // native string-sequence leaf (an Enumerable.* operator applied to a string) erases that call from the
@@ -495,6 +497,21 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
               ?? type;
 
     /// <summary>
+    /// Ruling R20: a declined query whose complex-collection element predicate needs a null guard the driver doesn't
+    /// apply is refused under <see cref="MongoQueryMode.Native"/> rather than served wrong (R17 reads a null element's
+    /// members as null; the driver reads them as MISSING, below every value). Called at every point where the gate commits
+    /// to the fallback; a no-op under explicit <see cref="MongoQueryMode.DriverLinq"/> and on EF8/EF9 (no complex
+    /// collections). See <c>ComplexElementNullGuardRefusal</c> (an EF10-only type).
+    /// </summary>
+    private static void ThrowIfDriverLinqMisreadsNullElements(MongoQueryExpression mongoQueryExpression, MongoQueryMode mode)
+    {
+#if !EF8 && !EF9
+        ComplexElementNullGuardRefusal.ThrowIfDriverLinqMisreadsNullElements(
+            mongoQueryExpression.CapturedExpression, mongoQueryExpression.CollectionExpression.EntityType.Model, mode);
+#endif
+    }
+
+    /// <summary>
     /// Throws when the captured chain, about to run on driver-LINQ, is a grouped query holding a case mapping
     /// (<c>ToUpper</c>/<c>ToLower</c>, incl. Invariant) in the <c>GroupBy</c>'s key/element/result selector, in an
     /// operator composed after it, or in any lambda of an ungrouped source it groups or combines with (either side of a
@@ -637,6 +654,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         if (nativeFactory == null)
         {
             ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+            ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, mode);
         }
 
         // Late-fallback strip: the driver renders the pushed-down Select with its own aliases, which disagree with

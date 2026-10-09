@@ -286,7 +286,11 @@ Rendering (null/missing/dialect semantics):
   default-serialized bool leaf compared as a value reads `$ifNull: [f, false]` (`ScopeValue`), so `== false`/`!= true`/
   `== p` agree with `!a.Verified` (true for a null element; two-valued; no owned pin exists); a `bool?` keeps null semantics;
   owned element scopes keep the RenderBinary no-`$ifNull` rule (a missing owned leaf is malformed data, a null complex element
-  is EF-written). Driver-LINQ answers such rows differently (pinned per mode).
+  is EF-written). Driver-LINQ answers such rows differently (pinned per mode). Ruling R20: a query the native path
+  DECLINES whose complex-element predicate holds a null-guard-requiring shape (relational, `==`/`!=` null, local-list
+  `Contains` of a member, non-nullable bool equality) is refused at the compile-time gate under `Native` instead of falling
+  back to those wrong rows (`ComplexElementNullGuardRefusal`, called where the gate commits to the fallback; structural,
+  so it refuses even over data with no null element; explicit `DriverLinq` runs the driver; owned scopes untouched).
   `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value
   (`MongoCurrentElementNullCheckExpression`, `$$e`), `!Contains` its exact `All` complement. The bridge coalesces a REQUIRED
   complex collection used as an operator source to `[]` (`TryRewriteRequiredComplexCollectionSource`; it reads empty, and
