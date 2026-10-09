@@ -285,6 +285,11 @@ internal static class ComplexElementNullGuardRefusal
             return elementScopes;
         }
 
+        // Whether an operand reads a keyed complex element parameter DIRECTLY (not from inside a nested lambda): a
+        // relational `r.Stops.Count(s2 => s2.City == s.City) >= 1` compares a count, never the element, so it needs no
+        // guard; the nested lambda's own body is still visited by the outer Finder, which finds any guard-requiring
+        // shape inside it. (The cost: an element read inside a nested lambda whose RESULT feeds the relational, e.g.
+        // `r.Stops.Select(s2 => s.Floor).First() < 1`, is not found; a documented limit, pinned.)
         private sealed class ParameterReadFinder(Dictionary<ParameterExpression, string> complexElements) : ExpressionVisitor
         {
             public ParameterExpression? Found { get; private set; }
@@ -301,6 +306,8 @@ internal static class ComplexElementNullGuardRefusal
 
                 return node;
             }
+
+            protected override Expression VisitLambda<T>(Expression<T> node) => node;
 
             protected override Expression VisitExtension(Expression node) => node;
         }

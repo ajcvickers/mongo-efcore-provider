@@ -124,7 +124,8 @@ Rendering (null/missing/dialect semantics):
   right side) answer true where C# answers false. The renderer conjoins `$gt: [<lower side>, null]` when
   `MayBeNull`. Non-nullable-typed values that may be *missing* (unmatched left-join side) get no guard; conditions
   over them decline.
-- **Top-level aggregation `$eq`/`$ne` against null is `$ifNull`-wrapped**, but not inside a `$filter`/`$map` scope.
+- **Top-level aggregation `$eq`/`$ne` against null is `$ifNull`-wrapped**, but not inside a `$filter`/`$map` scope
+  (except `NullSafe` complex-element leaves, ruling R17 below).
 - **`$expr` inside `$elemMatch` is a hard server error**; reject at `IsQueryDialectRenderable`. `$size` on a
   missing/null array also errors: `$ifNull` around `$size`/`$filter` is mandatory.
 - **Relational comparisons, sort keys and aggregates run on the stored form**: over a converted or non-default-
@@ -291,6 +292,17 @@ Rendering (null/missing/dialect semantics):
   `Contains` of a member, non-nullable bool equality) is refused at the compile-time gate under `Native` instead of falling
   back to those wrong rows (`ComplexElementNullGuardRefusal`, called where the gate commits to the fallback; structural,
   so it refuses even over data with no null element; explicit `DriverLinq` runs the driver; owned scopes untouched).
+  It is a BEST-EFFORT net for structurally keyable shapes, not a guarantee (ruling R21). Documented limits, pinned as
+  characterization in `ComplexCollectionNativeQueryTests.Known_limits_of_the_R20_refusal_net_...`: element predicates
+  reached through a navigation/join root (`s.Store.Tags.Any(t => t.Rank < 1)`: lambda roots are keyed by
+  `FindEntityTypes(param.Type)`, never a `TransparentIdentifier`); element-leaf `Select` chains
+  (`Select(s => s.Verified).Contains(false)`; `Select` is opaque to the keying); null tests not spelled against a null
+  CONSTANT (`Zip.HasValue`, `Zip == nullParameter`, `string.IsNullOrEmpty(Note)`, `Note == r.NullableRootMember`); an element
+  read inside a nested lambda whose result feeds a relational (`Select(s2 => s.Floor).First() < 1`: the operand check stops
+  at lambdas so `Count(s2 => s2.City == s.City) >= 1` isn't refused). Indexed overloads and `SelectMany` over a complex
+  collection are refused by EF in every mode. In those limits the default mode serves the driver's rows. The structural
+  cost: a keyed shape is refused even over clean data and even where the driver's rows would have been right
+  (`s.Tags.Count(...) >= 0`).
   `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value
   (`MongoCurrentElementNullCheckExpression`, `$$e`), `!Contains` its exact `All` complement. The bridge coalesces a REQUIRED
   complex collection used as an operator source to `[]` (`TryRewriteRequiredComplexCollectionSource`; it reads empty, and

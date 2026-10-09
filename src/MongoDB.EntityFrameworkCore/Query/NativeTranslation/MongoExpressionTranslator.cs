@@ -1254,9 +1254,12 @@ internal sealed partial class MongoExpressionTranslator
     /// matches a non-document element, not even with an empty body, so <c>All(a =&gt; a.City == "X")</c> (rendered as a
     /// negated <c>$elemMatch</c> over the complement) would answer true over <c>[X, null]</c> and
     /// <c>Any(a =&gt; a.City != "X")</c> false: silently wrong rows. Every aggregation scope (<c>$map</c>, and the
-    /// <c>$filter</c> of <c>Count(pred)</c>) reads a null element as an element whose members are all MISSING, as
-    /// driver-LINQ does, so quantifiers and filtered counts agree with each other and with the fallback. An owned
-    /// collection keeps <c>$elemMatch</c> (index-usable): EF never stores a null owned element.
+    /// <c>$filter</c> of <c>Count(pred)</c>) sees a null element as an element whose members are all MISSING; the
+    /// translator reads each member <see cref="MongoFieldExpression.NullSafe"/> (<see cref="ScopeField"/>, ruling R17) so
+    /// it answers as null (<c>$ifNull</c>, the relational null guard), and quantifiers and filtered counts agree with each
+    /// other and with C#. Driver-LINQ keeps the raw MISSING semantics in that scope and answers such rows differently
+    /// (pinned per mode). An owned collection keeps <c>$elemMatch</c> (index-usable): EF never stores a null owned
+    /// element.
     /// </remarks>
     private static bool RequiresAggregationElementScope(ITypeBase elementType)
         => elementType is IComplexType;
