@@ -87,7 +87,11 @@ public sealed class BsonElementAttributeConvention :
     /// </summary>
     /// <param name="propertyBuilder">The builder for the complex property.</param>
     /// <param name="context">Additional information associated with convention execution.</param>
-    public void ProcessComplexPropertyAdded(
+    /// <remarks>
+    /// Overrides (rather than hides) EF's <see cref="PropertyAttributeConventionBase{TAttribute}"/> implementation, whose
+    /// attribute hook does not run for this convention's complex properties.
+    /// </remarks>
+    public override void ProcessComplexPropertyAdded(
         IConventionComplexPropertyBuilder propertyBuilder,
         IConventionContext<IConventionComplexPropertyBuilder> context)
     {
