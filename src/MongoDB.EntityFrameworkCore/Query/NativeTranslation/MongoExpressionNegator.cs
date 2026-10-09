@@ -71,6 +71,8 @@ internal static class MongoExpressionNegator
             MongoElemMatchExpression e => new MongoElemMatchExpression(e.ArrayPath, e.ElementPredicate, !e.Negated),
             // Null-or-missing vs present partition every document, in both dialects.
             MongoElementNullCheckExpression e => e.Negate(),
+            // Null vs present partition every element (aggregation element scopes only).
+            MongoCurrentElementNullCheckExpression e => e.Negate(),
             _ => null
         };
 

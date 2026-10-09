@@ -92,7 +92,7 @@ internal sealed partial class MongoExpressionTranslator
 
         var otherSide = leftIsSelf ? right : left;
 
-        var primaryKey = _entityType.FindPrimaryKey();
+        var primaryKey = ScopeEntityType.FindPrimaryKey();
         if (primaryKey is null)
             return false;
 
@@ -105,7 +105,7 @@ internal sealed partial class MongoExpressionTranslator
         if (otherSide is ConstantExpression { Value: null })
             return false;
 
-        if (otherSide.Type != _entityType.ClrType)
+        if (otherSide.Type != _scopeType.ClrType)
             return false;
 
         result = CombineKeyComparisons(
@@ -222,10 +222,10 @@ internal sealed partial class MongoExpressionTranslator
             return false;
 
         var elementType = Unwrap(collection).Type.TryGetEnumerableElementType();
-        if (elementType != _entityType.ClrType)
+        if (elementType != _scopeType.ClrType)
             return false;
 
-        var primaryKey = _entityType.FindPrimaryKey();
+        var primaryKey = ScopeEntityType.FindPrimaryKey();
         if (primaryKey is null || primaryKey.Properties.Count != 1)
             return false; // composite key: no multi-field $in
 

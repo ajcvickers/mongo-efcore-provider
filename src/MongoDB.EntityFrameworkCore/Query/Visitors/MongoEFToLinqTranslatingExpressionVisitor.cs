@@ -839,6 +839,13 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
             return embeddedCountRewrite;
         }
 
+        // A required complex collection as an operator source (`c.Addresses.Any(...)`, `.Select(a => a.City)`); see
+        // TryRewriteRequiredComplexCollectionSource.
+        if (TryRewriteRequiredComplexCollectionSource(node, out var complexCollectionSource))
+        {
+            return complexCollectionSource;
+        }
+
         var zeroTakeRewrite = TryRewriteZeroTake(node);
         if (zeroTakeRewrite != null)
         {
@@ -916,6 +923,57 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
         var normalizedFieldAccess = Expression.Coalesce(fieldAccess, emptyCollection);
 
         result = Expression.Call(null, countMethod, normalizedFieldAccess);
+        return true;
+    }
+
+    /// <summary>
+    /// Rewrites <c>AsQueryable(EF.Property(entity, "Coll"))</c> over a REQUIRED complex collection into
+    /// <c>AsQueryable(field ?? new List&lt;T&gt;())</c>, so the operator over it (<c>Any</c>/<c>All</c>/<c>Count</c>/
+    /// <c>Select</c>/...) sees an empty array for a stored null or MISSING one.
+    /// </summary>
+    /// <remarks>
+    /// A required complex collection reads EMPTY when its element is missing or null (the complex read rule, as for an
+    /// owned collection), but the driver reads the raw field: <c>$size</c>/<c>$anyElementTrue</c>/<c>$allElementsTrue</c>
+    /// over a null array is a server error, and <c>Select(c =&gt; c.Lines.Select(l =&gt; l.Sku).ToList())</c> read a
+    /// <see langword="null"/> list where every other read answers an empty one (a silent wrong value). The native path
+    /// <c>$ifNull</c>s the same arrays (<c>MongoSizeExpression</c>, <c>RenderQuantifier</c>, <c>RenderFilteredSize</c>),
+    /// so this keeps the two paths on one answer. An OPTIONAL collection keeps its null (it reads null, and
+    /// <c>c.Opt!.Any()</c> over a null one has no C# answer), as does anything that isn't a complex collection read off
+    /// an entity. The same normalization the owned-collection Count rewrite (EF-358) applies, for the complex case.
+    /// </remarks>
+    private bool TryRewriteRequiredComplexCollectionSource(MethodCallExpression node, out Expression result)
+    {
+        result = null!;
+
+        // EF leaves a complex collection as a plain member access (`c.Addresses`); the EF.Property spelling is accepted too.
+        // The owner is an entity (root or owned), a complex hop, or an element of another complex collection (a nested
+        // collection inside an element lambda), resolved structurally by the stored-ordering walker's resolver.
+        if (node is not { Method: { Name: nameof(Queryable.AsQueryable), DeclaringType: var declaring }, Arguments: [var argument] }
+            || declaring != typeof(Queryable)
+            || !argument.TryGetMemberOrEFProperty(out var owner, out var propertyName))
+        {
+            return false;
+        }
+
+        IEnumerable<ITypeBase> owners = _queryContext.Context.Model.FindEntityTypes(owner.Type).ToList() is { Count: > 0 } ownerEntities
+            ? ownerEntities
+            : FindComplexHopTypes(owner);
+        var collections = owners.Select(t => t.FindComplexProperty(propertyName)).ToList();
+        if (collections.Count == 0 || collections.Any(p => p is not { IsCollection: true } || p.IsOptional()))
+        {
+            return false;
+        }
+
+        var fieldAccess = Visit(argument);
+        if (fieldAccess is null
+            || fieldAccess.Type.TryGetItemType() is not { } elementType
+            || !fieldAccess.Type.IsAssignableFrom(typeof(List<>).MakeGenericType(elementType)))
+        {
+            return false;
+        }
+
+        var empty = Expression.Constant(Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType)), fieldAccess.Type);
+        result = node.Update(null, [Expression.Coalesce(fieldAccess, empty)]);
         return true;
     }
 

@@ -50,6 +50,23 @@ internal readonly record struct StructuralPathResult(
     bool CrossesCollection);
 
 /// <summary>
+/// The outcome of <see cref="StructuralPath.TryResolveCollection"/>: an embedded array and the scope of its elements.
+/// </summary>
+/// <param name="ArrayPath">The dotted stored path of the array, relative to the starting scope.</param>
+/// <param name="Collection">
+/// The collection member: an embedded (owned) collection <see cref="INavigation"/> or a collection
+/// <see cref="IComplexProperty"/>.
+/// </param>
+/// <param name="ElementType">
+/// The structural type of one element, which an element-scoped predicate resolves its members against: the navigation's
+/// target <see cref="IEntityType"/> or the complex collection's <see cref="IComplexType"/>.
+/// </param>
+internal readonly record struct StructuralCollectionPath(
+    string ArrayPath,
+    IReadOnlyPropertyBase Collection,
+    ITypeBase ElementType);
+
+/// <summary>
 /// Resolves a root-first chain of member names across a mixed chain of owned (embedded) navigations and complex
 /// properties to its stored document path. The one place that knows both kinds of hop; callers decide which leaf
 /// kinds they accept.
@@ -69,14 +86,51 @@ internal readonly record struct StructuralPathResult(
 /// <para>
 /// <b>Arrays.</b> A hop into an owned or complex collection has no single dotted path: it declines with
 /// <see cref="StructuralPathResult.CrossesCollection"/> set. A collection as the <i>leaf</i> is not a crossing (the
-/// array itself has a dotted path). Element-scoped (quantifier) callers resolve the array path and bind their own
-/// element scope; a collection-aware variant for complex collections is the extension point for complex-collection
-/// quantifiers (it belongs beside this method and must not loosen <see cref="TryResolve"/>, which dotted-path
-/// callers rely on to decline).
+/// array itself has a dotted path). Element-scoped (quantifier, count) callers resolve the array with
+/// <see cref="TryResolveCollection"/>, the collection variant, and bind their own element scope over its
+/// <see cref="StructuralCollectionPath.ElementType"/>; <see cref="TryResolve"/> itself never crosses an array, which
+/// dotted-path callers rely on to decline.
 /// </para>
 /// </remarks>
 internal static class StructuralPath
 {
+    /// <summary>
+    /// Resolves <paramref name="names"/> (root-first; every name but the last a hop, the last the collection) against
+    /// <paramref name="scope"/> to an embedded array: an owned collection navigation or a complex collection, reached
+    /// through any mix of embedded single references and single complex properties.
+    /// </summary>
+    /// <returns>
+    /// <see langword="false"/> when any hop declines (<see cref="TryResolve"/>'s rules: an earlier hop into an array has no
+    /// dotted path, so a collection inside a collection element is resolved by a nested element scope, never here) or
+    /// the last name is not an embedded collection (a scalar, including a primitive collection; a reference; a
+    /// cross-document navigation).
+    /// </returns>
+    /// <remarks>
+    /// The final-name rule is the structural protection against a mapped scalar sharing a collection's name: a scalar is
+    /// never an embedded collection, so a member called <c>Count</c> or a same-named property on another scope can't match.
+    /// </remarks>
+    internal static bool TryResolveCollection(
+        ITypeBase scope, IReadOnlyList<string> names, out StructuralCollectionPath result)
+    {
+        result = default;
+
+        if (names.Count == 0 || !TryResolve(scope, names, names.Count - 1, out var resolved))
+            return false;
+
+        ITypeBase? elementType = resolved.Leaf switch
+        {
+            INavigation { IsCollection: true } navigation => navigation.TargetEntityType,
+            IComplexProperty { IsCollection: true } complexCollection => complexCollection.ComplexType,
+            _ => null
+        };
+
+        if (elementType is null)
+            return false;
+
+        result = new StructuralCollectionPath(string.Join(".", resolved.Segments), resolved.Leaf!, elementType);
+        return true;
+    }
+
     /// <summary>
     /// Resolves a single-parameter selector that reads one mapped property off its parameter, directly or through owned /
     /// complex hops (<c>o =&gt; o.Ship.City</c>, <c>EF.Property</c> spellings), to that property and its dotted stored path

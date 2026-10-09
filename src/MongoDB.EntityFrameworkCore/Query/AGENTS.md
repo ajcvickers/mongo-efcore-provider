@@ -270,6 +270,21 @@ Rendering (null/missing/dialect semantics):
   pairs need the same mapped members (both orders agree) and `StoredAlike` leaves; a captured comparand is read per execution
   (`RuntimeEvaluator` parameters). A value with ANY optional ancestor (owned or complex) equals an instance only when its
   own element is present; leaves are `NullSafe` so element scopes agree with the null check.
+- **Complex COLLECTIONS (EF10) share the owned-collection element machinery through one resolver**
+  (`StructuralPath.TryResolveCollection` → `TryResolveEmbeddedCollectionPath`): the array path plus the element's structural
+  type (`IComplexType` for a complex collection); the translator's scope is an `ITypeBase`, so an element-scoped predicate
+  resolves members (and nested collections) against the element's complex type. Entity-only arms (key equality, `$$ROOT`,
+  type folds) are gated on `IsSelfParamTheEntity`, false in a complex scope. EF10 stores a null ELEMENT as BSON null, and
+  `$elemMatch` never matches a non-document element, so a complex-collection quantifier always renders in an aggregation
+  element scope (`$anyElementTrue`/`$allElementsTrue` over `$map`, `RequiresAggregationElementScope`); owned collections keep
+  `$elemMatch`. A null element reads its members as null/MISSING (ruling R14: an element may be absent), and the RenderBinary
+  element-scope rule applies unchanged (`a.Zip != null` is true over a null element's missing leaf, as on driver-LINQ).
+  `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value
+  (`MongoCurrentElementNullCheckExpression`, `$$e`), `!Contains` its exact `All` complement. The bridge coalesces a REQUIRED
+  complex collection used as an operator source to `[]` (`TryRewriteRequiredComplexCollectionSource`; it reads empty, and
+  the driver's `$size`/`$map` over null is a server error); an optional one is not coalesced. EF-337's walker resolves an
+  element parameter of a complex collection to its complex type (`ComplexCollectionElementExpression`), so a relational
+  comparison over a converted element leaf is refused on the bridge.
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

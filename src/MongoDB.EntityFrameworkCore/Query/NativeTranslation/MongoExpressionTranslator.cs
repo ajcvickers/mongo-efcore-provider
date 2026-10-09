@@ -41,23 +41,30 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// </remarks>
 internal sealed partial class MongoExpressionTranslator
 {
-    private readonly IEntityType _entityType;
+    // The structural type members resolve against: the query's entity type, an owned element's entity type, or (inside a
+    // complex collection's element scope) the element's complex type. Arms that need an entity (primary key, hierarchy,
+    // `$$ROOT`) read it through IsSelfParamTheEntity / ScopeEntityType, which a complex element scope never satisfies.
+    private readonly ITypeBase _scopeType;
     private readonly ParameterExpression? _outerParam;
     private readonly IEntityType? _outerEntityType;
     private readonly string? _innerPrefix;
 
     /// <summary>
-    /// Creates a single-scope translator for the given entity type.
+    /// Creates a single-scope translator for the given structural type.
     /// </summary>
-    /// <param name="entityType">The entity type whose properties and element names are used during translation.</param>
+    /// <param name="entityType">
+    /// The structural type whose properties and element names are used during translation: an entity type, or the
+    /// element type of an embedded collection (an owned element's entity type, or a complex collection's complex type)
+    /// for an element-scoped predicate.
+    /// </param>
     /// <param name="selfParam">
     /// The root lambda parameter this translator was built for, or <see langword="null"/>. Used only to detect a
     /// single-level correlated owned-collection element predicate (<c>Count(pred)</c>/<c>Any</c>/<c>All</c>) whose
     /// free parameter is this one, so the call site can build a two-scope child translator instead of declining.
     /// </param>
-    public MongoExpressionTranslator(IEntityType entityType, ParameterExpression? selfParam = null)
+    public MongoExpressionTranslator(ITypeBase entityType, ParameterExpression? selfParam = null)
     {
-        _entityType = entityType;
+        _scopeType = entityType;
         SelfParam = selfParam;
     }
 
@@ -71,9 +78,9 @@ internal sealed partial class MongoExpressionTranslator
     /// path (<c>"$$e..x"</c>), which MongoDB rejects.
     /// </summary>
     public MongoExpressionTranslator(
-        IEntityType innerEntityType, ParameterExpression outerParam, IEntityType outerEntityType, string? innerPrefix)
+        ITypeBase innerEntityType, ParameterExpression outerParam, IEntityType outerEntityType, string? innerPrefix)
     {
-        _entityType = innerEntityType;
+        _scopeType = innerEntityType;
         _outerParam = outerParam;
         _outerEntityType = outerEntityType;
         _innerPrefix = innerPrefix;
@@ -128,7 +135,14 @@ internal sealed partial class MongoExpressionTranslator
         => SelfParam is not null
            && ReferenceEquals(node, SelfParam)
            && ProjectedAliasScope is null
-           && _entityType.ClrType.IsAssignableFrom(SelfParam.Type);
+           && _scopeType is IEntityType
+           && _scopeType.ClrType.IsAssignableFrom(SelfParam.Type);
+
+    /// <summary>
+    /// The scope as an entity type, for the arms that need one (primary key, hierarchy, <c>$$ROOT</c>). Only read after
+    /// <see cref="IsSelfParamTheEntity"/> has held, which already requires an entity scope.
+    /// </summary>
+    private IEntityType ScopeEntityType => (IEntityType)_scopeType;
 
     /// <summary>
     /// Attempts to translate a predicate or key-selector body. Returns <see langword="false"/> if the shape is not
@@ -304,16 +318,20 @@ internal sealed partial class MongoExpressionTranslator
     /// array itself (<c>b.Home.Notes</c> → <c>Home.Notes</c>), for use as a native projection leaf.
     /// </summary>
     /// <remarks>
-    /// Inherits <see cref="TryResolveOwnedCollectionPath"/>'s guards: the final hop must be a collection
-    /// navigation (so a same-named scalar can't match) and two-scope mode declines. Safe from by-name retargeting
-    /// because <see cref="NativeProjectionBinder"/> builds this translator on the query root.
+    /// Inherits <see cref="TryResolveEmbeddedCollectionPath"/>'s guards: the final hop must be an embedded collection
+    /// (so a same-named scalar can't match) and two-scope mode declines; restricted to OWNED collections (an entity-typed
+    /// element): a whole complex collection is a complex value leaf (<see cref="TryTranslateComplexValue"/>), read through
+    /// the complex materializer. Safe from by-name retargeting because <see cref="NativeProjectionBinder"/> builds this
+    /// translator on the query root.
     /// </remarks>
     public bool TryTranslateOwnedCollectionArray(
         Expression expression,
         [NotNullWhen(true)] out MongoElementRefExpression? result)
     {
         var source = UnwrapAsQueryable(expression);
-        if (TryResolveOwnedCollectionPath(source, out var arrayPath, out _, out var arrayIsOuter) && !arrayIsOuter)
+        if (TryResolveEmbeddedCollectionPath(source, out var arrayPath, out var arrayElementType, out var arrayIsOuter)
+            && !arrayIsOuter
+            && arrayElementType is IEntityType)
         {
             // Use the unwrapped source's type (the navigation's own collection type), not the AsQueryable()
             // wrapper's IQueryable<T> — nothing renders from it, but misreporting the CLR type is a trap.
@@ -818,6 +836,16 @@ internal sealed partial class MongoExpressionTranslator
 
             // --- Negation of a boolean field ---
 
+            // !c.Lines.Contains(item) over a complex collection: built as the exact complement (All over each element's
+            // `!=`), since the generic quantifier negation can't complement the runtime null-ness parameters inside it.
+            case UnaryExpression { NodeType: ExpressionType.Not, Operand: var notContainsOperand }
+                when Unwrap(notContainsOperand) is MethodCallExpression notContainsCall
+                     && TryMatchComplexCollectionContains(notContainsCall, out var notContainsSource, out _)
+                     && TryResolveEmbeddedCollectionPath(
+                         UnwrapAsQueryable(Unwrap(notContainsSource)), out _, out var notContainsElement, out _)
+                     && notContainsElement is IComplexType:
+                return TryTranslateComplexCollectionContains(notContainsCall, negated: true, out var notContains) ? notContains : null;
+
             case UnaryExpression { NodeType: ExpressionType.Not } not:
             {
                 var operand = TranslateNode(Unwrap(not.Operand));
@@ -904,6 +932,16 @@ internal sealed partial class MongoExpressionTranslator
                 var arrayFieldExpr = new MongoFieldExpression(arrayProperty, arrayFieldPath);
                 return new MongoArrayContainsExpression(arrayFieldExpr, itemNode, negated: false);
             }
+
+            // --- Complex-collection membership: c.Lines.Contains(line) / c.Lines.Any(l => l == line) ---
+            // Member-wise element equality (MongoExpressionTranslator.ComplexEquality.cs). Its decline is final: no other
+            // arm can compare a whole complex value, and the general membership arm below would misread the collection.
+            case MethodCallExpression complexContainsCall
+                when TryMatchComplexCollectionContains(complexContainsCall, out var complexContainsSource, out _)
+                     && TryResolveEmbeddedCollectionPath(
+                         UnwrapAsQueryable(Unwrap(complexContainsSource)), out _, out var complexContainsElement, out _)
+                     && complexContainsElement is IComplexType:
+                return TryTranslateComplexCollectionContains(complexContainsCall, out var complexContains) ? complexContains : null;
 
             // --- Entity-list membership: customers.Contains(c) ---
             // Must precede the general membership arm, which requires a member-access item. See
@@ -1064,13 +1102,13 @@ internal sealed partial class MongoExpressionTranslator
             case MethodCallExpression regexIsMatchCall when TryTranslateRegexIsMatch(regexIsMatchCall, out var regexIsMatchResult):
                 return regexIsMatchResult;
 
-            // --- Quantifiers over an owned (embedded) collection: source.Any() / Any(pred) / All(pred) ---
+            // --- Quantifiers over an embedded collection (owned or complex): source.Any() / Any(pred) / All(pred) ---
 
             case MethodCallExpression call
                 when TryMatchQuantifierMethod(call, out var quantifier, out var quantifierSource, out var elementLambda):
             {
-                if (!TryResolveOwnedCollectionPath(Unwrap(quantifierSource), out var arrayPath, out var elementType, out var sourceIsOuter))
-                    return null; // not an owned-collection source rooted at the query parameter
+                if (!TryResolveEmbeddedCollectionPath(Unwrap(quantifierSource), out var arrayPath, out var elementType, out var sourceIsOuter))
+                    return null; // not an embedded-collection source rooted at the query parameter
 
                 if (sourceIsOuter)
                     return null; // a quantifier over an outer-scoped collection isn't supported
@@ -1094,8 +1132,9 @@ internal sealed partial class MongoExpressionTranslator
                 // A correlated element predicate (references the enclosing entity). $elemMatch can't reference the
                 // enclosing document, so a correlation on SelfParam gets a two-scope child and emits a
                 // MongoQuantifierExpression ($anyElementTrue/$allElementsTrue over $map). Correlation reaching further
-                // out has already declined.
-                if (isCorrelated)
+                // out has already declined. A complex collection takes the same form even uncorrelated (see
+                // RequiresAggregationElementScope): its null elements are invisible to $elemMatch.
+                if (isCorrelated || RequiresAggregationElementScope(elementType))
                 {
                     if (!elementTranslator.TryTranslate(elementLambda.Body, out var correlatedPredicate))
                         return null;
@@ -1202,6 +1241,23 @@ internal sealed partial class MongoExpressionTranslator
                 return null;
         }
     }
+
+    /// <summary>
+    /// Whether an element-scoped quantifier over a collection of <paramref name="elementType"/> must render in an
+    /// aggregation element scope (<c>$anyElementTrue</c>/<c>$allElementsTrue</c> over <c>$map</c>) rather than
+    /// <c>$elemMatch</c>: true for a complex collection.
+    /// </summary>
+    /// <remarks>
+    /// EF10 stores a null element of a complex collection as BSON null (<c>[{...}, null]</c>). <c>$elemMatch</c> never
+    /// matches a non-document element, not even with an empty body, so <c>All(a =&gt; a.City == "X")</c> (rendered as a
+    /// negated <c>$elemMatch</c> over the complement) would answer true over <c>[X, null]</c> and
+    /// <c>Any(a =&gt; a.City != "X")</c> false: silently wrong rows. Every aggregation scope (<c>$map</c>, and the
+    /// <c>$filter</c> of <c>Count(pred)</c>) reads a null element as an element whose members are all MISSING, as
+    /// driver-LINQ does, so quantifiers and filtered counts agree with each other and with the fallback. An owned
+    /// collection keeps <c>$elemMatch</c> (index-usable): EF never stores a null owned element.
+    /// </remarks>
+    private static bool RequiresAggregationElementScope(ITypeBase elementType)
+        => elementType is IComplexType;
 
     /// <summary>
     /// Translates a comparison <see cref="BinaryExpression"/> into a <see cref="MongoBinaryExpression"/>.
@@ -1321,7 +1377,7 @@ internal sealed partial class MongoExpressionTranslator
             if (selfOp is null)
                 return null;
 
-            var rootRef = new MongoElementRefExpression(MongoElementRefExpression.WholeRootDocumentPath, _entityType.ClrType);
+            var rootRef = new MongoElementRefExpression(MongoElementRefExpression.WholeRootDocumentPath, _scopeType.ClrType);
             return new MongoBinaryExpression(selfOp.Value, rootRef, rootRef);
         }
 
@@ -1806,16 +1862,17 @@ internal sealed partial class MongoExpressionTranslator
         if (TryResolveFlattenedAlias(node, out var aliasFieldRef))
             return aliasFieldRef;
 
-        // An owned-collection element count (b.Posts.Count / .Count() / .LongCount()). The renderer picks the
-        // dialect: array-index existence test for an admissible integer constant, else null-safe $size in $expr.
+        // An embedded-collection element count (owned b.Posts.Count, complex c.Addresses.Count / .Count() /
+        // .LongCount()). The renderer picks the dialect: array-index existence test for an admissible integer constant,
+        // else null-safe $size in $expr.
         //
-        // Runs after TryResolveMember so a mapped scalar named "Count" wins. TryResolveOwnedCollectionPath requires
-        // the final hop to be a collection navigation, so a name collision can't resolve. It matches scope roots
+        // Runs after TryResolveMember so a mapped scalar named "Count" wins. TryResolveEmbeddedCollectionPath requires
+        // the final hop to be an embedded collection, so a name collision can't resolve. It matches scope roots
         // by reference only, so every non-root single-scope translator must be built after an identity guard
         // (ReferencesEnclosingScope / NativeSelectManyBinder.ReferencesParameter); otherwise a shared property
         // name could retarget an enclosing member to the inner scope (wrong rows).
         if (TryMatchCountExpression(node, out var countSource, out var countPredicate)
-            && TryResolveOwnedCollectionPath(countSource, out var arrayPath, out var countElementType, out var countSourceIsOuter)
+            && TryResolveEmbeddedCollectionPath(countSource, out var arrayPath, out var countElementType, out var countSourceIsOuter)
             && !countSourceIsOuter) // same out-of-scope note as the quantifier arm above
         {
             if (countPredicate is null)

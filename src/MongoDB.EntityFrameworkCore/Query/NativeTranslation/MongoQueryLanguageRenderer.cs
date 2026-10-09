@@ -401,6 +401,8 @@ internal sealed class MongoQueryLanguageRenderer
             MongoNumericTypeBracketExpression => true,
             // { path: null } / { path: { $ne: null } }; legal inside $elemMatch.
             MongoElementNullCheckExpression => true,
+            // The current element of an aggregation element scope: no query-dialect form ($elemMatch can't see it).
+            MongoCurrentElementNullCheckExpression => false,
             // No query-dialect form; listed explicitly rather than left to the catch-all.
             MongoConvertExpression => false,
             MongoConditionalExpression => false,

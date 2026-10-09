@@ -78,6 +78,10 @@ internal static class MongoAggregationExpressionRenderer
             MongoElementNullCheckExpression elementNullCheck
                 => new BsonDocument(elementNullCheck.IsNotNull ? "$ne" : "$eq",
                     new BsonArray { IfNull(FieldRef(elementNullCheck.Path, elementVariable), BsonNull.Value), BsonNull.Value }),
+            // The element scope's current element itself ("$$e"); at the document root, the document ("$$CURRENT", never null).
+            MongoCurrentElementNullCheckExpression currentElementNullCheck
+                => new BsonDocument(currentElementNullCheck.IsNotNull ? "$ne" : "$eq",
+                    new BsonArray { IfNull("$$" + (elementVariable ?? "CURRENT"), BsonNull.Value), BsonNull.Value }),
             MongoConstantExpression or MongoParameterExpression => MongoValueRenderer.RenderValue(node, placeholders),
             // Aggregation form of the query dialect's { field: { $type: "number" } }; see
             // MongoNumericTypeBracketExpression. $and short-circuits, so a following $toX never sees a non-number.
@@ -191,6 +195,8 @@ internal static class MongoAggregationExpressionRenderer
         {
             MongoFieldExpression or MongoElementRefExpression or MongoOuterFieldExpression or MongoLookupNullCheckExpression => true,
             MongoElementNullCheckExpression => true,
+            // Only built inside an element predicate (rendered with the scope's variable); see the Render arm.
+            MongoCurrentElementNullCheckExpression => true,
             MongoNumericTypeBracketExpression => true,
             MongoConstantExpression or MongoParameterExpression => true,
             // $and/$or test a bare operand by truthiness, so a value-converted bool field (e.g. stored as "N",

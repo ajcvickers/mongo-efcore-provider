@@ -132,6 +132,7 @@ public class MongoExpressionNodeCoverageTests
             new MongoElementRefExpression("Total", typeof(int)),
             new MongoLookupNullCheckExpression("_lookup_Manager", isNotNull: false),
             new MongoElementNullCheckExpression("Address", isNotNull: false),
+            new MongoCurrentElementNullCheckExpression(isNotNull: false),
             new MongoNumericTypeBracketExpression(rankField),
             rankConstant,
             new MongoParameterExpression("p0", rank),
@@ -568,6 +569,18 @@ public class MongoExpressionNodeCoverageTests
         ["MongoInExpression|QL.Render"] = "rendered",
 
         // Null-or-missing test of a stored element (complex value == null): both dialects, exact flip, prefixable.
+        // The current element of an aggregation element scope (`$$e`; `$$CURRENT` at the root): aggregation-only, so the
+        // query classifier refuses it (QL.Render falls open to $expr, which renders); not a path, so the prefix rewriter
+        // declines it; flips exactly; no IProperty, so both serialization columns are true.
+        ["MongoCurrentElementNullCheckExpression|Agg.CanRender"] = "true",
+        ["MongoCurrentElementNullCheckExpression|Agg.Render"] = "rendered",
+        ["MongoCurrentElementNullCheckExpression|AllFieldsDefaultSerialized"] = "true",
+        ["MongoCurrentElementNullCheckExpression|AllFieldsDefaultSerialized(converted)"] = "true",
+        ["MongoCurrentElementNullCheckExpression|Negator.TryNegate"] = "false",
+        ["MongoCurrentElementNullCheckExpression|PrefixRewriter.Rewrite"] = "declined",
+        ["MongoCurrentElementNullCheckExpression|QL.IsQueryDialectRenderable"] = "false",
+        ["MongoCurrentElementNullCheckExpression|QL.Render"] = "rendered",
+
         ["MongoElementNullCheckExpression|Agg.CanRender"] = "true",
         ["MongoElementNullCheckExpression|Agg.Render"] = "rendered",
         ["MongoElementNullCheckExpression|AllFieldsDefaultSerialized"] = "true",

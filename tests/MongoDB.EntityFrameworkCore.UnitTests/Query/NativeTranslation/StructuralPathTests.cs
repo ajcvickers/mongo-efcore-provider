@@ -21,6 +21,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata;
+using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Metadata.Conventions;
@@ -409,6 +410,108 @@ public static class StructuralPathTests
     }
 
     [Fact]
+    public static void Collection_variant_resolves_a_complex_collection_with_its_element_type_and_element_name()
+    {
+        var root = EntityType<ComplexCollectionLeafHolder>(mb =>
+            mb.Entity<ComplexCollectionLeafHolder>().ComplexCollection(e => e.Addresses,
+                a => a.Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "addrs")));
+
+        Assert.True(StructuralPath.TryResolveCollection(root, ["Addresses"], out var collection));
+        Assert.Equal("addrs", collection.ArrayPath);
+        var complexCollection = Assert.IsAssignableFrom<IComplexProperty>(collection.Collection);
+        Assert.Same(complexCollection.ComplexType, collection.ElementType);
+        Assert.Equal(typeof(Addr), collection.ElementType.ClrType);
+    }
+
+    [Fact]
+    public static void Collection_variant_reaches_a_complex_collection_through_a_complex_hop()
+    {
+        var root = EntityType<CollectionInComplexHolder>(mb =>
+            mb.Entity<CollectionInComplexHolder>().ComplexProperty(e => e.Profile, p =>
+            {
+                p.HasPropertyAnnotation(MongoAnnotationNames.ElementName, "prof");
+                p.ComplexCollection(x => x.Addresses);
+            }));
+
+        Assert.True(StructuralPath.TryResolveCollection(root, ["Profile", "Addresses"], out var collection));
+        Assert.Equal("prof.Addresses", collection.ArrayPath);
+        Assert.IsAssignableFrom<IComplexType>(collection.ElementType);
+    }
+
+    [Fact]
+    public static void Collection_variant_declines_a_scalar_a_single_complex_value_and_a_crossing()
+    {
+        var root = EntityType<CollectionInComplexHolder>(mb =>
+            mb.Entity<CollectionInComplexHolder>().ComplexProperty(e => e.Profile, p => p.ComplexCollection(x => x.Addresses)));
+
+        // The final name must be an embedded collection (the structural protection against a same-named scalar).
+        Assert.False(StructuralPath.TryResolveCollection(root, ["Name"], out _));
+        Assert.False(StructuralPath.TryResolveCollection(root, ["Profile"], out _));
+        // A collection reached across another collection has no dotted array path: a nested element scope resolves it.
+        Assert.False(StructuralPath.TryResolveCollection(root, ["Profile", "Addresses", "Tags"], out _));
+        Assert.False(StructuralPath.TryResolveCollection(root, [], out _));
+    }
+
+    [Fact]
+    public static void Complex_collection_quantifiers_render_in_an_aggregation_element_scope()
+    {
+        var root = EntityType<ComplexCollectionHolder>(mb => mb.Entity<ComplexCollectionHolder>().ComplexCollection(e => e.Addresses));
+        var parameter = Expression.Parameter(typeof(ComplexCollectionHolder), "c");
+        var translator = new MongoExpressionTranslator(root, parameter);
+
+        // $elemMatch never matches a null element (EF10 stores them), so a complex collection's quantifier is a $map
+        // quantifier, never $elemMatch: All(...) over [X, null] must be false.
+        Assert.True(translator.TryTranslate(Lambda<ComplexCollectionHolder>(parameter, c => c.Addresses.All(a => a.City == "X")), out var all));
+        var quantifier = Assert.IsType<MongoQuantifierExpression>(all);
+        Assert.Equal(MongoExpressionTranslator.MongoQuantifierKind.All, quantifier.Kind);
+        Assert.Equal("Addresses", quantifier.ArrayPath.Path);
+        var rendered = new MongoQueryLanguageRenderer().Render(all, new PlaceholderTable()).ToJson();
+        Assert.Contains("$allElementsTrue", rendered);
+        Assert.DoesNotContain("$elemMatch", rendered);
+
+        Assert.True(translator.TryTranslate(Lambda<ComplexCollectionHolder>(parameter, c => c.Addresses.Any(a => a.City == "X")), out var any));
+        Assert.Equal(MongoExpressionTranslator.MongoQuantifierKind.Any, Assert.IsType<MongoQuantifierExpression>(any).Kind);
+    }
+
+    [Fact]
+    public static void Complex_collection_contains_is_an_element_scoped_member_wise_equality()
+    {
+        var root = EntityType<ComplexCollectionHolder>(mb => mb.Entity<ComplexCollectionHolder>().ComplexCollection(e => e.Addresses));
+        var parameter = Expression.Parameter(typeof(ComplexCollectionHolder), "c");
+        var translator = new MongoExpressionTranslator(root, parameter);
+        // A constant comparand (EF turns a captured one into a query parameter; a hand-built closure member declines).
+        var constant = Expression.Constant(new Addr { City = "X", Street = "S" });
+        var addresses = Expression.Property(parameter, nameof(ComplexCollectionHolder.Addresses));
+        var containsCall = Expression.Call(
+            typeof(Enumerable).GetMethods().Single(m => m.Name == nameof(Enumerable.Contains) && m.GetParameters().Length == 2)
+                .MakeGenericMethod(typeof(Addr)),
+            addresses, constant);
+
+        Assert.True(translator.TryTranslate(containsCall, out var contains));
+        var any = Assert.IsType<MongoQuantifierExpression>(contains);
+        Assert.Equal(MongoExpressionTranslator.MongoQuantifierKind.Any, any.Kind);
+        var rendered = MongoAggregationExpressionRenderer.Render(contains, new PlaceholderTable()).ToJson();
+        // The element must be present ($$e not null), then each leaf compared element-relative.
+        Assert.Contains("{ \"$ne\" : [{ \"$ifNull\" : [\"$$e\", null] }, null] }", rendered);
+        Assert.Contains("\"$$e.City\"", rendered);
+
+        Assert.True(translator.TryTranslate(Expression.Not(containsCall), out var notContains));
+        Assert.Equal(MongoExpressionTranslator.MongoQuantifierKind.All, Assert.IsType<MongoQuantifierExpression>(notContains).Kind);
+    }
+
+    [Fact]
+    public static void Owned_collection_quantifier_keeps_the_index_usable_elemMatch()
+    {
+        var root = EntityType<OwnedCollectionHolder>(mb => mb.Entity<OwnedCollectionHolder>().OwnsMany(e => e.Posts));
+        var parameter = Expression.Parameter(typeof(OwnedCollectionHolder), "b");
+        var translator = new MongoExpressionTranslator(root, parameter);
+
+        Assert.True(translator.TryTranslate(Lambda<OwnedCollectionHolder>(parameter, b => b.Posts.All(p => p.Title == "X")), out var all));
+        var elemMatch = Assert.IsType<MongoElemMatchExpression>(all);
+        Assert.True(elemMatch.Negated);
+    }
+
+    [Fact]
     public static void Optional_complex_hop_resolves_like_required()
     {
         var root = EntityType<OptionalHolder>(mb => mb.Entity<OptionalHolder>().ComplexProperty(e => e.Address).IsRequired(false));
@@ -508,6 +611,18 @@ public static class StructuralPathTests
 
     private static Expression Predicate<T>(Expression<Func<T, bool>> predicate)
         => predicate.Body;
+
+    // The predicate's body rebound onto `parameter`, so a translator built with that SelfParam recognises the root.
+    private static Expression Lambda<T>(ParameterExpression parameter, Expression<Func<T, bool>> predicate)
+        => ReplacingParameter(predicate.Body, predicate.Parameters[0], parameter);
+
+    private static Expression ReplacingParameter(Expression body, ParameterExpression from, ParameterExpression to)
+        => new ParameterReplacer(from, to).Visit(body);
+
+    private sealed class ParameterReplacer(ParameterExpression from, ParameterExpression to) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node) => node == from ? to : node;
+    }
 
     private static IEntityType EntityType<TEntity>(Action<ModelBuilder> configure, bool camelCase = false)
         where TEntity : class
@@ -644,6 +759,9 @@ public static class StructuralPathTests
 #if !EF8 && !EF9
     class ComplexCollectionHolder { public int Id { get; set; } public List<Addr> Addresses { get; set; } = []; }
     class ComplexCollectionLeafHolder { public int Id { get; set; } public List<Addr> Addresses { get; set; } = []; }
+    public class TaggedAddr { public string City { get; set; } = null!; public List<Addr> Tags { get; set; } = []; }
+    public class CollectionProfile { public string Label { get; set; } = null!; public List<TaggedAddr> Addresses { get; set; } = []; }
+    class CollectionInComplexHolder { public int Id { get; set; } public string Name { get; set; } = null!; public CollectionProfile Profile { get; set; } = null!; }
     class OptionalHolder { public int Id { get; set; } public Addr? Address { get; set; } }
 #endif
 

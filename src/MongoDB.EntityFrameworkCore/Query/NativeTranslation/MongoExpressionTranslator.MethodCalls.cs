@@ -115,7 +115,7 @@ internal sealed partial class MongoExpressionTranslator
     /// <remarks>
     /// EF normalizes <c>.Count</c> into the call form; the property arm exists for hand-built trees. Must stay
     /// pure: <see cref="TranslateComparison"/> can call it twice per query. Name-based matching is safe against a
-    /// mapped scalar named <c>Count</c> because every match is gated on <see cref="TryResolveOwnedCollectionPath"/>.
+    /// mapped scalar named <c>Count</c> because every match is gated on <see cref="TryResolveEmbeddedCollectionPath"/>.
     /// </remarks>
     internal static bool TryMatchCountExpression(
         Expression node,
@@ -170,8 +170,8 @@ internal sealed partial class MongoExpressionTranslator
     }
 
     /// <summary>
-    /// Builds the translator for an owned-collection element predicate (<c>Any</c>/<c>All</c>/<c>Count(pred)</c>)
-    /// over <paramref name="elementType"/>: single-scope when the predicate is uncorrelated, two-scope
+    /// Builds the translator for an embedded-collection element predicate (<c>Any</c>/<c>All</c>/<c>Count(pred)</c>)
+    /// over <paramref name="elementType"/> (an owned element's entity type or a complex collection's complex type): single-scope when the predicate is uncorrelated, two-scope
     /// (<paramref name="isCorrelated"/>) when its sole free parameter is this translator's own
     /// <see cref="SelfParam"/> (by reference) or, on a two-scope translator, its outer parameter. Any other
     /// correlation, including two or more distinct free parameters, declines.
@@ -181,7 +181,7 @@ internal sealed partial class MongoExpressionTranslator
     /// it an enclosing member sharing a name with an element member would silently retarget to the element.
     /// </remarks>
     private bool TryCreateElementPredicateTranslator(
-        LambdaExpression predicate, IEntityType elementType,
+        LambdaExpression predicate, ITypeBase elementType,
         [NotNullWhen(true)] out MongoExpressionTranslator? translator, out bool isCorrelated)
     {
         translator = null;
@@ -195,9 +195,11 @@ internal sealed partial class MongoExpressionTranslator
         // The root is SelfParam on a single-scope translator, or the already-established outer parameter on a
         // two-scope one (EF-446): MongoOuterFieldExpression resolves at document root at any nesting depth, so a
         // nested predicate correlating back to the same root is admitted. A correlation to an intermediate scope
-        // (neither identity) still declines.
+        // (neither identity) still declines. A single-scope root must be this translator's own ENTITY scope: a
+        // correlation from inside a complex element scope (`c.Addresses.Any(a => a.Tags.Any(t => t.Label == a.City))`)
+        // has no outer entity to resolve against (and its SelfParam is null there anyway); declines.
         var rootParam = SelfParam ?? _outerParam;
-        var rootEntityType = SelfParam is not null ? _entityType : _outerEntityType;
+        var rootEntityType = SelfParam is not null ? _scopeType as IEntityType : _outerEntityType;
         if (rootParam is null || rootEntityType is null || freeParam is null || !ReferenceEquals(freeParam, rootParam))
             return false;
 

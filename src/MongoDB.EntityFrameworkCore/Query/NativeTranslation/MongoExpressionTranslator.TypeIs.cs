@@ -42,10 +42,10 @@ internal sealed partial class MongoExpressionTranslator
             return false;
 
         // Hierarchy types need a discriminator predicate, not a constant; decline.
-        if (_entityType.IsInHierarchy())
+        if (ScopeEntityType.IsInHierarchy())
             return false;
 
-        var matches = typeBinary.TypeOperand.IsAssignableFrom(_entityType.ClrType);
+        var matches = typeBinary.TypeOperand.IsAssignableFrom(_scopeType.ClrType);
         result = new MongoConstantExpression(matches, forSerialization: null);
         return true;
     }
