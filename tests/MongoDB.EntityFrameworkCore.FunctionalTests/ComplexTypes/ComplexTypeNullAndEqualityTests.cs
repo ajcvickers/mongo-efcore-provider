@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using MongoDB.Bson;
@@ -699,6 +700,122 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         PerMode(Opt(q => Names(q.Where(c => c.Opt == nullCity))), [], Serves, Serves, WholeValueRefused);
     }
 
+    public class SymComplexHolder
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public SymBox A { get; set; } = null!;
+        public SymBox B { get; set; } = null!;
+        public SymBox? O { get; set; }
+        public SymBox? P { get; set; }
+    }
+
+    private static void ConfigureSymComplex(ModelBuilder mb)
+    {
+        foreach (var slot in new[] { "A", "B", "O", "P" })
+        {
+            mb.Entity<SymComplexHolder>().ComplexProperty(typeof(SymBox), slot, c => c.ComplexProperty(typeof(SymInner), nameof(SymBox.Inner)));
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(SymPairs))]
+    public void Stored_pair_through_complex_slots_is_symmetric(string pair, string form)
+    {
+        var collection = database.CreateCollection<SymComplexHolder>(Unique(nameof(Stored_pair_through_complex_slots_is_symmetric) + pair + form));
+        Raw(collection).InsertMany(SymRows.Select((row, i) =>
+        {
+            var doc = new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", row } };
+            foreach (var (slot, states) in SymSlots)
+            {
+                if (SymValue(states[i]) is { } value)
+                {
+                    doc[slot] = value;
+                }
+            }
+
+            return doc;
+        }));
+
+        Expression<Func<SymComplexHolder, SymBox?>> left = pair[0] switch { 'A' => h => h.A, _ => h => h.O };
+        Expression<Func<SymComplexHolder, SymBox?>> right = pair[1] switch { 'B' => h => h.B, 'P' => h => h.P, _ => h => h.O };
+        var predicate = SymPredicate(left, right, form);
+        var expected = form.StartsWith("eq") ? SymEqual[pair] : [.. NotIn(SymEqual[pair])];
+        PerMode(mode => Run(collection, mode, ConfigureSymComplex, q => q.Where(predicate).Select(h => h.Name).ToList().Order(StringComparer.Ordinal)),
+            expected, Serves, Serves, SerializedDifferently);
+    }
+
+    public class DeepLeaf
+    {
+        public int? N { get; set; }
+    }
+
+    public class MidBox
+    {
+        public DeepLeaf Deep { get; set; } = null!;
+    }
+
+    public class OuterBox
+    {
+        public string? City { get; set; }
+        public MidBox? Mid { get; set; }
+    }
+
+    public class OuterHolder
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public OuterBox L { get; set; } = null!;
+        public OuterBox R { get; set; } = null!;
+    }
+
+    [Fact]
+    public void Optional_intermediate_reaches_grandchildren_on_either_side()
+    {
+        // L and R are required; Mid is optional; Mid.Deep is required. A present Mid whose Deep is MISSING reads Deep as null
+        // (Deep has an optional ancestor, R14). m1: L.Mid {Deep:{}} vs R.Mid {} → Deep value vs Deep null: not equal.
+        // m2: both Mid {} → equal. m3: both Mid {Deep:{N:1}} → equal. m4: L.Mid missing, R.Mid {} → null vs value: not equal.
+        var collection = database.CreateCollection<OuterHolder>(Unique(nameof(Optional_intermediate_reaches_grandchildren_on_either_side)));
+        BsonDocument Box(BsonValue? mid)
+        {
+            var box = new BsonDocument("City", "c");
+            if (mid != null)
+            {
+                box["Mid"] = mid;
+            }
+
+            return box;
+        }
+
+        Raw(collection).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "m1" }, { "L", Box(new BsonDocument("Deep", new BsonDocument())) }, { "R", Box(new BsonDocument()) } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "m2" }, { "L", Box(new BsonDocument()) }, { "R", Box(new BsonDocument()) } },
+            new BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Name", "m3" }, { "L", Box(new BsonDocument("Deep", new BsonDocument("N", 1))) },
+                { "R", Box(new BsonDocument("Deep", new BsonDocument("N", 1))) }
+            },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "m4" }, { "L", Box(null) }, { "R", Box(new BsonDocument()) } }
+        ]);
+
+        static void Configure(ModelBuilder mb)
+        {
+            foreach (var slot in new[] { "L", "R" })
+            {
+                mb.Entity<OuterHolder>().ComplexProperty(typeof(OuterBox), slot,
+                    o => o.ComplexProperty(typeof(MidBox), nameof(OuterBox.Mid), m => m.ComplexProperty(typeof(DeepLeaf), nameof(MidBox.Deep))));
+            }
+        }
+
+        PerMode(mode => Run(collection, mode, Configure, q => q.Where(h => h.L == h.R).Select(h => h.Name).ToList().Order(StringComparer.Ordinal)),
+            ["m2", "m3"], Serves, Serves, SerializedDifferently);
+        PerMode(mode => Run(collection, mode, Configure, q => q.Where(h => h.R == h.L).Select(h => h.Name).ToList().Order(StringComparer.Ordinal)),
+            ["m2", "m3"], Serves, Serves, SerializedDifferently);
+        PerMode(mode => Run(collection, mode, Configure, q => q.Where(h => h.R != h.L).Select(h => h.Name).ToList().Order(StringComparer.Ordinal)),
+            ["m1", "m4"], Serves, Serves, SerializedDifferently);
+    }
+
     [Fact]
     public void Captured_null_instance_takes_the_null_branch()
     {
@@ -977,7 +1094,19 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
             ["1", "1", "1", "0"], Serves, Serves, WholeValueRefused);
         PerMode(Items(q => q.OrderBy(h => h.Name).Select(h => h.Items.Count(i => i.Pos == new Pos { Zip = null, Tag = null })).ToList()
             .Select(x => x.ToString())), ["1", "1", "1", "0"], Serves, Serves, WholeValueRefused);
+
+        // PRE-EXISTING, OWNER-RULED characterization (not a regression of this slice): a bare scalar leaf compared with null
+        // inside a $filter scope renders `$eq: ["$$e.Pos.Zip", null]` without $ifNull (RenderBinary: missing-vs-null stays
+        // distinguished in element scopes, pinned by NativeOwnedCollectionFilteredCountTests), so a MISSING Zip is not null
+        // there, while C# (and the two complex predicates above) answer [1, 1, 1, 0]. Breaks loudly if that ruling changes.
+        var leafCount = Items(q => q.OrderBy(h => h.Name).Select(h => h.Items.Count(i => i.Pos.Zip == null)).ToList().Select(x => x.ToString()));
+        Assert.Equal(LeafCountObserved, leafCount(MongoQueryMode.NativeOnly));
+        Assert.Equal(LeafCountObserved, leafCount(MongoQueryMode.Native));
+        Assert.Equal(LeafCountDriverObserved, leafCount(MongoQueryMode.DriverLinq));
     }
+
+    private static readonly string[] LeafCountObserved = ["0", "0", "0", "0"];
+    private static readonly string[] LeafCountDriverObserved = ["0", "0", "0", "0"];
 
     [Fact]
     public void Correlated_element_equality_to_an_outer_complex_value()
@@ -1018,6 +1147,159 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         var other = AnnAddress;
         PerMode(Eq(q => Names(q.Where(c => c.Home == other || c.Home == new EqAddress { City = c.Name }).Where(c => c.Pin.Lat == 1))),
             ["ann"], NotNative, WholeValueRefused, WholeValueRefused);
+    }
+
+    // ── Fix round 2: stored-pair symmetry matrix (each side keeps its own presence flag) ─────────────────────────
+
+    // Slot states, seeded as raw BSON: M missing, N BSON null, L {City:"x"} (Inner missing), E {} , F {City:"x", Inner:{N:1}},
+    // F2 {City:"x", Inner:{}}. Interpretation (C# null propagation, ruling R14): a slot with no optional ancestor is never
+    // absent (missing/null reads members null, Inner too); an optional slot that is missing/null is null, and its Inner,
+    // missing, is null. Rows (A,B required | O,P optional):
+    //   r1 M,E | M,N   r2 L,F2 | L,F2   r3 F,F | F,F   r4 E,L | E,E   r5 F2,L | F2,N   r6 L,N | F2,L   r7 N,M | N,E
+    // Hand-derived: A==B {r1,r2,r3,r5,r7}; O==P {r1,r3,r4}; A==O {r3,r5,r6} (r6: A.Inner missing under a required A reads a
+    // value with null members, O.Inner {} is a value with null members: equal; the leak made A==O and O==A disagree here).
+    private static readonly string[] SymRows = ["r1", "r2", "r3", "r4", "r5", "r6", "r7"];
+
+    private static readonly Dictionary<string, string[]> SymSlots = new()
+    {
+        ["A"] = ["M", "L", "F", "E", "F2", "L", "N"],
+        ["B"] = ["E", "F2", "F", "L", "L", "N", "M"],
+        ["O"] = ["M", "L", "F", "E", "F2", "F2", "N"],
+        ["P"] = ["N", "F2", "F", "E", "N", "L", "E"]
+    };
+
+    public static readonly Dictionary<string, string[]> SymEqual = new()
+    {
+        ["AB"] = ["r1", "r2", "r3", "r5", "r7"],
+        ["OP"] = ["r1", "r3", "r4"],
+        ["AO"] = ["r3", "r5", "r6"]
+    };
+
+    private static BsonValue? SymValue(string state)
+        => state switch
+        {
+            "M" => null,
+            "N" => BsonNull.Value,
+            "L" => new BsonDocument("City", "x"),
+            "E" => new BsonDocument(),
+            "F" => new BsonDocument { { "City", "x" }, { "Inner", new BsonDocument("N", 1) } },
+            "F2" => new BsonDocument { { "City", "x" }, { "Inner", new BsonDocument() } },
+            _ => throw new ArgumentOutOfRangeException(nameof(state))
+        };
+
+    private static IEnumerable<string> NotIn(string[] rows) => SymRows.Except(rows);
+
+    [System.ComponentModel.DataAnnotations.Schema.ComplexType]
+    public class SymInner
+    {
+        public int? N { get; set; }
+    }
+
+    [System.ComponentModel.DataAnnotations.Schema.ComplexType]
+    public class SymBox
+    {
+        public string? City { get; set; }
+        public SymInner Inner { get; set; } = null!;
+    }
+
+    // Owned analogue (any EF version): the slot is an owned reference holding the compared complex value `Box`.
+    public class SymOwner
+    {
+        public SymBox Box { get; set; } = null!;
+    }
+
+    public class SymOwnedHolder
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public SymOwner A { get; set; } = null!;
+        public SymOwner B { get; set; } = null!;
+        public SymOwner? O { get; set; }
+        public SymOwner? P { get; set; }
+    }
+
+    private static void ConfigureSymOwned(ModelBuilder mb)
+    {
+        mb.Entity<SymOwnedHolder>(b =>
+        {
+            b.OwnsOne(h => h.A);
+            b.OwnsOne(h => h.B);
+            b.OwnsOne(h => h.O);
+            b.OwnsOne(h => h.P);
+            b.Navigation(h => h.A).IsRequired();
+            b.Navigation(h => h.B).IsRequired();
+        });
+    }
+
+    private Func<MongoQueryMode, List<string>> SymOwned(
+        Func<IQueryable<SymOwnedHolder>, IEnumerable<string>> query, string name)
+    {
+        var collection = database.CreateCollection<SymOwnedHolder>(Unique(name));
+        // A slot state applies to Box; the owner element is present except M/N, which apply to the owner itself.
+        Raw(collection).InsertMany(SymRows.Select((row, i) =>
+        {
+            var doc = new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", row } };
+            foreach (var (slot, states) in SymSlots)
+            {
+                var state = states[i];
+                if (state == "N")
+                {
+                    doc[slot] = BsonNull.Value;
+                }
+                else if (state != "M")
+                {
+                    doc[slot] = new BsonDocument("Box", SymValue(state)!);
+                }
+            }
+
+            return doc;
+        }));
+        return mode => Run(collection, mode, ConfigureSymOwned, query);
+    }
+
+    public static TheoryData<string, string> SymPairs()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var pair in new[] { "AB", "OP", "AO" })
+        foreach (var form in new[] { "eq", "eq_reversed", "ne", "ne_reversed" })
+        {
+            data.Add(pair, form);
+        }
+
+        return data;
+    }
+
+    private static Expression<Func<T, bool>> SymPredicate<T>(Expression<Func<T, SymBox?>> left, Expression<Func<T, SymBox?>> right, string form)
+    {
+        var parameter = left.Parameters[0];
+        var l = left.Body;
+        var r = new ParameterReplacer(right.Parameters[0], parameter).Visit(right.Body);
+        Expression body = form switch
+        {
+            "eq" => Expression.Equal(l, r),
+            "eq_reversed" => Expression.Equal(r, l),
+            "ne" => Expression.NotEqual(l, r),
+            _ => Expression.NotEqual(r, l)
+        };
+        return Expression.Lambda<Func<T, bool>>(body, parameter);
+    }
+
+    private sealed class ParameterReplacer(ParameterExpression from, ParameterExpression to) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node) => node == from ? to : node;
+    }
+
+    [Theory]
+    [MemberData(nameof(SymPairs))]
+    public void Stored_pair_through_owned_slots_is_symmetric(string pair, string form)
+    {
+        Expression<Func<SymOwnedHolder, SymBox?>> left = pair[0] switch { 'A' => h => h.A.Box, _ => h => h.O!.Box };
+        Expression<Func<SymOwnedHolder, SymBox?>> right = pair[1] switch { 'B' => h => h.B.Box, 'P' => h => h.P!.Box, _ => h => h.O!.Box };
+        var predicate = SymPredicate(left, right, form);
+        var expected = form.StartsWith("eq") ? SymEqual[pair] : [.. NotIn(SymEqual[pair])];
+        PerMode(SymOwned(q => q.Where(predicate).Select(h => h.Name).ToList().Order(StringComparer.Ordinal),
+                nameof(Stored_pair_through_owned_slots_is_symmetric) + pair + form),
+            expected, Serves, Serves, SerializedDifferently);
     }
 
     // ── Plumbing ───────────────────────────────────────────────────────────────────────────────────────────────
