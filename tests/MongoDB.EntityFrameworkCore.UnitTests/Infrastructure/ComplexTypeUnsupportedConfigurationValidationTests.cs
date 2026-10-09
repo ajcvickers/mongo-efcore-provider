@@ -21,11 +21,11 @@ using MongoDB.EntityFrameworkCore.Metadata;
 namespace MongoDB.EntityFrameworkCore.UnitTests.Infrastructure;
 
 /// <summary>
-/// Encryption is not supported inside complex types: neither the Queryable Encryption schema generator nor the
-/// encryption validation walks complex types, so an encryption annotation there would be silently ignored and the
-/// value written as plaintext. The model validator must reject it.
+/// Configuration the provider would silently ignore inside a complex type is rejected by the model validator:
+/// encryption (neither the Queryable Encryption schema generator nor the encryption validation walks complex types, so
+/// the value would be written as plaintext) and concurrency tokens / row versions (never part of the update filter).
 /// </summary>
-public static class ComplexTypeEncryptionValidationTests
+public static class ComplexTypeUnsupportedConfigurationValidationTests
 {
     private static readonly Guid DataKey = Guid.Parse("8a6c0e7d-60a5-4f71-9f7a-3a6d2a9b6f01");
 
@@ -170,6 +170,66 @@ public static class ComplexTypeEncryptionValidationTests
         Assert.Single(schema);
     }
 
+    // A concurrency token / row version inside a complex type would never reach the update filter (only the entity's own
+    // properties do) nor be generated, so a conflicting save would silently win: rejected like one on an owned entity.
+    [Fact]
+    public static void Concurrency_token_on_leaf_inside_complex_type_is_rejected()
+    {
+        var ex = Assert.Throws<NotSupportedException>(() =>
+        {
+            using var db = new TestContext<Customer>(mb =>
+                mb.Entity<Customer>().ComplexProperty(c => c.Home).Property(a => a.City).IsConcurrencyToken());
+            _ = db.Model;
+        });
+
+        Assert.Contains("'City'", ex.Message);
+        Assert.Contains("belongs to a complex type", ex.Message);
+    }
+
+    [Fact]
+    public static void Row_version_on_leaf_inside_nested_complex_type_is_rejected()
+    {
+        var ex = Assert.Throws<NotSupportedException>(() =>
+        {
+            using var db = new TestContext<VersionedCustomer>(mb =>
+                mb.Entity<VersionedCustomer>().ComplexProperty(c => c.Home, h =>
+                    h.ComplexProperty(a => a.Stamp, s => s.Property(x => x.Version).IsRowVersion())));
+            _ = db.Model;
+        });
+
+        Assert.Contains("'Version'", ex.Message);
+        Assert.Contains("belongs to a complex type", ex.Message);
+    }
+
+#if !EF8 && !EF9
+    [Fact]
+    public static void Concurrency_token_on_leaf_inside_complex_collection_is_rejected()
+    {
+        var ex = Assert.Throws<NotSupportedException>(() =>
+        {
+            using var db = new TestContext<CollectionCustomer>(mb =>
+                // The complex-collection property builder has no IsConcurrencyToken; set it through the metadata API.
+                ((Microsoft.EntityFrameworkCore.Metadata.IMutableProperty)mb.Entity<CollectionCustomer>().ComplexCollection(c => c.Homes)
+                    .Property(a => a.City).Metadata).IsConcurrencyToken = true);
+            _ = db.Model;
+        });
+
+        Assert.Contains("'City'", ex.Message);
+    }
+#endif
+
+    [Fact]
+    public static void Concurrency_token_on_the_root_beside_a_complex_property_is_still_allowed()
+    {
+        using var db = new TestContext<Customer>(mb =>
+        {
+            mb.Entity<Customer>().Property(c => c.Name).IsConcurrencyToken();
+            mb.Entity<Customer>().ComplexProperty(c => c.Home);
+        });
+
+        Assert.True(db.Model.FindEntityType(typeof(Customer))!.FindProperty(nameof(Customer.Name))!.IsConcurrencyToken);
+    }
+
     private static void AssertMessage(InvalidOperationException ex, string member, string complexType)
     {
         Assert.Contains($"'{member}'", ex.Message);
@@ -222,6 +282,23 @@ public static class ComplexTypeEncryptionValidationTests
     {
         public int Id { get; set; }
         public Profile Profile { get; set; } = new();
+    }
+
+    private class Stamp
+    {
+        public long Version { get; set; }
+    }
+
+    private class StampedAddr
+    {
+        public string City { get; set; } = "";
+        public Stamp Stamp { get; set; } = new();
+    }
+
+    private class VersionedCustomer
+    {
+        public int Id { get; set; }
+        public StampedAddr Home { get; set; } = new();
     }
 
     private class CollectionCustomer
