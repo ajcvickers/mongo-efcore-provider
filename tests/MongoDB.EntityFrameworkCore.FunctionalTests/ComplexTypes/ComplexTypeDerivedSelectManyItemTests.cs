@@ -163,6 +163,18 @@ public class ComplexTypeDerivedSelectManyItemTests(TemporaryDatabaseFixture data
     // Nav-expansion differs by EF version: EF10 refuses the shape itself, EF8/EF9 hand the bridge a cross-DbSet source.
     private const string NotTranslatedOrCrossDbSet = NotTranslated + "||" + CrossDbSet;
 
+    private static readonly Dictionary<string, Type> FragmentExceptionTypes = new()
+    {
+        [CrossDbSet] = typeof(InvalidOperationException),
+        [NotTranslated] = typeof(InvalidOperationException),
+        [DriverNotSupported] = typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException),
+        [OuterIdMissing] = typeof(InvalidOperationException),
+        [BsonDocKey] = typeof(KeyNotFoundException),
+        [NotLocated] = typeof(InvalidOperationException),
+        ["cannot be used for parameter"] = typeof(ArgumentException),
+        ["does not match member type"] = typeof(ArgumentException)
+    };
+
     // Pins EACH mode: `Serves` with the hand-written rows, `NotNativeAny` (a NativeTranslationNotSupportedException), or an
     // exception whose message contains the fragment (`||`-separated alternatives). A mode that starts serving where it threw
     // (or the reverse), or serves different rows, fails the test.
@@ -198,6 +210,11 @@ public class ComplexTypeDerivedSelectManyItemTests(TemporaryDatabaseFixture data
             else
             {
                 Assert.True(error != null && want.Split("||").Any(error.Message.Contains), $"{mode}: expected an exception containing '{want}', got {got}");
+                // The fragment alone could match an unrelated exception; each fragment's exception TYPE is pinned too
+                // (measured identical on EF8/EF9/EF10).
+                var matched = want.Split("||").First(error!.Message.Contains);
+                Assert.True(FragmentExceptionTypes.TryGetValue(matched, out var type) && error.GetType() == type,
+                    $"{mode}: '{matched}' expected {(type?.Name ?? "<unpinned fragment>")}, got {error.GetType().Name}");
             }
         }
     }

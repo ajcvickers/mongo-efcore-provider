@@ -295,4 +295,38 @@ public class ComplexTypeCompositionTests(TemporaryDatabaseFixture database) : IC
             },
             "2,1");
     }
+
+    [Fact]
+    public void Filtered_Include_ThenBy_and_Take_through_complex_leaves_sort_by_the_leaves()
+    {
+        // Ann's orders re-seeded so every key disagrees with the root property of the same name: o1 (rank 1) City Paris /
+        // Ship Rome lat 1, o2 (rank 2) City Zurich / Ship Paris lat 2, o6 (rank 6, added) City Athens / Ship Paris lat 7.
+        // OrderBy(Ship.City).ThenByDescending(Ship.Geo.Lat): o6 (Paris 7), o2 (Paris 2), o1 (Rome) = 6,2,1; a root-City
+        // sort would give 6,1,2 (Athens, Paris, Zurich). Take(1) keeps 6 (root City would also give 6, so the ThenBy row
+        // is the discriminating one; Take(2) gives 6,2 vs 6,1).
+        var collections = Seed(database, nameof(Filtered_Include_ThenBy_and_Take_through_complex_leaves_sort_by_the_leaves));
+        var orders = database.MongoDatabase.GetCollection<MongoDB.Bson.BsonDocument>(collections.Orders);
+        orders.UpdateOne(new MongoDB.Bson.BsonDocument("City", "Lima"), new MongoDB.Bson.BsonDocument("$set", new MongoDB.Bson.BsonDocument("City", "Zurich")));
+        var ann = MongoDB.Driver.IFindFluentExtensions.Single(MongoDB.Driver.IMongoCollectionExtensions.Find(orders, new MongoDB.Bson.BsonDocument("Rank", 1)))["ClientId"];
+        orders.InsertOne(new MongoDB.Bson.BsonDocument
+        {
+            { "_id", MongoDB.Bson.ObjectId.GenerateNewId() }, { "ClientId", ann }, { "City", "Athens" }, { "Rank", 6 },
+            { "Ship", new MongoDB.Bson.BsonDocument { { "Street", "o-Paris" }, { "City", "Paris" }, { "Geo", new MongoDB.Bson.BsonDocument { { "Lat", 7.0 }, { "Lon", 7.0 } } }, { "Code", 0 } } }
+        });
+
+        Native(mode =>
+            {
+                using var db = Create(database, collections, mode);
+                return [.. db.Clients.Where(c => c.Name == "Ann").Include(c => c.Orders.OrderBy(o => o.Ship.City).ThenByDescending(o => o.Ship.Geo.Lat)).ToList()
+                    .Select(c => string.Join(",", c.Orders.Select(o => o.Rank)))];
+            },
+            "6,2,1");
+        Native(mode =>
+            {
+                using var db = Create(database, collections, mode);
+                return [.. db.Clients.Where(c => c.Name == "Ann").Include(c => c.Orders.OrderBy(o => o.Ship.City).ThenBy(o => o.Ship.Geo.Lat).Take(2)).ToList()
+                    .Select(c => string.Join(",", c.Orders.Select(o => o.Rank)))];
+            },
+            "2,6");
+    }
 }
