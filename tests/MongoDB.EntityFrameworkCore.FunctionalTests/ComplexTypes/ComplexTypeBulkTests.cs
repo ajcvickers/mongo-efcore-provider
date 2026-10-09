@@ -548,6 +548,54 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         store.AssertStored(["a"], ("b", d => d["bill"]["town"] = "async"));
     }
 
+    // Two setters where one's stored path contains the other's: the server rejects such a `$set` ("would create a
+    // conflict", code 40) when the command runs. Refused at translation, in either order, constant or self-referencing.
+    public static TheoryData<string> OverlappingSetterShapes => new()
+    {
+        "whole-then-leaf", "leaf-then-whole", "whole-then-nested-leaf", "nested-whole-then-leaf", "self-referencing-whole-then-leaf"
+    };
+
+    [Theory]
+    [MemberData(nameof(OverlappingSetterShapes))]
+    public void Setters_whose_stored_paths_overlap_are_refused_and_write_nothing(string shape)
+    {
+        var store = Seed();
+        var value = new BAddr { City = "N", Code = 1, Rep = 2, Location = new GeoPoint { Lat = 9, Lon = 9 } };
+        using (var db = store.Context())
+        {
+            var ex = Assert.Throws<InvalidOperationException>(() => shape switch
+            {
+                "whole-then-leaf" => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing, value).SetProperty(c => c.Billing.City, "Q")),
+                "leaf-then-whole" => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.City, "Q").SetProperty(c => c.Billing, value)),
+                "whole-then-nested-leaf" => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing, value).SetProperty(c => c.Billing.Location.Lat, 1.0)),
+                "nested-whole-then-leaf" => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Pin, new GeoPoint { Lat = 1, Lon = 1 }).SetProperty(c => c.Pin.Lat, 2.0)),
+                "self-referencing-whole-then-leaf" => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing, value).SetProperty(c => c.Billing.Street, c => c.Name)),
+                _ => throw new ArgumentOutOfRangeException(nameof(shape))
+            });
+            Assert.Contains("one is stored inside the other", ex.Message);
+            Assert.Contains(shape == "nested-whole-then-leaf" ? "'Pin.Lat'" : "'bill'", ex.Message);
+        }
+
+        store.AssertUnchanged();
+    }
+
+    [Fact]
+    public void Setters_on_sibling_paths_and_the_same_leaf_twice_are_not_overlaps()
+    {
+        var store = Seed();
+        using (var db = store.Context())
+        {
+            // Sibling leaves of one complex property are not an overlap (only a dotted containment is). The same leaf set twice
+            // keeps the last value, as before this check (the server accepts it: the update document holds one key).
+            Assert.Equal(1, db.Entities.Where(c => c.Name == "a").ExecuteUpdate(s => s
+                .SetProperty(c => c.Billing.City, "P")
+                .SetProperty(c => c.Billing.Street, "s2")
+                .SetProperty(c => c.Billing.City, "Q")));
+        }
+
+        store.AssertStored(null, ("a", d => { d["bill"]["town"] = "Q"; d["bill"]["Street"] = "s2"; }));
+    }
+
     [Fact]
     public void Setter_targets_that_are_not_complex_leaves_keep_the_existing_refusal()
     {

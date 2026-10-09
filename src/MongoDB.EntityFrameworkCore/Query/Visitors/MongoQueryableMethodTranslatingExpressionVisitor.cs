@@ -1920,6 +1920,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         var parsed = setters
             .Select(s => BuildSetter(mongoQueryExpression, s.PropertySelector, s.ValueExpression))
             .ToList();
+        ThrowIfSetterPathsOverlap(mongoQueryExpression, parsed);
         return new MongoNonQueryExpression(mongoQueryExpression, parsed, strategy);
     }
 #else
@@ -1958,9 +1959,42 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                     mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
         }
 
+        ThrowIfSetterPathsOverlap(mongoQueryExpression, parsed);
         return new MongoNonQueryExpression(mongoQueryExpression, parsed, strategy);
     }
 #endif
+
+    /// <summary>
+    /// Refuses two setters where one's stored path is a strict prefix of the other's (<c>SetProperty(c => c.Address, v)</c>
+    /// with <c>SetProperty(c => c.Address.City, x)</c>): the server rejects such a <c>$set</c> ("would create a conflict")
+    /// only when the command runs. Only complex targets have dotted paths, and the model validator keeps element names
+    /// unique per document level, so root-scalar-only updates never overlap (a strict no-op for them). The same path set
+    /// twice is not an overlap: the update document keeps the last value, as before.
+    /// </summary>
+    private void ThrowIfSetterPathsOverlap(
+        MongoQueryExpression mongoQueryExpression,
+        IReadOnlyList<MongoNonQueryExpression.Setter> setters)
+    {
+        for (var i = 1; i < setters.Count; i++)
+        {
+            var path = setters[i].StoredPath;
+            for (var j = 0; j < i; j++)
+            {
+                var earlier = setters[j].StoredPath;
+                if (path.StartsWith(earlier + ".", StringComparison.Ordinal)
+                    || earlier.StartsWith(path + ".", StringComparison.Ordinal))
+                {
+                    AddTranslationErrorDetails(
+                        $"ExecuteUpdate cannot set both '{earlier}' and '{path}' of '{mongoQueryExpression.CollectionExpression.EntityType.DisplayName()}': "
+                        + "one is stored inside the other, and MongoDB rejects an update that sets both. Set either the whole value "
+                        + "or its members, not both.");
+                    throw new InvalidOperationException(
+                        CoreStrings.NonQueryTranslationFailedWithDetails(
+                            mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Parses a <c>SetProperty(selector, value)</c> into a <see cref="MongoNonQueryExpression.Setter"/>. The selector
