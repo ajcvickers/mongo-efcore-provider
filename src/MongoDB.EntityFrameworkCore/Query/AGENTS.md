@@ -267,7 +267,9 @@ Rendering (null/missing/dialect semantics):
 - **A whole complex value in `==`/`!=`/`.Equals` is owned by `MongoExpressionTranslator.ComplexEquality.cs`** (its decline is
   final): member-wise, never by example. Null/missing of a value is `MongoElementNullCheckExpression` (`{p: null}`, `$ifNull`
   in `$expr`; flips exactly); each comparison is built with its complement (`EqualityPair`), so negation never wraps; stored
-  pairs need `StoredAlike` leaves; a captured comparand is read per execution (`RuntimeEvaluator` parameters).
+  pairs need the same mapped members (both orders agree) and `StoredAlike` leaves; a captured comparand is read per execution
+  (`RuntimeEvaluator` parameters). A value with ANY optional ancestor (owned or complex) equals an instance only when its
+  own element is present; leaves are `NullSafe` so element scopes agree with the null check.
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

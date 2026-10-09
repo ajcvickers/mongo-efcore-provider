@@ -200,7 +200,9 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     {
         // cid's Home City is "paris": not equal to "Paris".
         var other = AnnAddress;
-        PerMode(Eq(q => Names(q.Where(c => c.Home == other || c.Home.City == "nowhere"))), ["ann"], Serves, Serves, WholeValueRefused);
+        PerMode(Eq(q => Names(q.Where(c => c.Home == other))), ["ann"], Serves, Serves, WholeValueRefused);
+        var lower = new EqAddress { City = "paris", Zip = 7, Geo = new GeoPoint { Lat = 1, Lon = 2 }, Grade = Grade.High };
+        PerMode(Eq(q => Names(q.Where(c => c.Home == lower))), ["cid"], Serves, Serves, WholeValueRefused);
     }
 
     [Fact]
@@ -436,6 +438,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         public int? Zip { get; set; }
         public GeoPoint Geo { get; set; }
         public InnerBits? Inner { get; set; }
+        public InnerBits Req { get; set; } = null!;
     }
 
     public class OptCustomer
@@ -454,28 +457,33 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         {
             a.ComplexProperty(x => x.Geo);
             a.ComplexProperty(x => x.Inner);
+            a.ComplexProperty(x => x.Req);
         });
         mb.Entity<OptCustomer>().ComplexProperty(c => c.Alt, a =>
         {
             a.ComplexProperty(x => x.Geo);
             a.ComplexProperty(x => x.Inner);
+            a.ComplexProperty(x => x.Req);
         });
         mb.Entity<OptCustomer>().ComplexProperty(c => c.Main, a =>
         {
             a.ComplexProperty(x => x.Geo);
             a.ComplexProperty(x => x.Inner);
+            a.ComplexProperty(x => x.Req);
         });
         mb.Entity<OptCustomer>().ComplexProperty(c => c.OptPin);
     }
 
     private static readonly OptAddress ParisAddress = new()
     {
-        City = "Paris", Zip = 7, Geo = new GeoPoint { Lat = 1, Lon = 2 }, Inner = new InnerBits { Text = "t", Num = 1 }
+        City = "Paris", Zip = 7, Geo = new GeoPoint { Lat = 1, Lon = 2 }, Inner = new InnerBits { Text = "t", Num = 1 },
+        Req = new InnerBits { Text = "r" }
     };
 
     /// <summary>
-    /// Opt per row: a-missing (no element), b-null (BSON null), c-empty (<c>{}</c>), d-paris (Paris/7/1,2/Inner t,1),
-    /// e-rome (Rome, Zip and Inner missing), f-oslo (Zip and Inner BSON null), g-lima (Inner <c>{}</c>). Alt: d-paris holds
+    /// Opt per row: a-missing (no element), b-null (BSON null), c-empty (<c>{}</c>: every member, incl. the required Req and
+    /// Geo, missing), d-paris (Paris/7/1,2/Inner t,1/Req r), e-rome (Rome, Zip and Inner missing, Req {}), f-oslo (Zip and
+    /// Inner BSON null, Req {}), g-lima (Inner <c>{}</c>, Req {}). Alt: d-paris holds
     /// Opt's value reordered with an unmapped element, b-null... missing everywhere else. Main (required): Inner {t} on
     /// a-missing, BSON null on b-null, missing elsewhere. OptPin: c-empty 9,9; d-paris 1,2; f-oslo 5,6; b-null BSON null;
     /// missing elsewhere.
@@ -485,12 +493,13 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         var collection = database.CreateCollection<OptCustomer>(Unique(name));
         var paris = new BsonDocument
         {
-            { "City", "Paris" }, { "Zip", 7 }, { "Geo", Geo(1, 2) }, { "Inner", new BsonDocument { { "Text", "t" }, { "Num", 1 } } }
+            { "City", "Paris" }, { "Zip", 7 }, { "Geo", Geo(1, 2) }, { "Inner", new BsonDocument { { "Text", "t" }, { "Num", 1 } } },
+            { "Req", new BsonDocument("Text", "r") }
         };
         var parisReordered = new BsonDocument
         {
             { "Inner", new BsonDocument { { "Num", 1 }, { "Text", "t" } } }, { "Extra", true }, { "Geo", Geo(1, 2) }, { "Zip", 7 },
-            { "City", "Paris" }
+            { "Req", new BsonDocument("Text", "r") }, { "City", "Paris" }
         };
         Raw(collection).InsertMany(
         [
@@ -498,10 +507,13 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
             Row("b-null", BsonNull.Value, null, Main(BsonNull.Value), BsonNull.Value),
             Row("c-empty", new BsonDocument(), null, Main(null), Geo(9, 9)),
             Row("d-paris", paris, parisReordered, Main(null), Geo(1, 2)),
-            Row("e-rome", new BsonDocument { { "City", "Rome" }, { "Geo", Geo(3, 4) } }, null, Main(null), null),
-            Row("f-oslo", new BsonDocument { { "City", "Oslo" }, { "Zip", BsonNull.Value }, { "Geo", Geo(5, 6) }, { "Inner", BsonNull.Value } },
-                null, Main(null), Geo(5, 6)),
-            Row("g-lima", new BsonDocument { { "City", "Lima" }, { "Geo", Geo(7, 8) }, { "Inner", new BsonDocument() } }, null, Main(null), null)
+            Row("e-rome", new BsonDocument { { "City", "Rome" }, { "Geo", Geo(3, 4) }, { "Req", new BsonDocument() } }, null, Main(null), null),
+            Row("f-oslo", new BsonDocument
+            {
+                { "City", "Oslo" }, { "Zip", BsonNull.Value }, { "Geo", Geo(5, 6) }, { "Inner", BsonNull.Value }, { "Req", new BsonDocument() }
+            }, null, Main(null), Geo(5, 6)),
+            Row("g-lima", new BsonDocument { { "City", "Lima" }, { "Geo", Geo(7, 8) }, { "Inner", new BsonDocument() }, { "Req", new BsonDocument() } },
+                null, Main(null), null)
         ]);
         return collection;
 
@@ -651,6 +663,43 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     }
 
     [Fact]
+    public void Required_value_under_an_absent_optional_complex_parent_is_not_equal_to_an_all_null_instance()
+    {
+        // Opt.Req is required, but Opt is optional: an absent Opt reads Req (and its members) as null.
+        // c-empty's Opt is present but its required Req is missing: the compared path is absent, so not equal (R14).
+        PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req == new InnerBits { Text = null, Num = null }))), ["e-rome", "f-oslo", "g-lima"],
+            Serves, Serves, WholeValueRefused);
+        PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req != new InnerBits { Text = null, Num = null }))), ["a-missing", "b-null", "c-empty", "d-paris"],
+            Serves, Serves, WholeValueRefused);
+        var empty = new InnerBits();
+        PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req == empty))), ["e-rome", "f-oslo", "g-lima"], Serves, Serves, WholeValueRefused);
+        PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req != empty))), ["a-missing", "b-null", "c-empty", "d-paris"], Serves, Serves, WholeValueRefused);
+        PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req == EF.Constant(empty)))), ["e-rome", "f-oslo", "g-lima"], Serves, Serves, WholeValueRefused);
+    }
+
+    [Fact]
+    public void Stored_pair_under_optional_parents_that_differ_in_presence()
+    {
+        // Opt.Req vs Main.Req (Main required, no optional ancestor: always a value; its Req is missing, members null): equal
+        // only where Opt.Req is present with null members. Opt.Req vs Alt.Req: absent on both sides (a, b, c: null == null),
+        // present on both with equal members (d), present on one side only (e, f, g: not equal).
+        PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req == c.Main.Req))), ["e-rome", "f-oslo", "g-lima"], Serves, Serves,
+            SerializedDifferently);
+        PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req == c.Alt!.Req))), ["a-missing", "b-null", "c-empty", "d-paris"], Serves, Serves,
+            SerializedDifferently);
+        PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req != c.Alt!.Req))), ["e-rome", "f-oslo", "g-lima"], Serves, Serves, SerializedDifferently);
+    }
+
+    [Fact]
+    public void Present_empty_value_against_a_comparand_with_a_null_required_leaf()
+    {
+        // `{}` is a present Opt whose required members are all MISSING (materializing it throws, Task 10). Member-wise its
+        // required nested values (Geo, Req) are absent under an optional ancestor, so it never equals an instance: no row.
+        var nullCity = new OptAddress { City = null!, Zip = null, Geo = new GeoPoint(), Inner = null, Req = new InnerBits() };
+        PerMode(Opt(q => Names(q.Where(c => c.Opt == nullCity))), [], Serves, Serves, WholeValueRefused);
+    }
+
+    [Fact]
     public void Captured_null_instance_takes_the_null_branch()
     {
         // The driver serializes a null comparand as BSON null, so every mode serves it.
@@ -731,6 +780,245 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         Assert.Equal(7, Raw(updateCollection).CountDocuments(FilterDefinition<BsonDocument>.Empty));
     }
 #endif
+
+    // ── Fix round 1: optional ancestors, symmetric stored pairs, element scope, misc ───────────────────────────────
+
+    // C1 (any version): a REQUIRED complex value under an OPTIONAL OWNED reference. An absent owner reads its members as
+    // null, so `c.Owned.Note == new Note()` (every member null) is FALSE for it and `!=` is TRUE.
+    [System.ComponentModel.DataAnnotations.Schema.ComplexType]
+    public class Note
+    {
+        public string? Text { get; set; }
+        public int? N { get; set; }
+    }
+
+    public class NoteOwner
+    {
+        public Note Note { get; set; } = null!;
+    }
+
+    public class NoteHolder
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public NoteOwner? Owned { get; set; }
+        public NoteOwner? Other { get; set; }
+    }
+
+    private static void ConfigureNotes(ModelBuilder mb)
+    {
+        // An owned type has no ComplexProperty builder; Note is a [ComplexType] class.
+        mb.Entity<NoteHolder>().OwnsOne(h => h.Owned);
+        mb.Entity<NoteHolder>().OwnsOne(h => h.Other);
+    }
+
+    /// <summary>
+    /// Owned per row: o-missing (no element), o-null (BSON null), o-empty-note (Note {}), o-value (Note t/1). Other: absent
+    /// except on o-empty-note ({} too) and o-value (Note t/2).
+    /// </summary>
+    private Func<MongoQueryMode, List<string>> Notes(
+        Func<IQueryable<NoteHolder>, IEnumerable<string>> query, [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+    {
+        var collection = database.CreateCollection<NoteHolder>(Unique(name + Guid.NewGuid().ToString("N")[..4]));
+        Raw(collection).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "o-missing" } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "o-null" }, { "Owned", BsonNull.Value } },
+            new BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Name", "o-empty-note" }, { "Owned", new BsonDocument("Note", new BsonDocument()) },
+                { "Other", new BsonDocument("Note", new BsonDocument()) }
+            },
+            new BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Name", "o-value" },
+                { "Owned", new BsonDocument("Note", new BsonDocument { { "Text", "t" }, { "N", 1 } }) },
+                { "Other", new BsonDocument("Note", new BsonDocument { { "Text", "t" }, { "N", 2 } }) }
+            }
+        ]);
+        return mode => Run(collection, mode, ConfigureNotes, query);
+    }
+
+    private static IEnumerable<string> Names(IQueryable<NoteHolder> q) => q.Select(c => c.Name).ToList().Order(StringComparer.Ordinal);
+
+    [Fact]
+    public void Required_value_under_an_absent_optional_owner_is_not_equal_to_an_all_null_instance()
+    {
+        PerMode(Notes(q => Names(q.Where(c => c.Owned!.Note == new Note { Text = null, N = null }))), ["o-empty-note"], Serves, Serves,
+            WholeValueRefused);
+        PerMode(Notes(q => Names(q.Where(c => c.Owned!.Note != new Note { Text = null, N = null }))), ["o-missing", "o-null", "o-value"],
+            Serves, Serves, WholeValueRefused);
+        var empty = new Note();
+        PerMode(Notes(q => Names(q.Where(c => c.Owned!.Note == empty))), ["o-empty-note"], Serves, Serves, WholeValueRefused);
+        PerMode(Notes(q => Names(q.Where(c => c.Owned!.Note != empty))), ["o-missing", "o-null", "o-value"], Serves, Serves, WholeValueRefused);
+        PerMode(Notes(q => Names(q.Where(c => c.Owned!.Note == EF.Constant(empty)))), ["o-empty-note"], Serves, Serves, WholeValueRefused);
+    }
+
+    [Fact]
+    public void Stored_pair_with_optional_owners_follows_null_propagation()
+    {
+        // Both owners absent: each side reads null, null == null. One absent, one present: not equal. o-value: N differs.
+        PerMode(Notes(q => Names(q.Where(c => c.Owned!.Note == c.Other!.Note))), ["o-empty-note", "o-missing", "o-null"], Serves, Serves,
+            SerializedDifferently);
+        PerMode(Notes(q => Names(q.Where(c => c.Owned!.Note != c.Other!.Note))), ["o-value"], Serves, Serves, SerializedDifferently);
+    }
+
+    // I1: Home ignores Scratch, Work maps it; both operand orders must answer alike.
+    public class ScratchAddr
+    {
+        public string City { get; set; } = null!;
+        public string? Scratch { get; set; }
+    }
+
+    public class ScratchHolder
+    {
+        public ObjectId Id { get; set; }
+        public ScratchAddr Home { get; set; } = null!;
+        public ScratchAddr Work { get; set; } = null!;
+    }
+
+    [Fact]
+    public void Stored_pair_with_different_mapped_members_declines_in_both_operand_orders()
+    {
+        var collection = database.CreateCollection<ScratchHolder>(Unique(nameof(Stored_pair_with_different_mapped_members_declines_in_both_operand_orders)));
+        Raw(collection).InsertOne(new BsonDocument
+        {
+            { "_id", ObjectId.GenerateNewId() }, { "Home", new BsonDocument("City", "c") },
+            { "Work", new BsonDocument { { "City", "c" }, { "Scratch", "s" } } }
+        });
+
+        static void Configure(ModelBuilder mb)
+        {
+            mb.Entity<ScratchHolder>().ComplexProperty(h => h.Home, a => a.Ignore(x => x.Scratch));
+            mb.Entity<ScratchHolder>().ComplexProperty(h => h.Work);
+        }
+
+        PerMode(mode => Run(collection, mode, Configure, q => q.Where(h => h.Home == h.Work).Select(h => h.Home.City)),
+            [], NotNative, SerializedDifferently, SerializedDifferently);
+        PerMode(mode => Run(collection, mode, Configure, q => q.Where(h => h.Work == h.Home).Select(h => h.Home.City)),
+            [], NotNative, SerializedDifferently, SerializedDifferently);
+    }
+
+    // I2: complex values inside owned-collection elements ($elemMatch, $filter/$map scopes).
+    [System.ComponentModel.DataAnnotations.Schema.ComplexType]
+    public class Pos
+    {
+        public int? Zip { get; set; }
+        public string? Tag { get; set; }
+    }
+
+    public class Item
+    {
+        public string Sku { get; set; } = null!;
+        public Pos Pos { get; set; } = null!;
+    }
+
+    public class ItemHolder
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public List<Item> Items { get; set; } = [];
+        public Pos Home { get; set; } = null!;
+    }
+
+    private static void ConfigureItems(ModelBuilder mb)
+    {
+        mb.Entity<ItemHolder>().OwnsMany(h => h.Items);
+        mb.Entity<ItemHolder>().ComplexProperty(h => h.Home);
+    }
+
+    /// <summary>
+    /// h-missing: one item whose Pos is MISSING (malformed: Pos is required). h-null: Pos BSON null. h-empty: Pos {} (every
+    /// member missing). h-value: Pos 1/"t". Home on every row: Zip 1, Tag "t".
+    /// </summary>
+    private Func<MongoQueryMode, List<string>> Items(
+        Func<IQueryable<ItemHolder>, IEnumerable<string>> query, [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+    {
+        var collection = database.CreateCollection<ItemHolder>(Unique(name + Guid.NewGuid().ToString("N")[..4]));
+        var home = new BsonDocument { { "Zip", 1 }, { "Tag", "t" } };
+        Raw(collection).InsertMany(
+        [
+            Holder("h-missing", new BsonDocument("Sku", "a")),
+            Holder("h-null", new BsonDocument { { "Sku", "a" }, { "Pos", BsonNull.Value } }),
+            Holder("h-empty", new BsonDocument { { "Sku", "a" }, { "Pos", new BsonDocument() } }),
+            Holder("h-value", new BsonDocument { { "Sku", "a" }, { "Pos", new BsonDocument { { "Zip", 1 }, { "Tag", "t" } } } })
+        ]);
+        return mode => Run(collection, mode, ConfigureItems, query);
+
+        BsonDocument Holder(string n, BsonDocument item)
+            => new() { { "_id", ObjectId.GenerateNewId() }, { "Name", n }, { "Items", new BsonArray { item } }, { "Home", home.DeepClone() } };
+    }
+
+    private static IEnumerable<string> Names(IQueryable<ItemHolder> q) => q.Select(c => c.Name).ToList().Order(StringComparer.Ordinal);
+
+    [Fact]
+    public void Complex_null_check_and_all_null_instance_agree_inside_element_scopes()
+    {
+        // Pos is REQUIRED with no optional ancestor: a missing/null Pos is malformed and reads its members as null, as at the
+        // root (`{Pos.Zip: null}` matches it). `{}` reads every member null. The two dialects ($elemMatch, $filter) agree.
+        var blank = new Pos();
+        // $elemMatch (query dialect). Driver-LINQ misses the element whose Pos is MISSING (pinned observed value).
+        var nullCheck = Items(q => Names(q.Where(h => h.Items.Any(i => i.Pos == null))));
+        Assert.Equal(["h-missing", "h-null"], nullCheck(MongoQueryMode.NativeOnly));
+        Assert.Equal(["h-missing", "h-null"], nullCheck(MongoQueryMode.Native));
+        Assert.Equal(["h-null"], nullCheck(MongoQueryMode.DriverLinq));
+        PerMode(Items(q => Names(q.Where(h => h.Items.Any(i => i.Pos == new Pos { Zip = null, Tag = null })))), ["h-empty", "h-missing", "h-null"],
+            Serves, Serves, WholeValueRefused);
+        // A captured class comparand carries a per-execution `{ $expr: <is-null parameter> }` branch, which is illegal in
+        // $elemMatch: it declines and the fallback refuses (R1).
+        PerMode(Items(q => Names(q.Where(h => h.Items.Any(i => i.Pos == blank)))), [], NotNative, WholeValueRefused, WholeValueRefused);
+        // $filter scope (filtered Count).
+        // Driver-LINQ's $filter `$eq: ["$$e.Pos", null]` misses the MISSING Pos (pinned observed value).
+        var nullCount = Items(q => q.OrderBy(h => h.Name).Select(h => h.Items.Count(i => i.Pos == null)).ToList().Select(x => x.ToString()));
+        Assert.Equal(["0", "1", "1", "0"], nullCount(MongoQueryMode.NativeOnly));
+        Assert.Equal(["0", "1", "1", "0"], nullCount(MongoQueryMode.Native));
+        Assert.Equal(["0", "0", "1", "0"], nullCount(MongoQueryMode.DriverLinq));
+        PerMode(Items(q => q.OrderBy(h => h.Name).Select(h => h.Items.Count(i => i.Pos == blank)).ToList().Select(x => x.ToString())),
+            ["1", "1", "1", "0"], Serves, Serves, WholeValueRefused);
+        PerMode(Items(q => q.OrderBy(h => h.Name).Select(h => h.Items.Count(i => i.Pos == new Pos { Zip = null, Tag = null })).ToList()
+            .Select(x => x.ToString())), ["1", "1", "1", "0"], Serves, Serves, WholeValueRefused);
+    }
+
+    [Fact]
+    public void Correlated_element_equality_to_an_outer_complex_value()
+    {
+        // Two scopes: the element's Pos against the root's Home. Pinned per mode.
+        PerMode(Items(q => Names(q.Where(h => h.Items.Any(i => i.Pos == h.Home)))), ["h-value"], NotNative, SerializedDifferently,
+            SerializedDifferently);
+    }
+
+    [Fact]
+    public void All_over_a_complex_equality()
+    {
+        // All(pred) $matches the complement of pred, and only a query-dialect predicate has one (MongoExpressionNegator). A
+        // captured comparand's per-execution null branch is `{ $expr: <bool parameter> }`, so All over it declines and the
+        // fallback refuses (R1); a constant comparand is pure query dialect and stays native.
+        var other = AnnAddress;
+        PerMode(Eq(q => [q.All(c => c.Home == other).ToString()]), [], NotNative, WholeValueRefused, WholeValueRefused);
+        PerMode(Eq(q => [q.All(c => c.Home == new EqAddress { City = "Paris", Zip = 7, Geo = new GeoPoint { Lat = 1, Lon = 2 }, Grade = Grade.High })
+            .ToString()]), ["False"], Serves, Serves, WholeValueRefused);
+        PerMode(Eq(q => [q.All(c => c.Home != new EqAddress { City = "x", Zip = null, Geo = new GeoPoint(), Grade = Grade.Low }).ToString()]),
+            ["True"], Serves, Serves, WholeValueRefused);
+        PerMode(Eq(q => [q.All(c => c.Home != null).ToString()]), ["True"], Serves, Serves, Serves);
+    }
+
+    [Fact]
+    public void Default_struct_construction_is_a_known_value()
+    {
+        // `new GeoPoint()` has no bindings: every member is default (0, 0). No row's Pin is 0/0.
+        PerMode(Eq(q => Names(q.Where(c => c.Pin.Equals(new GeoPoint())))), [], Serves, Serves, WholeValueRefused);
+        PerMode(Eq(q => Names(q.Where(c => !c.Pin.Equals(new GeoPoint())))), ["ann", "bob", "cid", "dee"], Serves, Serves, WholeValueRefused);
+    }
+
+    [Fact]
+    public void A_declining_equality_inside_a_disjunction_declines_the_whole_predicate_and_leaves_no_residue()
+    {
+        // The second disjunct (an inline construction reading the row) declines, so the whole predicate declines; the
+        // translator-level residue check is the unit test of the same name.
+        var other = AnnAddress;
+        PerMode(Eq(q => Names(q.Where(c => c.Home == other || c.Home == new EqAddress { City = c.Name }).Where(c => c.Pin.Lat == 1))),
+            ["ann"], NotNative, WholeValueRefused, WholeValueRefused);
+    }
 
     // ── Plumbing ───────────────────────────────────────────────────────────────────────────────────────────────
 

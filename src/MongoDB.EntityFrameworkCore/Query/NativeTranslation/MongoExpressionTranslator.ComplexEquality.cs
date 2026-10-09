@@ -54,6 +54,10 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// <c>!(a == b)</c> take the complement directly, never the generic <c>Not</c> wrap.
 /// </para>
 /// <para>
+/// <b>Pure until committed.</b> Every builder here only constructs new nodes (and draws parameter names from a static
+/// counter); nothing on the translator or the query is mutated, so a decline anywhere leaves no residue.
+/// </para>
+/// <para>
 /// <b>Declines</b> (the whole comparison, via the caller's <c>MarkNotNativelyRepresentable()</c>): a complex collection
 /// anywhere in the compared value; a primitive-collection or <c>byte[]</c> leaf; a leaf or nested property with no
 /// element name; a shadow leaf compared with an instance (it has no CLR value); a comparand that is neither null, a
@@ -65,6 +69,8 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// </remarks>
 internal sealed partial class MongoExpressionTranslator
 {
+    // Names only need to be distinct within one template; process-wide like RuntimeClock's seed, so wraparound after 2^32
+    // names is harmless (a template never holds that many).
     private static int _complexEqualityParameterSeed;
 
     /// <summary>
@@ -76,14 +82,32 @@ internal sealed partial class MongoExpressionTranslator
         public EqualityPair Negate() => new(NotEqual, Equal);
 
         public static EqualityPair And(EqualityPair left, EqualityPair right)
-            => new(
-                new MongoBinaryExpression(MongoBinaryOperator.AndAlso, left.Equal, right.Equal),
-                new MongoBinaryExpression(MongoBinaryOperator.OrElse, left.NotEqual, right.NotEqual));
+            => new(AndOf(left.Equal, right.Equal), OrOf(left.NotEqual, right.NotEqual));
 
         public static EqualityPair Or(EqualityPair left, EqualityPair right)
-            => new(
-                new MongoBinaryExpression(MongoBinaryOperator.OrElse, left.Equal, right.Equal),
-                new MongoBinaryExpression(MongoBinaryOperator.AndAlso, left.NotEqual, right.NotEqual));
+            => new(OrOf(left.Equal, right.Equal), AndOf(left.NotEqual, right.NotEqual));
+
+        // Literal true/false operands (a side that can never be absent) fold away, so the rendered predicate stays free of
+        // `$expr: true/false` and in the query dialect.
+        private static MongoExpression AndOf(MongoExpression left, MongoExpression right)
+            => (left, right) switch
+            {
+                (MongoConstantExpression { Value: false }, _) or (_, MongoConstantExpression { Value: false })
+                    => new MongoConstantExpression(false, forSerialization: null),
+                (MongoConstantExpression { Value: true }, _) => right,
+                (_, MongoConstantExpression { Value: true }) => left,
+                _ => new MongoBinaryExpression(MongoBinaryOperator.AndAlso, left, right)
+            };
+
+        private static MongoExpression OrOf(MongoExpression left, MongoExpression right)
+            => (left, right) switch
+            {
+                (MongoConstantExpression { Value: true }, _) or (_, MongoConstantExpression { Value: true })
+                    => new MongoConstantExpression(true, forSerialization: null),
+                (MongoConstantExpression { Value: false }, _) => right,
+                (_, MongoConstantExpression { Value: false }) => left,
+                _ => new MongoBinaryExpression(MongoBinaryOperator.OrElse, left, right)
+            };
 
         public static EqualityPair IsNull(string path)
             => new(new MongoElementNullCheckExpression(path, isNotNull: false), new MongoElementNullCheckExpression(path, isNotNull: true));
@@ -107,8 +131,11 @@ internal sealed partial class MongoExpressionTranslator
         public sealed record Runtime(string ParameterName, IReadOnlyList<IClrPropertyGetter> Getters, bool MayBeNull)
             : ComplexComparand;
 
-        /// <summary>Another stored complex value of the same CLR type, at <paramref name="Path"/>.</summary>
-        public sealed record Stored(string Path, IComplexProperty Property) : ComplexComparand;
+        /// <summary>
+        /// Another stored complex value of the same CLR type, at <paramref name="Path"/>. <paramref name="MayBeAbsent"/>:
+        /// the value or an ancestor is optional, so the value reads null when its element is null/missing.
+        /// </summary>
+        public sealed record Stored(string Path, IComplexProperty Property, bool MayBeAbsent) : ComplexComparand;
 
         /// <summary>
         /// An inline construction (<c>new Address { City = "X", Geo = new GeoPoint { ... } }</c>): each member's bound
@@ -153,13 +180,14 @@ internal sealed partial class MongoExpressionTranslator
         Expression otherSide;
         string path;
         IComplexProperty complexProperty;
-        if (TryResolveComplexOperand(left, out var leftPath, out var leftProperty))
+        bool mayBeAbsent;
+        if (TryResolveComplexOperand(left, out var leftPath, out var leftProperty, out var leftAbsent))
         {
-            (path, complexProperty, otherSide) = (leftPath, leftProperty, right);
+            (path, complexProperty, mayBeAbsent, otherSide) = (leftPath, leftProperty, leftAbsent, right);
         }
-        else if (TryResolveComplexOperand(right, out var rightPath, out var rightProperty))
+        else if (TryResolveComplexOperand(right, out var rightPath, out var rightProperty, out var rightAbsent))
         {
-            (path, complexProperty, otherSide) = (rightPath, rightProperty, left);
+            (path, complexProperty, mayBeAbsent, otherSide) = (rightPath, rightProperty, rightAbsent, left);
         }
         else
         {
@@ -169,7 +197,7 @@ internal sealed partial class MongoExpressionTranslator
         if (!TryClassifyComplexComparand(Unwrap(otherSide), complexProperty, out var comparand))
             return null;
 
-        var pair = TryBuildComplexEquality(complexProperty, path, comparand);
+        var pair = TryBuildComplexEquality(complexProperty, path, mayBeAbsent, comparand);
         if (pair is null)
             return null;
 
@@ -214,15 +242,20 @@ internal sealed partial class MongoExpressionTranslator
                 comparand = new ComplexComparand.Runtime(parameterName, [], MayBeNull: otherSide.Type.IsNullableType());
                 return true;
 
+            // `new GeoPoint()` (no constructor, no bindings): a known default struct value.
+            case NewExpression { Constructor: null, Arguments.Count: 0 } defaultStruct when defaultStruct.Type.IsValueType:
+                comparand = new ComplexComparand.Known(Activator.CreateInstance(defaultStruct.Type));
+                return true;
+
             case MemberInitExpression or NewExpression when TryGetConstructedMembers(otherSide, out var members):
                 comparand = new ComplexComparand.Constructed(members);
                 return true;
 
             default:
-                if (TryResolveComplexOperand(otherSide, out var otherPath, out var otherProperty)
+                if (TryResolveComplexOperand(otherSide, out var otherPath, out var otherProperty, out var otherAbsent)
                     && otherProperty.ComplexType.ClrType == clrType)
                 {
-                    comparand = new ComplexComparand.Stored(otherPath, otherProperty);
+                    comparand = new ComplexComparand.Stored(otherPath, otherProperty, otherAbsent);
                     return true;
                 }
 
@@ -234,9 +267,15 @@ internal sealed partial class MongoExpressionTranslator
     /// The equality of the complex value <paramref name="complexProperty"/> stored at <paramref name="path"/> with
     /// <paramref name="comparand"/>, or <see langword="null"/> to decline.
     /// </summary>
-    private static EqualityPair? TryBuildComplexEquality(IComplexProperty complexProperty, string path, ComplexComparand comparand)
+    /// <param name="mayBeAbsent">
+    /// The value can be absent: it, or any owned/complex ancestor on its path, is optional (ruling R14). An absent value
+    /// reads null, as do its members (null propagation), so it equals null and never an instance, whatever the instance's
+    /// members are; its element is then null or MISSING, which <see cref="EqualityPair.IsNull"/> tests.
+    /// </param>
+    private static EqualityPair? TryBuildComplexEquality(
+        IComplexProperty complexProperty, string path, bool mayBeAbsent, ComplexComparand comparand)
     {
-        var isOptional = complexProperty.IsOptional();
+        mayBeAbsent |= complexProperty.IsOptional();
 
         switch (comparand)
         {
@@ -247,45 +286,46 @@ internal sealed partial class MongoExpressionTranslator
 
             case ComplexComparand.Known or ComplexComparand.Runtime { MayBeNull: false } or ComplexComparand.Constructed:
             {
-                var members = TryBuildMemberEquality(complexProperty.ComplexType, path, comparand);
+                var members = TryBuildMemberEquality(complexProperty.ComplexType, path, mayBeAbsent, comparand);
                 if (members is null)
                     return null;
 
-                // An optional value equals an instance only when present: `{}` holds an instance, null/missing don't.
-                return isOptional ? EqualityPair.And(EqualityPair.IsNull(path).Negate(), members.Value) : members;
+                // An absent-able value equals an instance only when present: `{}` holds an instance, null/missing don't.
+                return WhenPresent(path, mayBeAbsent, members.Value);
             }
 
             case ComplexComparand.Runtime runtime:
             {
-                var members = TryBuildMemberEquality(complexProperty.ComplexType, path, runtime);
+                var members = TryBuildMemberEquality(complexProperty.ComplexType, path, mayBeAbsent, runtime);
                 if (members is null)
                     return null;
 
-                var whenPresent = isOptional ? EqualityPair.And(EqualityPair.IsNull(path).Negate(), members.Value) : members.Value;
-
                 // Which branch applies is known only per execution: (value is null AND stored is null/missing) OR
-                // (value is not null AND the members match).
+                // (value is not null AND the value is present with matching members).
                 var valueIsNull = RuntimeIsNull(runtime);
                 return EqualityPair.Or(
                     EqualityPair.And(valueIsNull, EqualityPair.IsNull(path)),
-                    EqualityPair.And(valueIsNull.Negate(), whenPresent));
+                    EqualityPair.And(valueIsNull.Negate(), WhenPresent(path, mayBeAbsent, members.Value)));
             }
 
             case ComplexComparand.Stored stored:
             {
-                var members = TryBuildMemberEquality(complexProperty.ComplexType, path, stored);
+                var otherAbsent = stored.MayBeAbsent | stored.Property.IsOptional();
+                var members = TryBuildMemberEquality(complexProperty.ComplexType, path, mayBeAbsent || otherAbsent, stored);
                 if (members is null)
                     return null;
 
-                if (!isOptional && !stored.Property.IsOptional())
+                if (!mayBeAbsent && !otherAbsent)
                     return members;
 
-                // Both null/missing, or both present with equal members.
+                // Each side is null when its element is null/missing. C# null propagation: null == null is true, null ==
+                // value false, value == value member-wise. A side that can't be absent is never null (its missing element is
+                // malformed data and reads members as null, as everywhere else).
+                var leftNull = mayBeAbsent ? EqualityPair.IsNull(path) : Never;
+                var rightNull = otherAbsent ? EqualityPair.IsNull(stored.Path) : Never;
                 return EqualityPair.Or(
-                    EqualityPair.And(EqualityPair.IsNull(path), EqualityPair.IsNull(stored.Path)),
-                    EqualityPair.And(
-                        EqualityPair.And(EqualityPair.IsNull(path).Negate(), EqualityPair.IsNull(stored.Path).Negate()),
-                        members.Value));
+                    EqualityPair.And(leftNull, rightNull),
+                    EqualityPair.And(EqualityPair.And(leftNull.Negate(), rightNull.Negate()), members.Value));
             }
 
             default:
@@ -293,13 +333,26 @@ internal sealed partial class MongoExpressionTranslator
         }
     }
 
+    // A constant-false predicate and its complement, for a side that is never absent. Simplified away below.
+    private static readonly EqualityPair Never = new(
+        new MongoConstantExpression(false, forSerialization: null), new MongoConstantExpression(true, forSerialization: null));
+
+    private static EqualityPair WhenPresent(string path, bool mayBeAbsent, EqualityPair members)
+        => mayBeAbsent ? EqualityPair.And(EqualityPair.IsNull(path).Negate(), members) : members;
+
     /// <summary>
     /// The conjunction of member equalities of <paramref name="complexType"/> (stored at <paramref name="path"/>) with
     /// the corresponding members of <paramref name="comparand"/>, recursing into nested complex properties.
     /// </summary>
-    private static EqualityPair? TryBuildMemberEquality(IComplexType complexType, string path, ComplexComparand comparand)
+    private static EqualityPair? TryBuildMemberEquality(
+        IComplexType complexType, string path, bool mayBeAbsent, ComplexComparand comparand)
     {
         EqualityPair? result = null;
+
+        // Two stored values must map the same members (ruling R15): walking only one side's members would make the answer
+        // depend on operand order (`c.Home == c.Work` comparing fewer members than `c.Work == c.Home`).
+        if (comparand is ComplexComparand.Stored storedSide && !MapsSameMembers(complexType, storedSide.Property.ComplexType))
+            return null;
 
         foreach (var leaf in complexType.GetProperties())
         {
@@ -329,14 +382,14 @@ internal sealed partial class MongoExpressionTranslator
                     when stored.Property.ComplexType.FindComplexProperty(nested.Name) is { IsCollection: false } otherNested
                          && otherNested.ClrType == nested.ClrType
                          && otherNested.GetElementName() is { Length: > 0 } otherElement
-                    => new ComplexComparand.Stored(stored.Path + "." + otherElement, otherNested),
+                    => new ComplexComparand.Stored(stored.Path + "." + otherElement, otherNested, stored.MayBeAbsent),
                 _ => null
             };
 
             if (nestedComparand is null)
                 return null;
 
-            var nestedPair = TryBuildComplexEquality(nested, nestedPath, nestedComparand);
+            var nestedPair = TryBuildComplexEquality(nested, nestedPath, mayBeAbsent, nestedComparand);
             if (nestedPair is null)
                 return null;
 
@@ -358,7 +411,10 @@ internal sealed partial class MongoExpressionTranslator
         }
 
         var leafPath = path + "." + element;
-        var field = new MongoFieldExpression(leaf, leafPath);
+        // NullSafe so a missing and a null member compare alike in every dialect, as the null check does: the query
+        // dialect's `{ f: null }` already does; inside a $filter/$map element scope, where a bare field's `$eq` against
+        // null is deliberately not $ifNull-normalized, this keeps member-wise equality and `== null` consistent (R16).
+        var field = new MongoFieldExpression(leaf, leafPath, nullSafe: true);
 
         switch (comparand)
         {
@@ -416,6 +472,22 @@ internal sealed partial class MongoExpressionTranslator
         }
     }
 
+    // The same mapped leaves and nested complex properties, by name, on both types (ruling R15).
+    private static bool MapsSameMembers(IComplexType left, IComplexType right)
+    {
+        static HashSet<string> Names(IComplexType type)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in type.GetProperties())
+                names.Add("p:" + property.Name);
+            foreach (var complex in type.GetComplexProperties())
+                names.Add("c:" + complex.Name);
+            return names;
+        }
+
+        return Names(left).SetEquals(Names(right));
+    }
+
     /// <summary>
     /// The member bindings of an inline construction with a parameterless constructor (<c>new A { X = ... }</c>, or a
     /// struct's <c>new G { ... }</c>), by member name. A constructor with arguments declines: which member each argument
@@ -458,6 +530,8 @@ internal sealed partial class MongoExpressionTranslator
         return bound switch
         {
             ConstantExpression constant => new ComplexComparand.Known(constant.Value),
+            NewExpression { Constructor: null, Arguments.Count: 0 } defaultStruct when defaultStruct.Type.IsValueType
+                => new ComplexComparand.Known(Activator.CreateInstance(defaultStruct.Type)),
             MemberInitExpression or NewExpression when TryGetConstructedMembers(bound, out var members)
                 => new ComplexComparand.Constructed(members),
             _ when NativeQueryParameter.TryGetQueryParameterName(bound, out var parameterName)

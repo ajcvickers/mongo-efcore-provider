@@ -472,9 +472,21 @@ internal sealed partial class MongoExpressionTranslator
     /// </remarks>
     private bool TryResolveComplexOperand(
         Expression node, [NotNullWhen(true)] out string? path, [NotNullWhen(true)] out IComplexProperty? complexProperty)
+        => TryResolveComplexOperand(node, out path, out complexProperty, out _);
+
+    /// <summary>
+    /// <see cref="TryResolveComplexOperand(Expression, out string?, out IComplexProperty?)"/>, also reporting whether the
+    /// value can be absent (<paramref name="mayBeAbsent"/>): the leaf itself is an optional complex property (EF10), or
+    /// any hop on the way is an optional owned reference or an optional complex property. An absent ancestor reads every
+    /// value below it as null.
+    /// </summary>
+    private bool TryResolveComplexOperand(
+        Expression node, [NotNullWhen(true)] out string? path, [NotNullWhen(true)] out IComplexProperty? complexProperty,
+        out bool mayBeAbsent)
     {
         path = null;
         complexProperty = null;
+        mayBeAbsent = false;
 
         node = Unwrap(node);
         while (node is MemberExpression { Member.Name: nameof(Nullable<int>.Value), Expression: { } nullableReceiver }
@@ -499,6 +511,21 @@ internal sealed partial class MongoExpressionTranslator
             || node.Type.UnwrapNullableType() != leaf.ComplexType.ClrType)
         {
             return false;
+        }
+
+        // Every hop, then the leaf: optional owned references and optional complex properties make the value absent-able.
+        for (var count = 1; count <= names.Count; count++)
+        {
+            var prefixNames = names.GetRange(0, count);
+            if (!StructuralPath.TryResolve(scopeType, prefixNames, count - 1, out var prefix))
+                return false;
+
+            mayBeAbsent |= prefix.Leaf switch
+            {
+                INavigation navigation => !navigation.ForeignKey.IsRequiredDependent,
+                IComplexProperty complex => complex.IsOptional(),
+                _ => false
+            };
         }
 
         path = string.Join(".", resolved.Segments);

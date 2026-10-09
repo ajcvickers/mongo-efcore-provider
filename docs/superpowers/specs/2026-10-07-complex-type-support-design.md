@@ -59,7 +59,9 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   stored complex value of the same CLR type translate to a conjunction of leaf equalities, recursing into nested complex
   values; never a by-example match of the stored subdocument (element order and unmapped elements are irrelevant).
   Null semantics are C#'s: BSON null and MISSING read alike (`{p: null}` / `{p: {$ne: null}}` in the query dialect,
-  `$ifNull`-normalized in `$expr`); `{}` is present; an optional value equals an instance only when present; a captured
+  `$ifNull`-normalized in `$expr` and element scopes); `{}` is present; a value that can be absent (it or ANY owned/complex
+  ancestor is optional) equals an instance only when present, and two such values are equal when both are absent (null
+  propagation, `null == null`); stored pairs must map the same members (else decline, so operand order can't matter); a captured
   comparand's null-ness and members are read per execution. `!=` is the exact De Morgan complement built with the equality.
   Declines (fallback refuses: the complex serializer, ruling R1, or the driver's "serialized differently"): complex
   collections, primitive-collection/`byte[]` leaves, shadow leaves against an instance (EF8/EF9), an inline construction
