@@ -330,10 +330,66 @@ public class MongoModelValidator : ModelValidator
         IModel model,
         IDiagnosticsLogger<DbLoggerCategory.Model.Validation> logger)
     {
+        foreach (var entityType in model.GetEntityTypes())
+        {
+            ValidateNoEncryptionInsideComplexTypes(entityType);
+        }
+
         foreach (var entityType in model.GetEntityTypes().Where(e => e.IsDocumentRoot()))
         {
             ValidateEntityQueryableEncryption(entityType, false, false, [], logger);
         }
+    }
+
+    private static readonly string[] EncryptionAnnotationNames =
+    [
+        MongoAnnotationNames.EncryptionDataKeyId,
+        MongoAnnotationNames.QueryableEncryptionType,
+        MongoAnnotationNames.QueryableEncryptionRangeMin,
+        MongoAnnotationNames.QueryableEncryptionRangeMax,
+        MongoAnnotationNames.QueryableEncryptionContention,
+        MongoAnnotationNames.QueryableEncryptionTrimFactor,
+        MongoAnnotationNames.QueryableEncryptionPrecision,
+        MongoAnnotationNames.QueryableEncryptionSparsity
+    ];
+
+    /// <summary>
+    /// Validate that no encryption annotation is configured on a complex property or on any member of a complex type,
+    /// recursing through nested complex properties and complex collections.
+    /// </summary>
+    /// <param name="type">The entity type or complex type whose complex properties are checked.</param>
+    /// <remarks>
+    /// Neither the Queryable Encryption schema generator nor the model validator's encryption checks walk complex
+    /// types, so an encryption annotation inside one would otherwise be silently ignored and the value written as
+    /// plaintext. The configuration is rejected rather than failing open.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">When an encryption annotation is found inside a complex type.</exception>
+    private static void ValidateNoEncryptionInsideComplexTypes(ITypeBase type)
+    {
+        foreach (var complexProperty in type.GetDeclaredComplexProperties())
+        {
+            ThrowIfEncryptionConfigured(complexProperty, complexProperty.ComplexType);
+
+            foreach (var property in complexProperty.ComplexType.GetDeclaredProperties())
+            {
+                ThrowIfEncryptionConfigured(property, complexProperty.ComplexType);
+            }
+
+            ValidateNoEncryptionInsideComplexTypes(complexProperty.ComplexType);
+        }
+    }
+
+    private static void ThrowIfEncryptionConfigured(IPropertyBase member, IComplexType complexType)
+    {
+        if (!EncryptionAnnotationNames.Any(name => member.FindAnnotation(name) != null)) return;
+
+        throw new InvalidOperationException(
+            MemberOnType(member)
+            + (member is IComplexProperty ? $" (complex type '{complexType.DisplayName()}')" : "")
+            + " is configured for encryption."
+            + " Encryption (Queryable Encryption or client-side field level encryption) is not supported for complex"
+            + " properties or for properties inside complex types; map the value as a property of an entity type"
+            + " or an owned entity type to encrypt it.");
     }
 
     /// <summary>
