@@ -384,6 +384,61 @@ public class NativeMalformedAggregateAndDistinctTests(TemporaryDatabaseFixture d
         }
     }
 
+    public class ManyCollections
+    {
+        public ObjectId Id { get; set; }
+        public byte[]? Blob { get; set; }
+        public List<string>? Tags { get; set; }
+        public string[]? Codes { get; set; }
+        public List<int>? Numbers { get; set; }
+        public int Rank { get; set; }
+    }
+
+    [Fact]
+    public void Distinct_over_collection_typed_properties_reads_explicit_null_and_missing_alike()
+    {
+        // Task 9 deferred pins: an EXPLICIT BSON null beside a MISSING element and a value, for byte[], List<string>,
+        // string[] and List<int> (the reference-typed marker covers every reference-typed key, not only string).
+        var raw = database.MongoDatabase.GetCollection<BsonDocument>(
+            TemporaryDatabaseFixtureBase.CreateCollectionName(nameof(Distinct_over_collection_typed_properties_reads_explicit_null_and_missing_alike))
+            + Guid.NewGuid().ToString("N")[..8]);
+        raw.InsertMany(
+        [
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Blob", new BsonBinaryData([1]) }, { "Tags", new BsonArray { "a" } }, { "Codes", new BsonArray { "c" } }, { "Numbers", new BsonArray { 1, 2 } }, { "Rank", 1 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Blob", new BsonBinaryData([1]) }, { "Tags", new BsonArray { "a" } }, { "Codes", new BsonArray { "c" } }, { "Numbers", new BsonArray { 1, 2 } }, { "Rank", 2 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Blob", BsonNull.Value }, { "Tags", BsonNull.Value }, { "Codes", BsonNull.Value }, { "Numbers", BsonNull.Value }, { "Rank", 3 } },
+            new() { { "_id", ObjectId.GenerateNewId() }, { "Rank", 4 } },
+        ]);
+        var collection = database.MongoDatabase.GetCollection<ManyCollections>(raw.CollectionNamespace.CollectionName);
+
+        List<string> Run(MongoQueryMode mode, string which)
+        {
+            using var db = SingleEntityDbContext.Create(collection, optionsBuilderAction: b =>
+            {
+                b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+                new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
+            });
+            var rows = db.Entities.AsNoTracking();
+            IEnumerable<string> values = which switch
+            {
+                "blob" => rows.Select(x => x.Blob).Distinct().AsEnumerable().Select(v => v == null ? "<null>" : Convert.ToHexString(v)),
+                "tags" => rows.Select(x => x.Tags).Distinct().AsEnumerable().Select(v => v == null ? "<null>" : string.Join("|", v)),
+                "codes" => rows.Select(x => x.Codes).Distinct().AsEnumerable().Select(v => v == null ? "<null>" : string.Join("|", v)),
+                _ => rows.Select(x => x.Numbers).Distinct().AsEnumerable().Select(v => v == null ? "<null>" : string.Join("|", v))
+            };
+            return values.Order(StringComparer.Ordinal).ToList();
+        }
+
+        // Native: explicit null and missing both read null and group together (one <null> row, the C# answer). Driver-LINQ
+        // groups the stored forms, so null and missing are two groups that both read <null> (a duplicate row): pinned as
+        // a known driver-path divergence (Jira candidate, not filed); the pin breaks loudly when it changes.
+        Assert.Equal(["01", "<null>"], NativeModeAssert.NativeAndExpected(m => Run(m, "blob"), ["01", "<null>"], driverKnownWrong: true));
+        Assert.Equal(["<null>", "a"], NativeModeAssert.NativeAndExpected(m => Run(m, "tags"), ["<null>", "a"], driverKnownWrong: true));
+        Assert.Equal(["<null>", "c"], NativeModeAssert.NativeAndExpected(m => Run(m, "codes"), ["<null>", "c"], driverKnownWrong: true));
+        Assert.Equal(["1|2", "<null>"], NativeModeAssert.NativeAndExpected(m => Run(m, "numbers"), ["1|2", "<null>"], driverKnownWrong: true));
+        Assert.Equal(["<null>", "<null>", "a"], Run(MongoQueryMode.DriverLinq, "tags"));
+    }
+
     private static List<string> RunPerRowSet(
         IMongoCollection<Item> collection, MongoQueryMode mode, Func<IQueryable<Item>, string> run, string[] expected)
     {

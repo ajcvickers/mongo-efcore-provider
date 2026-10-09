@@ -1116,11 +1116,11 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         var leafCount = Items(q => q.OrderBy(h => h.Name).Select(h => h.Items.Count(i => i.Pos.Zip == null)).ToList().Select(x => x.ToString()));
         Assert.Equal(LeafCountObserved, leafCount(MongoQueryMode.NativeOnly));
         Assert.Equal(LeafCountObserved, leafCount(MongoQueryMode.Native));
-        Assert.Equal(LeafCountDriverObserved, leafCount(MongoQueryMode.DriverLinq));
+        Assert.Equal(LeafCountObserved, leafCount(MongoQueryMode.DriverLinq));
     }
 
+    // The same in every mode (the owner-ruled element-scope leaf rule), so one array.
     private static readonly string[] LeafCountObserved = ["0", "0", "0", "0"];
-    private static readonly string[] LeafCountDriverObserved = ["0", "0", "0", "0"];
 
     [Fact]
     public void Correlated_element_equality_to_an_outer_complex_value()

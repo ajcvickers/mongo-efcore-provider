@@ -148,6 +148,9 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
             {
                 Assert.True(error != null && error.Message.Contains(want),
                     $"{mode}: expected an exception containing '{want}', got {(error == null ? $"rows [{string.Join("; ", rows!)}]" : error.ToString())}");
+                // A message fragment alone could match an unrelated exception: the type is pinned too.
+                Assert.True(error is MongoDB.Driver.Linq.ExpressionNotSupportedException or InvalidOperationException,
+                    $"{mode}: '{want}' with unexpected exception type {error!.GetType().Name}");
             }
         }
     }
