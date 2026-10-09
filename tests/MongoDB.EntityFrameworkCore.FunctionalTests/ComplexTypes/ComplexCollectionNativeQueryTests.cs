@@ -353,7 +353,8 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     {
         foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native })
         {
-            Assert.True(expected.SequenceEqual(run(mode)), $"{mode}: expected [{string.Join("; ", expected)}], got [{string.Join("; ", run(mode))}]");
+            var rows = run(mode);
+            Assert.True(expected.SequenceEqual(rows), $"{mode}: expected [{string.Join("; ", expected)}], got [{string.Join("; ", rows)}]");
         }
 
         if (driverError is not null)
@@ -366,6 +367,75 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         var driver = run(MongoQueryMode.DriverLinq);
         var want = driverRows ?? expected;
         Assert.True(want.SequenceEqual(driver), $"DriverLinq: expected [{string.Join("; ", want)}], got [{string.Join("; ", driver)}]");
+    }
+
+    [Fact]
+    public void Null_element_matches_a_null_member_of_a_local_list()
+    {
+        // `list.Contains(a.Zip)` ($in): the null element's Zip reads null (R17), so it matches a list holding null and no
+        // other list. Customer seed: a-two [Paris 7, Rome null], e-one [Paris 9], f-nullelem [Oslo null, null element].
+        int?[] withNull = [null, 7];
+        int?[] seven = [7];
+        string?[] streets = [null, "x"];
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.Any(a => withNull.Contains(a.Zip))))), ["a-two", "f-nullelem"]);
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.Any(a => seven.Contains(a.Zip))))), ["a-two"]);
+        // Every element of a-two and f-nullelem is in the list; only e-one has one outside it.
+        // Driver-LINQ's aggregation $in doesn't equate the null element's MISSING Zip with null (pinned rows).
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.Any(a => !withNull.Contains(a.Zip))))), ["e-one"], ["e-one", "f-nullelem"]);
+        NullElement(Customers(q => PerRow(q, c => c.Addresses.Count(a => withNull.Contains(a.Zip)))), ["2", "0", "0", "0", "0", "2"],
+            ["2", "0", "0", "0", "0", "1"]);
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.All(a => withNull.Contains(a.Zip))))),
+            ["a-two", "b-empty", "c-null", "d-missing", "f-nullelem"], ["a-two", "b-empty", "c-null", "d-missing"]);
+        // Street is stored BSON null on every present element and MISSING on the null element.
+        NullElement(Customers(q => Names(q.Where(c => c.Addresses.Any(a => streets.Contains(a.Street))))), ["a-two", "e-one", "f-nullelem"]);
+        int?[] onlyNull = [null];
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => onlyNull.Contains(s.Zip))))), ["r-mixed", "r-null"], []);
+    }
+
+    public class Clock
+    {
+        public string Label { get; set; } = null!;
+        public DateTimeOffset At { get; set; }
+    }
+
+    public class Schedule
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public List<Clock> Clocks { get; set; } = [];
+    }
+
+    [Fact]
+    public void Null_element_DateTimeOffset_members_read_null()
+    {
+        // At is stored as the provider's DateTimeOffset subdocument {DateTime, Ticks, Offset}. d-null: [null]; d-mixed:
+        // [2024-05-10, null]; d-full: [2024-05-10]. A null element's At reads null, so every comparison over a member of it
+        // is false (R17).
+        var at = new DateTimeOffset(2024, 5, 10, 0, 0, 0, TimeSpan.Zero);
+        var collection = database.CreateCollection<Schedule>(Unique(nameof(Null_element_DateTimeOffset_members_read_null)));
+        static void Configure(ModelBuilder mb) => mb.Entity<Schedule>().ComplexCollection(s => s.Clocks);
+        using (var db = Context(collection, MongoQueryMode.Native, Configure))
+        {
+            db.Entities.Add(new Schedule { Name = "d-full", Clocks = [new Clock { Label = "c", At = at }] });
+            db.Entities.Add(new Schedule { Name = "d-mixed", Clocks = [new Clock { Label = "c", At = at }, null!] });
+            db.Entities.Add(new Schedule { Name = "d-null", Clocks = [null!] });
+            db.SaveChanges();
+        }
+
+        IEnumerable<string> N(IQueryable<Schedule> q) => q.Select(s => s.Name).ToList().Order(StringComparer.Ordinal);
+        var cutoff = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        Func<Func<IQueryable<Schedule>, IEnumerable<string>>, Func<MongoQueryMode, List<string>>> run = query => m => Run(collection, m, Configure, query);
+        // Driver-LINQ can't translate a DateTimeOffset member here at all (CSHARP-5296: its serializer exposes no member
+        // fields; the bridge's rewrite only covers entity/complex-hop receivers): loud in every row.
+        const string DriverDto = "does not represent members as fields";
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.UtcDateTime < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto);
+        NullElement(run(q => N(q.Where(s => s.Clocks.All(c => c.At.UtcDateTime < cutoff)))), ["d-full"], driverError: DriverDto);
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.UtcDateTime > cutoff)))), [], driverError: DriverDto);
+        NullElement(run(q => N(q.Where(s => s.Clocks.All(c => c.At.Year == 2024)))), ["d-full"], driverError: DriverDto);
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Year != 2024)))), ["d-mixed", "d-null"], driverError: DriverDto);
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Year < 2030)))), ["d-full", "d-mixed"], driverError: DriverDto);
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.DateTime < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto);
+        NullElement(run(q => N(q.Where(s => s.Clocks.Any(c => c.At.Date < cutoff)))), ["d-full", "d-mixed"], driverError: DriverDto);
     }
 
     // ── Counts ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -971,7 +1041,8 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         Raw(collection).InsertMany(
         [
             new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "x" }, { "Items", new BsonArray { new BsonDocument("Label", "l") } } },
-            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "y" }, { "Items", BsonNull.Value } }
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "y" }, { "Items", BsonNull.Value } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "z" } }
         ]);
         static void Configure(ModelBuilder mb) => mb.Entity<Crate>().ComplexCollection(c => c.Items);
         IEnumerable<string> N(IQueryable<Crate> q) => q.Select(c => c.Name).ToList().Order();
