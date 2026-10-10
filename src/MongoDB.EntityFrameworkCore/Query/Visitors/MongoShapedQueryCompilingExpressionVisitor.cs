@@ -1282,7 +1282,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    nonQuery.SourceQuery.CapturedExpression?.Print(),
+                    ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression),
                     exception.Message),
                 exception);
         }
@@ -1296,7 +1296,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    nonQuery.SourceQuery.CapturedExpression?.Print(),
+                    ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression),
                     "the entity must have a primary key to use ordering, paging, or Distinct in a bulk delete or update."));
         }
     }

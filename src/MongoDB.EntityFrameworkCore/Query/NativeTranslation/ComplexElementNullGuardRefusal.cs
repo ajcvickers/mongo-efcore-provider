@@ -795,7 +795,7 @@ internal static class ComplexElementNullGuardRefusal
         private string DescribeCollectionRead(Expression expression)
             => ResolveCollectionReads(expression) is [var first, ..]
                 ? $"{first.DeclaringType.DisplayName()}.{first.Name}"
-                : expression.ToString();
+                : ExpressionShapePrinter.Print(expression);
 
         private sealed class FreeElementReadFinder(Finder owner) : ExpressionVisitor
         {

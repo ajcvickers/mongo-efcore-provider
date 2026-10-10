@@ -2130,7 +2130,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 + "to indicate the properties to be updated.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
         }
 
         ThrowIfSetterPathsOverlap(mongoQueryExpression, parsed);
@@ -2164,7 +2164,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                         + "or its members, not both.");
                     throw new InvalidOperationException(
                         CoreStrings.NonQueryTranslationFailedWithDetails(
-                            mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                            ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
                 }
             }
         }
@@ -2226,7 +2226,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 + $"property of '{entityType.DisplayName()}'.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
         }
 
         // EF9 self-referencing: value is a quoted Func<T,TProp> lambda; unwrap and detect a reference to its parameter.
@@ -2251,7 +2251,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 $"Self-referencing ExecuteUpdate on property '{property.Name}' is not supported because it uses a value converter.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
         }
 
         // A self-referencing value for a complex LEAF stored with a BsonRepresentation would be written in the value's own
@@ -2265,7 +2265,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 + "BsonRepresentation, which the computed value would not be written in.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
         }
 
         // A whole complex value computed from the row (`c.Billing = c.Shipping`) would copy the STORED subdocument, whose
@@ -2279,7 +2279,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 + "(SetProperty(e => e.Complex.Member, e => ...)), or set it to a value computed on the client.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
         }
 
         return new MongoNonQueryExpression.Setter(property, value, isSelfReferencing, complexElementPath);
@@ -2345,7 +2345,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                     + "value. Set the whole optional complex property instead (SetProperty(e => e.Optional, value)).");
                 throw new InvalidOperationException(
                     CoreStrings.NonQueryTranslationFailedWithDetails(
-                        mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                        ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
             }
 
             hopScope = hop.ComplexType;
@@ -2450,7 +2450,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             + "operators can scope a bulk operation.");
         throw new InvalidOperationException(
             CoreStrings.NonQueryTranslationFailedWithDetails(
-                mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
     }
 #endif
 
