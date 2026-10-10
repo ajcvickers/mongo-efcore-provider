@@ -435,18 +435,23 @@ internal static class ComplexElementNullGuardRefusal
             return finder.Found;
         }
 
+        // A membership test `list.Contains(value)`: a static Enumerable/MemoryExtensions call or an instance call on a
+        // collection. NOT a string receiver: `hay.Contains(s.City)` is a substring test (`$indexOfCP`, a server error over a
+        // missing member, possibly after earlier writes), and `Enumerable.Contains<char>` over a string tests a char; a
+        // string is an IEnumerable<char> of a value type, which the bulk allow-list would take for a list that can't hold null.
         private static bool TryGetContainsOperands(MethodCallExpression call, out Expression sequence, out Expression value)
         {
             switch (call)
             {
                 case { Object: null, Arguments: [var staticSequence, var staticValue, ..] }
-                    when staticSequence.Type.TryGetItemType() is not null || IsSpanLike(staticSequence.Type):
+                    when staticSequence.Type != typeof(string)
+                         && (staticSequence.Type.TryGetItemType() is not null || IsSpanLike(staticSequence.Type)):
                     sequence = staticSequence;
                     value = staticValue;
                     return true;
 
                 case { Object: { } instanceSequence, Arguments: [var instanceValue] }
-                    when instanceSequence.Type.TryGetItemType() is not null:
+                    when instanceSequence.Type != typeof(string) && instanceSequence.Type.TryGetItemType() is not null:
                     sequence = instanceSequence;
                     value = instanceValue;
                     return true;
