@@ -30,11 +30,20 @@ namespace MongoDB.EntityFrameworkCore.Query.Expressions;
 /// <c>ProjectionAnalyzer.CanPushDown</c>, it keeps such a projection off the driver-LINQ typed push-down (whose
 /// <c>ComplexTypeSerializer</c> can't deserialize), so a non-native run uses the mixed shaper over whole documents.
 /// </remarks>
-internal sealed class ComplexValueProjectionExpression(ProjectionBindingExpression binding, IComplexProperty complexProperty)
+internal sealed class ComplexValueProjectionExpression(
+    ProjectionBindingExpression binding, IComplexProperty complexProperty, Expression source)
     : Expression, IPrintableExpression
 {
     /// <summary>The projection member the value was bound to.</summary>
     public ProjectionBindingExpression Binding { get; } = binding;
+
+    /// <summary>
+    /// The bound value expression itself (<c>c.Address</c> over the source shaper), as registered under
+    /// <see cref="Binding"/>'s member. A whole-document reader resolves the value's natural path from it when that member is
+    /// shared by several arguments of a member-less construction (<c>new P(c.Home, c.Work)</c>), where the member's
+    /// registration is only the last argument's.
+    /// </summary>
+    public Expression Source { get; } = source;
 
     /// <summary>The projected complex property.</summary>
     public IComplexProperty ComplexProperty { get; } = complexProperty;

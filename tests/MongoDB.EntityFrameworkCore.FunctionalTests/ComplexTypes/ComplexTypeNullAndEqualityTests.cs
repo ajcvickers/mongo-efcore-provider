@@ -179,9 +179,14 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         Assert.Equal(["ann:True", "bob:False", "cid:False", "dee:False"], run(MongoQueryMode.NativeOnly));
         Assert.Equal(["ann:True", "bob:False", "cid:False", "dee:False"], run(MongoQueryMode.Native));
         Assert.Equal(["ann:False", "bob:False", "cid:False", "dee:False"], run(MongoQueryMode.DriverLinq));
-        // Driver-LINQ materializes both values client-side and reads Work's City under its CLR name: a loud throw.
-        PerMode(Eq(q => q.OrderBy(c => c.Name).Select(c => c.Home == c.Work).ToList().Select(x => x.ToString())),
-            ["True", "True", "False", "False"], Serves, Serves, Throws<InvalidOperationException>("Document element is missing for required non-nullable property 'City'"));
+        // Driver-LINQ materializes both values client-side and compares them by C# reference equality, as for `other`
+        // above: always False (known wrong, explicit DriverLinq only). It used to throw "Document element is missing ..."
+        // because both operands shared one projection member and Work was read through Home's registration (the spec
+        // known limitation 29 mechanism); each operand now reads its own element.
+        var sameRun = Eq(q => q.OrderBy(c => c.Name).Select(c => c.Home == c.Work).ToList().Select(x => x.ToString()));
+        Assert.Equal(["True", "True", "False", "False"], sameRun(MongoQueryMode.NativeOnly));
+        Assert.Equal(["True", "True", "False", "False"], sameRun(MongoQueryMode.Native));
+        Assert.Equal(["False", "False", "False", "False"], sameRun(MongoQueryMode.DriverLinq));
     }
 
     [Fact]
