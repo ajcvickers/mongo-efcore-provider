@@ -270,6 +270,21 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
             Assert.Contains(".Note.StartsWith(?)", refusal.Message);
             Assert.Contains(".Floor < ?", refusal.Message);
             Assert.Contains("Route.Stops", refusal.Message);
+            // The OUTER message prints the captured query too: its literals are redacted as well (RED at 5547cfa2: the
+            // outer message held "hunter2-secret"), and the shape and remedy stay.
+            Assert.DoesNotContain("hunter2-secret", ex.Message);
+            Assert.Contains(".Note.StartsWith(?)", ex.Message);
+            Assert.Contains("MongoQueryMode.DriverLinq", ex.Message);
+
+            // A literal in the filter's root predicate and in a SIBLING setter value.
+            ex = Assert.Throws<InvalidOperationException>(() => db.Entities
+                .Where(r => r.Name != "hunter2-literal" && r.Stops.Any(s => s.Floor < 1))
+                .ExecuteUpdate(s => s.SetProperty(r => r.Name, r => r.Name + "secret-suffix")));
+            Assert.IsType<NativeTranslationNotSupportedException>(ex.InnerException);
+            Assert.DoesNotContain("hunter2-literal", ex.Message);
+            Assert.DoesNotContain("secret-suffix", ex.Message);
+            Assert.Contains("ExecuteUpdate", ex.Message);
+            Assert.Contains(".Floor < ?", ex.Message);
         }
 
         store.AssertUnchanged();

@@ -612,6 +612,15 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
                 () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.City.Substring(0, 3) + "secret-suffix", "x")));
             Assert.DoesNotContain("secret-suffix", ex.Message);
             Assert.Contains(".Billing.City.Substring(?, ?) + ?", ex.Message);
+
+            // The OUTER message (the captured query) redacts a FILTER literal and a SIBLING setter's literal too (RED at
+            // 5547cfa2: both printed), and keeps the shape and the remedy.
+            ex = Assert.Throws<InvalidOperationException>(() => db.Entities.Where(c => c.Name == "hunter2-literal")
+                .ExecuteUpdate(s => s.SetProperty(c => c.Name, c => c.Name + "secret-suffix").SetProperty(c => c.Billing.City.Trim(), "x")));
+            Assert.DoesNotContain("hunter2-literal", ex.Message);
+            Assert.DoesNotContain("secret-suffix", ex.Message);
+            Assert.Contains("Only mapped root scalar properties can be updated", ex.Message);
+            Assert.Contains(".Name == ?", ex.Message);
         }
 
         store.AssertUnchanged();

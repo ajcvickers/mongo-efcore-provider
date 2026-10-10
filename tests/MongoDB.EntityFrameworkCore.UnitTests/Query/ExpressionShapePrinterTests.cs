@@ -57,4 +57,24 @@ public class ExpressionShapePrinterTests
         Assert.DoesNotContain("captured-secret", printed);
         Assert.Contains(".secret", printed);
     }
+
+    [Fact]
+    public void An_anonymous_type_constant_is_redacted_not_printed()
+    {
+        // Anonymous types are [CompilerGenerated] like closure display classes, but print their values: redacted.
+        var anonymous = Expression.Constant(new { Pwd = "anon-secret" });
+        Assert.DoesNotContain("anon-secret", ExpressionShapePrinter.Print(anonymous));
+        Assert.DoesNotContain("anon-secret", ExpressionShapePrinter.Print(Expression.Property(anonymous, "Pwd")));
+        Assert.DoesNotContain("anon-secret", ExpressionShapePrinter.PrintQuery(anonymous));
+    }
+
+    [Fact]
+    public void The_query_printer_redacts_literals_in_EF_print_format()
+    {
+        var printed = ExpressionShapePrinter.PrintQuery((Expression<Func<Row, bool>>)(r => r.Name == "top-secret" && r.Rank > 42));
+
+        Assert.DoesNotContain("top-secret", printed);
+        Assert.DoesNotContain("42", printed);
+        Assert.Contains("r.Name == ?", printed);
+    }
 }
