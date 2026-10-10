@@ -1336,7 +1336,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         }
 
         throw new InvalidOperationException(
-            $"The projected complex value '{bound.Print()}' could not be located in the document.");
+            $"The projected complex value '{ExpressionShapePrinter.PrintQuery(bound)}' could not be located in the document.");
     }
 
     /// <summary>
