@@ -224,18 +224,30 @@ public static class ComplexTypeSerializerTests
         Assert.Equal("st", Lookup(itemInfo.Serializer, nameof(Addr.Street)).ElementName);
     }
 
+    // A T[] complex collection is refused at model validation (EF cannot materialize or save it:
+    // ComplexCollectionClrTypeValidationTests); a non-List collection type EF can use gets the same array serializer shape.
     [Fact]
-    public static void Complex_array_collection_is_array_serializer_over_complex_serializer()
+    public static void Complex_ObservableCollection_is_array_serializer_over_complex_serializer()
     {
-        using var db = new TestContext<ArrayCollectionHolder>(mb =>
-            mb.Entity<ArrayCollectionHolder>().ComplexCollection(e => e.Addresses));
+        using var db = new TestContext<ObservableCollectionHolder>(mb =>
+            mb.Entity<ObservableCollectionHolder>().ComplexCollection(e => e.Addresses));
 
-        var collection = Lookup(EntitySerializerFor<ArrayCollectionHolder>(db, out _), nameof(ArrayCollectionHolder.Addresses));
-        Assert.Equal(typeof(Addr[]), collection.Serializer.ValueType);
+        var collection = Lookup(EntitySerializerFor<ObservableCollectionHolder>(db, out _), nameof(ObservableCollectionHolder.Addresses));
+        Assert.Equal(typeof(System.Collections.ObjectModel.ObservableCollection<Addr>), collection.Serializer.ValueType);
 
         var arraySerializer = Assert.IsAssignableFrom<IBsonArraySerializer>(collection.Serializer);
         Assert.True(arraySerializer.TryGetItemSerializationInfo(out var itemInfo));
         Assert.IsType<ComplexTypeSerializer<Addr>>(itemInfo.Serializer);
+    }
+
+    [Fact]
+    public static void Complex_array_collection_is_refused_by_the_model()
+    {
+        using var db = new TestContext<ArrayCollectionHolder>(mb =>
+            mb.Entity<ArrayCollectionHolder>().ComplexCollection(e => e.Addresses));
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains("is a complex collection of CLR type 'Addr[]'", ex.Message);
     }
 
     [Fact]
@@ -398,6 +410,7 @@ public static class ComplexTypeSerializerTests
 #if !EF8 && !EF9
     class CollectionHolder { public int Id { get; set; } public List<Addr> Addresses { get; set; } = null!; }
     class ArrayCollectionHolder { public int Id { get; set; } public Addr[] Addresses { get; set; } = null!; }
+    class ObservableCollectionHolder { public int Id { get; set; } public System.Collections.ObjectModel.ObservableCollection<Addr> Addresses { get; set; } = null!; }
     class CachedCollectionHolder { public int Id { get; set; } public List<Addr> Addresses { get; set; } = null!; }
     class OptionalHolder { public int Id { get; set; } public Addr? Address { get; set; } }
     class OptionalStructHolder { public int Id { get; set; } public Pt? Point { get; set; } }

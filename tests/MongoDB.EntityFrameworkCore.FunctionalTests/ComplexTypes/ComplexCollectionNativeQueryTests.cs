@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1289,9 +1289,16 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
             "0", "0", "0", "1");
     }
 
-    // ── Array-typed complex collection (T[]) ────────────────────────────────────────────────────────────────────
+    // ── Collection types the bridge cannot normalise (ObservableCollection<T>); T[] is refused by the model ─────────
 
     public class Crate
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public System.Collections.ObjectModel.ObservableCollection<Tag> Items { get; set; } = [];
+    }
+
+    public class ArrayCrate
     {
         public ObjectId Id { get; set; }
         public string Name { get; set; } = null!;
@@ -1299,12 +1306,12 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     }
 
     [Fact]
-    public void Array_typed_collection_quantifiers_are_native_and_the_fallback_stays_loud_on_a_null_array()
+    public void Non_list_collection_quantifiers_are_native_and_the_fallback_stays_loud_on_a_null_array()
     {
         // Native $ifNull's the null/missing array. The bridge's `?? new List<T>()` normalization only applies to collection
-        // types a List<T> is assignable to, so a T[] property keeps the raw field on driver-LINQ: a server error on a null
-        // array (loud, never rows).
-        var collection = database.CreateCollection<Crate>(Unique(nameof(Array_typed_collection_quantifiers_are_native_and_the_fallback_stays_loud_on_a_null_array)));
+        // types a List<T> is assignable to, so an ObservableCollection<T> property keeps the raw field on driver-LINQ: a
+        // server error on a null array (loud, never rows).
+        var collection = database.CreateCollection<Crate>(Unique(nameof(Non_list_collection_quantifiers_are_native_and_the_fallback_stays_loud_on_a_null_array)));
         Raw(collection).InsertMany(
         [
             new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "x" }, { "Items", new BsonArray { new BsonDocument("Label", "l") } } },
@@ -1315,6 +1322,21 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         IEnumerable<string> N(IQueryable<Crate> q) => q.Select(c => c.Name).ToList().Order();
         PerMode(m => Run(collection, m, Configure, q => N(q.Where(c => c.Items.Any(i => i.Label == "l")))), ["x"],
             Serves, Serves, "$anyElementTrue's argument must be an array");
+    }
+
+    // A T[] complex collection is accepted by EF but cannot be read or saved (ComplexCollectionClrTypeTests): the model
+    // refuses it in every mode, before any query runs.
+    [Fact]
+    public void Array_typed_collection_is_refused_by_the_model_in_every_mode()
+    {
+        var collection = database.CreateCollection<ArrayCrate>(Unique(nameof(Array_typed_collection_is_refused_by_the_model_in_every_mode)));
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        {
+            var ex = Assert.Throws<NotSupportedException>(() =>
+                Run(collection, mode, mb => mb.Entity<ArrayCrate>().ComplexCollection(c => c.Items),
+                    q => q.Where(c => c.Items.Any(i => i.Label == "l")).Select(c => c.Name)));
+            Assert.Contains("is a complex collection of CLR type 'Tag[]'", ex.Message);
+        }
     }
 
     // ── Bulk operations: the bridge normalization also serves ExecuteUpdate/ExecuteDelete (smoke; full coverage Task 14) ──

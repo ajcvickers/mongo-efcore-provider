@@ -284,6 +284,8 @@ public class ComplexElementNullGuardRefusalTests
     public class ListHolder { public int Id { get; set; } public List<Tag> Items { get; set; } = []; }
     public class IListHolder { public int Id { get; set; } public IList<Tag> Items { get; set; } = []; }
     public class ObservableHolder { public int Id { get; set; } public System.Collections.ObjectModel.ObservableCollection<Tag> Items { get; set; } = []; }
+    public class TagList : List<Tag>;
+    public class SubclassHolder { public int Id { get; set; } public TagList Items { get; set; } = []; }
 
     private sealed class HolderContext<T>(Action<ModelBuilder> configure) : DbContext where T : class
     {
@@ -312,7 +314,8 @@ public class ComplexElementNullGuardRefusalTests
     {
         // Normalised by the bridge (a List<T> is assignable): List<T>, IList<T> (and IEnumerable<T>/ICollection<T>/
         // IReadOnlyList<T>, which EF10 rejects for complex collections at model/serializer level: measured). Not normalised:
-        // T[], ObservableCollection<T> (and any other concrete type a List<T> doesn't fit).
+        // ObservableCollection<T>, Collection<T>, a List<T> subclass (any concrete type a List<T> doesn't fit). T[] is not
+        // normalised either, but the model refuses a T[] complex collection outright (EF cannot read or save it).
         Assert.Null(ComplexElementNullGuardRefusal.FindForBulk(
             [(Expression<Func<IQueryable<ListHolder>, IQueryable<ListHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
             HolderModel<ListHolder>(mb => mb.Entity<ListHolder>().ComplexCollection(h => h.Items))));
@@ -320,10 +323,13 @@ public class ComplexElementNullGuardRefusalTests
             [(Expression<Func<IQueryable<IListHolder>, IQueryable<IListHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
             HolderModel<IListHolder>(mb => mb.Entity<IListHolder>().ComplexCollection(h => h.Items))));
 
-        var array = ComplexElementNullGuardRefusal.FindForBulk(
-            [(Expression<Func<IQueryable<ArrayHolder>, IQueryable<ArrayHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
-            HolderModel<ArrayHolder>(mb => mb.Entity<ArrayHolder>().ComplexCollection(h => h.Items)));
-        Assert.Contains("whose CLR type cannot hold a List<T>", array!.Value.Shape);
+        var array = Assert.Throws<NotSupportedException>(() => HolderModel<ArrayHolder>(mb => mb.Entity<ArrayHolder>().ComplexCollection(h => h.Items)));
+        Assert.Contains("is a complex collection of CLR type 'Tag[]'", array.Message);
+
+        var subclass = ComplexElementNullGuardRefusal.FindForBulk(
+            [(Expression<Func<IQueryable<SubclassHolder>, IQueryable<SubclassHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
+            HolderModel<SubclassHolder>(mb => mb.Entity<SubclassHolder>().ComplexCollection(h => h.Items)));
+        Assert.Contains("whose CLR type cannot hold a List<T>", subclass!.Value.Shape);
 
         var observable = ComplexElementNullGuardRefusal.FindForBulk(
             [(Expression<Func<IQueryable<ObservableHolder>, IQueryable<ObservableHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
