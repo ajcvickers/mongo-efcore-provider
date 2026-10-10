@@ -47,15 +47,26 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   document: the mixed projection `new { e, e.Name, R = e.Referrer!.Name }` read `e.Name` off the joined referrer at 040cecdf
   (`Dev|Boss|Boss`, observed) and now answers `Dev|Dev|Boss`. A wrong-rows fix needed for derived complex values. Also a
   correction of RELEASED behaviour: published 10.0.4 answers the same `Dev|Boss|Boss` (measured on MongoDB 8, final fix
-  wave); 8.4.4 and 9.1.4 throw (the reference navigation is untranslatable there).
+  wave); 8.4.4 and 9.1.4 throw (the reference navigation is untranslatable there). With the referrer typed as the
+  hierarchy's BASE type (`StaffBase? Referrer`) the same query answers `Dev|Dev|Boss` too (Native and DriverLinq; NativeOnly
+  declines; `ComplexTypeDerivedShaperJoinTests.Derived_outer_root_in_a_join_with_a_base_typed_referrer`), and `new { e, R }`
+  answers `Dev|Boss`: that half is exception (h)'s fix (reverting da260abd reproduces the reviewer's `Dev/Dev/Dev`;
+  published 10.0.4 answered `Dev/Boss/Dev`, and `new { e, R }` `Dev/Dev` on every version, per the api-stability review).
 - (d) (ruling R13, Task 11) Join and sort keys read through an owned/complex HOP are resolved structurally, never by the
   leaf's simple name, and the mixed reader's `_outer` redirect covers hop sources. Non-complex cases corrected (silent wrong
   rows before): an owned-hop join key beside a same-named root property (now declines; fallback correct); an inner-side hop
   key named like the navigation's principal key (`a => a.Tag.Id`, kept the `_id` navigation `$lookup`); the bridge's
   whole-entity `LeftJoin` on an owned-hop key; a filtered-Include `OrderBy` through an owned hop (sorted by the root
   property); an owned hop leaf beside a whole joined entity (read null). Same bug class as the complex shapes; one fix.
-  The filtered-Include `OrderBy` (`GetSortField`) and bridge `LeftJoin` key (`TryGetKeyFieldPath`) cases also correct
-  RELEASED code: both resolve by simple name at v8.4.4, v9.1.4 and v10.0.4 (verified in the tagged source).
+  Against RELEASED behaviour (api-stability review, measured on 8.4.4, 9.1.4, 10.0.4, base and HEAD in every mode): the
+  filtered-Include half does NOT observably change: whenever the INCLUDED entity has an owned navigation, every version
+  (released and HEAD) drops the whole `$lookup` pipeline (`$sort` and `Take`), even for a root key
+  (`Include(b => b.Posts.OrderByDescending(p => p.Rank))` seeded Rank 1,2,3 answers A,B,C; without the owned navigation
+  C,B,A), so the structural sort-key fix helps complex properties only (known limitation 21). The bridge `LeftJoin` half
+  is observable only on 10.0.4, for the method-syntax `LeftJoin` that returns entities
+  (`People.LeftJoin(Cities, p => p.Home.CityId, ..., (p, ci) => new { p, ci })`: 10.0.4 and base `p1:TWENTY, p2:TEN`, HEAD
+  `p1:TEN, p2:TWENTY`); 8.4.4 and 9.1.4 throw on that query, and the query-syntax projected form was already correct on
+  10.0.4.
 - (e) (rulings R18/R22, Task 13) At the ROOT (entity scope), a relational comparison over a null-propagating date-add,
   conditional or coalesce whose operand may be null now gets the same null guard as every other relational comparison
   (`MayBeNull` is structural for those three nodes), so rows whose operand is null no longer match `<`/`<=`; the direction
@@ -66,11 +77,40 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   ([f, h, m, n, v] → [h, m, n, v]); `(x.Flag ? 0 : x.Score!.Value) < 5` and `(x.Flag ? x.Rank : x.Score!.Value) < 5`
   ([f, h, m, n, v] → [h, m, n, v]); `(x.A ?? x.Label!.Length) < 5` ([f, m, n, v] → [v]);
   `(x.A ?? (x.Flag ? 0 : x.B!.Value)) < 5` ([f, h, m, n, v] → [h, m, n, v]). Already-guarded shapes (a nullable-typed
-  date-add/coalesce, a conditional whose nullable branch gives it its type) and every `>` are unchanged.
+  date-add/coalesce, a conditional whose nullable branch gives it its type) and every `>` are unchanged. Against RELEASED
+  versions (api-stability review): only the date-add with a nullable AMOUNT (`x.D.AddDays(x.A!.Value) < c`, `$dateAdd`) is
+  this branch's change: 8.4.4, 9.1.4, 10.0.4 and base answer `1,2` (the null-amount row returned); HEAD Default and NativeOnly
+  answer `2`, DriverLinq still `1,2` (re-measured at HEAD on EF8 and EF10). The `??` and `?:` operand changes had already
+  happened on base (unreleased).
 - (f) (Task 9 round 2) An owned-hop `EF.Property` projection (`new { C = EF.Property<string>(b.Home, "City") }`) read NULL
   rows; it now reads the stored value. Unreleased native path; low risk.
 - (g) (Task 10 round 4) `OfType<T>()` + `SelectMany` projecting a derived outer member threw `ArgumentException` in every
   mode; it now declines cleanly (fallback). Unreleased native path; low risk.
+- (h) (fix wave 2, stream 1 item 2; owner-approved) Members of a SAME-CLR-TYPE joined row (the inner side of a self-join,
+  a same-type reference navigation) projected beside the whole outer entity were read off the OUTER document; they now read
+  the joined document. Measured on a no-complex owned self-join model (`Person { Name, ReferrerId, Referrer, Main (owned)
+  { Text } }`, n2 refers to n1; answers wanted / 10.0.4 / 9.1.4 / 8.4.4 / HEAD):
+  `People.Join(People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e }).Select(x => new { x.p, x.e.Name })`
+  `n2|n1` / `n2|n2` / `n2|n2` / `n2|n2` / `n2|n1`; the same with the inner owned leaf `x.e.Main.Text` `n2|t1` / `n2|` (null)
+  on all three released versions / `n2|t1`; `Select(x => new { x.p, E = x.e.Name, x.e.Main.Text })` `n2|n1|t1` / `n2|n2|` on
+  all three / `n2|n1|t1`; `Where(p => p.ReferrerId != null).Select(p => new { p, R = p.Referrer!.Name })` `n2|n1` / 10.0.4
+  `n2|n2` / 8.4.4 and 9.1.4 throw / `n2|n1`. Also wrong at origin/EF-322c in Native and DriverLinq. Leaf-only projections
+  without the whole outer entity and navigations between different types are unchanged.
+- (i) (stream 1 item 4) EF8/EF9 only: a compiled query comparing a row member with a member of a compiled-query ENTITY
+  argument (`EF.CompileQuery((db, Customer o) => db.Customers.Where(c => c.Name == o.Name))`, and owned hops such as
+  `c.Card.Tag == o.Card.Tag`) returned EVERY row natively at base; NativeOnly now declines and Native falls back to the
+  driver's correct rows. Released 8.4.4, 9.1.4 and 10.0.4 answer correctly (measured: the released path was driver-LINQ),
+  so this fixes an UNRELEASED regression of the native path, not a released-behaviour change.
+- (j) (stream 1 item 6) In a pipeline-form `ExecuteUpdate` (one that also has a self-referencing setter), a constant or
+  captured value set on a ROOT scalar (a string, a string provider value through a converter or `BsonRepresentation`, a
+  string array item) that begins with `$` was evaluated as a field path or variable (`"$Secret"` copied another field,
+  `"$$ROOT"`/`"$$NOW"` stored the document or a date, `"$"` errored); it is now stored literally (`$literal`). Pre-existing
+  at released 10.0.4 (measured by the security review). Single-setter and all-constant updates (plain `$set`) are unchanged.
+- (k) (stream 1 item 1) A relational comparison, ordering or aggregate over a CONVERTED root scalar read through a downcast
+  (`a is Cat && ((Cat)a).Lives > 5`, `Lives` with `HasConversion<string>`) answered `[]` at origin/EF-322c in Native and
+  DriverLinq; it is now refused with the EF-337 `NotSupportedException` in Native and DriverLinq (NativeOnly declines).
+  Also (stream 1 item 7): bulk-operation failure messages now print `?` for literals and captured values in the printed
+  query (message text is not contract).
 
 ## Decisions
 
@@ -265,6 +305,37 @@ Candidate Jira tickets (NOT filed; owner to decide), numbered as in the SDD ledg
 18. Root `BsonRepresentation` self-referencing bulk setter writes the computed CLR type into a string-stored field.
 19. Driver-LINQ `byte[].Length == 0` returns no rows.
 20. Driver-LINQ `Distinct` over collection-typed properties returns a duplicate `<null>` row (explicit null vs missing).
+21. PRE-EXISTING (all released versions, base and HEAD; silent wrong order and row count; unfixed): a filtered `Include` of
+    an entity that has an OWNED navigation drops the whole `$lookup` pipeline (`$sort`, `Skip`, `Take`), e.g.
+    `Include(b => b.Posts.OrderByDescending(p => p.Rank).Take(2))` returns all posts in stored order (api-stability review;
+    re-measured at HEAD on EF8 and EF10 in every mode).
+22. Equality on a converted member through a downcast (`((Cat)a).Vet.Code == 10`, `((Cat)a).Lives == 9`) returns `[]` in
+    Native and DriverLinq (pre-existing driver serializer behaviour: the comparand goes through the default class map, not
+    the EF converter; non-complex too). Pinned.
+23. The OWNED analogues of the complex null-propagation fixes (stream 1 item 3) are wrong in every mode at origin/EF-322c:
+    `p.Owned!.Req.CompareTo("X") < 0`, `p.Owned!.Text == p.Main.Text` / `!=`, `p.Posts.Any(t => t.Title == p.Owned!.Text)`.
+    Not fixed: OwnsOne references are optional dependents by default, so the same predicate would change the MQL of most
+    owned-reference queries.
+24. A same-type collection `Include` (`Include(p => p.Referrals)`) on a self-referencing entity that has an OWNED reference
+    throws "variable 'bsonArray3Object' ... is not defined" in every mode (pre-existing, with or without complex
+    properties). Pinned.
+25. A whole complex value through a downcast in `GroupBy`/`Select` (`GroupBy(x => ((Derived)x).Box)`,
+    `Select(x => ((Derived)x).Box)`) fails with `InvalidOperationException`/`NullReferenceException` rather than the R7/R8
+    message (message quality only; loud).
+26. Read-query translation-failure messages (EF's standard `CoreStrings.TranslationFailed(expression.Print())`, and the
+    projection binder's and `LeftJoin.cs` equivalents) still print literals and captured values; the bulk messages redact
+    them (stream 1 item 7).
+27. FILE-WORTHY, PRE-EXISTING: a `readonly` backing field breaks the one-pass materializer (base fails identically for a
+    readonly SCALAR field): `MongoStreamingEntityMaterializerRewriter.ConstructionRewriter` rebuilds EF's writeable-bypass
+    `Assign` as a checked one. Fix: rebuild assignments through EF's `ExpressionExtensions.Assign`.
+28. `T[]` and other complex collection CLR types EF cannot materialize or save (`ReadOnlyCollection<T>`; any type without a
+    public parameterless constructor) are refused at model validation (fix wave 2, item E; measured per type in
+    `ComplexCollectionClrTypeTests`). Supporting `T[]` would need EF-side collection-accessor support for arrays.
+29. KNOWN WRONG READ (complex-only, unreleased; found in fix wave 2 item J): two whole complex values of the same CLR type
+    stored alike as constructor/record arguments (`Select(x => new P(x.Home, x.Work))`) read EVERY argument from the last
+    one (`W|W`, wanted `H|W`) in Native and DriverLinq; NativeOnly declines. Differently stored values fail loudly
+    ("Document element is missing ..."); the owned analogue is correct. Pinned in
+    `ComplexValueConstructorProjectionTests`; the fallback's memberless-construction refusal should cover it.
 
 (CSHARP-5296, driver-LINQ DateTimeOffset members, is an existing upstream driver ticket.)
 

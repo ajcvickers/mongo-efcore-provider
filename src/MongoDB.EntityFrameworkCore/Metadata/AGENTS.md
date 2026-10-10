@@ -27,10 +27,15 @@ Runtime *use* of annotations belongs to Query/Storage/Serializers/ValueGeneratio
   configures a PK there takes over that responsibility.
 - **Complex properties reuse `Mongo:ElementName`** (no new key); read it only through
   `MongoStructuralMemberExtensions.GetElementName(IReadOnlyComplexProperty)`. Naming conventions implement
-  `IComplexPropertyAddedConvention` and set the name through the builder at their own configuration source, so explicit
-  configuration wins. `MongoModelValidator` recurses into complex types (nested, collections): element-name rules, and it
-  REJECTS encryption annotations and concurrency tokens inside complex types (neither the QE schema generator nor the
-  update filter walks them, so they would be silently ignored: plaintext / lost updates).
+  `IComplexPropertyAddedConvention` and set the name through the builder (`propertyBuilder.HasAnnotation(...,
+  fromDataAnnotation: true)` for the attribute conventions, NEVER `Metadata.SetAnnotation`, which replaces a higher-source
+  name when EF lifts a derived type's complex property to its base) at their own configuration source, so explicit
+  configuration wins. `MongoModelValidator` recurses into complex types (nested, collections): element-name rules (an
+  empty/whitespace name is rejected on a complex PROPERTY, kept as "not stored" on a leaf), the unsupported-attribute
+  checks (same code path and messages as entity/owned types), unusable complex collection CLR types (`T[]`,
+  no parameterless constructor), and it REJECTS encryption annotations and concurrency tokens inside complex types
+  (neither the QE schema generator nor the update filter walks them, so they would be silently ignored: plaintext / lost
+  updates). `[Column(TypeName=...)]` on a complex property raises `ColumnAttributeWithTypeUsed` (ComplexPropertyEventData).
 - **Write annotations only in conventions/builders** (mutable during model building, immutable on `IModel`/
   `IRuntimeModel`).
 - Serializers read metadata, never set it. A new BSON attribute needs a convention here and serializer support.
