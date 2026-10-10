@@ -251,12 +251,32 @@ public class MongoModelValidator : ModelValidator
     {
         foreach (var entityType in model.GetEntityTypes())
         {
-            ValidateNoUnsupportedClassAttributes(entityType);
-            ValidateNoUnsupportedConstructorAttributes(entityType);
-            ValidateNoUnsupportedMethodAttributes(entityType);
-            ValidateNoUnsupportedPropertyAnnotations(entityType);
+            ValidateNoUnsupportedAttributesOrAnnotations(entityType);
         }
     }
+
+    /// <summary>
+    /// Validate one entity type, and every complex type reached through its declared complex properties (references and
+    /// collections, at every depth), with the same checks and messages: a complex type's members are serialized by the
+    /// provider exactly as an owned type's are, so an attribute that would be silently ignored is rejected for both.
+    /// </summary>
+    /// <param name="type">The entity type or complex type being validated.</param>
+    /// <exception cref="NotSupportedException">When an unsupported attribute or annotation is encountered.</exception>
+    private static void ValidateNoUnsupportedAttributesOrAnnotations(ITypeBase type)
+    {
+        ValidateNoUnsupportedClassAttributes(type);
+        ValidateNoUnsupportedConstructorAttributes(type);
+        ValidateNoUnsupportedMethodAttributes(type);
+        ValidateNoUnsupportedPropertyAnnotations(type);
+
+        foreach (var complexProperty in type.GetDeclaredComplexProperties())
+        {
+            ValidateNoUnsupportedAttributesOrAnnotations(complexProperty.ComplexType);
+        }
+    }
+
+    private static string TypeNoun(IReadOnlyTypeBase type)
+        => type is IReadOnlyEntityType ? "Entity" : "Complex type";
 
     /// <summary>
     /// Validate that no unsupported attributes are defined on the entity type.
@@ -269,7 +289,7 @@ public class MongoModelValidator : ModelValidator
         if (unsupported == null) return;
 
         var attributeTypeName = unsupported.GetType().ShortDisplayName();
-        throw new NotSupportedException($"Entity '{entityType.DisplayName()}' is annotated with unsupported attribute '{
+        throw new NotSupportedException($"{TypeNoun(entityType)} '{entityType.DisplayName()}' is annotated with unsupported attribute '{
             attributeTypeName}'.");
     }
 
@@ -287,7 +307,7 @@ public class MongoModelValidator : ModelValidator
 
             var attributeTypeName = unsupported.GetType().ShortDisplayName();
             throw new NotSupportedException(
-                $"Entity '{entityType.DisplayName()}' has a constructor annotated with unsupported attribute '{attributeTypeName
+                $"{TypeNoun(entityType)} '{entityType.DisplayName()}' has a constructor annotated with unsupported attribute '{attributeTypeName
                 }'.");
         }
     }
