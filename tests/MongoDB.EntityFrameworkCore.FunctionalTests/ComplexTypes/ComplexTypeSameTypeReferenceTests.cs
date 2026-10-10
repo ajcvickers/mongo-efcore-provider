@@ -65,7 +65,7 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
         public int Level { get; set; }
     }
 
-    private sealed class PeopleContext(DbContextOptions options, string collection) : DbContext(options)
+    private sealed class PeopleContext(DbContextOptions options, string collection, bool withOwned) : DbContext(options)
     {
         public DbSet<Person> People => Set<Person>();
 
@@ -79,7 +79,16 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
                 b.HasOne(p => p.Referrer).WithMany(p => p.Referrals).HasForeignKey(p => p.ReferrerId);
                 b.ComplexProperty(p => p.Badge);
                 b.ComplexProperty(p => p.Desk);
-                b.OwnsOne(p => p.Card);
+                // EF8/EF9 send complex projections of an entity with an owned navigation to the fallback (ruling R24), so the
+                // owned Card is mapped only for the tests that read it.
+                if (withOwned)
+                {
+                    b.OwnsOne(p => p.Card);
+                }
+                else
+                {
+                    b.Ignore(p => p.Card);
+                }
 #if !EF8 && !EF9
                 b.ComplexProperty(p => p.Spare);
 #endif
@@ -93,6 +102,13 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
     // Guest (P; referrer Boss; B-guest, 1, c-guest, Spare missing).
     private Func<MongoQueryMode, QueryTrackingBehavior, List<string>> Seed(Func<PeopleContext, IEnumerable<string>> query,
         [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+        => Seed(query, withOwned: false, name);
+
+    private Func<MongoQueryMode, QueryTrackingBehavior, List<string>> SeedOwned(Func<PeopleContext, IEnumerable<string>> query,
+        [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+        => Seed(query, withOwned: true, name);
+
+    private Func<MongoQueryMode, QueryTrackingBehavior, List<string>> Seed(Func<PeopleContext, IEnumerable<string>> query, bool withOwned, string name)
     {
         var collection = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + Guid.NewGuid().ToString("N")[..8];
         static BsonDocument Desk(double lat) => new() { { "Lat", lat }, { "Lon", lat + 0.5 } };
@@ -124,7 +140,7 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
                 .UseQueryTrackingBehavior(tracking)
                 .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
             new MongoDbContextOptionsBuilder(builder).UseQueryMode(mode);
-            using var db = new PeopleContext(builder.Options, collection);
+            using var db = new PeopleContext(builder.Options, collection, withOwned);
             return query(db).ToList();
         };
     }
@@ -182,14 +198,14 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
     {
         Declines(NoTracking(Seed(db => [.. Referred(db).Select(p => new { p.Name, p.Referrer!.Badge.Code }).ToList().Select(x => $"{x.Name}|{x.Code}")])),
             "Dev|B-boss", "Guest|B-boss");
-        Declines(NoTracking(Seed(db => [.. Referred(db).Select(p => new { p.Name, p.Referrer!.Card.Tag }).ToList().Select(x => $"{x.Name}|{x.Tag}")])),
+        Declines(NoTracking(SeedOwned(db => [.. Referred(db).Select(p => new { p.Name, p.Referrer!.Card.Tag }).ToList().Select(x => $"{x.Name}|{x.Tag}")])),
             "Dev|c-boss", "Guest|c-boss");
     }
 
     [Fact]
     public void Owned_whole_value_through_a_same_type_reference_navigation()
         // The owned analogue of the whole-value read (an owned reference navigation's target, not a complex value).
-        => Declines(NoTracking(Seed(db => [.. Referred(db).Select(p => new { p.Name, p.Referrer!.Card }).ToList().Select(x => $"{x.Name}|{x.Card.Tag}")])),
+        => Declines(NoTracking(SeedOwned(db => [.. Referred(db).Select(p => new { p.Name, p.Referrer!.Card }).ToList().Select(x => $"{x.Name}|{x.Card.Tag}")])),
             "Dev|c-boss", "Guest|c-boss");
 
     // ── The inner side of a same-type self-join ──────────────────────────────────────────────────────────────────
@@ -219,14 +235,15 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
         var run = Seed(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
             .OrderBy(x => x.p.Name).Select(x => new { x.p, x.e.Badge.Code }).ToList().Select(x => x.p.Name + "|" + x.Code)]);
         Declines(NoTracking(run), "Dev|B-boss", "Guest|B-boss");
-        Declines(NoTracking(Seed(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
+        Declines(NoTracking(SeedOwned(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
             .OrderBy(x => x.p.Name).Select(x => new { x.p, x.e.Card.Tag }).ToList().Select(x => x.p.Name + "|" + x.Tag)])),
             "Dev|c-boss", "Guest|c-boss");
-        Declines(NoTracking(Seed(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
+        // Served natively (no owned navigation in this model), and on the fallback through the fixed arm.
+        Native(NoTracking(Seed(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
             .OrderBy(x => x.p.Name).Select(x => new { x.p, x.e.Name }).ToList().Select(x => x.p.Name + "|" + x.Name)])),
             "Dev|Boss", "Guest|Boss");
         // NON-complex (exception (h)): at 5547cfa2 this answered `Dev|Dev|c-dev ; Guest|Guest|c-guest`.
-        Declines(NoTracking(Seed(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
+        Declines(NoTracking(SeedOwned(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
             .OrderBy(x => x.p.Name).Select(x => new { x.p, E = x.e.Name, x.e.Card.Tag }).ToList().Select(x => x.p.Name + "|" + x.E + "|" + x.Tag)])),
             "Dev|Boss|c-boss", "Guest|Boss|c-boss");
     }
@@ -253,12 +270,16 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
         // referenced from scope '', but it is not defined"); listed for the owner, pinned so a fix is noticed.
         foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
         {
-            var ex = Assert.Throws<InvalidOperationException>(() => Tracking(Seed(db => [.. db.People.Include(p => p.Referrals).ToList()
+            var ex = Assert.Throws<InvalidOperationException>(() => Tracking(SeedOwned(db => [.. db.People.Include(p => p.Referrals).ToList()
                 .Select(p => p.Name)], "IncludeReferrals" + mode))(mode));
             Assert.Contains("referenced from scope", ex.Message);
         }
 
-        Declines(NoTracking(Seed(db => [.. db.People.Include(p => p.Referrer).Where(p => p.ReferrerId != null).OrderBy(p => p.Name).ToList()
+        // Without the owned reference the same Include reads each document.
+        Native(Tracking(Seed(db => [.. db.People.Include(p => p.Referrals).OrderBy(p => p.Name).ToList()
+                .Select(p => $"{p.Name}|{p.Badge.Code}|{string.Join(",", p.Referrals.Select(r => r.Name + ":" + r.Badge.Code).Order())}")])),
+            "Boss|B-boss|Dev:B-dev,Guest:B-guest", "Dev|B-dev|", "Guest|B-guest|");
+        Native(NoTracking(Seed(db => [.. db.People.Include(p => p.Referrer).Where(p => p.ReferrerId != null).OrderBy(p => p.Name).ToList()
                 .Select(p => $"{p.Name}|{p.Badge.Code}|{p.Referrer!.Name}:{p.Referrer.Badge.Code}:{p.Referrer.Desk.Lat}")])),
             "Dev|B-dev|Boss:B-boss:9", "Guest|B-guest|Boss:B-boss:9");
     }
