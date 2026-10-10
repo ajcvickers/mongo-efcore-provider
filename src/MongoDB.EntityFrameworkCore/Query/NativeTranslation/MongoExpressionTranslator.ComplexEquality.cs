@@ -210,7 +210,7 @@ internal sealed partial class MongoExpressionTranslator
 
     /// <summary>
     /// <c>c.Lines.Contains(item)</c> over a complex collection (EF also rewrites <c>c.Lines.Any(l =&gt; l == item)</c> to
-    /// it): "some element equals <paramref name="item"/>", each element compared member-wise with the comparand exactly as
+    /// it): "some element equals the item", each element compared member-wise with the comparand exactly as
     /// a single complex value is (<see cref="TryBuildComplexEquality"/>), with the element itself as the compared value.
     /// Rendered as an <c>Any</c> quantifier over the array (an aggregation element scope, like every complex-collection
     /// quantifier: see <see cref="RequiresAggregationElementScope"/>).
@@ -340,6 +340,9 @@ internal sealed partial class MongoExpressionTranslator
     /// The equality of the complex value <paramref name="complexProperty"/> stored at <paramref name="path"/> with
     /// <paramref name="comparand"/>, or <see langword="null"/> to decline.
     /// </summary>
+    /// <param name="complexProperty">The complex property whose value is compared.</param>
+    /// <param name="path">The field path the value is stored at.</param>
+    /// <param name="comparand">What the value is compared with.</param>
     /// <param name="mayBeAbsent">
     /// The value can be absent: it, or any owned/complex ancestor on its path, is optional (ruling R14). An absent value
     /// reads null, as do its members (null propagation), so it equals null and never an instance, whatever the instance's
