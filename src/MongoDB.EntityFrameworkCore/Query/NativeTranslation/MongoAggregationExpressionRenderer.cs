@@ -57,7 +57,9 @@ internal static class MongoAggregationExpressionRenderer
             MongoElementRefExpression { NullSafe: true } nullSafeElementRef
                 => IfNull(FieldRef(nullSafeElementRef.Path, elementVariable), BsonNull.Value),
             MongoElementRefExpression elementRef => FieldRef(elementRef.Path, elementVariable),
-            // Always at document root, regardless of elementVariable.
+            // Always at document root, regardless of elementVariable. See MongoOuterFieldExpression.NullSafe.
+            MongoOuterFieldExpression { NullSafe: true } nullSafeOuter
+                => IfNull(FieldRef(nullSafeOuter.ElementName, elementVariable: null), BsonNull.Value),
             MongoOuterFieldExpression outer => FieldRef(outer.ElementName, elementVariable: null),
             // Used for a Select-side join-scope null-check ternary (`ti.Inner != null ? ti.Inner.City : null`;
             // see NativeJoinScopeProjectionBinder.TryBindConditionalProjection).
@@ -941,7 +943,7 @@ internal static class MongoAggregationExpressionRenderer
         => MayBeNull(other) ? MissingAsNull(operand, rendered) : rendered;
 
     private static BsonValue MissingAsNull(MongoExpression operand, BsonValue rendered)
-        => operand is MongoFieldExpression { NullSafe: false } or MongoOuterFieldExpression
+        => operand is MongoFieldExpression { NullSafe: false } or MongoOuterFieldExpression { NullSafe: false }
                or MongoElementRefExpression { NullSafe: false, Path: not MongoElementRefExpression.WholeRootDocumentPath }
             ? IfNull(rendered, BsonNull.Value)
             : rendered;
@@ -982,7 +984,8 @@ internal static class MongoAggregationExpressionRenderer
         {
             MongoConstantExpression constant => constant.Value is null,
             // Rendered as $ifNull: [field, null], so it is null (never missing) when absent.
-            MongoFieldExpression { NullSafe: true } or MongoElementRefExpression { NullSafe: true } => true,
+            MongoFieldExpression { NullSafe: true } or MongoElementRefExpression { NullSafe: true }
+                or MongoOuterFieldExpression { NullSafe: true } => true,
             // A read of an upstream alias holding a null-propagated value behind a non-nullable type.
             MongoElementRefExpression { ThrowsOnNull: true } => true,
             MongoParameterExpression => true,

@@ -697,10 +697,9 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
     public static readonly Dictionary<string, (Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<string>> Run, string[] Expected)>
         OptionalParentShapes = new()
         {
-            // IsFoldSafe admits the fold to {Address.City: {$lt: "c"}} over the non-nullable City. In-memory C# would also
-            // answer Missing and Null (string.Compare(null, "c") is -1), but the oracle is driver-LINQ, which answers [A]
-            // like the fold: server-side, no element is $lt "c" when the parent is missing or null. Native matches.
-            ["compare_lt"] = (q => q.Where(c => string.Compare(c.Address!.City, "c") < 0).OrderBy(c => c.Name).Select(c => c.Name), ["A"]),
+            // `string.Compare(c.Address!.City, "c") < 0` moved to ComplexTypeNullPropagationTests (item 3b of the fix wave): C#
+            // orders the absent parent's null City first (Missing and Null match), and the native path no longer folds a
+            // relational compare under an optional complex parent to {Address.City: {$lt: "c"}}; driver-LINQ answers [A].
             ["compare_gt"] = (q => q.Where(c => string.Compare(c.Address!.City, "c") > 0).OrderBy(c => c.Name).Select(c => c.Name), ["D"]),
             ["anon_lat"] = (q => q.OrderBy(c => c.Name).Select(c => new { c.Name, c.Address!.Location.Lat }).ToList().Select(x => x.Name + ":" + x.Lat),
                 ["A:1", "D:3", "Missing:0", "Null:0"]),
