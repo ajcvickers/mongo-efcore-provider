@@ -323,6 +323,81 @@ public static class ComplexPropertyConventionTests
         Assert.NotNull(db.Model);
     }
 
+    // An explicit (fluent) element name configured on a DERIVED type survives EF lifting the complex property to the base
+    // type, where the attribute conventions run again for the base's member: the attribute (a data annotation) must not
+    // replace the higher-source fluent name. Scalars already behaved this way (their path goes through the builder).
+    [Fact]
+    public static void Fluent_element_name_on_derived_type_survives_lift_to_base_over_attributes()
+    {
+        using var db = new TestContext<LiftDerived>(mb =>
+        {
+            mb.Entity<LiftDerived>().ComplexProperty(b => b.Home).HasPropertyAnnotation(MongoAnnotationNames.ElementName, "fluent");
+            mb.Entity<LiftDerived>().ComplexProperty(b => b.Work).HasPropertyAnnotation(MongoAnnotationNames.ElementName, "wfluent");
+            mb.Entity<LiftDerived>().Property(b => b.S).HasElementName("sfluent");
+            mb.Entity<LiftBase>();
+        });
+
+        var baseType = db.Model.FindEntityType(typeof(LiftBase))!;
+        Assert.Equal("sfluent", baseType.FindProperty(nameof(LiftBase.S))!.GetElementName());
+        Assert.Equal("fluent", baseType.FindComplexProperty(nameof(LiftBase.Home))!.GetElementName());
+        Assert.Equal("wfluent", baseType.FindComplexProperty(nameof(LiftBase.Work))!.GetElementName());
+    }
+
+    // Precedence on one complex property: explicit (fluent) > data annotation ([BsonElement]/[Column]) > convention
+    // (camel case), whatever order EF runs them in.
+    [Fact]
+    public static void Fluent_element_name_wins_over_attribute_and_camel_case()
+    {
+        using var db = new TestContext<PrecedenceHolder>(
+            mb =>
+            {
+                mb.Entity<PrecedenceHolder>().Property(e => e.Id).Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "_id");
+                mb.Entity<PrecedenceHolder>().ComplexProperty(e => e.BsonAddress).HasPropertyAnnotation(MongoAnnotationNames.ElementName, "fluentB");
+                mb.Entity<PrecedenceHolder>().ComplexProperty(e => e.ColumnAddress).HasPropertyAnnotation(MongoAnnotationNames.ElementName, "fluentC");
+                mb.Entity<PrecedenceHolder>().ComplexProperty(e => e.AttrOnly);
+                mb.Entity<PrecedenceHolder>().ComplexProperty(e => e.CamelOnly);
+            },
+            camelCase: true);
+
+        var entityType = db.Model.FindEntityType(typeof(PrecedenceHolder))!;
+        Assert.Equal("fluentB", entityType.FindComplexProperty(nameof(PrecedenceHolder.BsonAddress))!.GetElementName());
+        Assert.Equal("fluentC", entityType.FindComplexProperty(nameof(PrecedenceHolder.ColumnAddress))!.GetElementName());
+        Assert.Equal("attr", entityType.FindComplexProperty(nameof(PrecedenceHolder.AttrOnly))!.GetElementName());
+        Assert.Equal("camelOnly", entityType.FindComplexProperty(nameof(PrecedenceHolder.CamelOnly))!.GetElementName());
+    }
+
+    // The same lift with camel case on: the fluent name still wins on the base.
+    [Fact]
+    public static void Fluent_element_name_on_derived_type_survives_lift_to_base_with_camel_case()
+    {
+        using var db = new TestContext<LiftCamelDerived>(
+            mb =>
+            {
+                mb.Entity<LiftCamelDerived>().ComplexProperty(b => b.Home).HasPropertyAnnotation(MongoAnnotationNames.ElementName, "fluent");
+                mb.Entity<LiftCamelBase>().Property(e => e.Id).Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "_id");
+            },
+            camelCase: true);
+
+        var baseType = db.Model.FindEntityType(typeof(LiftCamelBase))!;
+        Assert.Equal("fluent", baseType.FindComplexProperty(nameof(LiftCamelBase.Home))!.GetElementName());
+        Assert.Equal("work", baseType.FindComplexProperty(nameof(LiftCamelBase.Work))!.GetElementName());
+        Assert.Equal("battr", baseType.FindComplexProperty(nameof(LiftCamelBase.Attr))!.GetElementName());
+    }
+
+    // [BsonElement] and [Column] on the same member are both data annotations: the one whose convention runs last wins.
+    // MongoConventionSetBuilder adds BsonElementAttributeConvention after ColumnAttributeConvention, so [BsonElement]'s
+    // name is used, for a complex property exactly as for a scalar (docs/complex-types.md).
+    [Fact]
+    public static void BsonElement_and_Column_on_same_member_resolve_like_a_scalar()
+    {
+        using var db = new TestContext<TwoAttrHolder>(mb => mb.Entity<TwoAttrHolder>().ComplexProperty(e => e.Address));
+
+        var entityType = db.Model.FindEntityType(typeof(TwoAttrHolder))!;
+        var scalarName = entityType.FindProperty(nameof(TwoAttrHolder.Name))!.GetElementName();
+        Assert.Equal("bson", scalarName);
+        Assert.Equal("cbson", entityType.FindComplexProperty(nameof(TwoAttrHolder.Address))!.GetElementName());
+    }
+
     static void AssertMessage(InvalidOperationException ex, string first, string second, string element, string typeName)
     {
         Assert.Contains($"'{first}'", ex.Message);
@@ -367,6 +442,40 @@ public static class ComplexPropertyConventionTests
 
     [ComplexType]
     class AutoAddr { public string Street { get; set; } }
+
+    class LiftBase
+    {
+        public int Id { get; set; }
+        [BsonElement("attr")] public AutoAddr Home { get; set; }
+        [BsonElement("sattr")] public string S { get; set; }
+        [Column("cattr")] public AutoAddr Work { get; set; }
+    }
+    class LiftDerived : LiftBase { public int X { get; set; } }
+
+    class LiftCamelBase
+    {
+        public int Id { get; set; }
+        [BsonElement("attr")] public AutoAddr Home { get; set; }
+        public AutoAddr Work { get; set; }
+        [Column("battr")] public AutoAddr Attr { get; set; }
+    }
+    class LiftCamelDerived : LiftCamelBase { public int X { get; set; } }
+
+    class PrecedenceHolder
+    {
+        public int Id { get; set; }
+        [BsonElement("attrB")] public Addr BsonAddress { get; set; }
+        [Column("attrC")] public Addr ColumnAddress { get; set; }
+        [BsonElement("attr")] public Addr AttrOnly { get; set; }
+        public Addr CamelOnly { get; set; }
+    }
+
+    class TwoAttrHolder
+    {
+        public int Id { get; set; }
+        [BsonElement("bson"), Column("col")] public string Name { get; set; }
+        [BsonElement("cbson"), Column("ccol")] public Addr Address { get; set; }
+    }
 
     class IgnoredHolder
     {
