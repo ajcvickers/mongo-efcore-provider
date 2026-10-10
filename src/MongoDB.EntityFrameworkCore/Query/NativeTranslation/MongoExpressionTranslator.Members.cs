@@ -102,6 +102,10 @@ internal sealed partial class MongoExpressionTranslator
                 return TryResolveOwnedFieldPath(node, out property, out fieldPath, out isOuter);
         }
 
+        // An EF8/EF9 compiled-query argument is a plain prefixed ParameterExpression (`__o`), never a row root.
+        if (IsQueryParameterRoot(param))
+            return false;
+
         // Two-scope mode: a member rooted on the outer param resolves against the outer entity type at document
         // root; every other member is inner-scoped. Identity (ReferenceEquals), never name — so a member name
         // shared between the two scopes cannot be mis-routed.
@@ -390,7 +394,7 @@ internal sealed partial class MongoExpressionTranslator
             current = inner;
         }
 
-        if (current is not ParameterExpression rootParam || hopNames.Count < minimumHops)
+        if (current is not ParameterExpression rootParam || hopNames.Count < minimumHops || IsQueryParameterRoot(rootParam))
             return false;
 
         isOuter = _outerParam is not null && ReferenceEquals(rootParam, _outerParam);
@@ -537,6 +541,17 @@ internal sealed partial class MongoExpressionTranslator
         complexProperty = leaf;
         return true;
     }
+
+    /// <summary>
+    /// Whether <paramref name="parameter"/> is a QUERY parameter, not a lambda's row parameter: on EF8/EF9 a compiled
+    /// query's argument (<c>EF.CompileQuery((db, Customer o) =&gt; ... c.Address == o.Address)</c>) reaches the translator
+    /// as a plain <see cref="ParameterExpression"/> named with <c>QueryCompilationContext.QueryParameterPrefix</c>
+    /// (<c>__o</c>), typed as the entity, so a member chain rooted on it resolved against the scope and compared the field
+    /// with itself (every row). Never a row root; a no-op on EF10, whose query parameters are
+    /// <c>QueryParameterExpression</c> nodes.
+    /// </summary>
+    private static bool IsQueryParameterRoot(ParameterExpression parameter)
+        => NativeQueryParameter.TryGetQueryParameterName(parameter, out _);
 
     /// <summary>
     /// Whether the member chain <paramref name="node"/> crosses an OPTIONAL complex property (EF10) on its way to its leaf,
