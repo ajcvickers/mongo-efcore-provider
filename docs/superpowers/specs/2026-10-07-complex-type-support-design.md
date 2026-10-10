@@ -45,13 +45,17 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
 - (c) (ruling R9, Task 10) In a join, the query root's own shaper is recognised by its projection binding, not its CLR type, so a
   derived OUTER root (`People.OfType<Employee>()` with a self-reference to `Employee`) reads its own members from the root
   document: the mixed projection `new { e, e.Name, R = e.Referrer!.Name }` read `e.Name` off the joined referrer at 040cecdf
-  (`Dev|Boss|Boss`, observed) and now answers `Dev|Dev|Boss`. A wrong-rows fix needed for derived complex values.
+  (`Dev|Boss|Boss`, observed) and now answers `Dev|Dev|Boss`. A wrong-rows fix needed for derived complex values. Also a
+  correction of RELEASED behaviour: published 10.0.4 answers the same `Dev|Boss|Boss` (measured on MongoDB 8, final fix
+  wave); 8.4.4 and 9.1.4 throw (the reference navigation is untranslatable there).
 - (d) (ruling R13, Task 11) Join and sort keys read through an owned/complex HOP are resolved structurally, never by the
   leaf's simple name, and the mixed reader's `_outer` redirect covers hop sources. Non-complex cases corrected (silent wrong
   rows before): an owned-hop join key beside a same-named root property (now declines; fallback correct); an inner-side hop
   key named like the navigation's principal key (`a => a.Tag.Id`, kept the `_id` navigation `$lookup`); the bridge's
   whole-entity `LeftJoin` on an owned-hop key; a filtered-Include `OrderBy` through an owned hop (sorted by the root
   property); an owned hop leaf beside a whole joined entity (read null). Same bug class as the complex shapes; one fix.
+  The filtered-Include `OrderBy` (`GetSortField`) and bridge `LeftJoin` key (`TryGetKeyFieldPath`) cases also correct
+  RELEASED code: both resolve by simple name at v8.4.4, v9.1.4 and v10.0.4 (verified in the tagged source).
 - (e) (rulings R18/R22, Task 13) At the ROOT (entity scope), a relational comparison over a null-propagating date-add,
   conditional or coalesce whose operand may be null now gets the same null guard as every other relational comparison
   (`MayBeNull` is structural for those three nodes), so rows whose operand is null no longer match `<`/`<=`; the direction
@@ -63,6 +67,10 @@ concepts that do not exist for MongoDB, and any change to owned-type behavior.
   ([f, h, m, n, v] → [h, m, n, v]); `(x.A ?? x.Label!.Length) < 5` ([f, m, n, v] → [v]);
   `(x.A ?? (x.Flag ? 0 : x.B!.Value)) < 5` ([f, h, m, n, v] → [h, m, n, v]). Already-guarded shapes (a nullable-typed
   date-add/coalesce, a conditional whose nullable branch gives it its type) and every `>` are unchanged.
+- (f) (Task 9 round 2) An owned-hop `EF.Property` projection (`new { C = EF.Property<string>(b.Home, "City") }`) read NULL
+  rows; it now reads the stored value. Unreleased native path; low risk.
+- (g) (Task 10 round 4) `OfType<T>()` + `SelectMany` projecting a derived outer member threw `ArgumentException` in every
+  mode; it now declines cleanly (fallback). Unreleased native path; low risk.
 
 ## Decisions
 
@@ -251,7 +259,9 @@ Candidate Jira tickets (NOT filed; owner to decide), numbered as in the SDD ledg
 14. Driver-LINQ misses a missing complex value in `$map`.
 15. Upstream EF: `Any(a => a == null)` over a complex collection throws `ArgumentException`.
 16. Driver-LINQ element-scope missing-vs-null semantics (general).
-17. `optionalCollection == null` on the Native fallback also returns rows whose array is `[null]`.
+17. `optionalCollection == null` on the Native fallback also returns rows whose array is `[null]`. RESOLVED by ruling R25
+    (final fix wave): the default mode refuses a complex collection compared with null; explicit DriverLinq keeps the
+    driver's rows (pinned).
 18. Root `BsonRepresentation` self-referencing bulk setter writes the computed CLR type into a string-stored field.
 19. Driver-LINQ `byte[].Length == 0` returns no rows.
 20. Driver-LINQ `Distinct` over collection-typed properties returns a duplicate `<null>` row (explicit null vs missing).
@@ -264,3 +274,26 @@ collections; native constructor/record projections of complex values; native Gro
 (structural equality); per-member `$set` (R5); index-friendly `$elemMatch` for positive complex-collection `Any`; narrower
 R20/bulk refusals (relational upper side, `== true`, non-nullable `Contains`) and making the R20 scanner call the
 R17-R19 predicates instead of restating them; DatePart-over-DateAdd native translation (removes one R20 refusal).
+
+Final-triage follow-ups (NOT filed in Jira; owner to decide):
+
+1. R24: EF8/EF9 owned-navigation + complex projection goes to the fallback (whole complex value fails loudly); peel the
+   owned `IncludeExpression` in the hop walk.
+2. R21 limits of the R20 net (navigation/join roots, element-leaf `Select`, null tests not against a null constant, element
+   reads inside nested lambdas): file a Jira before release.
+3. Root comparisons over members of a null/missing `DateTimeOffset?` match those rows in every mode (Jira candidate 12).
+4. R23: optionally log a warning when an explicit-DriverLinq bulk operation reads complex collection elements.
+5. Split `ComplexElementNullGuardRefusal` (one Finder, two jobs by a `strict` flag) into a shared keying base plus query
+   and bulk subclasses.
+6. Split the large complex-type test files (Robustness, Materialization, ComplexCollectionNativeQuery) by theme.
+7. Complex-collection positive `Any` renders in an aggregation element scope (`$anyElementTrue` over `$map`), losing index
+   use; index-friendly `$elemMatch` where no null element can change the answer (performance only).
+8. Fluent `HasElementName` overloads for complex properties and members are a public-API gap (only annotation spellings
+   exist today: `HasPropertyAnnotation`/`HasAnnotation(MongoAnnotationNames.ElementName, ...)`,
+   `Metadata.SetElementName` on a member; `HasElementName` is CS1929 on EF8/EF9/EF10).
+9. DECISION BEFORE RELEASE (owner declined for now, 'Keep strict'): read a missing REQUIRED complex value whose members
+   are all nullable as an instance (matches released behaviour; 10.0.4 returned a non-null instance with null members).
+   Today it throws; BREAKING-CHANGES.md documents the change and the mitigations.
+10. EF8/EF9 baselines: the published 8.4.4/9.1.4 probes match 10.0.4 for complex-property storage; EF8/EF9 run a subset of
+    the complex-type tests (complex collections and optional complex properties are EF10-only), so their suite totals
+    are lower by design.
