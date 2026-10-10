@@ -109,9 +109,12 @@ public class MongoExpressionNodeCoverageTests
 
     /// <summary>
     /// One representative instance per concrete node type — the simplest legal one, since the harness checks arm
-    /// coverage, not value space.
+    /// coverage, not value space. With <paramref name="nullSafeOperands"/> every field and element reference is
+    /// <c>NullSafe</c> (a complex element scope's read, ruling R17) and the coalesce fallback is a field, so
+    /// <c>ComplexElementNullGuardRefusalTests</c> can find the structural <c>MayBeNull</c> arms (R18) by comparing the two
+    /// sample sets.
     /// </summary>
-    private static Dictionary<Type, MongoExpression> BuildSamples(bool valueConverted = false)
+    internal static Dictionary<Type, MongoExpression> BuildSamples(bool valueConverted = false, bool nullSafeOperands = false)
     {
         var rank = PostProperty(nameof(Post.Rank), valueConverted);
         var flag = PostProperty(nameof(Post.Flag), valueConverted);
@@ -120,16 +123,16 @@ public class MongoExpressionNodeCoverageTests
         var when = PostProperty(nameof(Post.When), valueConverted);
         var stamp = PostProperty(nameof(Post.Stamp), valueConverted);
 
-        var rankField = new MongoFieldExpression(rank, "Rank");
-        var flagField = new MongoFieldExpression(flag, "Flag");
-        var headingField = new MongoFieldExpression(heading, "Heading");
+        var rankField = new MongoFieldExpression(rank, "Rank", nullSafeOperands);
+        var flagField = new MongoFieldExpression(flag, "Flag", nullSafeOperands);
+        var headingField = new MongoFieldExpression(heading, "Heading", nullSafeOperands);
         var rankConstant = new MongoConstantExpression(5, rank);
 
         var samples = new MongoExpression[]
         {
             rankField,
             new MongoOuterFieldExpression(rank, "Rank"),
-            new MongoElementRefExpression("Total", typeof(int)),
+            new MongoElementRefExpression("Total", typeof(int), nullSafe: nullSafeOperands),
             new MongoLookupNullCheckExpression("_lookup_Manager", isNotNull: false),
             new MongoElementNullCheckExpression("Address", isNotNull: false),
             new MongoCurrentElementNullCheckExpression(isNotNull: false),
@@ -156,11 +159,11 @@ public class MongoExpressionNodeCoverageTests
                 MongoExpressionTranslator.MongoQuantifierKind.Any),
             new MongoConvertExpression(rankField, typeof(long)),
             new MongoConditionalExpression(flagField, rankField, rankConstant),
-            new MongoCoalesceExpression(rankField, rankConstant),
-            new MongoDatePartExpression(new MongoFieldExpression(when, "When"), MongoDatePart.Year),
+            new MongoCoalesceExpression(rankField, nullSafeOperands ? rankField : rankConstant),
+            new MongoDatePartExpression(new MongoFieldExpression(when, "When", nullSafeOperands), MongoDatePart.Year),
             new MongoDateAddExpression(
-                new MongoFieldExpression(when, "When"), MongoDateAddUnit.Minute, new MongoConstantExpression(5, null)),
-            new MongoDateTimeOffsetLocalExpression(new MongoFieldExpression(stamp, "Stamp")),
+                new MongoFieldExpression(when, "When", nullSafeOperands), MongoDateAddUnit.Minute, new MongoConstantExpression(5, null)),
+            new MongoDateTimeOffsetLocalExpression(new MongoFieldExpression(stamp, "Stamp", nullSafeOperands)),
             new MongoConcatExpression([headingField, new MongoConstantExpression("x", heading)]),
             new MongoStringIndexOfExpression(headingField, new MongoConstantExpression("x", heading)),
             new MongoStringLengthExpression(headingField),

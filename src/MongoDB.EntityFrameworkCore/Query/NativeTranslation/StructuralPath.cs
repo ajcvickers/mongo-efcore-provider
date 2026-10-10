@@ -95,6 +95,18 @@ internal readonly record struct StructuralCollectionPath(
 internal static class StructuralPath
 {
     /// <summary>
+    /// Whether <paramref name="scope"/>, a translator/scanner scope or the element type of a resolved embedded collection
+    /// (<see cref="StructuralCollectionPath.ElementType"/>), is a COMPLEX collection's element scope: EF10 stores a null
+    /// element there as BSON null, so leaves read null-safe (ruling R17), quantifiers render in an aggregation element
+    /// scope and the R20/bulk scanner keys its checks. An owned element (an <see cref="IEntityType"/>) and an entity scope
+    /// are not. The ONE spelling of this question: the native translator (<c>ScopeField</c>, <c>ScopeValue</c>,
+    /// <c>RequiresAggregationElementScope</c>, the complex-operand absent check, the collection <c>Contains</c> arms) and
+    /// <c>ComplexElementNullGuardRefusal</c> (EF10 only) call it.
+    /// </summary>
+    internal static bool IsComplexElementScope(ITypeBase? scope)
+        => scope is IComplexType;
+
+    /// <summary>
     /// Resolves <paramref name="names"/> (root-first; every name but the last a hop, the last the collection) against
     /// <paramref name="scope"/> to an embedded array: an owned collection navigation or a complex collection, reached
     /// through any mix of embedded single references and single complex properties.

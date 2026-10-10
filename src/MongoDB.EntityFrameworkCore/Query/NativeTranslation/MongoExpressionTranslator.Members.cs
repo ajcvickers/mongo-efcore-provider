@@ -491,7 +491,7 @@ internal sealed partial class MongoExpressionTranslator
         complexProperty = null;
         // Inside a complex collection's element scope the element itself may be null (EF10 stores null elements), and an
         // absent element reads every value below it as absent: an ancestor that can be absent (ruling R14).
-        mayBeAbsent = _scopeType is IComplexType;
+        mayBeAbsent = StructuralPath.IsComplexElementScope(_scopeType);
 
         node = Unwrap(node);
         while (node is MemberExpression { Member.Name: nameof(Nullable<int>.Value), Expression: { } nullableReceiver }

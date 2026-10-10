@@ -943,6 +943,12 @@ internal static class MongoAggregationExpressionRenderer
     /// operators over such an operand. A non-null constant never does; a query parameter always may (its value is
     /// only known at execution).
     /// </summary>
+    /// <remarks>
+    /// KEEP IN STEP: an arm that is STRUCTURAL (true over a <c>NullSafe</c> complex-element operand that its CLR type alone
+    /// would not flag) makes the native path null-guard a relational comparison the driver-LINQ fallback does not, so the
+    /// R20 scanner (<c>ComplexElementNullGuardRefusal</c>) must refuse that shape. <c>ComplexElementNullGuardRefusalTests</c>
+    /// discovers the structural arms and fails for one without a paired scanner example.
+    /// </remarks>
     internal static bool MayBeNull(MongoExpression node)
         => node switch
         {

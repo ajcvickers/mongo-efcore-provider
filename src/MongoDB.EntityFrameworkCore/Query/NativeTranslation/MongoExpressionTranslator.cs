@@ -845,7 +845,7 @@ internal sealed partial class MongoExpressionTranslator
                      && TryMatchComplexCollectionContains(notContainsCall, out var notContainsSource, out _)
                      && TryResolveEmbeddedCollectionPath(
                          UnwrapAsQueryable(Unwrap(notContainsSource)), out _, out var notContainsElement, out _)
-                     && notContainsElement is IComplexType:
+                     && StructuralPath.IsComplexElementScope(notContainsElement):
                 return TryTranslateComplexCollectionContains(notContainsCall, negated: true, out var notContains) ? notContains : null;
 
             case UnaryExpression { NodeType: ExpressionType.Not } not:
@@ -942,7 +942,7 @@ internal sealed partial class MongoExpressionTranslator
                 when TryMatchComplexCollectionContains(complexContainsCall, out var complexContainsSource, out _)
                      && TryResolveEmbeddedCollectionPath(
                          UnwrapAsQueryable(Unwrap(complexContainsSource)), out _, out var complexContainsElement, out _)
-                     && complexContainsElement is IComplexType:
+                     && StructuralPath.IsComplexElementScope(complexContainsElement):
                 return TryTranslateComplexCollectionContains(complexContainsCall, out var complexContains) ? complexContains : null;
 
             // --- Entity-list membership: customers.Contains(c) ---
@@ -1262,7 +1262,7 @@ internal sealed partial class MongoExpressionTranslator
     /// element.
     /// </remarks>
     private static bool RequiresAggregationElementScope(ITypeBase elementType)
-        => elementType is IComplexType;
+        => StructuralPath.IsComplexElementScope(elementType);
 
     /// <summary>
     /// A field read in this translator's scope. Inside a complex collection's element scope (ruling R17) every leaf is
@@ -1271,7 +1271,7 @@ internal sealed partial class MongoExpressionTranslator
     /// null guard (MayBeNull). Owned element scopes and the document root are unchanged (<paramref name="nullSafe"/> only).
     /// </summary>
     private MongoFieldExpression ScopeField(IProperty property, string path, bool nullSafe = false)
-        => new(property, path, nullSafe || _scopeType is IComplexType);
+        => new(property, path, nullSafe || StructuralPath.IsComplexElementScope(_scopeType));
 
     /// <summary>
     /// A field used as a compared VALUE in this scope. Inside a complex collection's element scope a non-nullable,
@@ -1281,7 +1281,7 @@ internal sealed partial class MongoExpressionTranslator
     /// is returned unchanged; a converted bool keeps null semantics (its stored form isn't a bool to default to).
     /// </summary>
     private MongoExpression ScopeValue(MongoFieldExpression field)
-        => _scopeType is IComplexType
+        => StructuralPath.IsComplexElementScope(_scopeType)
            && field.Property.ClrType == typeof(bool)
            && NativeGroupByBinder.HasDefaultKeySerialization(field.Property)
             ? new MongoCoalesceExpression(
