@@ -859,18 +859,19 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
                 .ExecuteUpdate(u => u.SetProperty(s => s.Billing.City, "bulk").SetProperty(s => s.Previous.Code, 5)));
             Assert.Contains("The 'Select' operator is not supported in a bulk delete or update", ex.Message);
             Assert.Equal(before["b"], Raw(collection).Find(Builders<BsonDocument>.Filter.Eq("Name", "b")).Single());
-            return;
 #else
             Assert.Equal(1, db.Entities.Where(s => s.Shipping.City == "B1")
                 .ExecuteUpdate(u => u.SetProperty(s => s.Billing.City, "bulk").SetProperty(s => s.Previous.Code, 5)));
 #endif
         }
 
+#if !EF9
         var after = Raw(collection).Find(FilterDefinition<BsonDocument>.Empty).ToList().ToDictionary(d => d["Name"].AsString);
         Assert.Equal(before["a"], after["a"]);
         before["b"]["bill"]["bc"] = "bulk";
         before["b"]["Previous"]["Code"] = 5;
         Assert.Equal(before["b"], after["b"]);
+#endif
     }
 #endif
 
