@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -252,6 +252,7 @@ public class ComplexTypeRobustnessUpdateTests(TemporaryDatabaseFixture database)
 
     public class NamesA(DbContextOptions options, string collection) : DbContext(options)
     {
+        public string CollectionName => collection;
         public DbSet<Person> People { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder mb)
@@ -275,6 +276,7 @@ public class ComplexTypeRobustnessUpdateTests(TemporaryDatabaseFixture database)
 
     public class NamesB(DbContextOptions options, string collection) : DbContext(options)
     {
+        public string CollectionName => collection;
         public DbSet<Person> People { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder mb)
@@ -298,11 +300,82 @@ public class ComplexTypeRobustnessUpdateTests(TemporaryDatabaseFixture database)
 
     // One options instance (one internal service provider: one BsonSerializerFactory singleton, one compiled-query
     // cache) shared by both context types, so the caches are shared and only model identity separates the two.
-    private DbContextOptions SharedOptions()
-        => new DbContextOptionsBuilder()
+    private DbContextOptions SharedOptions(MongoQueryMode mode = MongoQueryMode.Native, bool keyByCollection = false)
+    {
+        var builder = new DbContextOptionsBuilder()
             .UseMongoDB(database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName)
-            .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning))
-            .Options;
+            .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+        if (keyByCollection)
+        {
+            builder.ReplaceService<IModelCacheKeyFactory, CollectionCacheKeyFactory>();
+        }
+
+        new MongoDbContextOptionsBuilder(builder).UseQueryMode(mode);
+        return builder.Options;
+    }
+
+    // NamesA/NamesB bake their collection name into the model; EF caches the model per context type in a service provider
+    // that equal options share across tests, so a second test using them must key the model by its collection too.
+    private sealed class CollectionCacheKeyFactory : IModelCacheKeyFactory
+    {
+        public object Create(DbContext context, bool designTime)
+            => (context.GetType(), context switch { NamesA a => a.CollectionName, NamesB b => b.CollectionName, _ => null }, designTime);
+    }
+
+    // The serializer caches (BsonSerializerFactory._complexTypeSerializersCache / _complexPropertySerializersCache) are
+    // used by the driver-LINQ path (queries and the bulk bridge), never by the native translator: so the interleaved
+    // two-model test above, which runs natively, cannot see a cache keyed by something weaker than the complex type
+    // (e.g. CLR type + property name). Here every query and a bulk update run on driver-LINQ, interleaved so that each
+    // model's lookups find the other model's entries first.
+    [Theory]
+    [InlineData(MongoQueryMode.DriverLinq)]
+    [InlineData(MongoQueryMode.Native)]
+    public void Two_context_types_with_different_element_names_query_and_bulk_update_through_their_own_serializers(MongoQueryMode mode)
+    {
+        var collectionA = Collection<Person>("CacheA" + mode);
+        var collectionB = Collection<Person>("CacheB" + mode);
+        var options = SharedOptions(mode, keyByCollection: true);
+        var nameA = collectionA.CollectionNamespace.CollectionName;
+        var nameB = collectionB.CollectionNamespace.CollectionName;
+
+        for (var round = 0; round < 2; round++)
+        {
+            using (var a = new NamesA(options, nameA))
+            {
+                a.People.Add(P("a" + round, A("Oslo", round), A("w", 0)));
+                a.SaveChanges();
+                Assert.Equal(Enumerable.Range(0, round + 1).Select(i => "a" + i),
+                    a.People.Where(p => p.Home.City == "Oslo").OrderBy(p => p.Name).Select(p => p.Name).ToList());
+            }
+
+            using (var b = new NamesB(options, nameB))
+            {
+                b.People.Add(P("b" + round, A("Oslo", round), A("w", 0)));
+                b.SaveChanges();
+                Assert.Equal(Enumerable.Range(0, round + 1).Select(i => "b" + i),
+                    b.People.Where(p => p.Home.City == "Oslo").OrderBy(p => p.Name).Select(p => p.Name).ToList());
+                Assert.Equal(Enumerable.Range(0, round + 1).Select(_ => "Oslo"),
+                    b.People.OrderBy(p => p.Name).Select(p => p.Home.City).ToList());
+            }
+        }
+
+#if !EF8
+        using (var a = new NamesA(options, nameA))
+        {
+            Assert.Equal(2, a.People.Where(p => p.Home.City == "Oslo").ExecuteUpdate(s => s.SetProperty(p => p.Name, p => p.Name + "!")));
+        }
+
+        using (var b = new NamesB(options, nameB))
+        {
+            Assert.Equal(2, b.People.Where(p => p.Home.City == "Oslo").ExecuteUpdate(s => s.SetProperty(p => p.Name, p => p.Name + "?")));
+        }
+
+        Assert.Equal(["a0!", "a1!"], Raw(collectionA).Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => d["Name"].AsString).Order());
+        Assert.Equal(["b0?", "b1?"], Raw(collectionB).Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => d["Name"].AsString).Order());
+#endif
+        Assert.All(Raw(collectionA).Find(FilterDefinition<BsonDocument>.Empty).ToList(), d => Assert.Equal("Oslo", d["homeA"]["cityA"].AsString));
+        Assert.All(Raw(collectionB).Find(FilterDefinition<BsonDocument>.Empty).ToList(), d => Assert.Equal("Oslo", d["homeB"]["cityB"].AsString));
+    }
 
     [Fact]
     public void Two_context_types_with_different_element_names_in_one_process_each_use_their_own_names()
@@ -385,16 +458,20 @@ public class ComplexTypeRobustnessUpdateTests(TemporaryDatabaseFixture database)
             => (context.GetType(), ((FlaggedContext)context).Alt, designTime);
     }
 
-    [Fact]
-    public void Same_context_type_with_two_cached_models_keeps_their_element_names_apart_under_concurrency()
+    // DriverLinq too: only that path reads through the complex serializer caches (see the two-context theory above).
+    [Theory]
+    [InlineData(MongoQueryMode.Native)]
+    [InlineData(MongoQueryMode.DriverLinq)]
+    public void Same_context_type_with_two_cached_models_keeps_their_element_names_apart_under_concurrency(MongoQueryMode mode)
     {
-        var collection = Collection<Person>();
+        var collection = Collection<Person>(nameof(Same_context_type_with_two_cached_models_keeps_their_element_names_apart_under_concurrency) + mode);
         var name = collection.CollectionNamespace.CollectionName;
-        var options = new DbContextOptionsBuilder()
+        var builder = new DbContextOptionsBuilder()
             .UseMongoDB(database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName)
             .ReplaceService<IModelCacheKeyFactory, FlagCacheKeyFactory>()
-            .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning))
-            .Options;
+            .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+        new MongoDbContextOptionsBuilder(builder).UseQueryMode(mode);
+        var options = builder.Options;
 
         const int iterations = 300;
         var errors = new ConcurrentQueue<string>();
@@ -416,12 +493,23 @@ public class ComplexTypeRobustnessUpdateTests(TemporaryDatabaseFixture database)
                     errors.Enqueue($"{i}: [{string.Join(",", mine)}]");
                 }
 
-                // A captured complex comparand (member-wise equality parameter) re-evaluated per execution.
-                var probe = A(city, i, i);
-                var matched = db.People.AsNoTracking().Where(p => p.Home == probe).Select(p => p.Name).ToList();
-                if (matched.Count != 1 || matched[0] != "p" + i)
+                // A captured complex comparand (member-wise equality parameter) re-evaluated per execution. Native only:
+                // driver-LINQ refuses a whole complex value comparison (R1); the leaf filter below goes through the
+                // serializer caches instead.
+                if (mode != MongoQueryMode.DriverLinq)
                 {
-                    errors.Enqueue($"{i} equality: [{string.Join(",", matched)}]");
+                    var probe = A(city, i, i);
+                    var matched = db.People.AsNoTracking().Where(p => p.Home == probe).Select(p => p.Name).ToList();
+                    if (matched.Count != 1 || matched[0] != "p" + i)
+                    {
+                        errors.Enqueue($"{i} equality: [{string.Join(",", matched)}]");
+                    }
+                }
+
+                var byLeaf = db.People.AsNoTracking().Where(p => p.Home.City == city).Select(p => p.Name).ToList();
+                if (byLeaf.Count != 1 || byLeaf[0] != "p" + i)
+                {
+                    errors.Enqueue($"{i} leaf: [{string.Join(",", byLeaf)}]");
                 }
             }
             catch (Exception e) when (e is not Xunit.Sdk.XunitException)
