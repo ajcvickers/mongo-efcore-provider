@@ -187,10 +187,12 @@ Not supported (each fails with a clear exception in every mode, never wrong rows
   `First`/`Single`/`Last`(`OrDefault`) without a predicate, `Count`, `LongCount` and `Any`. Use member projections instead.
 - `GroupBy` in which a whole complex value takes part (as the key, part of the key, or read off the grouped elements).
   Grouping by a member is supported.
-- A constructor or record projection with MORE than one argument that includes a whole complex value
-  (`new Holder(x.Home, x.Name)`). A one-argument constructor or record (`new Holder(x.Home)`), a member-initialized DTO
-  (`new Dto { A = x.Home }`) and an anonymous type work in every mode. (One exception to "never wrong rows": see Known
-  limitations.)
+- A constructor or record projection that mixes a whole complex value with any other argument
+  (`new Holder(x.Home, x.Name)`): "The projection constructs 'Holder' from arguments that can't each be read ...". A
+  constructor, record or `Tuple.Create` whose arguments are ALL whole complex values (`new P(x.Home, x.Work)`, of one CLR
+  type or not), a one-argument constructor or record (`new Holder(x.Home)`), a member-initialized DTO
+  (`new Dto { A = x.Home }`) and an anonymous type work (constructors, records and tuples via the driver-LINQ fallback, so
+  refused under `NativeOnly`; member-initialized DTOs and anonymous types natively where their members are native).
 - `Sum`/`Max`/`Min`/`Average` over the members of complex collection elements, and a count projected beside an element-list
   projection (`new { N = c.Lines.Count, Xs = c.Lines.Select(l => l.X) }`).
 
@@ -255,7 +257,8 @@ Bulk operations run on the driver-LINQ path.
 
 These are pinned in the provider's tests; the native path answers as C# does.
 
-- Projecting a complex-value equality (`new { Same = c.Home == other }`) always answers `false`.
+- Projecting a complex-value equality (`new { Same = c.Home == other }`, `Select(c => c.Home == c.Work)`) always answers
+  `false`.
 - `c.Opt == null ? ... : ...` in a projection treats a missing optional complex value as present.
 - `Any(i => i.Pos == null)`/`Count(i => i.Pos == null)` miss a missing complex value inside an owned collection.
 - Predicates over `null` complex collection elements (see above).
@@ -263,10 +266,6 @@ These are pinned in the provider's tests; the native path answers as C# does.
 
 ## Known limitations
 
-- **Wrong read:** a constructor or record projection taking two complex values of the same CLR type that are stored alike
-  (`Select(x => new P(x.Home, x.Work))`) reads every argument from the last one in the default and `DriverLinq` modes
-  (`NativeOnly` refuses it). Use a member-initialized DTO or an anonymous type (`new { x.Home, x.Work }`), which read
-  correctly.
 - There is no fluent `HasElementName` for complex properties or their members; use the annotation spellings above.
 - A required complex property whose element is missing throws on read even when all its members are nullable (see
   Stored shape).

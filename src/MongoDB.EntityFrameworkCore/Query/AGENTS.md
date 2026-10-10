@@ -284,12 +284,14 @@ Rendering (null/missing/dialect semantics):
   (`HasComplexValueShaperLeaf`) is set by ONE predicate (`RecordComplexValueShaperLeaf`) on the result of every
   `TranslateSelect` arm (shaper holds a `ComplexValueProjectionExpression`, or the native projection staged a complex
   value). A positional-ctor/container projection never stages a complex argument (`IsScalarPositionalConstruction`: its
-  index shaper would read it through a class map); it declines and the fallback refuses the memberless construction. This
-  applies to constructions with MORE than one argument: a one-argument record/constructor of a whole complex value
-  (`new Holder(x.Home)`, renamed members too) and member-init DTOs are served in every mode
-  (`ComplexValueConstructorProjectionTests`). Known wrong read (unreleased, spec known limitation 29): two alike-stored
-  complex values of one CLR type as constructor arguments (`new P(x.Home, x.Work)`) read every argument from the last one
-  on the fallback (`W|W`) instead of being refused; the owned analogue reads correctly.
+  index shaper would read it through a class map); it declines. On the fallback (mixed reader, whole documents) a
+  construction whose arguments are all whole complex values is served, and one mixing a complex value with a scalar is
+  refused by the member-less construction refusal (`AliasedConstructionMembers`). A one-argument record/constructor of a
+  whole complex value (`new Holder(x.Home)`, renamed members too) and member-init DTOs are served in every mode
+  (`ComplexValueConstructorProjectionTests`, `ComplexValueSameTypeArgumentTests`). **A whole-document read of a complex
+  value resolves from the node's own `ComplexValueProjectionExpression.Source`, never from the registration under its
+  projection member**: a member-less construction's or method call's arguments share one member whose registration is
+  the last argument's, so `new P(x.Home, x.Work)` read `W|W` (spec known limitation 29, resolved).
   GroupBy in which a whole complex value takes part (key, key part, read off the grouped elements in a post-group Select:
   `ThrowIfGroupByOverComplexValue`) is refused with the same message naming GroupBy (ruling R8). Where EF erases the value
   (`Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key)` becomes a leaf-key grouping over the entity; the
