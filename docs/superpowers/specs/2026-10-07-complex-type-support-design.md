@@ -331,11 +331,19 @@ Candidate Jira tickets (NOT filed; owner to decide), numbered as in the SDD ledg
 28. `T[]` and other complex collection CLR types EF cannot materialize or save (`ReadOnlyCollection<T>`; any type without a
     public parameterless constructor) are refused at model validation (fix wave 2, item E; measured per type in
     `ComplexCollectionClrTypeTests`). Supporting `T[]` would need EF-side collection-accessor support for arrays.
-29. KNOWN WRONG READ (complex-only, unreleased; found in fix wave 2 item J): two whole complex values of the same CLR type
-    stored alike as constructor/record arguments (`Select(x => new P(x.Home, x.Work))`) read EVERY argument from the last
-    one (`W|W`, wanted `H|W`) in Native and DriverLinq; NativeOnly declines. Differently stored values fail loudly
-    ("Document element is missing ..."); the owned analogue is correct. Pinned in
-    `ComplexValueConstructorProjectionTests`; the fallback's memberless-construction refusal should cover it.
+29. RESOLVED (was a known wrong read; complex-only, unreleased; found in fix wave 2 item J): two whole complex values of
+    the same CLR type stored alike as constructor/record arguments (`Select(x => new P(x.Home, x.Work))`) read EVERY
+    argument from the last one (`W|W`, wanted `H|W`) in Native and DriverLinq. Cause: both modes read whole documents
+    through the mixed reader (no `$project`), which located a projected complex value through the registration under
+    its projection member; a member-less construction's (or method call's, `Tuple.Create`) arguments all share one
+    member, whose registration is the last argument's. Not driver behaviour. Fix: `ComplexValueProjectionExpression`
+    carries its own bound expression (`Source`) and `ReadComplexValueElement` resolves the whole-document path from it.
+    Now: constructions whose arguments are all whole complex values (any number, any order, same or different CLR type
+    or stored shape, struct, optional, through a join or a same-type reference navigation) decline natively and the
+    fallback serves the right rows; a whole complex value beside a scalar argument is refused loudly by the fallback's
+    member-less construction refusal (was a misleading "could not be located"); explicit-DriverLinq
+    `Select(c => c.Home == c.Work)` answers the driver path's known reference-equality `False` instead of throwing.
+    `ComplexValueSameTypeArgumentTests`, `ComplexValueConstructorProjectionTests`.
 
 (CSHARP-5296, driver-LINQ DateTimeOffset members, is an existing upstream driver ticket.)
 
