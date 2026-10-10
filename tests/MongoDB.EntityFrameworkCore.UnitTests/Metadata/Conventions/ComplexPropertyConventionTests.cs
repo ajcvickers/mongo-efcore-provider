@@ -111,6 +111,26 @@ public static class ComplexPropertyConventionTests
         Assert.Equal("Street_Name", complexProperty.ComplexType.FindProperty(nameof(Addr.StreetName))!.GetElementName());
     }
 
+    // The spellings docs/complex-types.md documents for a member inside a complex type (a fluent HasElementName does not
+    // exist for complex properties or their members: CS1929 on EF8/EF9/EF10). The complex property's own spelling,
+    // HasPropertyAnnotation(MongoAnnotationNames.ElementName, ...), and the leaf's Metadata.SetElementName are covered above.
+    [Fact]
+    public static void HasAnnotation_on_a_complex_member_sets_its_element_name()
+    {
+        using var db = new TestContext<MemberAnnotationHolder>(
+            mb =>
+            {
+                mb.Entity<MemberAnnotationHolder>().Property(e => e.Id).Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "_id");
+                mb.Entity<MemberAnnotationHolder>().ComplexProperty(e => e.HomeAddress,
+                    a => a.Property(x => x.StreetName).HasAnnotation(MongoAnnotationNames.ElementName, "st"));
+            },
+            camelCase: true);
+
+        var complexProperty = db.Model.FindEntityType(typeof(MemberAnnotationHolder))!.FindComplexProperty(nameof(MemberAnnotationHolder.HomeAddress))!;
+        Assert.Equal("homeAddress", complexProperty.GetElementName());
+        Assert.Equal("st", complexProperty.ComplexType.FindProperty(nameof(Addr.StreetName))!.GetElementName());
+    }
+
     [Fact]
     public static void Camel_casing_that_makes_a_complex_property_collide_with_a_scalar_fails_validation()
     {
@@ -330,6 +350,7 @@ public static class ComplexPropertyConventionTests
     class CamelHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
     class PlainHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
     class CamelCollisionHolder { public int Id { get; set; } public Addr Home { get; set; } public string home { get; set; } }
+    class MemberAnnotationHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
     class FluentCamelHolder { public int Id { get; set; } public Addr HomeAddress { get; set; } }
     class NestedHolder { public int Id { get; set; } public NestedAddr HomeAddress { get; set; } }
 

@@ -233,10 +233,14 @@ Rendering (null/missing/dialect semantics):
   Whole-entity reads stay strict ("Document element ... is missing"). The exception TYPE for malformed stored data
   (native `InvalidOperationException` vs the driver's `FormatException`/converter exceptions) is not contract; the
   outcome (value vs throw) is.
-- **`StructuralPath` is the ONLY walker of mixed owned/complex hop chains** (`TryResolve`; `TryResolveCollection` for a chain
-  ending in an owned or complex collection; `TryResolveSelectorLeaf` for selector-addressed keys). Don't add a second
-  walker or resolve a hop by simple name; a failed resolve's partial segments are not usable. Collection hops without a
-  quantifier decline.
+- **`StructuralPath` is the single walker of mixed owned/complex hop chains for the native translator's member-chain and
+  field-path resolution, and for join/sort keys** (`TryResolve`; `TryResolveCollection` for a chain ending in an owned or
+  complex collection; `TryResolveSelectorLeaf` for selector-addressed keys; `IsComplexElementScope` for "is this a complex
+  element scope"). Don't add another walker there or resolve a hop by simple name; a failed resolve's partial segments are
+  not usable. Collection hops without a quantifier decline. Other trees have their own hop walkers, kept in step with it by
+  hand: the bridge's `FindComplexHopTypes`/`FindComplexCollectionElementTypes` (`...LinqTranslatingExpressionVisitor.StoredOrdering.cs`,
+  also used by the empty-list coalesce), `MongoProjectionBindingExpressionVisitor.ResolveHopType`/`ResolveComplexHopType`,
+  and `MongoProjectionBindingRemovingExpressionVisitor.TryResolveComplexPropertyDocument` (read side).
 - **A binder that can't bind a selector node fails the translation, never `default(T)`**:
   `MongoProjectionBindingExpressionVisitor.TranslationFailed` (set where `MatchTypes` receives a null binding and substitutes
   a default stand-in; reset per `Translate`) makes `TranslateSelect` decline (NativeOnly throws, Native falls back). Silent null rows were the
@@ -287,7 +291,7 @@ Rendering (null/missing/dialect semantics):
   typed as a derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other
   derived shaper does only outside a join. This also corrected a pre-existing NON-complex wrong read (owner-approved
   exception, ruling R9): `OfType<E>().Select(e => new { e, e.Name, R = e.Referrer!.Name })` read `e.Name` off the joined
-  referrer at 040cecdf (`Dev|Boss|Boss`), now `Dev|Dev|Boss`. A bare-nav SelectMany's ITEM shaper
+  referrer at 040cecdf (`Dev|Boss|Boss`, and so did published 10.0.4), now `Dev|Dev|Boss`. A bare-nav SelectMany's ITEM shaper
   (`BuildBareNavWrappedShaper`) is bound to the same empty member, so `IsRootProjectionShaper` is true for it too; this
   is harmless today because the arm is never reached for a served row (an item type in the root's EF hierarchy needs a
   reference unwind, which has no driver-LINQ fallback; the native path binds by scope depth and reads by alias; an owned

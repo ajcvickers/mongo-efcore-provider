@@ -14,7 +14,9 @@ MongoDB 8, with a model `C { Id, Name, Home: Addr { City } }` and `ComplexProper
 - `SaveChanges` silently did not write the complex property: the stored document was `{ _id, Name }` (`{ _id, name }` with
   `CamelCaseElementNameConvention`).
 - Reading the entity back (`Find`, `ToList`) threw `InvalidOperationException: Document element is missing for required
-  non-nullable property 'City'`.
+  non-nullable property 'City'`. When **every** member of the complex type was nullable (for example
+  `Addr { string? Street }`), reading the same kind of document did not throw: it returned a non-null `Home` with `null`
+  members (measured on 10.0.4). In both cases `SaveChanges` silently dropped the value.
 - Querying a complex member (`Where(c => c.Home.City == "Oslo")`) threw the driver's `ExpressionNotSupportedException`.
 - The model built without validation errors for a complex property whose element name duplicated a scalar's, started with
   `$`, or contained `.`, and for an element name collision introduced by camel-casing (`Home` and a property `home`).
@@ -46,9 +48,18 @@ nor read them, so any model using them lost data on save.
 
 #### Mitigations
 
-- Documents written by an earlier version lack the complex property's element. Reading such a document throws for a required
-  complex property (as before, but now naming the complex property). Backfill the element (for example with an
-  `updateMany` that `$set`s a default subdocument) before reading, or make the complex property optional (EF10).
+- Documents written by an earlier version lack the complex property's element. Reading such a document now throws
+  `Document element 'Home' is missing for required complex property 'C.Home'`. For a complex type with a required
+  non-nullable member this is not new (it threw before, naming the member). For a complex type whose members are **all
+  nullable** it is new: such a document read fine before (a non-null instance with `null` members) and now throws on every
+  document that lacks the element. Mitigations:
+  - EF10: make the complex property optional (a nullable CLR property, or `IsRequired(false)`) if that suits the model; a
+    missing element then reads `null`.
+  - EF8/EF9 (EF rejects optional complex properties there), or to keep it required: backfill the element before reading,
+    using its stored element name, for example
+    `db.cs.updateMany({ Home: { $exists: false } }, { $set: { Home: {} } })`; the nullable members of `{}` then read `null`
+    (a required member would still throw). Or keep the previous behaviour by ignoring the property
+    (`Ignore(c => c.Home)`) until the data is migrated.
 - If you worked around the earlier behavior with `Ignore(c => c.Home)` nothing changes. If you kept a parallel property
   (for example a shadow property or a separately mapped owned type) under the same element name, the model validator now
   reports the collision; give one of them a different element name.
@@ -60,8 +71,21 @@ corrected, and which internal path a query takes is not contract): to support co
 also (a) translates a bare projection of a dotted owned field natively; (b) reads a projected `Distinct` over a missing
 required `string` as `null`, as the driver-LINQ path in released versions did; (c) reads a derived outer root's own members
 in a join correctly; (d) resolves join and sort keys through owned hops structurally instead of by the member's simple name;
-and (e) applies the existing relational null guard to date-add, conditional and coalesce operands that may be null, so
-`<`/`<=` no longer match rows whose operand is null. (a), (c) and (d) correct wrong answers on the unreleased native path;
+(e) applies the existing relational null guard to date-add, conditional and coalesce operands that may be null, so
+`<`/`<=` no longer match rows whose operand is null; (f) reads an owned-hop `EF.Property` projection
+(`new { C = EF.Property<string>(b.Home, "City") }`) correctly instead of as `null`; and (g) declines `OfType<T>()` followed
+by `SelectMany` projecting a derived outer member (falling back) instead of throwing `ArgumentException` in every mode.
+(a), (f) and (g) correct the unreleased native path. (c) and (d) correct wrong answers on the unreleased native path **and
+on released code**:
+- (c): on 10.0.4 (measured, MongoDB 8) `People.OfType<Employee>().Where(e => e.ReferrerId != null)
+  .Select(e => new { e, e.Name, R = e.Referrer!.Name })` answered `Dev|Boss|Boss` (`e.Name` read off the joined referrer);
+  it now answers `Dev|Dev|Boss` in every mode. 8.4.4 and 9.1.4 cannot translate that query (it throws).
+- (d): in 8.4.4, 9.1.4 and 10.0.4 a filtered `Include` whose `OrderBy` reads through an owned navigation
+  (`Include(b => b.Posts.OrderBy(p => p.Meta.Rank))`) and the driver-LINQ `LeftJoin` on a key read through an owned
+  navigation resolved the key by the member's simple name (`GetSortField`, `TryGetKeyFieldPath`, verified in the tagged
+  source), so when the entity itself had a property of that name they silently sorted or joined by it; they now use the
+  owned field.
+
 (b) restores the released driver-LINQ answer; (e) follows EF's null semantics and the native path's existing guard policy
 (driver-LINQ includes those null-operand rows, as it already did for the shapes the guard covered before).
 

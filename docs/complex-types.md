@@ -48,9 +48,20 @@ modelBuilder.Entity<Customer>(e =>
   configured with `ComplexProperty`; they are not discovered by convention.
 - Element names: the CLR name by default; `CamelCaseElementNameConvention` camel-cases complex properties and their
   members; `[BsonElement("...")]` and `[Column("...")]` on a complex property or a member override it, as does the
-  `Mongo:ElementName` annotation (`HasPropertyAnnotation(MongoAnnotationNames.ElementName, "...")` on the complex property
-  builder, `HasElementName("...")` on a member's property builder). `[BsonIgnore]` and `[BsonRequired]` are honored.
-  `BsonRepresentation` and value converters on members work as they do for entity properties.
+  `Mongo:ElementName` annotation. There is no fluent `HasElementName` for complex properties or their members (it exists
+  only on entity and owned-type property builders); set the annotation instead:
+
+  ```c#
+  e.ComplexProperty(c => c.Home, a =>
+  {
+      a.HasPropertyAnnotation(MongoAnnotationNames.ElementName, "home");             // the complex property
+      a.Property(x => x.City).HasAnnotation(MongoAnnotationNames.ElementName, "c"); // a member
+      // or: a.Property(x => x.City).Metadata.SetElementName("c");
+  });
+  ```
+
+  `[BsonIgnore]` and `[BsonRequired]` are honored. `BsonRepresentation` and value converters on members work as they do
+  for entity properties.
 - The same CLR type may be used at several places with different element names; each place is configured independently.
 
 ### Per-version support
@@ -94,15 +105,21 @@ The model validator rejects, with an `InvalidOperationException` or `NotSupporte
 - A null optional complex property is stored as BSON `null`. When reading, `null` and a missing element both read as
   `null`; `{}` reads as an instance whose members follow the rules below.
 - A **required** complex property whose element is missing or BSON `null` throws when the entity (or the value) is
-  read ("... is missing/null for required complex property ..."); it never reads as `null` or a default struct.
+  read ("... is missing/null for required complex property ..."); it never reads as `null` or a default struct. This holds
+  even when every member of the complex type is nullable (a missing element is not read as an instance with `null`
+  members).
 - A missing or `null` **required complex collection** reads as an empty collection. EF10 can store a `null` element in a
   complex collection; it reads back as `null`.
 - Members inside a complex value follow the same rules as entity properties: a missing required member throws, a
   missing nullable member reads `null`.
 
 Documents written by provider versions before complex type support do not contain the complex property's element
-(those versions silently did not write it; see `BREAKING-CHANGES.md`). Backfill the element before reading them, or make
-the property optional (EF10).
+(those versions silently did not write it; see `BREAKING-CHANGES.md`). Reading such a document now throws for a required
+complex property, including one whose members are all nullable, which earlier versions read as an instance with `null`
+members. On EF10, make the property optional if that suits the model. On any version, backfill the element before reading
+(for example `db.customers.updateMany({ Home: { $exists: false } }, { $set: { Home: {} } })` with the stored element
+name; nullable members of `{}` then read `null`, and a required member still throws), or keep `Ignore(c => c.Home)` until
+the data is migrated.
 
 ## Saving and change tracking
 
@@ -126,7 +143,8 @@ Supported natively:
   `GroupBy(c => c.Home.City)`), aggregates over members (`Max(c => c.Pin.Lat)`), and set operations over member projections;
 - projections of members and of whole complex values (`Select(c => c.Home)`, `new { c.Name, c.Home }`, nested values,
   complex collections), and materialization of entities holding complex properties, tracked or not;
-- `== null` / `!= null` on an optional complex property (EF10), and equality between a complex value and `null`, an instance
+- `== null` / `!= null` on an optional single complex property (EF10; not on a complex collection, see below), and
+  equality between a complex value and `null`, an instance
   (constant, captured or constructed inline) or another stored complex value of the same CLR type. Equality is
   **member-wise** (it compares every mapped member, recursing into nested values) and follows C# null propagation;
 - joins, `Include` and TPH queries over entities that have complex properties;
@@ -164,6 +182,13 @@ translatable natively and its element predicate contains a comparison that depen
 a comparison with `null`, a local-list `Contains` of a member, or an equality on a non-nullable `bool` member), the
 default `Native` mode refuses the query with a `NativeTranslationNotSupportedException` instead of falling back to wrong
 rows. The check is structural: it refuses such a query even if no element is null.
+
+The default mode also refuses a **complex collection compared with `null`** (`c.PastAddresses == null`, `!= null`, in a
+filter, a projection, a ternary or a sort key): the native translator does not translate it, and the driver-LINQ path's
+`{PastAddresses: null}` also matches an array that contains a `null` element (and, for a required collection, a missing or
+`null` array, which reads as empty). Use `!c.PastAddresses.Any()` or `c.PastAddresses.Count == 0` (translated natively; a
+null, missing or empty array all count as empty), project the collection and test it on the client to tell `null` from
+empty, or use `MongoQueryMode.DriverLinq` for the driver's evaluation. `NativeOnly` throws as for any untranslated query.
 
 This check is best effort. It does not see element predicates reached through a navigation or join
 (`s.Store.Tags.Any(t => t.Rank < 1)`), through an element-member `Select` (`Select(s => s.Verified).Contains(false)`),
@@ -204,6 +229,19 @@ These are pinned in the provider's tests; the native path answers as C# does.
 - `c.Opt == null ? ... : ...` in a projection treats a missing optional complex value as present.
 - `Any(i => i.Pos == null)`/`Count(i => i.Pos == null)` miss a missing complex value inside an owned collection.
 - Predicates over `null` complex collection elements (see above).
+- `collection == null` also matches an array that contains a `null` element (see above).
+
+## Known limitations
+
+- There is no fluent `HasElementName` for complex properties or their members; use the annotation spellings above.
+- A required complex property whose element is missing throws on read even when all its members are nullable (see
+  Stored shape).
+- On EF8/EF9, projecting complex members from an entity that also has an owned navigation uses the driver-LINQ fallback,
+  and a whole complex value in such a projection fails (see Queries).
+- The `Native`-mode refusal for `null` complex collection elements is best effort (see the limits above).
+- A positive `Any` over a complex collection is evaluated in an aggregation element scope, so it cannot use an index on
+  the array's members (owned collections use `$elemMatch`).
+- `MongoQueryMode.DriverLinq` bulk operations over complex collection elements log no warning; see the warning above.
 
 ## Design time
 
