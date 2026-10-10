@@ -107,7 +107,9 @@ public class ColumnAttributeConvention :
 
         if (!string.IsNullOrWhiteSpace(attribute?.Name))
         {
-            meta.SetAnnotation(MongoAnnotationNames.ElementName, attribute.Name, fromDataAnnotation: true);
+            // Through the builder, as the scalar path's HasElementName is: a name configured with a higher source
+            // (explicit configuration) is kept, e.g. when EF lifts the complex property from a derived type to its base.
+            propertyBuilder.HasAnnotation(MongoAnnotationNames.ElementName, attribute.Name, fromDataAnnotation: true);
         }
     }
 }
