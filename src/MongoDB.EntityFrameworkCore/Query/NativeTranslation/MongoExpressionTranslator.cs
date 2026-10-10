@@ -1274,6 +1274,26 @@ internal sealed partial class MongoExpressionTranslator
         => new(property, path, nullSafe || StructuralPath.IsComplexElementScope(_scopeType));
 
     /// <summary>
+    /// A field of the OUTER (root) row read inside an element scope. Inside a COMPLEX collection's element scope it is
+    /// <see cref="MongoOuterFieldExpression.NullSafe"/> when it may be absent (a nullable property, or one under an optional
+    /// owned/complex ancestor): the element's leaves read a null element's members as null (R17), so the outer value must
+    /// read MISSING as null too (R14), or <c>a.Street == p.Opt!.Text</c> compares null with MISSING. Owned element scopes
+    /// and required outer values are unchanged.
+    /// </summary>
+    private MongoOuterFieldExpression OuterField(IProperty property, string path, Expression member)
+        => new(property, path,
+            StructuralPath.IsComplexElementScope(_scopeType) && (property.IsNullable || CrossesOptionalHop(member, includeOwned: true)));
+
+    // A bare stored field (not already null-normalized) as a null-normalized one; any other operand unchanged.
+    private static MongoExpression NullSafeFieldOperand(MongoExpression operand)
+        => operand switch
+        {
+            MongoFieldExpression { NullSafe: false } field => new MongoFieldExpression(field.Property, field.ElementName, nullSafe: true),
+            MongoOuterFieldExpression { NullSafe: false } outer => new MongoOuterFieldExpression(outer.Property, outer.ElementName, nullSafe: true),
+            _ => operand
+        };
+
+    /// <summary>
     /// A field used as a compared VALUE in this scope. Inside a complex collection's element scope a non-nullable,
     /// default-serialized <see cref="bool"/> leaf of a null element reads <see langword="false"/> (ruling R19, the
     /// provider's bool null-as-false read rule), so `== false`, `!= true`, `== p` and leaf-to-leaf comparisons agree with
@@ -1461,7 +1481,7 @@ internal sealed partial class MongoExpressionTranslator
                     && rightUnwrapped is ConstantExpression { Value: null }
                     && nodeType is ExpressionType.Equal or ExpressionType.NotEqual;
                 MongoExpression leftField = leftIsOuter && _innerPrefix is null
-                    ? new MongoOuterFieldExpression(leftProperty, leftPath!)
+                    ? OuterField(leftProperty, leftPath!, leftUnwrapped)
                     : ScopeValue(ScopeField(leftProperty, leftPath!, leftNullSafe));
                 return new MongoBinaryExpression(mongoOp.Value, leftField, valueExpr);
             }
@@ -1500,7 +1520,7 @@ internal sealed partial class MongoExpressionTranslator
                     && leftUnwrapped is ConstantExpression { Value: null }
                     && nodeType is ExpressionType.Equal or ExpressionType.NotEqual;
                 MongoExpression rightField = rightIsOuter && _innerPrefix is null
-                    ? new MongoOuterFieldExpression(rightProperty, rightPath!)
+                    ? OuterField(rightProperty, rightPath!, rightUnwrapped)
                     : ScopeValue(ScopeField(rightProperty, rightPath!, rightNullSafe));
                 return new MongoBinaryExpression(mongoOp.Value, rightField, valueExpr);
             }
@@ -1562,6 +1582,20 @@ internal sealed partial class MongoExpressionTranslator
                 return null;
 
             return new MongoBinaryExpression(mirroredOp.Value, rightOperand, leftOperand);
+        }
+
+        // A leaf under an OPTIONAL complex parent is MISSING when the parent is null/absent, where C# reads it as null
+        // (ruling R14), and $expr's $eq/$ne and relational operators don't equate MISSING with null: `p.Opt!.Text ==
+        // p.Main.Text` missed the both-null row. When either side crosses an optional complex hop, both bare field
+        // operands read null-normalized (so the other side's MISSING compares as null too), and MayBeNull gives a
+        // relational comparison its null guard. Single-scope (root) translators only: element scopes have their own rules
+        // (R17 element leaves, OuterField for the correlated row; owned element scopes byte-identical). Owned ancestors are
+        // unchanged (pre-existing in every mode). A no-op for any comparison with no optional complex hop on either side.
+        if (_outerParam is null && _innerPrefix is null
+            && (CrossesOptionalComplexHop(left) || CrossesOptionalComplexHop(right)))
+        {
+            leftOperand = NullSafeFieldOperand(leftOperand);
+            rightOperand = NullSafeFieldOperand(rightOperand);
         }
 
         var comparisonResult = new MongoBinaryExpression(generalOp.Value, leftOperand, rightOperand);
@@ -1881,7 +1915,7 @@ internal sealed partial class MongoExpressionTranslator
             // never reaches the query dialect, so an outer field renders the same as a plain one. Asserted by
             // NativeSelectManyBinderTests.
             return operandIsOuter
-                ? new MongoOuterFieldExpression(property, fieldPath!)
+                ? OuterField(property, fieldPath!, node)
                 : ScopeValue(ScopeField(property, fieldPath!));
         }
 

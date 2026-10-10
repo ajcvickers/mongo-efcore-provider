@@ -538,6 +538,48 @@ internal sealed partial class MongoExpressionTranslator
         return true;
     }
 
+    /// <summary>
+    /// Whether the member chain <paramref name="node"/> crosses an OPTIONAL complex property (EF10) on its way to its leaf,
+    /// so the leaf is MISSING whenever that ancestor is null/absent (ruling R14). Owned hops are not counted.
+    /// </summary>
+    private bool CrossesOptionalComplexHop(Expression node)
+        => CrossesOptionalHop(node, includeOwned: false);
+
+    /// <summary>
+    /// Whether the member chain <paramref name="node"/> (rooted on a scope parameter) crosses an optional complex property,
+    /// or with <paramref name="includeOwned"/> an optional owned reference, before its leaf.
+    /// </summary>
+    private bool CrossesOptionalHop(Expression node, bool includeOwned)
+    {
+        node = Unwrap(node);
+        while (node is MemberExpression { Member.Name: nameof(Nullable<int>.Value), Expression: { } nullableReceiver }
+               && Nullable.GetUnderlyingType(nullableReceiver.Type) is not null)
+        {
+            node = Unwrap(nullableReceiver);
+        }
+
+        if (!TryBeginOwnedHopWalk(node, minimumHops: 2, scopeRootFallback: false, out var names, out var scopeType, out _))
+            return false;
+
+        for (var count = 1; count < names.Count; count++)
+        {
+            if (!StructuralPath.TryResolve(scopeType, names.GetRange(0, count), count - 1, out var prefix))
+                return false;
+
+            if (prefix.Leaf switch
+                {
+                    IComplexProperty complex => complex.IsOptional(),
+                    INavigation navigation => includeOwned && !navigation.ForeignKey.IsRequiredDependent,
+                    _ => false
+                })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// True when <paramref name="property"/> is a component of a composite primary key. The serializer nests such a
     /// key under an <c>_id</c> local to the declaring type — <c>{ _id: { Key1, Key2 } }</c> at the root, or
     /// <c>{ Author: { _id: { City, Country } } }</c> for an owned type with its own <c>HasKey</c> — at any depth.
