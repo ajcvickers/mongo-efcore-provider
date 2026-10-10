@@ -111,5 +111,10 @@ public class ColumnAttributeConvention :
             // (explicit configuration) is kept, e.g. when EF lifts the complex property from a derived type to its base.
             propertyBuilder.HasAnnotation(MongoAnnotationNames.ElementName, attribute.Name, fromDataAnnotation: true);
         }
+
+        if (!string.IsNullOrWhiteSpace(attribute?.TypeName))
+        {
+            Dependencies.Logger.ColumnAttributeWithTypeUsed(meta); // Will throw by default, as for a scalar
+        }
     }
 }

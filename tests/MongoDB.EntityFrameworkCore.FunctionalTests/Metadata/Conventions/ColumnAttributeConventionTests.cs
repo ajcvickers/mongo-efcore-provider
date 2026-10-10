@@ -177,6 +177,95 @@ public class ColumnAttributeConventionTests(TemporaryDatabaseFixture database)
             ex.Message);
     }
 
+    [ComplexType]
+    class TypeNameAddress
+    {
+        public string City { get; set; }
+    }
+
+    class ComplexTypeNameSpecifyingEntity
+    {
+        public ObjectId _id { get; set; }
+
+        [Column("home", TypeName = "varchar(255)")]
+        public TypeNameAddress Home { get; set; }
+    }
+
+    [ComplexType]
+    class LeafTypeNameAddress
+    {
+        [Column("city", TypeName = "varchar(255)")]
+        public string City { get; set; }
+    }
+
+    class ComplexLeafTypeNameSpecifyingEntity
+    {
+        public ObjectId _id { get; set; }
+
+        public LeafTypeNameAddress Home { get; set; }
+    }
+
+    // The same diagnostic (same event ID, same message shape) as for a scalar: the TypeName on a complex property is not
+    // silently dropped.
+    [Fact]
+    public void ColumnAttribute_throws_if_type_name_specified_on_complex_property()
+    {
+        var collection = database.CreateCollection<ComplexTypeNameSpecifyingEntity>();
+
+        using var db = SingleEntityDbContext.Create(collection);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => db.Model);
+
+        Assert.Equal(
+            "An error was generated for warning 'Microsoft.EntityFrameworkCore.Model.ColumnAttributeWithTypeUsed': " +
+            "Property 'ComplexTypeNameSpecifyingEntity.Home' specifies a 'ColumnAttribute.TypeName' which is not supported by MongoDB. " +
+            "Use MongoDB-specific attributes or the model building API to configure your model for MongoDB. " +
+            "The 'TypeName' will be ignored if this event is suppressed. " +
+            "This exception can be suppressed or logged by passing event ID 'MongoEventId.ColumnAttributeWithTypeUsed' to the 'ConfigureWarnings' method in 'DbContext.OnConfiguring' or 'AddDbContext'.",
+            ex.Message);
+    }
+
+    // A leaf inside a complex type goes through the scalar convention path.
+    [Fact]
+    public void ColumnAttribute_throws_if_type_name_specified_on_complex_type_leaf()
+    {
+        var collection = database.CreateCollection<ComplexLeafTypeNameSpecifyingEntity>();
+
+        using var db = SingleEntityDbContext.Create(collection);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => db.Model);
+
+        Assert.StartsWith(
+            "An error was generated for warning 'Microsoft.EntityFrameworkCore.Model.ColumnAttributeWithTypeUsed': " +
+            "Property 'ComplexLeafTypeNameSpecifyingEntity.Home#LeafTypeNameAddress.City' specifies a 'ColumnAttribute.TypeName'",
+            ex.Message);
+    }
+
+    [Fact]
+    public void ColumnAttribute_warning_on_complex_property_can_be_suppressed_and_keeps_the_name()
+    {
+        using var db = new NoThrowComplexDbContext();
+
+        var complexProperty = db.Model
+            .FindEntityType(typeof(ComplexTypeNameSpecifyingEntity))!
+            .FindComplexProperty(nameof(ComplexTypeNameSpecifyingEntity.Home))!;
+        Assert.Equal("home", complexProperty[MongoDB.EntityFrameworkCore.Metadata.MongoAnnotationNames.ElementName]);
+    }
+
+    private class NoThrowComplexDbContext : DbContext
+    {
+        public DbSet<ComplexTypeNameSpecifyingEntity> Entities { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+            => optionsBuilder
+                .UseMongoDB("mongodb://localhost:27017", nameof(ComplexTypeNameSpecifyingEntity))
+                .ConfigureWarnings(x =>
+                {
+                    x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning);
+                    x.Ignore(MongoEventId.ColumnAttributeWithTypeUsed);
+                });
+    }
+
     [Fact]
     public void ColumnAttribute_warning_can_be_suppressed()
     {
