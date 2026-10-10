@@ -268,6 +268,62 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
                 .Select(e => new { e, e.Name, R = e.Referrer!.Name }).ToList().Select(x => $"{x.e.Name}|{x.Name}|{x.R}")));
     }
 
+    // ── The same shape with the referrer typed as the hierarchy's BASE type (api-stability review, exception (c)) ───
+
+    public class StaffBase
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public ObjectId? ReferrerId { get; set; }
+        public StaffBase? Referrer { get; set; }
+    }
+
+    public class StaffDev : StaffBase
+    {
+        public int Level { get; set; }
+    }
+
+    private sealed class StaffContext(DbContextOptions options, string collection) : DbContext(options)
+    {
+        public DbSet<StaffBase> People => Set<StaffBase>();
+
+        protected override void OnModelCreating(ModelBuilder mb)
+        {
+            mb.Entity<StaffDev>().HasBaseType<StaffBase>();
+            mb.Entity<StaffBase>(b =>
+            {
+                b.ToCollection(collection);
+                b.HasDiscriminator<string>("_t").HasValue<StaffBase>("P").HasValue<StaffDev>("E");
+                b.HasOne(p => p.Referrer).WithMany().HasForeignKey(p => p.ReferrerId);
+            });
+        }
+    }
+
+    private List<string> StaffOutcome(string collection, MongoQueryMode mode, Func<StaffContext, IEnumerable<string>> query)
+    {
+        var builder = new DbContextOptionsBuilder<StaffContext>()
+            .UseMongoDB(database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName)
+            .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+            .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+        new MongoDbContextOptionsBuilder(builder).UseQueryMode(mode);
+        using var db = new StaffContext(builder.Options, collection);
+        return query(db).ToList();
+    }
+
+    [Fact]
+    public void Derived_outer_root_in_a_join_with_a_base_typed_referrer()
+    {
+        // Seed: Boss (E) <- Dev (E), Guest (P). OfType<StaffDev>() keeps Dev only; its referrer is Boss.
+        // Hand-written answer: e.Name = Dev, R = Boss.
+        var collection = Seed(nameof(Derived_outer_root_in_a_join_with_a_base_typed_referrer));
+        CompositionAssert.PerMode(m => StaffOutcome(collection, m, db => db.People.OfType<StaffDev>().Where(e => e.ReferrerId != null)
+                .Select(e => new { e, e.Name, R = e.Referrer!.Name }).ToList().Select(x => $"{x.e.Name}|{x.Name}|{x.R}")),
+            ["Dev|Dev|Boss"], NotNativeAny, Serves, Serves);
+        CompositionAssert.PerMode(m => StaffOutcome(collection, m, db => db.People.OfType<StaffDev>().Where(e => e.ReferrerId != null)
+                .Select(e => new { e, R = e.Referrer!.Name }).ToList().Select(x => $"{x.e.Name}|{x.R}")),
+            ["Dev|Boss"], NotNativeAny, Serves, Serves);
+    }
+
     [Fact]
     public void Derived_shaper_with_complex_values_in_a_non_join_query_reads_the_root_document()
     {
