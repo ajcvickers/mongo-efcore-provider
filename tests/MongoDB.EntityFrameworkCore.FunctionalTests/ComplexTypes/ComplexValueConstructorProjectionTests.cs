@@ -26,9 +26,11 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// <summary>
 /// Constructor, record and member-init projections of a whole complex value, per mode (the source of the constructor
 /// sentence in docs/complex-types.md). A ONE-argument constructor or record of a whole complex value, and a member-init
-/// DTO, are served in every mode (including a value stored under renamed members); a construction with MORE than one
-/// argument that includes a whole complex value is not supported: it declines natively and the fallback fails loudly, except
-/// for two complex values of the same CLR type, which is a known wrong read (pinned below).
+/// DTO, are served in every mode (including a value stored under renamed members). A construction with MORE than one
+/// argument whose arguments are all whole complex values declines natively and the fallback serves it (each argument read
+/// from its own element; it used to read every argument from the last one, spec known limitation 29); one that mixes a
+/// whole complex value with a scalar declines natively and the fallback refuses it loudly. More shapes:
+/// <see cref="ComplexValueSameTypeArgumentTests"/>.
 /// </summary>
 [XUnitCollection("QueryTests")]
 public class ComplexValueConstructorProjectionTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
@@ -79,19 +81,21 @@ public class ComplexValueConstructorProjectionTests(TemporaryDatabaseFixture dat
         => Native(Run(db => db.Clients.OrderBy(c => c.Name).Select(c => new Dto { A = c.Shipping, N = c.Name }).ToList().Select(x => x.N + "|" + Composition.Fmt(x.A!))),
             "Ann|Rome/2/-/2", "Bob|Oslo/1/-/1", "Cid|Paris/3/9/3", "Hid|Paris/5/-/4");
 
+    // The scalar argument shares the construction's one projection member with the complex one, so the fallback's
+    // member-less construction refusal names the type and the remedy.
     [Fact]
     public void Two_argument_record_of_a_whole_complex_value_and_a_scalar_is_refused()
         => PerMode(Run(db => db.Clients.OrderBy(c => c.Name).Select(c => new Two(c.Billing, c.Name)).ToList().Select(x => x.N + "|" + Composition.Fmt(x.A))),
-            [], NotNative, Throws<InvalidOperationException>("could not be located in the document"),
-            Throws<InvalidOperationException>("could not be located in the document"));
+            [], NotNative, Throws<InvalidOperationException>("The projection constructs 'Two' from arguments that can't each be read"),
+            Throws<InvalidOperationException>("The projection constructs 'Two' from arguments that can't each be read"));
 
-    // Two whole complex values of the same CLR type stored DIFFERENTLY: loud, with a misleading message (the second
-    // argument is read through the first's element names).
+    // Two whole complex values of the same CLR type stored DIFFERENTLY (Shipping under renamed members): each argument is
+    // read through its own element names. Before the limitation-29 fix this threw "Document element is missing ..."
+    // (the first argument was read through the second's registration).
     [Fact]
-    public void Two_argument_record_of_two_differently_stored_complex_values_fails_loudly()
+    public void Two_argument_record_of_two_differently_stored_complex_values_reads_each_argument()
         => PerMode(Run(db => db.Clients.OrderBy(c => c.Name).Select(c => new TwoAddr(c.Billing, c.Shipping)).ToList().Select(x => Composition.Fmt(x.A) + "|" + Composition.Fmt(x.B))),
-            [], NotNative, Throws<InvalidOperationException>("Document element is missing for required non-nullable property 'City'"),
-            Throws<InvalidOperationException>("Document element is missing for required non-nullable property 'City'"));
+            ["Paris/1/75/1|Rome/2/-/2", "Rome/3/-/2|Oslo/1/-/1", "Oslo/1/-/3|Paris/3/9/3", "Hidden/5/-/4|Paris/5/-/4"], NotNative, Serves, Serves);
 
     public class PA
     {
@@ -138,12 +142,12 @@ public class ComplexValueConstructorProjectionTests(TemporaryDatabaseFixture dat
         };
     }
 
-    // KNOWN WRONG READ (unreleased, complex-only; listed in the design spec's known limitations): two whole complex values
-    // of the same CLR type, stored alike, as constructor arguments read EVERY argument from the LAST one. Correct: H|W.
-    // Pinned to the measured rows so a fix flips it; the owned control below reads correctly.
+    // Was a silent wrong read (spec known limitation 29, resolved): two whole complex values of the same CLR type, stored
+    // alike, as constructor arguments read EVERY argument from the LAST one (W|W). Each is now read from its own element,
+    // like the owned control below.
     [Fact]
-    public void Two_argument_record_of_two_alike_stored_complex_values_is_a_known_wrong_read()
-        => PerMode(Pair(owned: false), ["W|W"], NotNative, Serves, Serves);
+    public void Two_argument_record_of_two_alike_stored_complex_values_reads_each_argument()
+        => PerMode(Pair(owned: false), ["H|W"], NotNative, Serves, Serves);
 
     [Fact]
     public void Owned_control_two_argument_record_of_two_owned_values_reads_each_argument()

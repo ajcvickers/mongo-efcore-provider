@@ -229,7 +229,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 when !(_queryExpression.Select.Route == NativeRoute.WholeEntity
                        && _queryExpression.Select.HasClientWrappedWholeEntityShaper)
                      && ResolveComplexValueProperty(expression) is { } complexValueProperty:
-                return new ComplexValueProjectionExpression(BindWholeLeaf(expression), complexValueProperty);
+                return new ComplexValueProjectionExpression(BindWholeLeaf(expression), complexValueProperty, expression);
 
             case MemberExpression memberExpression:
                 return BindWholeLeaf(memberExpression);

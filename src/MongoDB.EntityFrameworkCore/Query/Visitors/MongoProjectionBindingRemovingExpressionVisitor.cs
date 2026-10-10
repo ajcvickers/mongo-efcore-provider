@@ -1301,10 +1301,11 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
         // A whole un-projected document (the mixed shaper): read the value at its natural path, resolving the hops as a
         // leaf's field access does (TryResolveFieldAccessSource), so every segment is the model's element name.
-        var bound = complexValue.Binding.ProjectionMember is { } member
-                    && _queryExpression.GetMappedProjection(member) is not ConstantExpression { Value: int }
-            ? _queryExpression.GetMappedProjection(member)
-            : GetProjection(complexValue.Binding).Expression;
+        // The value's OWN bound expression, never the registration under its projection member: the arguments of a
+        // member-less construction or a method call (`new P(c.Home, c.Work)`, `Tuple.Create(c.Home, c.Work)`) all
+        // register under one shared member, whose registration is only the LAST argument's, so every complex argument
+        // read the last one's value (W|W; spec known limitation 29). Elsewhere the registration is this same expression.
+        var bound = complexValue.Source;
         if (bound.RemoveConvert().TryGetMemberOrEFProperty(out var receiver, out var name)
             && TryResolveFieldAccessSource(receiver) is { EntityType: { } owner, DocumentExpression: { } ownerDocument }
             && owner.FindComplexProperty(name) is { } complexProperty)

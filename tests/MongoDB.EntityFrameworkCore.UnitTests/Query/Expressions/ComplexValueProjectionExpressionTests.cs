@@ -73,7 +73,8 @@ public class ComplexValueProjectionExpressionTests
         var queryExpression = new MongoQueryExpression(entityType);
         return new ComplexValueProjectionExpression(
             new ProjectionBindingExpression(queryExpression, new ProjectionMember(), typeof(Address)),
-            entityType.FindComplexProperty(nameof(Customer.Address))!);
+            entityType.FindComplexProperty(nameof(Customer.Address))!,
+            Expression.Default(typeof(Address)));
     }
 
     [Fact]
