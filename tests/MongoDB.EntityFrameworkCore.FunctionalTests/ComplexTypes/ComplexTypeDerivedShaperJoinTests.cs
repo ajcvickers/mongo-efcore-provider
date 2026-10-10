@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -112,51 +112,16 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
         return query(db).ToList();
     }
 
-    private const string Serves = "serves";
-
-    // Pins EACH mode: either it serves the hand-written rows (`Serves`), or it throws an exception whose message contains
-    // the given fragment. A mode that starts throwing where it served, or serving where it threw, fails the test; a
-    // wrong-document read is a value difference in a serving mode.
+    // Pins EACH mode through the shared CompositionAssert.PerMode: serves the hand-written rows, or declines natively
+    // (a NativeTranslationNotSupportedException). A mode that starts throwing where it served, or serving where it threw,
+    // fails the test; a wrong-document read is a value difference in a serving mode.
     private void AssertPerMode(
         string collection, Func<PeopleContext, IEnumerable<string>> query, string[] expected,
-        string nativeOnly, string native, string driverLinq)
-    {
-        foreach (var (mode, want) in new[] { (MongoQueryMode.NativeOnly, nativeOnly), (MongoQueryMode.Native, native), (MongoQueryMode.DriverLinq, driverLinq) })
-        {
-            List<string>? rows = null;
-            Exception? error = null;
-            try
-            {
-                rows = Outcome(collection, mode, query);
-            }
-            catch (Exception e) when (e is not Xunit.Sdk.XunitException)
-            {
-                error = e;
-            }
+        Outcome nativeOnly, Outcome native, Outcome driverLinq)
+        => CompositionAssert.PerMode(mode => Outcome(collection, mode, query), expected, nativeOnly, native, driverLinq);
 
-            if (want == Serves)
-            {
-                Assert.True(error == null, $"{mode}: expected rows, got {error}");
-                Assert.True(expected.SequenceEqual(rows!), $"{mode}: expected [{string.Join("; ", expected)}], got [{string.Join("; ", rows!)}]");
-            }
-            else if (want == NotNativeAny)
-            {
-                Assert.True(error is MongoDB.EntityFrameworkCore.Query.NativeTranslation.NativeTranslationNotSupportedException,
-                    $"{mode}: expected NativeTranslationNotSupportedException, got {(error == null ? $"rows [{string.Join("; ", rows!)}]" : error.ToString())}");
-            }
-            else
-            {
-                Assert.True(error != null && error.Message.Contains(want),
-                    $"{mode}: expected an exception containing '{want}', got {(error == null ? $"rows [{string.Join("; ", rows!)}]" : error.ToString())}");
-                // A message fragment alone could match an unrelated exception: the type is pinned too.
-                Assert.True(error is MongoDB.Driver.Linq.ExpressionNotSupportedException or InvalidOperationException,
-                    $"{mode}: '{want}' with unexpected exception type {error!.GetType().Name}");
-            }
-        }
-    }
-
-    // A NativeOnly decline: asserted by exception TYPE (NativeTranslationNotSupportedException), not by message.
-    private const string NotNativeAny = "<NativeTranslationNotSupportedException>";
+    private static readonly Outcome Serves = CompositionAssert.Serves;
+    private static readonly Outcome NotNativeAny = CompositionAssert.NotNative;
 
     [Fact]
     public void Mixed_projection_through_a_derived_reference_reads_the_joined_document()

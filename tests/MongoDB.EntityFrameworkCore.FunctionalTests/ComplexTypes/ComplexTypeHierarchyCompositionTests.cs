@@ -231,7 +231,7 @@ public class ComplexTypeHierarchyCompositionTests(TemporaryDatabaseFixture datab
         Declines(Run(db => [.. db.B.Where(x => x.Where.City == "Oslo").ToList().Select(x => x.Name + "|" + x.Where.City + "|" + x.Where.Geo.Lat)]), "b1|Oslo|3");
         Native(Run(db => [.. db.B.Where(x => x.Where.City == "Paris").Select(x => x.Name)]));
         PerMode(Run(db => [.. db.A.Select(x => x.Where.City).Union(db.B.Select(x => x.Where.City)).ToList().Order()]),
-            ["Oslo", "Paris", "Rome"], Serves, Serves, "cross-DbSet");
+            ["Oslo", "Paris", "Rome"], Serves, Serves, Throws<InvalidOperationException>("cross-DbSet"));
         // KNOWN PRE-EXISTING WRONG READ (not complex-specific; Jira candidate, not filed): in a join between two shared-type
         // entity types of ONE CLR type (A joined to B, both Bag), the driver-LINQ path can't attribute a member of the inner
         // side by CLR type and reads it through A's element names: B's `y.Where.City` answers A's decoy `Where.City`
@@ -342,7 +342,7 @@ public class ComplexTypeHierarchyCompositionTests(TemporaryDatabaseFixture datab
         // A filtered Count over an owned collection in a PROJECTION is refused by EF in every mode, for a scalar element
         // member too (pre-existing). Never rows.
         PerMode(Owners(db => [.. db.Owners.OrderBy(o => o.Name).Select(o => o.Lots.Count(l => l.Plate.Label != "L2").ToString())]), ["1", "1"],
-            "could not be translated", "could not be translated", "could not be translated");
+            Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"));
         // An owned-collection SelectMany projecting an element's complex leaf declines natively (the SelectMany projection
         // binder binds one-hop members only); the owned unwind fallback serves.
         Declines(Owners(db => [.. db.Owners.SelectMany(o => o.Lots, (o, l) => new { o.Name, l.Sku, l.Plate.Label }).ToList()

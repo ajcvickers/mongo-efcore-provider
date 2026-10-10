@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -145,8 +145,8 @@ public class ComplexCollectionStringContainsTests(TemporaryDatabaseFixture datab
             return [.. db.Entities.Where(r => r.Stops.Any(s => hay.Contains(s.City))).Select(r => r.Name).ToList().Order(StringComparer.Ordinal)];
         }
 
-        CompositionAssert.PerMode(Run, [], CompositionAssert.NotNative, "$indexOfCP requires a string as the second argument",
-            "$indexOfCP requires a string as the second argument");
+        CompositionAssert.PerMode(Run, [], CompositionAssert.NotNative, CompositionAssert.Throws<MongoDB.Driver.MongoCommandException>("$indexOfCP requires a string as the second argument"),
+            CompositionAssert.Throws<MongoDB.Driver.MongoCommandException>("$indexOfCP requires a string as the second argument"));
     }
 }
 #endif

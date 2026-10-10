@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -105,8 +105,10 @@ public partial class ComplexTypeDowncastTests(TemporaryDatabaseFixture database)
         }
     }
 
-    private const string StoredOrderingRefusal = "cannot be translated to a MongoDB query: the property is stored through a value converter";
+    private const string StoredOrderingRefusalMessage = "cannot be translated to a MongoDB query: the property is stored through a value converter";
 
+
+    private static readonly Outcome StoredOrderingRefusal = Throws<NotSupportedException>(StoredOrderingRefusalMessage);
     // tom (Cat, Vet.Code "10", Lives "9"), kit (Cat, Vet.Code "2", Lives "3"), rex (Animal).
     private static BsonDocument[] ZooSeed()
         =>
@@ -175,10 +177,10 @@ public partial class ComplexTypeDowncastTests(TemporaryDatabaseFixture database)
         using (var db = new ZooContext(Options<ZooContext>(MongoQueryMode.Native), collection))
         {
             var ex = Assert.Throws<InvalidOperationException>(() => db.Animals.Where(a => a is Cat && ((Cat)a).Vet.Code < 5).ExecuteDelete());
-            Assert.Contains(StoredOrderingRefusal, ex.Message);
+            Assert.Contains(StoredOrderingRefusalMessage, ex.Message);
             ex = Assert.Throws<InvalidOperationException>(
                 () => db.Animals.Where(a => a is Cat && (a as Cat)!.Vet.Code < 5).ExecuteUpdate(s => s.SetProperty(a => a.Rank, 9)));
-            Assert.Contains(StoredOrderingRefusal, ex.Message);
+            Assert.Contains(StoredOrderingRefusalMessage, ex.Message);
         }
 
         AssertRawUnchanged(collection, seed);

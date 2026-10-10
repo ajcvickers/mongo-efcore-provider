@@ -75,9 +75,9 @@ public class ComplexTypeCompositionTests(TemporaryDatabaseFixture database) : IC
     {
         // No driver-LINQ oracle for Intersect/Except (Query AGENTS.md): pinned as native, DriverLinq refusing.
         PerMode(Clients(db => Sorted(db.Clients.Select(c => c.Billing.City).Intersect(db.Clients.Select(c => c.Shipping.City)))),
-            ["Oslo", "Paris", "Rome"], Serves, Serves, "not supported||Expression not supported");
+            ["Oslo", "Paris", "Rome"], Serves, Serves, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("not supported||Expression not supported"));
         PerMode(Clients(db => Sorted(db.Clients.Select(c => c.Billing.City).Except(db.Clients.Select(c => c.Shipping.City)))),
-            ["Hidden"], Serves, Serves, "not supported||Expression not supported");
+            ["Hidden"], Serves, Serves, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("not supported||Expression not supported"));
     }
 
     [Fact]
@@ -107,10 +107,10 @@ public class ComplexTypeCompositionTests(TemporaryDatabaseFixture database) : IC
     {
         // Across two collections there is no driver-LINQ oracle (cross-DbSet): native serves, DriverLinq refuses.
         PerMode(Clients(db => Sorted(db.Clients.Select(c => c.Billing.City).Union(db.Orders.Select(o => o.City)))),
-            ["Hidden", "Lima", "Oslo", "Paris", "Rome"], Serves, Serves, "cross-DbSet");
+            ["Hidden", "Lima", "Oslo", "Paris", "Rome"], Serves, Serves, Throws<InvalidOperationException>("cross-DbSet"));
         PerMode(Clients(db => Sorted(db.Clients.Where(c => c.Rank < 3).Select(c => c.Shipping.City)
                 .Concat(db.Orders.Where(o => o.Rank > 3).Select(o => o.Ship.City)))),
-            ["Hidden", "Oslo", "Oslo", "Rome"], Serves, Serves, "cross-DbSet");
+            ["Hidden", "Oslo", "Oslo", "Rome"], Serves, Serves, Throws<InvalidOperationException>("cross-DbSet"));
         Native(Clients(db => Sorted(db.Clients.Select(c => new { c.Name, c.Billing.City })
                 .Union(db.Clients.Where(c => c.Shipping.Geo.Lat > 2).Select(c => new { c.Name, City = c.Shipping.City })))),
             "{ Name = Ann, City = Paris }", "{ Name = Bob, City = Rome }", "{ Name = Cid, City = Oslo }", "{ Name = Cid, City = Paris }",
@@ -170,8 +170,8 @@ public class ComplexTypeCompositionTests(TemporaryDatabaseFixture database) : IC
         Native(Clients(db => [F(db.Clients.OrderBy(c => c.Billing.Geo.Lat).ThenBy(c => c.Name).Last())]), Hid);
         Native(Clients(db => [F(db.Clients.OrderBy(c => c.Name).LastOrDefault(c => c.Billing.Geo.Lat == 1))]), Cid);
         // Two rows match: Single throws EF's "Sequence contains more than one element" in every mode, never a row.
-        PerMode(Clients(db => [F(db.Clients.Single(c => c.Shipping.City == "Paris"))]), [], "more than one element", "more than one element",
-            "more than one element");
+        PerMode(Clients(db => [F(db.Clients.Single(c => c.Shipping.City == "Paris"))]), [], Throws<InvalidOperationException>("more than one element"), Throws<InvalidOperationException>("more than one element"),
+            Throws<InvalidOperationException>("more than one element"));
     }
 
     [Fact]
@@ -215,7 +215,7 @@ public class ComplexTypeCompositionTests(TemporaryDatabaseFixture database) : IC
         Native(Clients(db => [db.Clients.Count().ToString()], Filter.ClientBillingCity), "3");
         Native(Clients(db => Sorted(db.Clients.Select(c => c.Billing.City).Distinct()), Filter.ClientBillingCity), "Oslo", "Paris", "Rome");
         PerMode(Clients(db => Sorted(db.Clients.Select(c => c.Shipping.City).Union(db.Orders.Select(o => o.Ship.City))), Filter.OrderShipCity),
-            ["Oslo", "Paris", "Rome"], Serves, Serves, "cross-DbSet");
+            ["Oslo", "Paris", "Rome"], Serves, Serves, Throws<InvalidOperationException>("cross-DbSet"));
     }
 
     [Fact]

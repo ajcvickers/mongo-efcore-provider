@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -799,15 +799,15 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         // a third row below makes them equal); the driver refuses the stored pair (its serializers differ) and the
         // complex serializer refuses an instance comparand (ruling R1).
         PerMode(m => Query(collection, ConfigureShipper, m, q => q.Where(s => s.Shipping == s.Previous).Select(s => s.Name)), [],
-            Serves, Serves, "because the two arguments are serialized differently");
+            Serves, Serves, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"));
         PerMode(m => Query(collection, ConfigureShipper, m, q => q.Where(s => s.Billing != s.Previous).OrderBy(s => s.Name).Select(s => s.Name)), ["a", "b"],
-            Serves, Serves, "because the two arguments are serialized differently");
+            Serves, Serves, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"));
         var target = S("B1", 20);
         PerMode(m => Query(collection, ConfigureShipper, m, q => q.Where(s => s.Shipping == target).Select(s => s.Name)), ["b"],
-            Serves, Serves, "as a whole value is not supported");
+            Serves, Serves, Throws<NotSupportedException>("as a whole value is not supported"));
         var targetForBilling = S("B1", 1);
         PerMode(m => Query(collection, ConfigureShipper, m, q => q.Where(s => s.Billing == targetForBilling).Select(s => s.Name)), ["a"],
-            Serves, Serves, "as a whole value is not supported");
+            Serves, Serves, Throws<NotSupportedException>("as a whole value is not supported"));
 #if !EF8 && !EF9
         NativeModeAssert.NativeAndExpected(m => Query(collection, ConfigureShipper, m, q => q.Where(s => s.History.Any(h => h.City == "B1")).Select(s => s.Name)), ["b"]);
         NativeModeAssert.NativeAndExpected(m => Query(collection, ConfigureShipper, m, q => q.Where(s => s.History.Any(h => h.Code == 8)).Select(s => s.Name)), ["a"]);
@@ -815,11 +815,11 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
     }
 
 #if EF8 || EF9
-    private const string OwnedIncludeNativeOnly = NotNative;
-    private const string OwnedIncludeWholeValueFallback = OwnedIncludeWholeValueFallbackMessage;
+    private static readonly Outcome OwnedIncludeNativeOnly = NotNative;
+    private static readonly Outcome OwnedIncludeWholeValueFallback = Throws<FormatException>(OwnedIncludeWholeValueFallbackMessage);
 #else
-    private const string OwnedIncludeNativeOnly = Serves;
-    private const string OwnedIncludeWholeValueFallback = Serves;
+    private static readonly Outcome OwnedIncludeNativeOnly = Serves;
+    private static readonly Outcome OwnedIncludeWholeValueFallback = Serves;
 #endif
     // The fallback cannot read a whole complex value back (the complex serializer does not deserialize; ruling R1/R7
     // family): loud, never rows.
@@ -971,12 +971,12 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         // Equality compares mapped members only: an instance whose ignored member differs is still equal.
         var instance = new AttributedValue { Elemented = "e1", Columned = "k1", Required = "r", Represented = 1, Ignored = "something else" };
         PerMode(m => Query(collection, ConfigureAttributed, m, q => q.Where(h => h.Value == instance).Select(h => h.Name)), ["a"],
-            Serves, Serves, "as a whole value is not supported");
+            Serves, Serves, Throws<NotSupportedException>("as a whole value is not supported"));
 
         // An ignored member is not part of the model: a predicate over it never reads the stored decoy. Native declines;
         // the driver refuses (the complex serializer has no such member). Loud in every mode, never rows.
         PerMode(m => Query(collection, ConfigureAttributed, m, q => q.Where(h => h.Value.Ignored == "stored").Select(h => h.Name)), [],
-            NotNative, "does not have a member named Ignored", "does not have a member named Ignored");
+            NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("does not have a member named Ignored"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("does not have a member named Ignored"));
     }
 
     [Fact]
@@ -1454,9 +1454,9 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         // A captured instance equal to a's scalars matches a only; one leaf changed (each type in turn) matches nothing.
         var equal = Fill(new ScalarLeaves(), true);
         PerMode(m => Query(collection, ConfigureTyped, m, q => q.Where(r => r.Leaves.Scalars == equal).Select(r => r.Name)), ["a"],
-            Serves, Serves, "as a whole value is not supported");
+            Serves, Serves, Throws<NotSupportedException>("as a whole value is not supported"));
         PerMode(m => Query(collection, ConfigureTyped, m, q => q.Where(r => r.Leaves.Scalars != equal).Select(r => r.Name)), ["b"],
-            Serves, Serves, "as a whole value is not supported");
+            Serves, Serves, Throws<NotSupportedException>("as a whole value is not supported"));
 
         foreach (var member in typeof(ScalarLeaves).GetProperties())
         {
@@ -1476,7 +1476,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         var collection = SeedTyped();
         var value = Leaves(true);
         PerMode(m => Query(collection, ConfigureTyped, m, q => q.Where(r => r.Leaves == value).Select(r => r.Name)), [],
-            NotNative, "as a whole value is not supported", "as a whole value is not supported");
+            NotNative, Throws<NotSupportedException>("as a whole value is not supported"), Throws<NotSupportedException>("as a whole value is not supported"));
     }
 
     public class Floats
@@ -1522,7 +1522,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         // double.IsNaN has no translation in any mode (root scalars too); loud, never rows. `D != D` is the NaN test the
         // server cannot express either, so the supported spelling is an ordering bound.
         PerMode(m => Query(collection, Configure, m, q => q.Where(h => double.IsNaN(h.Value.D)).Select(h => h.Name)), [],
-            NotNative, "Expression not supported: IsNaN", "Expression not supported: IsNaN");
+            NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported: IsNaN"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported: IsNaN"));
     }
 
     public class ConvertedPair
@@ -1572,20 +1572,20 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         // driver refuses it, alike or not (measured: identical for two converted ROOT scalars, pre-existing). Never a
         // stored-form answer ("2" vs 2).
         PerMode(m => Query(collection, Configure, m, q => q.Where(h => h.Left.A == h.Right.A).Select(h => h.Name)), ["same"],
-            NotNative, "because the two arguments are serialized differently", "because the two arguments are serialized differently");
+            NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"));
         PerMode(m => Query(collection, Configure, m, q => q.Where(h => h.Left.B == h.Right.B).OrderBy(h => h.Name).Select(h => h.Name)),
-            ["diff", "same"], NotNative, "because the two arguments are serialized differently", "because the two arguments are serialized differently");
+            ["diff", "same"], NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"));
 
         // Whole values: B is not stored alike on both sides, so member-wise equality declines (ruling: stored-alike).
         PerMode(m => Query(collection, Configure, m, q => q.Where(h => h.Left == h.Right).Select(h => h.Name)), ["same"],
-            NotNative, "because the two arguments are serialized differently", "because the two arguments are serialized differently");
+            NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"));
 
         // Against a captured instance each leaf is serialized through its own converter: native and right.
         var value = new ConvertedPair { A = 3, B = 2 };
         PerMode(m => Query(collection, Configure, m, q => q.Where(h => h.Right == value).Select(h => h.Name)), ["diff"],
-            Serves, Serves, "as a whole value is not supported");
+            Serves, Serves, Throws<NotSupportedException>("as a whole value is not supported"));
         PerMode(m => Query(collection, Configure, m, q => q.Where(h => h.Left == value).Select(h => h.Name)), [],
-            Serves, Serves, "as a whole value is not supported");
+            Serves, Serves, Throws<NotSupportedException>("as a whole value is not supported"));
     }
 
     // ── Part 2(a): the projection binder never turns an untranslatable leaf into default(T) ──────────────────────
