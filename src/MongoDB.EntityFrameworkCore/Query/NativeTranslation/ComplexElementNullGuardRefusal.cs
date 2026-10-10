@@ -284,7 +284,7 @@ internal static class ComplexElementNullGuardRefusal
                 && node.Arguments.Count >= (strict ? 1 : 2))
             {
                 var elementScopes = ResolveElementScopes(node.Arguments[0], out var collectionName, out var collectionRead, out var collections);
-                var isComplexElementScope = collectionName is not null && elementScopes.Count > 0 && elementScopes.All(s => s is IComplexType);
+                var isComplexElementScope = collectionName is not null && elementScopes.Count > 0 && elementScopes.All(StructuralPath.IsComplexElementScope);
                 if (strict && isComplexElementScope && !IsBulkSafeOperator(node, collectionRead!, collections, collectionName!))
                 {
                     return node;
@@ -336,6 +336,9 @@ internal static class ComplexElementNullGuardRefusal
             return base.VisitMethodCall(node);
         }
 
+        // KEEP IN STEP with the renderer's structural MayBeNull arms (R18) and ScopeField/ScopeValue (R17/R19): a node kind
+        // that gets the native null guard in a complex element scope must be refused here on the fallback.
+        // ComplexElementNullGuardRefusalTests pairs every discovered structural arm with an example this method refuses.
         protected override Expression VisitBinary(BinaryExpression node)
         {
             if (!strict && _complexElementCollections.Count > 0)
@@ -526,7 +529,10 @@ internal static class ComplexElementNullGuardRefusal
         // null element (measured: [null] matched), so the operation would select a non-null collection.
         private readonly HashSet<Expression> _approvedCollectionReads = new(ReferenceEqualityComparer.Instance);
 
-        // The CLR types of every complex collection's element in the model (for the unbound-lambda check).
+        // The CLR types of every complex collection's element in the model (for the unbound-lambda check). Deliberately
+        // NOT StructuralPath.IsComplexElementScope: that judges a structural scope the keying has BOUND; this asks a
+        // different question, whether a lambda parameter the keying could NOT bind (no scope to judge) might range over
+        // complex elements, which only its CLR type can answer (an over-approximation, refused in strict mode).
         private HashSet<Type> ComplexElementClrTypes
             => _complexElementClrTypes ??= [.. ModelComplexTypes.For(model).Collections.Select(c => c.ComplexType.ClrType)];
 

@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata;
 using MongoDB.EntityFrameworkCore.Infrastructure;
+using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.UnitTests.Query.NativeTranslation;
@@ -40,6 +41,7 @@ public class ComplexElementNullGuardRefusalTests
         public int? Zip { get; set; }
         public bool Verified { get; set; }
         public DateTime When { get; set; }
+        public DateTimeOffset Stamp { get; set; }
     }
 
     public class Route
@@ -92,6 +94,78 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["nested count compared with an element member", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) > s.Floor))), "a relational comparison"];
         // The guard-requiring shape sits INSIDE the nested lambda; the outer Finder visits its body.
         yield return ["relational inside a nested element lambda", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.Floor < s.Floor) >= 1))), "a relational comparison"];
+    }
+
+    // ── KEEP IN STEP: the renderer's structural MayBeNull arms (R18) and the R20 scanner's deny-list ──────────────────────
+    //
+    // Inside a complex element scope a leaf is NullSafe (R17); a node whose MayBeNull is STRUCTURAL (true because an operand
+    // is NullSafe, not because of its CLR type) makes a relational comparison over it take the native null guard, which the
+    // driver-LINQ fallback does not apply. The R20 scanner must therefore refuse a relational comparison over every such
+    // node when the query falls back. The arms are DISCOVERED (MongoExpressionNodeCoverageTests' per-node samples, plain vs
+    // NullSafe operands, so a new node type is covered once it is sampled); the table pairs each with a LINQ element
+    // predicate that lowers to it and the scanner kind that refuses it. A new structural arm fails the first test until it
+    // has a row here (and the scanner refuses its example); removing a scanner kind fails the second.
+
+    private static readonly Dictionary<string, (Expression Captured, string Shape)> StructuralMayBeNullArms = new()
+    {
+        ["MongoFieldExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => s.Floor < 1))), "a relational comparison"),
+        // A NullSafe element reference is the same leaf read through an alias (e.g. an upstream stage).
+        ["MongoElementRefExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => 1 > s.Floor))), "a relational comparison"),
+        ["MongoBinaryExpression(arithmetic)"] = (Query(q => q.Where(r => r.Stops.Any(s => s.Floor + 1 < 2))), "a relational comparison"),
+        ["MongoConvertExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => (long)s.Floor < 1))), "a relational comparison"),
+        ["MongoDatePartExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => s.When.Year < 2030))), "a relational comparison"),
+        ["MongoDateAddExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => s.When.AddDays(1) < r.Departs))), "a relational comparison"),
+        ["MongoConditionalExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => (s.Verified ? s.Floor : 0) < 1))), "a relational comparison"),
+        ["MongoCoalesceExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => (s.Zip ?? s.Floor) < 1))), "a relational comparison"),
+        ["MongoDateTimeOffsetLocalExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => s.Stamp.DateTime < r.Departs))), "a relational comparison"),
+        ["MongoMathExpression"] = (Query(q => q.Where(r => r.Stops.Any(s => Math.Abs(s.Floor) < 1))), "a relational comparison"),
+    };
+
+    private static IEnumerable<string> DiscoverStructuralMayBeNullArms()
+    {
+        var plain = MongoExpressionNodeCoverageTests.BuildSamples();
+        var nullSafe = MongoExpressionNodeCoverageTests.BuildSamples(nullSafeOperands: true);
+        foreach (var (type, sample) in nullSafe)
+        {
+            if (MongoAggregationExpressionRenderer.MayBeNull(sample) && !MongoAggregationExpressionRenderer.MayBeNull(plain[type]))
+            {
+                yield return type.Name;
+            }
+        }
+
+        // The arithmetic arm of MongoBinaryExpression (the shared sample is a comparison, which has no structural arm).
+        var rank = ((MongoFieldExpression)plain[typeof(MongoFieldExpression)]).Property;
+        MongoExpression Add(bool safe)
+            => new MongoBinaryExpression(MongoBinaryOperator.Add, new MongoFieldExpression(rank, "Rank", safe), new MongoConstantExpression(1, rank));
+        if (MongoAggregationExpressionRenderer.MayBeNull(Add(true)) && !MongoAggregationExpressionRenderer.MayBeNull(Add(false)))
+        {
+            yield return "MongoBinaryExpression(arithmetic)";
+        }
+    }
+
+    [Fact]
+    public void Every_structural_MayBeNull_arm_is_paired_with_a_scanner_kind()
+    {
+        var discovered = DiscoverStructuralMayBeNullArms().OrderBy(n => n, StringComparer.Ordinal).ToList();
+        var unpaired = discovered.Except(StructuralMayBeNullArms.Keys).ToList();
+        Assert.True(unpaired.Count == 0,
+            $"MayBeNull is structural (true over NullSafe operands only) for {string.Join(", ", unpaired)}, which has no row in "
+            + $"{nameof(StructuralMayBeNullArms)}. The native path null-guards a relational comparison over it inside a complex "
+            + "element scope; make ComplexElementNullGuardRefusal refuse that shape on the fallback (KEEP IN STEP), then add the row.");
+        var stale = StructuralMayBeNullArms.Keys.Except(discovered).ToList();
+        Assert.True(stale.Count == 0,
+            $"{nameof(StructuralMayBeNullArms)} lists {string.Join(", ", stale)}, whose MayBeNull is no longer structural: remove the row.");
+    }
+
+    [Fact]
+    public void The_scanner_refuses_a_relational_comparison_over_every_structural_MayBeNull_arm()
+    {
+        foreach (var (arm, (captured, shape)) in StructuralMayBeNullArms)
+        {
+            var found = ComplexElementNullGuardRefusal.Find(captured, Model);
+            Assert.True(found is not null, $"The R20 scanner does not refuse the {arm} example; it must (KEEP IN STEP with MayBeNull).");
+            Assert.Equal(shape, found!.Value.Shape);
+        }
     }
 
     [Theory]
