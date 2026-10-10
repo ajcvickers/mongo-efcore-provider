@@ -213,7 +213,8 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
                 return [];
         }
 
-        var ownerType = StripConverts(hopOwner).Type;
+        // A downcast receiver (`((Cat)a).Vet`) resolves against the cast type, which declares the member.
+        var ownerType = MemberOwnerType.Of(hopOwner);
         IEnumerable<ITypeBase> owners = IsMappedEntityType(ownerType)
             ? _queryContext.Context.Model.FindEntityTypes(ownerType)
             : FindComplexHopTypes(hopOwner);
@@ -233,7 +234,7 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
             return [];
         }
 
-        var ownerType = StripConverts(owner).Type;
+        var ownerType = MemberOwnerType.Of(owner);
         IEnumerable<ITypeBase> owners = IsMappedEntityType(ownerType)
             ? _queryContext.Context.Model.FindEntityTypes(ownerType)
             : FindComplexHopTypes(owner);
@@ -280,8 +281,8 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
             var collectionProperties = sequence switch
             {
                 MemberExpression { Expression: { } collectionOwner, Member: var collectionMember }
-                    when IsMappedEntityType(StripConverts(collectionOwner).Type)
-                    => FindMappedProperties(StripConverts(collectionOwner).Type, collectionMember.Name).ToList(),
+                    when IsMappedEntityType(MemberOwnerType.Of(collectionOwner))
+                    => FindMappedProperties(MemberOwnerType.Of(collectionOwner), collectionMember.Name).ToList(),
                 MethodCallExpression { Method: var efProperty, Arguments: [{ } collectionSource, ConstantExpression { Value: string collectionName }, ..] }
                     when efProperty.IsEFPropertyMethod() && IsMappedEntityType(collectionSource.Type)
                     => FindMappedProperties(collectionSource.Type, collectionName).ToList(),
@@ -709,7 +710,7 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
                 return;
             }
 
-            var ownerType = StripConverts(memberOwner).Type;
+            var ownerType = MemberOwnerType.Of(memberOwner);
             if (owner.IsMappedEntityType(ownerType))
             {
                 // A scalar property is checked; a navigation yields an entity/collection, not an ordered value.
@@ -940,7 +941,7 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
         {
             if (node.Expression is { } memberOwner)
             {
-                Check(StripConverts(memberOwner).Type, node.Member.Name);
+                Check(MemberOwnerType.Of(memberOwner), node.Member.Name);
                 Found ??= owner.FindComplexLeafProperties(memberOwner, node.Member.Name)
                     .FirstOrDefault(p => !owner.PreservesStoredOrdering(p, use));
             }
