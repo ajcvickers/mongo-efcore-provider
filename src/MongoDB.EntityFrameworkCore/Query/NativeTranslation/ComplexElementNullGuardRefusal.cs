@@ -492,15 +492,26 @@ internal static class ComplexElementNullGuardRefusal
             collectionRead = source;
             var names = new List<string>();
             var current = source;
+            Expression? rootReceiver = null;
             while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
             {
                 names.Insert(0, name);
-                current = receiver.RemoveConvert()!;
+                rootReceiver = receiver;
+                current = MemberOwnerType.StripCasts(receiver);
             }
 
             if (names.Count == 0 || current is not ParameterExpression root || !_scopes.TryGetValue(root, out var rootScopes))
             {
                 return [];
+            }
+
+            // A downcast of the root (`((Derived)b).Detours`, `(b as Derived)!.Stops`) ranges over the cast type's entity
+            // types within the root's scopes: the member is declared there, not on the parameter's (base) type.
+            if (rootReceiver is not null
+                && MemberOwnerType.IsDowncast(rootReceiver, out _, out var castType)
+                && model.FindEntityTypes(castType).ToList() is { Count: > 0 } castEntityTypes)
+            {
+                rootScopes = [.. castEntityTypes.Where(t => rootScopes.Any(s => s is IEntityType scope && scope.IsAssignableFrom(t)))];
             }
 
             var elementScopes = new List<ITypeBase>();
@@ -769,7 +780,8 @@ internal static class ComplexElementNullGuardRefusal
                 return [];
             }
 
-            var receiverType = receiver.RemoveConvert()!.Type;
+            // A downcast receiver (`((Derived)b).Detours`) resolves against the cast type, which declares the member.
+            var receiverType = MemberOwnerType.Of(receiver);
             IEnumerable<IReadOnlyTypeBase> owners = model.FindEntityTypes(receiverType);
             owners = owners.Concat(ModelComplexTypes.For(model).Types.Where(t => t.ClrType == receiverType));
             return [.. owners.Select(t => t.FindComplexProperty(name)).OfType<IReadOnlyComplexProperty>().Where(p => p.IsCollection)];
