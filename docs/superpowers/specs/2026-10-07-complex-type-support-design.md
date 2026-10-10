@@ -297,3 +297,10 @@ Final-triage follow-ups (NOT filed in Jira; owner to decide):
 10. EF8/EF9 baselines: the published 8.4.4/9.1.4 probes match 10.0.4 for complex-property storage; EF8/EF9 run a subset of
     the complex-type tests (complex collections and optional complex properties are EF10-only), so their suite totals
     are lower by design.
+11. Translate `collection == null` / `!= null` natively so the R25 refusal can be removed. The driver fallback's
+    `{p: null}` / `{p: {$ne: null}}` is wrong on data EF itself can write (an array holding a null element matches `null`;
+    legacy missing/null arrays are dropped by `$ne: null`), so default mode refuses these shapes today. Native forms: an
+    optional collection `{p: {$not: {$type: "array"}}}` for `== null`; a required collection is constant false for
+    `== null` and true for `!= null` (null/missing arrays read as empty). Users who write defensive
+    `Addresses != null && Addresses.Count > 0` guards currently get a clear refusal with the native remedy
+    (`.Any()` / `Count`).

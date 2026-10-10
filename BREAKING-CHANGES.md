@@ -79,7 +79,8 @@ by `SelectMany` projecting a derived outer member (falling back) instead of thro
 on released code**:
 - (c): on 10.0.4 (measured, MongoDB 8) `People.OfType<Employee>().Where(e => e.ReferrerId != null)
   .Select(e => new { e, e.Name, R = e.Referrer!.Name })` answered `Dev|Boss|Boss` (`e.Name` read off the joined referrer);
-  it now answers `Dev|Dev|Boss` in every mode. 8.4.4 and 9.1.4 cannot translate that query (it throws).
+  it now answers `Dev|Dev|Boss` in the default and `DriverLinq` modes (`NativeOnly` declines the shape). 8.4.4 and 9.1.4
+  cannot translate that query (it throws).
 - (d): in 8.4.4, 9.1.4 and 10.0.4 a filtered `Include` whose `OrderBy` reads through an owned navigation
   (`Include(b => b.Posts.OrderBy(p => p.Meta.Rank))`) and the driver-LINQ `LeftJoin` on a key read through an owned
   navigation resolved the key by the member's simple name (`GetSortField`, `TryGetKeyFieldPath`, verified in the tagged
