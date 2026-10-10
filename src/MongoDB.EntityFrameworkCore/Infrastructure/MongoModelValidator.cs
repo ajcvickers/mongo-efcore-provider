@@ -74,6 +74,7 @@ public class MongoModelValidator : ModelValidator
         ValidateMaximumOneRowVersionPerEntity(model);
         ValidateNoConcurrencyTokensOnOwnedEntities(model);
         ValidateNoUnsupportedAttributesOrAnnotations(model);
+        ValidateComplexCollectionClrTypes(model);
         ValidateElementNames(model);
         ValidateOwnedTypeMappingConsistency(model);
         ValidateNoMutableKeys(model, logger);
@@ -272,6 +273,45 @@ public class MongoModelValidator : ModelValidator
         foreach (var complexProperty in type.GetDeclaredComplexProperties())
         {
             ValidateNoUnsupportedAttributesOrAnnotations(complexProperty.ComplexType);
+        }
+    }
+
+    /// <summary>
+    /// Validate that every complex collection (EF10) has a CLR type EF Core can materialize and save.
+    /// </summary>
+    /// <remarks>
+    /// EF accepts an array (<c>T[]</c>) or a collection class without a public parameterless constructor (e.g.
+    /// <c>ReadOnlyCollection&lt;T&gt;</c>) as a complex collection in the model, but every whole-entity read then fails in
+    /// EF's collection accessor ("Collection navigations cannot be arrays" / "not possible to create a concrete instance")
+    /// and SaveChanges fails ("Collection was of a fixed size"). Measured per CLR type on EF10; refused up front instead.
+    /// Interfaces EF accepts (<c>IList&lt;T&gt;</c>) are instantiated as <c>List&lt;T&gt;</c> and work.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">When a complex collection has an unusable CLR type.</exception>
+    private static void ValidateComplexCollectionClrTypes(IModel model)
+    {
+        foreach (var entityType in model.GetEntityTypes())
+        {
+            ValidateComplexCollectionClrTypes(entityType);
+        }
+    }
+
+    private static void ValidateComplexCollectionClrTypes(ITypeBase type)
+    {
+        foreach (var complexProperty in type.GetDeclaredComplexProperties())
+        {
+            var clrType = complexProperty.ClrType;
+            if (complexProperty.IsEmbeddedCollection()
+                && (clrType.IsArray
+                    || (!clrType.IsInterface && (clrType.IsAbstract || clrType.GetConstructor(Type.EmptyTypes) == null))))
+            {
+                throw new NotSupportedException(
+                    MemberOnType(complexProperty) + $" is a complex collection of CLR type '{clrType.ShortDisplayName()}', which"
+                    + " EF Core cannot materialize or save: arrays and collection types without a public parameterless"
+                    + " constructor are not supported. Declare it as List<T>, IList<T>, or another mutable collection type"
+                    + " with a public parameterless constructor.");
+            }
+
+            ValidateComplexCollectionClrTypes(complexProperty.ComplexType);
         }
     }
 

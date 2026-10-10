@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -767,6 +767,24 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         public System.Collections.ObjectModel.ObservableCollection<Tag> Items { get; set; } = [];
     }
 
+    public class TagList : List<Tag>;
+
+    public class SubclassCrate
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public int Rank { get; set; }
+        public TagList Items { get; set; } = [];
+    }
+
+    public class CollectionCrate
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public int Rank { get; set; }
+        public System.Collections.ObjectModel.Collection<Tag> Items { get; set; } = [];
+    }
+
     public class IListCrate
     {
         public ObjectId Id { get; set; }
@@ -801,24 +819,46 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         => Assert.Equal(seed.OrderBy(d => d["_id"]).Select(d => d.ToJson()),
             raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().OrderBy(d => d["_id"]).Select(d => d.ToJson()));
 
+    // A T[] complex collection never reaches the bulk allow-list: the model refuses it (EF cannot read or save it).
     [Fact]
-    public void Operators_over_an_array_typed_collection_are_refused_and_write_nothing()
+    public void An_array_typed_collection_is_refused_by_the_model_and_writes_nothing()
     {
-        var (raw, db, seed) = Crates<Crate>(nameof(Operators_over_an_array_typed_collection_are_refused_and_write_nothing),
+        var (raw, db, seed) = Crates<Crate>(nameof(An_array_typed_collection_is_refused_by_the_model_and_writes_nothing),
             mb => mb.Entity<Crate>().ComplexCollection(c => c.Items));
+        using (db)
+        {
+            var ex = Assert.Throws<NotSupportedException>(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)));
+            Assert.Contains("is a complex collection of CLR type 'Tag[]'", ex.Message);
+        }
+
+        AssertSeedUnchanged(raw, seed);
+    }
+
+    // Every concrete collection type a List<T> doesn't fit is refused by the allow-list, here a List<T> subclass and
+    // Collection<T> (both read and save correctly: ComplexCollectionClrTypeTests).
+    [Fact]
+    public void Operators_over_other_non_list_collection_types_are_refused_and_write_nothing()
+    {
+        var (raw, db, seed) = Crates<SubclassCrate>(nameof(Operators_over_other_non_list_collection_types_are_refused_and_write_nothing),
+            mb => mb.Entity<SubclassCrate>().ComplexCollection(c => c.Items));
         using (db)
         {
             const string shape = "whose CLR type cannot hold a List<T>";
             AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)), shape);
-            AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteDelete(), shape);
-            AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).OrderBy(c => c.Name).Take(5).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)), shape);
             AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).OrderBy(c => c.Name).Take(5).ExecuteDelete(), shape);
-            // `Count()` / `Length` (the `$size` form): EF lowers both to the Count operator.
             AssertRefused(() => db.Entities.Where(c => c.Items.Count() > 0).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)), shape);
-            AssertRefused(() => db.Entities.Where(c => c.Items.Length > 0).ExecuteDelete(), shape);
         }
 
         AssertSeedUnchanged(raw, seed);
+
+        var (raw2, db2, seed2) = Crates<CollectionCrate>(nameof(Operators_over_other_non_list_collection_types_are_refused_and_write_nothing) + "c",
+            mb => mb.Entity<CollectionCrate>().ComplexCollection(c => c.Items));
+        using (db2)
+        {
+            AssertRefused(() => db2.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteDelete(), "whose CLR type cannot hold a List<T>");
+        }
+
+        AssertSeedUnchanged(raw2, seed2);
     }
 
     [Fact]
