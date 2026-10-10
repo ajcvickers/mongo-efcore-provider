@@ -610,12 +610,12 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
     // The structural type `source` denotes when it is a hop chain (embedded owned references and single complex
     // properties, member or EF.Property spelling) over an entity shaper; null otherwise.
-    private static ITypeBase? ResolveHopType(Expression source)
-        => (ITypeBase?)ResolveReadSource(source) ?? ResolveComplexHopType(source);
+    private static ITypeBase ResolveHopType(Expression source)
+        => (ITypeBase)ResolveReadSource(source) ?? ResolveComplexHopType(source);
 
     // The complex type `source` denotes when it is a chain of single complex-property hops (member or EF.Property
     // spelling, through embedded owned references) over an entity shaper; null otherwise.
-    private static IComplexType? ResolveComplexHopType(Expression source)
+    private static IComplexType ResolveComplexHopType(Expression source)
     {
         source = source.RemoveConvert();
         var (owner, name) = source switch
@@ -629,8 +629,8 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             return null;
         }
 
-        ITypeBase? ownerType = (ITypeBase?)ResolveReadSource(owner) ?? ResolveComplexHopType(owner);
-        return ownerType?.FindComplexProperty(name!) is { IsCollection: false } complexProperty
+        ITypeBase ownerType = (ITypeBase)ResolveReadSource(owner) ?? ResolveComplexHopType(owner);
+        return ownerType?.FindComplexProperty(name) is { IsCollection: false } complexProperty
             ? complexProperty.ComplexType
             : null;
     }
