@@ -26,7 +26,8 @@ internal static class MongoStructuralMemberExtensions
 {
     /// <summary>
     /// The element name a complex property occupies, read from the same <c>Mongo:ElementName</c> annotation as
-    /// <see cref="MongoPropertyExtensions.GetElementName(IReadOnlyProperty)"/>, falling back to the CLR name.
+    /// <see cref="Microsoft.EntityFrameworkCore.MongoPropertyExtensions.GetElementName(Microsoft.EntityFrameworkCore.Metadata.IReadOnlyProperty)"/>,
+    /// falling back to the CLR name.
     /// </summary>
     internal static string GetElementName(this IReadOnlyComplexProperty property)
         => (string?)property[MongoAnnotationNames.ElementName] ?? property.Name;
