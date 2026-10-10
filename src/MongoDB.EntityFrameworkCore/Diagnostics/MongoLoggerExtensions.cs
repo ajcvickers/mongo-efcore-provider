@@ -237,6 +237,30 @@ internal static class MongoLoggerExtensions
         }
     }
 
+    // The complex-property form of the event: same event ID and message, with EF's ComplexPropertyEventData payload.
+    public static void ColumnAttributeWithTypeUsed(
+        this IDiagnosticsLogger<DbLoggerCategory.Model> diagnostics,
+        IReadOnlyComplexProperty complexProperty)
+    {
+        var definition = LogColumnAttributeWithTypeUsed(diagnostics);
+
+        if (diagnostics.ShouldLog(definition))
+        {
+            definition.Log(diagnostics, complexProperty.DeclaringType.DisplayName(), complexProperty.Name);
+        }
+
+        if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+        {
+            var eventData = new ComplexPropertyEventData(
+                definition,
+                (d, p) => ((EventDefinition<string, string>)d).GenerateMessage(
+                    ((ComplexPropertyEventData)p).Property.DeclaringType.DisplayName(),
+                    ((ComplexPropertyEventData)p).Property.Name),
+                complexProperty);
+            diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
+        }
+    }
+
     private static EventDefinition<string, string> LogColumnAttributeWithTypeUsed(IDiagnosticsLogger logger)
     {
         var definition = ((MongoLoggingDefinitions)logger.Definitions).LogColumnAttributeWithTypeUsed;
