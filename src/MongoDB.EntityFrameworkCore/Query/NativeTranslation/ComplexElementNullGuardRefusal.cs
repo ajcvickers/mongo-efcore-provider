@@ -61,17 +61,39 @@ internal static class ComplexElementNullGuardRefusal
             return;
         }
 
-        if (Find(captured, model) is { } found)
+        if (Find(captured, model) is not { } found)
+        {
+            return;
+        }
+
+        if (found.Shape == CollectionNullCheckShape)
         {
             throw new NativeTranslationNotSupportedException(
-                $"The query is not natively translatable and would run on driver-LINQ, which evaluates {found.Shape} over an "
-                + $"element of the complex collection '{found.Collection}' incorrectly when the element is null (the members of "
-                + "a null element are missing, which the server orders below every value and does not equate with null), so "
-                + "the fallback would return wrong rows. Rewrite the element predicate to a natively translatable form, "
-                + "project the values you need and evaluate the condition on the client, or use MongoQueryMode.DriverLinq to "
-                + "opt in to the driver-LINQ execution of this query.");
+                $"The query is not natively translatable and would run on driver-LINQ, which evaluates a comparison of the "
+                + $"complex collection '{found.Collection}' with null incorrectly: its null filter also matches an array that "
+                + "contains a null element (and a missing or null array of a required collection, which reads as empty), so the "
+                + "fallback would return wrong rows. To test for a null or empty collection use '!c.Collection.Any()' or "
+                + "'c.Collection.Count == 0', which are translated natively; to tell null from empty, project the collection "
+                + "and test it on the client, or use MongoQueryMode.DriverLinq to opt in to the driver-LINQ execution of this "
+                + "query.");
         }
+
+        throw new NativeTranslationNotSupportedException(
+            $"The query is not natively translatable and would run on driver-LINQ, which evaluates {found.Shape} over an "
+            + $"element of the complex collection '{found.Collection}' incorrectly when the element is null (the members of "
+            + "a null element are missing, which the server orders below every value and does not equate with null), so "
+            + "the fallback would return wrong rows. Rewrite the element predicate to a natively translatable form, "
+            + "project the values you need and evaluate the condition on the client, or use MongoQueryMode.DriverLinq to "
+            + "opt in to the driver-LINQ execution of this query.");
     }
+
+    /// <summary>
+    /// The <see cref="Find"/> shape for a complex COLLECTION compared with <see langword="null"/> (ruling R25): the driver
+    /// renders <c>r.Detours == null</c> as <c>{Detours: null}</c>, which also matches <c>[null]</c> (EF10 writes a null
+    /// element as BSON null) and, for a required collection, a missing or null array (which reads as empty). The native
+    /// path declines such a comparison, so under <see cref="MongoQueryMode.Native"/> the fallback would serve those rows.
+    /// </summary>
+    internal const string CollectionNullCheckShape = "a comparison of the collection with null";
 
     /// <summary>
     /// The first null-guard-requiring shape in a complex element scope of <paramref name="captured"/>, or
@@ -341,6 +363,22 @@ internal static class ComplexElementNullGuardRefusal
         // ComplexElementNullGuardRefusalTests pairs every discovered structural arm with an example this method refuses.
         protected override Expression VisitBinary(BinaryExpression node)
         {
+            // R25: a complex collection itself compared with null, keyed structurally by the same resolver as the element
+            // scopes (a member chain rooted on a bound parameter, through StructuralPath.TryResolveCollection; owned
+            // collections are never in `collections`). Strict (bulk) mode refuses the read already: an unapproved
+            // collection read.
+            if (!strict
+                && node.NodeType is ExpressionType.Equal or ExpressionType.NotEqual
+                && (IsNullConstant(node.Left) ? node.Right : IsNullConstant(node.Right) ? node.Left : null) is { } nullCompared)
+            {
+                ResolveElementScopes(nullCompared, out var nullComparedName, out _, out var nullComparedCollections);
+                if (nullComparedCollections.Count > 0)
+                {
+                    Found = (CollectionNullCheckShape, nullComparedName!);
+                    return node;
+                }
+            }
+
             if (!strict && _complexElementCollections.Count > 0)
             {
                 switch (node.NodeType)

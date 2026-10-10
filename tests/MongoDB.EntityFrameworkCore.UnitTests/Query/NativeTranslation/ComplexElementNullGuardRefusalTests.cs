@@ -94,6 +94,10 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["nested count compared with an element member", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) > s.Floor))), "a relational comparison"];
         // The guard-requiring shape sits INSIDE the nested lambda; the outer Finder visits its body.
         yield return ["relational inside a nested element lambda", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.Floor < s.Floor) >= 1))), "a relational comparison"];
+        // R25: the collection itself compared with null (the driver's `{Stops: null}` also matches `[null]`).
+        yield return ["collection == null", Query(q => q.Where(r => r.Stops == null)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
+        yield return ["null != collection", Query(q => q.Where(r => null != r.Stops)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
+        yield return ["collection null check in a projection", Scalar(q => q.Select(r => r.Stops == null ? 0 : 1)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
     }
 
     // ── KEEP IN STEP: the renderer's structural MayBeNull arms (R18) and the R20 scanner's deny-list ──────────────────────
@@ -181,6 +185,8 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["string operator", Query(q => q.Where(r => r.Stops.Any(s => s.City.StartsWith("O"))))];
         yield return ["Length == constant (a null-propagating operator, no guard needed)", Query(q => q.Where(r => r.Stops.Any(s => s.Note!.Length == 2)))];
         yield return ["bare Any", Query(q => q.Where(r => r.Stops.Any()))];
+        yield return ["OWNED collection == null (R25 keys complex collections only)", Query(q => q.Where(r => r.Owned == null))];
+        yield return ["root scalar == null", Query(q => q.Where(r => r.Name == null))];
         yield return ["Count comparison at the root", Query(q => q.Where(r => r.Stops.Count > 1))];
         yield return ["indexer, no element lambda", Query(q => q.Where(r => r.Stops[0].City == "Oslo"))];
         yield return ["root relational (no element scope)", Query(q => q.Where(r => r.Departs.AddDays(1).Year < 2030))];

@@ -334,7 +334,11 @@ Rendering (null/missing/dialect semantics):
   at lambdas so `Count(s2 => s2.City == s.City) >= 1` isn't refused). Indexed overloads and `SelectMany` over a complex
   collection are refused by EF in every mode. In those limits the default mode serves the driver's rows. The structural
   cost: a keyed shape is refused even over clean data and even where the driver's rows would have been right
-  (`s.Tags.Count(...) >= 0`).
+  (`s.Tags.Count(...) >= 0`). Ruling R25: the same net refuses a complex COLLECTION itself compared with null
+  (`r.Detours == null`, `!=`, in a predicate, projection, ternary or sort key; keyed through the scanner's structural
+  resolver, owned collections untouched): native declines it, and the driver's `{Detours: null}` also matches `[null]` (and,
+  for a required collection, a missing/null array that reads empty). Remedies the message names: `!c.X.Any()`/`c.X.Count == 0`
+  (native), or explicit `DriverLinq`.
   `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value
   (`MongoCurrentElementNullCheckExpression`, `$$e`), `!Contains` its exact `All` complement. The bridge coalesces a REQUIRED
   complex collection used as an operator source to `[]` (`TryRewriteRequiredComplexCollectionSource`; it reads empty, and
