@@ -1414,11 +1414,13 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             }
             else
             {
-                // `$set` in a pipeline evaluates its value as an aggregation expression. A complex target's literal (a
-                // subdocument, an array of them, or a leaf) is `$literal`-wrapped so `{}` (an error there) and any "$..." string
-                // inside it stay data. Root scalar setters keep their existing (unwrapped) rendering.
+                // `$set` in a pipeline evaluates its value as an aggregation expression, so every constant setter value is
+                // `$literal`-wrapped and stays data: a "$Field" / "$$ROOT" string (user input) would be a field path or a
+                // variable, `{}` an error, an array's "$..." items paths. Root scalars included (before, only complex targets
+                // were wrapped, so `SetProperty(c => c.Name, "$Secret")` beside a self-referencing setter copied the row's
+                // Secret). `$literal` returns its argument unchanged, so numbers, bools, dates and null keep their BSON types.
                 var constant = SerializeConstant(queryContext, setter);
-                setStageDoc[setter.StoredPath] = setter.ElementPath is null ? constant : new BsonDocument("$literal", constant);
+                setStageDoc[setter.StoredPath] = new BsonDocument("$literal", constant);
             }
         }
 
