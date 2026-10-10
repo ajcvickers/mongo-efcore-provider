@@ -52,6 +52,14 @@ public class ComplexValueElementOperatorTests(TemporaryDatabaseFixture database)
         foreach (var op in new[] { "ElementAt", "ElementAtOrDefault", "DefaultIfEmpty" })
         {
             var fragment = Refusal + op + "'";
+#if EF8 || EF9
+            // EF8/EF9 reject DefaultIfEmpty over this projection before the provider sees it (EF's own message).
+            if (op == "DefaultIfEmpty")
+            {
+                fragment = "could not be translated";
+                fragmentTypes[fragment] = typeof(InvalidOperationException);
+            }
+#endif
             var run = Run(db => op switch
             {
                 "ElementAt" => [Composition.Fmt(db.Clients.OrderBy(c => c.Name).Select(c => c.Billing).ElementAt(1))],
