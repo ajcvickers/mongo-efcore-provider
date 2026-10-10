@@ -1016,6 +1016,48 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
             [], NotNative, SerializedDifferently, SerializedDifferently);
     }
 
+    // R15, nested-complex half: Home ignores a NESTED COMPLEX property (Geo), Work maps it. Both operand orders must
+    // decline natively (MapsSameMembers compares nested complex properties as well as leaves).
+    public class GeoScratch
+    {
+        public double Lat { get; set; }
+    }
+
+    public class GeoScratchAddr
+    {
+        public string City { get; set; } = null!;
+        public GeoScratch Geo { get; set; } = null!;
+    }
+
+    public class GeoScratchHolder
+    {
+        public ObjectId Id { get; set; }
+        public GeoScratchAddr Home { get; set; } = null!;
+        public GeoScratchAddr Work { get; set; } = null!;
+    }
+
+    [Fact]
+    public void Stored_pair_with_different_mapped_nested_complex_properties_declines_in_both_operand_orders()
+    {
+        var collection = database.CreateCollection<GeoScratchHolder>(Unique(nameof(Stored_pair_with_different_mapped_nested_complex_properties_declines_in_both_operand_orders)));
+        Raw(collection).InsertOne(new BsonDocument
+        {
+            { "_id", ObjectId.GenerateNewId() }, { "Home", new BsonDocument("City", "c") },
+            { "Work", new BsonDocument { { "City", "c" }, { "Geo", new BsonDocument("Lat", 1.0) } } }
+        });
+
+        static void Configure(ModelBuilder mb)
+        {
+            mb.Entity<GeoScratchHolder>().ComplexProperty(h => h.Home, a => a.Ignore(x => x.Geo));
+            mb.Entity<GeoScratchHolder>().ComplexProperty(h => h.Work, a => a.ComplexProperty(x => x.Geo));
+        }
+
+        PerMode(mode => Run(collection, mode, Configure, q => q.Where(h => h.Home == h.Work).Select(h => h.Home.City)),
+            [], NotNative, SerializedDifferently, SerializedDifferently);
+        PerMode(mode => Run(collection, mode, Configure, q => q.Where(h => h.Work == h.Home).Select(h => h.Home.City)),
+            [], NotNative, SerializedDifferently, SerializedDifferently);
+    }
+
     // I2: complex values inside owned-collection elements ($elemMatch, $filter/$map scopes).
     [System.ComponentModel.DataAnnotations.Schema.ComplexType]
     public class Pos
