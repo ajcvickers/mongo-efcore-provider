@@ -84,7 +84,7 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
         => PerMode(Shop(db => [.. db.Orders.Join(db.Clients, o => new { o.City, o.Rank }, c => new { c.Billing.City, c.Rank },
                     (o, c) => new { o.Rank, c.Name })
                 .OrderBy(x => x.Rank).ToList().Select(x => $"{x.Rank}|{x.Name}")]),
-            ["1|Ann", "3|Cid", "4|Hid"], NotNative, "Expression not supported", "Expression not supported");
+            ["1|Ann", "3|Cid", "4|Hid"], NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"));
 
     [Fact]
     public void Join_key_through_a_complex_hop_never_resolves_to_a_same_named_root_property()
@@ -230,14 +230,14 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
         // in every mode, exactly like an owned-hop leaf (pre-existing).
         => PerMode(Shop(db => [.. db.Clients.SelectMany(c => c.Orders, (c, o) => new { c.Name, B = c.Billing.City, S = o.Ship.City, o.Rank })
                 .Where(x => x.S != "Hidden").OrderBy(x => x.Rank).ToList().Select(x => $"{x.Name}|{x.B}|{x.S}|{x.Rank}")]),
-            ["Ann|Paris|Rome|1", "Ann|Paris|Paris|2", "Bob|Rome|Oslo|5"], NotNative, "cross-DbSet", "cross-DbSet");
+            ["Ann|Paris|Rome|1", "Ann|Paris|Paris|2", "Bob|Rome|Oslo|5"], NotNative, Throws<InvalidOperationException>("cross-DbSet"), Throws<InvalidOperationException>("cross-DbSet"));
 
     [Fact]
     public void SelectMany_correlated_on_a_complex_leaf()
         // A correlated subquery on a non-key member is refused by EF itself in every mode, as for a scalar member.
         => PerMode(Shop(db => [.. db.Clients.SelectMany(c => db.Orders.Where(o => o.Ship.City == c.Shipping.City), (c, o) => new { c.Name, o.Rank })
                 .OrderBy(x => x.Name).ThenBy(x => x.Rank).ToList().Select(x => $"{x.Name}|{x.Rank}")]),
-            ["Ann|1", "Bob|5", "Cid|2", "Cid|3", "Hid|2", "Hid|3"], "could not be translated", "could not be translated", "could not be translated");
+            ["Ann|1", "Bob|5", "Cid|2", "Cid|3", "Hid|2", "Hid|3"], Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"));
 
     // ── Key guards: a hop key whose leaf NAME matches a property of the scope (mutation-discriminating rows) ─────
 
@@ -498,7 +498,7 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
         // correlated count in every mode. Never rows. Correct answer would be t1 1, t2 1, t3 0.
         => PerMode(Tickets(db => [.. db.Tickets.GroupJoin(db.Accounts, t => t.AccountId, a => (ObjectId?)a.Ref.Id, (t, g) => new { t.Label, N = g.Count() })
                 .ToList().Select(x => x.Label + "|" + x.N).Order()]),
-            ["t1|1", "t2|1", "t3|0"], "could not be translated", "could not be translated", "could not be translated");
+            ["t1|1", "t2|1", "t3|0"], Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"));
 
 #if !EF8 && !EF9
     [Fact]

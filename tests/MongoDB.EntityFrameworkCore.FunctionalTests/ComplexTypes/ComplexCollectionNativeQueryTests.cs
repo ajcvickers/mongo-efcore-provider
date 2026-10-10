@@ -54,9 +54,11 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
 {
     // The driver-LINQ path can't compare a whole complex value (the complex serializer refuses it, ruling R1).
-    private const string WholeValueRefused = "as a whole value is not supported";
-    private const string NotTranslated = "could not be translated";
+    private const string WholeValueRefusedMessage = "as a whole value is not supported";
+    private static readonly Outcome WholeValueRefused = Throws<NotSupportedException>(WholeValueRefusedMessage);
+    private const string NotTranslatedMessage = "could not be translated";
 
+    private static readonly Outcome NotTranslated = Throws<InvalidOperationException>(NotTranslatedMessage);
     public class Tag
     {
         public string Label { get; set; } = null!;
@@ -173,12 +175,12 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // The driver renders EndsWith with $strLenCP, a server error over the null element's missing City (known driver
         // behaviour, loud); native's regex is false for a missing field.
         PerMode(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.City.EndsWith("lo"))))), ["f-nullelem"],
-            Serves, Serves, "$strLenCP requires a string argument");
+            Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("$strLenCP requires a string argument"));
         Native(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.City.Contains("om"))))), "a-two");
         // Length over the null element's missing City: native answers C#'s (null == 4 is false; Oslo has 4); the driver's
         // $strLenCP is a server error on a missing string (known driver behaviour, loud).
         PerMode(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a.City.Length == 4)))), ["a-two", "f-nullelem"],
-            Serves, Serves, "$strLenCP requires a string argument");
+            Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("$strLenCP requires a string argument"));
         // `string.Compare(null, "P") < 0` is true in C#: the null element (members null) matches, as driver-LINQ answers.
         Native(Customers(q => Names(q.Where(c => c.Addresses.Any(a => string.Compare(a.City, "P") < 0)))), "f-nullelem");
     }
@@ -416,10 +418,11 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     // unequal to null, is refused at the compile-time gate under Native (NativeTranslationNotSupportedException naming the
     // collection and what to do); NativeOnly still throws its usual decline; explicit DriverLinq runs the driver, whose
     // rows are pinned (known driver behaviour). Structural, so it refuses even when the data has no null element.
-    private const string R20Refusal = "incorrectly when the element is null";
+    private const string R20RefusalMessage = "incorrectly when the element is null";
+    private static readonly Outcome R20Refusal = Throws<MongoDB.EntityFrameworkCore.Query.NativeTranslation.NativeTranslationNotSupportedException>(R20RefusalMessage);
 
     private static void Refused(Func<MongoQueryMode, List<string>> run, string[] driverRows)
-        => CompositionAssert.Refused(run, driverRows, R20Refusal, "MongoQueryMode.DriverLinq");
+        => CompositionAssert.Refused(run, driverRows, R20RefusalMessage, "MongoQueryMode.DriverLinq");
 
     [Fact]
     public void Null_element_shapes_the_native_path_declines_are_refused_rather_than_served_wrong()
@@ -638,7 +641,7 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // D5: field-to-field EndsWith: $strLenCP over the null element's missing strings is a server error in every mode
         // (native renders the driver's shape; loud, never rows).
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.City.EndsWith(p.Note!))))), [],
-            "$strLenCP requires a string argument", "$strLenCP requires a string argument", "$strLenCP requires a string argument");
+            Throws<MongoDB.Driver.MongoCommandException>("$strLenCP requires a string argument"), Throws<MongoDB.Driver.MongoCommandException>("$strLenCP requires a string argument"), Throws<MongoDB.Driver.MongoCommandException>("$strLenCP requires a string argument"));
         NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => Regex.IsMatch(p.City, pattern))))), ["full", "mixed"]);
         // A null field PATTERN reads null: no match (C# would throw; the driver can't translate it).
         NullElement(Q(q => N(q.Where(h => h.Ps.Any(p => Regex.IsMatch("Oslo", p.Note!))))), ["full", "mixed"],
@@ -652,17 +655,17 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // comparison over an element member is R20's category, so Native refuses it at the gate (before the driver's own
         // "Expression not supported" would); explicit DriverLinq runs the driver.
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Zip.GetValueOrDefault() < 1)))), [], NotNative,
-            R20Refusal, "Expression not supported");
+            R20Refusal, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"));
         PerMode(Q(q => N(q.Where(h => h.Ps.Select(p => p.City).Contains("Oslo")))), ["full", "mixed"], NotNative, Serves, Serves);
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.At.Offset == TimeSpan.FromHours(2))))), [], NotNative,
-            "does not represent members as fields", "does not represent members as fields");
+            Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("does not represent members as fields"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("does not represent members as fields"));
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.At.Ticks < 1)))), [], NotNative,
-            R20Refusal, "does not represent members as fields");
-        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Marks.HasFlag(Mark.A))))), [], NotNative, "Expression not supported", "Expression not supported");
+            R20Refusal, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("does not represent members as fields"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Marks.HasFlag(Mark.A))))), [], NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"));
         // A primitive-collection leaf on an element: no native element-scope rendering ($in over an array field is
         // query-dialect only); the fallback's $in/$size over the null element's missing array is a server error.
-        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x"))))), [], NotNative, "Command aggregate failed", "Command aggregate failed");
-        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Count == 0)))), [], NotNative, "Command aggregate failed", "Command aggregate failed");
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x"))))), [], NotNative, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"), Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Count == 0)))), [], NotNative, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"), Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
         // Sum over an element leaf: refused in every mode.
         PerMode(Q(q => q.OrderBy(h => h.Name).Select(h => h.Ps.Sum(p => p.Zip)).ToList().Select(x => x?.ToString() ?? "<null>")), [],
             NotTranslated, NotTranslated, NotTranslated);
@@ -873,9 +876,9 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // EF's own QueryOptimizingExpressionVisitor rewrites `Any(a => a == null)` / `All(a => a != null)` to a Contains with
         // an object-typed null and throws ArgumentException before the provider sees the query (EF limitation, every mode).
         PerMode(Customers(q => Names(q.Where(c => c.Addresses.Any(a => a == null)))), [],
-            "cannot be used for parameter of type", "cannot be used for parameter of type", "cannot be used for parameter of type");
+            Throws<ArgumentException>("cannot be used for parameter of type"), Throws<ArgumentException>("cannot be used for parameter of type"), Throws<ArgumentException>("cannot be used for parameter of type"));
         PerMode(Customers(q => Names(q.Where(c => c.Addresses.All(a => a != null)))), [],
-            "cannot be used for parameter of type", "cannot be used for parameter of type", "cannot be used for parameter of type");
+            Throws<ArgumentException>("cannot be used for parameter of type"), Throws<ArgumentException>("cannot be used for parameter of type"), Throws<ArgumentException>("cannot be used for parameter of type"));
     }
 
     public class Note
@@ -968,7 +971,7 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
                 .Select(x => $"{x.Name}:{x.N}:{Fmt(x.Addresses)}")),
             ["a-two:2:[Paris|7|1.5|x;Rome|-|0.5|y]", "b-empty:0:[]", "c-null:0:[]", "d-missing:0:[]", "e-one:1:[Paris|9|3|y,x]",
                 "f-nullelem:2:[Oslo|-|2|;<null>]"],
-            Serves, Serves, "The property 'Customer.N' could not be found");
+            Serves, Serves, Throws<InvalidOperationException>("The property 'Customer.N' could not be found"));
 
     [Fact]
     public void Paging_after_a_whole_collection_projection()
@@ -1006,7 +1009,7 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     {
         // R7/R8: a projected whole complex value (a collection is one) can't be the operand of a value-reading operator.
         PerMode(Customers(q => q.Select(c => c.Addresses).Distinct().ToList().Select(Fmt)), [],
-            "cannot be the operand of 'Distinct'", "cannot be the operand of 'Distinct'", "cannot be the operand of 'Distinct'");
+            Throws<NotSupportedException>("cannot be the operand of 'Distinct'"), Throws<NotSupportedException>("cannot be the operand of 'Distinct'"), Throws<NotSupportedException>("cannot be the operand of 'Distinct'"));
         // Scalar counts are not complex values: Distinct and GroupBy over them are native.
         Native(Customers(q => q.Select(c => c.Addresses.Count).Distinct().ToList().Order().Select(n => n.ToString())), "0", "1", "2");
     }
@@ -1072,7 +1075,7 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // scope) fires first, at compile time; under explicit DriverLinq the bridge's EF-337 refusal fires.
         // (Before this task Native's fallback and DriverLinq compared the stored "4" with 100 and served `x`: wrong rows.)
         PerMode(m => Run(collection, m, Configure, q => N(q.Where(t => t.Inbound.Any(l => l.Seats > 100)))), [],
-            NotNative, R20Refusal, "stored through a value converter or a BsonRepresentation");
+            NotNative, R20Refusal, Throws<NotSupportedException>("stored through a value converter or a BsonRepresentation"));
     }
 
     [Fact]
@@ -1279,12 +1282,12 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // null is single-valued only). Ruling R25: the driver's `{Extra: null}` also matches an array holding a null element,
         // so the default mode refuses it (structurally: here no array holds one, and explicit DriverLinq answers right).
         PerMode(m => Run(collection, m, Configure, q => N(q.Where(i => i.Extra == null))), ["i-missing", "i-null"], NotNative,
-            "comparison of the complex collection 'Itinerary.Extra' with null incorrectly", Serves);
+            Throws<MongoDB.EntityFrameworkCore.Query.NativeTranslation.NativeTranslationNotSupportedException>("comparison of the complex collection 'Itinerary.Extra' with null incorrectly"), Serves);
         // `i.Extra!.Any()` over a null collection has no C# answer (it would throw); native reads the stored null/missing
         // array as empty ($ifNull, as for every array quantifier), while driver-LINQ's $size over the null array is a server
         // error: the optional collection is deliberately NOT normalized on the fallback (it reads null), so it stays loud.
         PerMode(m => Run(collection, m, Configure, q => N(q.Where(i => i.Extra!.Any()))), ["i-one"], Serves, Serves,
-            "The argument to $size must be an array");
+            Throws<MongoDB.Driver.MongoCommandException>("The argument to $size must be an array"));
         Native(m => Run(collection, m, Configure, q => q.OrderBy(i => i.Name).Select(i => i.Extra!.Count).ToList().Select(n => n.ToString())),
             "0", "0", "0", "1");
     }
@@ -1321,7 +1324,7 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         static void Configure(ModelBuilder mb) => mb.Entity<Crate>().ComplexCollection(c => c.Items);
         IEnumerable<string> N(IQueryable<Crate> q) => q.Select(c => c.Name).ToList().Order();
         PerMode(m => Run(collection, m, Configure, q => N(q.Where(c => c.Items.Any(i => i.Label == "l")))), ["x"],
-            Serves, Serves, "$anyElementTrue's argument must be an array");
+            Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("$anyElementTrue's argument must be an array"));
     }
 
     // A T[] complex collection is accepted by EF but cannot be read or saved (ComplexCollectionClrTypeTests): the model

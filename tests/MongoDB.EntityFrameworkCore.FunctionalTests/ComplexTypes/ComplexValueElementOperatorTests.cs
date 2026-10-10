@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,17 +47,14 @@ public class ComplexValueElementOperatorTests(TemporaryDatabaseFixture database)
     [Fact]
     public void ElementAt_ElementAtOrDefault_and_DefaultIfEmpty_after_a_whole_complex_value_are_refused_in_every_mode()
     {
-        var fragmentTypes = new Dictionary<string, Type> { [Refusal + "ElementAt'"] = typeof(NotSupportedException),
-            [Refusal + "ElementAtOrDefault'"] = typeof(NotSupportedException), [Refusal + "DefaultIfEmpty'"] = typeof(NotSupportedException) };
         foreach (var op in new[] { "ElementAt", "ElementAtOrDefault", "DefaultIfEmpty" })
         {
-            var fragment = Refusal + op + "'";
+            var outcome = Throws<NotSupportedException>(Refusal + op + "'");
 #if EF8 || EF9
             // EF8/EF9 reject DefaultIfEmpty over this projection before the provider sees it (EF's own message).
             if (op == "DefaultIfEmpty")
             {
-                fragment = "could not be translated";
-                fragmentTypes[fragment] = typeof(InvalidOperationException);
+                outcome = Throws<InvalidOperationException>("could not be translated");
             }
 #endif
             var run = Run(db => op switch
@@ -66,7 +63,7 @@ public class ComplexValueElementOperatorTests(TemporaryDatabaseFixture database)
                 "ElementAtOrDefault" => [db.Clients.OrderBy(c => c.Name).Select(c => c.Billing).ElementAtOrDefault(1) is { } a ? Composition.Fmt(a) : "<null>"],
                 _ => [.. db.Clients.Where(c => c.Name == "none").Select(c => c.Billing).DefaultIfEmpty().ToList().Select(a => a is null ? "<null>" : Composition.Fmt(a))]
             }, "ElementOps" + op);
-            PerMode(run, [], fragment, fragment, fragment, fragmentTypes);
+            PerMode(run, [], outcome, outcome, outcome);
         }
     }
 }

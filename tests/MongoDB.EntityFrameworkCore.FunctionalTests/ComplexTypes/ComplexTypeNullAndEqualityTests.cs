@@ -46,9 +46,11 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
 {
     // The complex serializer's whole-value refusal (ruling R1) and the driver's refusal of two stored complex values.
-    private const string WholeValueRefused = "as a whole value is not supported";
-    private const string SerializedDifferently = "serialized differently";
+    private const string WholeValueRefusedMessage = "as a whole value is not supported";
+    private static readonly Outcome WholeValueRefused = Throws<NotSupportedException>(WholeValueRefusedMessage);
+    private const string SerializedDifferentlyMessage = "serialized differently";
 
+    private static readonly Outcome SerializedDifferently = Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>(SerializedDifferentlyMessage);
     public enum Grade
     {
         Low,
@@ -179,7 +181,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         Assert.Equal(["ann:False", "bob:False", "cid:False", "dee:False"], run(MongoQueryMode.DriverLinq));
         // Driver-LINQ materializes both values client-side and reads Work's City under its CLR name: a loud throw.
         PerMode(Eq(q => q.OrderBy(c => c.Name).Select(c => c.Home == c.Work).ToList().Select(x => x.ToString())),
-            ["True", "True", "False", "False"], Serves, Serves, "Document element is missing for required non-nullable property 'City'");
+            ["True", "True", "False", "False"], Serves, Serves, Throws<InvalidOperationException>("Document element is missing for required non-nullable property 'City'"));
     }
 
     [Fact]
@@ -268,7 +270,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         using var driverDb = Context(collection, MongoQueryMode.DriverLinq, ConfigureEq);
         var captured = AnnAddress;
         var ex = Assert.Throws<NotSupportedException>(() => Names(driverDb.Entities.AsNoTracking().Where(c => c.Home == captured)).ToList());
-        Assert.Contains(WholeValueRefused, ex.Message);
+        Assert.Contains(WholeValueRefusedMessage, ex.Message);
     }
 
     // ── Leaf kinds: converters, BsonRepresentation, Guid, DateTime, decimal, enum ──────────────────────────────────
@@ -624,7 +626,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         // `{}` (a present Opt missing its required City); native computes it on the server.
         PerMode(Opt(q => q.OrderBy(c => c.Name).Select(c => c.Opt != null).ToList().Select(x => x.ToString())),
             ["False", "False", "True", "True", "True", "True", "True"], Serves, Serves,
-            "Document element is missing for required non-nullable property 'City'");
+            Throws<InvalidOperationException>("Document element is missing for required non-nullable property 'City'"));
     }
 
     private static void AssertNativeServesAndDriverDiffers(Func<MongoQueryMode, List<string>> run, string[] expected, string[] driverObserved)
@@ -890,7 +892,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         {
             var ex = Assert.Throws<InvalidOperationException>(() => db.Entities.Where(c => c.Opt == other).ExecuteDelete());
             Assert.Contains("could not be translated", ex.Message);
-            Assert.Contains(WholeValueRefused, ex.Message);
+            Assert.Contains(WholeValueRefusedMessage, ex.Message);
             Assert.IsType<NotSupportedException>(ex.InnerException);
         }
 

@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -159,7 +159,7 @@ public class NativeRootNullPropagatingOperandGuardTests(TemporaryDatabaseFixture
         Guarded(Readings(x => (x.A ?? x.B!.Value) < 5), ["v"], ["f", "m", "n", "v"], ["v"]);
         // CHANGED by R18: the fallback is a null-guarded `Length` over a nullable string (int-typed; null when Label is null).
         // Base native [f, m, n, v]; now [v]. The driver's $strLenCP over a null/missing string is a server error (loud).
-        PerMode(Readings(x => (x.A ?? x.Label!.Length) < 5), ["v"], Serves, Serves, "$strLenCP requires a string argument");
+        PerMode(Readings(x => (x.A ?? x.Label!.Length) < 5), ["v"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("$strLenCP requires a string argument"));
         // CHANGED: the fallback is a conditional with a nullable false branch. Base [f, h, m, n, v]; now [h, m, n, v].
         Guarded(Readings(x => (x.A ?? (x.Flag ? 0 : x.B!.Value)) < 5), ["h", "m", "n", "v"], ["f", "h", "m", "n", "v"], ["f", "h", "m", "n", "v"]);
         // A non-nullable fallback (`Rank`) is never null: no guard, unchanged, every row matches in every mode.

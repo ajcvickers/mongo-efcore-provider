@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -152,35 +152,30 @@ public class ComplexTypeDerivedSelectManyItemTests(TemporaryDatabaseFixture data
 
     // ── Per-mode pins ──────────────────────────────────────────────────────────────────────────────────────────
 
-    private const string Serves = CompositionAssert.Serves;
-    private const string NotNativeAny = CompositionAssert.NotNative;
-    private const string CrossDbSet = "Unsupported cross-DbSet query";
-    private const string NotTranslated = "could not be translated";
-    private const string DriverNotSupported = "Expression not supported";
-    private const string OuterIdMissing = "missing for required non-nullable property 'Id'";
-    private const string BsonDocKey = "'bsonDoc'";
-    private const string NotLocated = "could not be located in the document";
+    private static readonly Outcome Serves = CompositionAssert.Serves;
+    private static readonly Outcome NotNativeAny = CompositionAssert.NotNative;
+    private const string CrossDbSetMessage = "Unsupported cross-DbSet query";
+    private static readonly Outcome CrossDbSet = CompositionAssert.Throws<InvalidOperationException>(CrossDbSetMessage);
+    private const string NotTranslatedMessage = "could not be translated";
+    private static readonly Outcome NotTranslated = CompositionAssert.Throws<InvalidOperationException>(NotTranslatedMessage);
+    private const string DriverNotSupportedMessage = "Expression not supported";
+    private static readonly Outcome DriverNotSupported = CompositionAssert.Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>(DriverNotSupportedMessage);
+    private const string OuterIdMissingMessage = "missing for required non-nullable property 'Id'";
+    private static readonly Outcome OuterIdMissing = CompositionAssert.Throws<InvalidOperationException>(OuterIdMissingMessage);
+    private const string BsonDocKeyMessage = "'bsonDoc'";
+    private static readonly Outcome BsonDocKey = CompositionAssert.Throws<KeyNotFoundException>(BsonDocKeyMessage);
+    private const string NotLocatedMessage = "could not be located in the document";
+    private static readonly Outcome NotLocated = CompositionAssert.Throws<InvalidOperationException>(NotLocatedMessage);
     // Nav-expansion differs by EF version: EF10 refuses the shape itself, EF8/EF9 hand the bridge a cross-DbSet source.
-    private const string NotTranslatedOrCrossDbSet = NotTranslated + "||" + CrossDbSet;
-
-    private static readonly Dictionary<string, Type> FragmentExceptionTypes = new()
-    {
-        [CrossDbSet] = typeof(InvalidOperationException),
-        [NotTranslated] = typeof(InvalidOperationException),
-        [DriverNotSupported] = typeof(MongoDB.Driver.Linq.ExpressionNotSupportedException),
-        [OuterIdMissing] = typeof(InvalidOperationException),
-        [BsonDocKey] = typeof(KeyNotFoundException),
-        [NotLocated] = typeof(InvalidOperationException),
-        ["cannot be used for parameter"] = typeof(ArgumentException),
-        ["does not match member type"] = typeof(ArgumentException)
-    };
+    private const string NotTranslatedOrCrossDbSetMessage = NotTranslatedMessage + "||" + CrossDbSetMessage;
+    private static readonly Outcome NotTranslatedOrCrossDbSet = CompositionAssert.Throws<InvalidOperationException>(NotTranslatedOrCrossDbSetMessage);
 
     // Pins EACH mode: `Serves` with the hand-written rows, `NotNativeAny` (a NativeTranslationNotSupportedException), or an
     // exception whose message contains the fragment (`||`-separated alternatives). A mode that starts serving where it threw
     // (or the reverse), or serves different rows, fails the test.
     private static void AssertPerMode<TContext>(
         Func<MongoQueryMode, TContext> create, Func<TContext, IEnumerable<string>> query, string[] expected,
-        string nativeOnly, string native, string driverLinq)
+        Outcome nativeOnly, Outcome native, Outcome driverLinq)
         where TContext : DbContext
         => CompositionAssert.PerMode(
             mode =>
@@ -188,7 +183,7 @@ public class ComplexTypeDerivedSelectManyItemTests(TemporaryDatabaseFixture data
                 using var db = create(mode);
                 return query(db).ToList();
             },
-            expected, nativeOnly, native, driverLinq, FragmentExceptionTypes);
+            expected, nativeOnly, native, driverLinq);
 
     // ── Derived item (Reports: List<Employee>) ─────────────────────────────────────────────────────────────────
 
@@ -450,9 +445,9 @@ public class ComplexTypeDerivedSelectManyItemTests(TemporaryDatabaseFixture data
 
         // Whole element (no driver-LINQ oracle for a whole owned element: pre-existing, same for the control).
         AssertPerMode(owned, db => db.People.SelectMany(p => p.Reports).AsNoTracking().ToList().Select(e => $"{e.Name}|{e.Level}|{e.Desk.Lat}|{e.Badge.Code}"),
-            ["Dev|2|2|B-dev", "Ops|3|3|B-ops"], Serves, Serves, "does not match member type");
+            ["Dev|2|2|B-dev", "Ops|3|3|B-ops"], Serves, Serves, CompositionAssert.Throws<ArgumentException>("does not match member type"));
         AssertPerMode(ctl, db => db.People.SelectMany(p => p.Reports).AsNoTracking().ToList().Select(e => $"{e.Name}|{e.Level}|{e.Desk.Lat}|{e.Badge.Code}"),
-            ["Dev|2|2|B-dev", "Ops|3|3|B-ops"], Serves, Serves, "cannot be used for parameter");
+            ["Dev|2|2|B-dev", "Ops|3|3|B-ops"], Serves, Serves, CompositionAssert.Throws<ArgumentException>("cannot be used for parameter"));
 
         // Complex leaves of the element (member, EF.Property, query syntax, client-computed beside one): the fallback
         // reads the element's values.

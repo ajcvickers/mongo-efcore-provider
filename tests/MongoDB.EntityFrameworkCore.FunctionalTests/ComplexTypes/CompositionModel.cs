@@ -202,28 +202,70 @@ public static class Composition
 }
 
 /// <summary>
+/// One mode's expected outcome in <see cref="CompositionAssert.PerMode"/>: it serves the hand-written rows
+/// (<see cref="CompositionAssert.Serves"/>), declines natively (<see cref="CompositionAssert.NotNative"/>: a
+/// <see cref="NativeTranslationNotSupportedException"/>), or throws an exception of exactly one TYPE whose message contains a
+/// fragment (<c>||</c>-separated alternatives). A fragment outcome can only be built with its exception type
+/// (<see cref="CompositionAssert.Throws{TException}"/>): a generic fragment ("Command aggregate failed", "Expression not
+/// supported") alone would accept an unrelated exception.
+/// </summary>
+internal sealed class Outcome
+{
+    private Outcome(string? fragment, Type? exceptionType)
+    {
+        Fragment = fragment;
+        ExceptionType = exceptionType;
+    }
+
+    internal static readonly Outcome ServesRows = new(null, null);
+    internal static readonly Outcome DeclinesNatively = new(null, typeof(NativeTranslationNotSupportedException));
+
+    /// <summary>The message fragment (<c>||</c>-separated alternatives) of a throwing outcome; null for Serves/NotNative.</summary>
+    public string? Fragment { get; }
+
+    /// <summary>The exact exception type of a throwing or declining outcome; null for Serves.</summary>
+    public Type? ExceptionType { get; }
+
+    internal static Outcome Throws(Type exceptionType, string fragment)
+    {
+        ArgumentNullException.ThrowIfNull(exceptionType);
+        ArgumentException.ThrowIfNullOrEmpty(fragment);
+        return new Outcome(fragment, exceptionType);
+    }
+
+    internal bool Matches(Exception error)
+        => this == DeclinesNatively
+            ? error is NativeTranslationNotSupportedException
+            : Fragment != null && error.GetType() == ExceptionType && Fragment.Split("||").Any(error.Message.Contains);
+
+    public override string ToString()
+        => this == ServesRows ? "serves" : this == DeclinesNatively ? "<NativeTranslationNotSupportedException>"
+            : $"{ExceptionType!.Name} containing '{Fragment}'";
+}
+
+/// <summary>
 /// Per-mode outcome pins for the composition tests: each mode either serves the hand-written rows (<see cref="Serves"/>),
 /// declines natively (<see cref="NotNative"/>: a <see cref="NativeTranslationNotSupportedException"/>), or throws an
-/// exception whose message contains a fragment (<c>||</c>-separated alternatives). Never wrong rows: a serving mode is
-/// compared with the hand-written answer, and a both-throw pin names the message, so it is not vacuous.
+/// exception of a pinned type whose message contains a fragment (<see cref="Throws{TException}"/>). Never wrong rows: a
+/// serving mode is compared with the hand-written answer, and a throwing pin names the type and the message, so it is not
+/// vacuous.
 /// </summary>
 internal static class CompositionAssert
 {
-    public const string Serves = "serves";
-    public const string NotNative = "<NativeTranslationNotSupportedException>";
+    public static readonly Outcome Serves = Outcome.ServesRows;
+    public static readonly Outcome NotNative = Outcome.DeclinesNatively;
+
+    /// <summary>A throwing outcome: exactly <typeparamref name="TException"/>, with a message containing <paramref name="fragment"/>.</summary>
+    public static Outcome Throws<TException>(string fragment) where TException : Exception
+        => Outcome.Throws(typeof(TException), fragment);
 
     /// <param name="run">Runs the query under a mode.</param>
     /// <param name="expected">The hand-written rows a <see cref="Serves"/> mode must return.</param>
     /// <param name="nativeOnly">The NativeOnly outcome.</param>
     /// <param name="native">The Native outcome.</param>
     /// <param name="driverLinq">The DriverLinq outcome.</param>
-    /// <param name="fragmentExceptionTypes">
-    /// When given, the exception TYPE of each message fragment is pinned too (a fragment alone could match an unrelated
-    /// exception); a matched fragment missing from the map fails the test.
-    /// </param>
     public static void PerMode(
-        Func<MongoQueryMode, List<string>> run, string[] expected, string nativeOnly, string native, string driverLinq,
-        IReadOnlyDictionary<string, Type>? fragmentExceptionTypes = null)
+        Func<MongoQueryMode, List<string>> run, string[] expected, Outcome nativeOnly, Outcome native, Outcome driverLinq)
     {
         var failures = new List<string>();
         foreach (var (mode, want) in new[] { (MongoQueryMode.NativeOnly, nativeOnly), (MongoQueryMode.Native, native), (MongoQueryMode.DriverLinq, driverLinq) })
@@ -240,18 +282,12 @@ internal static class CompositionAssert
             }
 
             var got = error == null ? $"rows [{string.Join("; ", rows!)}]" : $"{error.GetType().Name}: {error.Message}";
-            var ok = want switch
-            {
-                Serves => error == null && expected.SequenceEqual(rows!),
-                NotNative => error is NativeTranslationNotSupportedException,
-                _ => error != null && want.Split("||").Any(error.Message.Contains)
-                     && (fragmentExceptionTypes is null
-                         || (fragmentExceptionTypes.TryGetValue(want.Split("||").First(error.Message.Contains), out var type)
-                             && error.GetType() == type))
-            };
+            var ok = want == Serves
+                ? error == null && expected.SequenceEqual(rows!)
+                : error != null && want.Matches(error);
             if (!ok)
             {
-                failures.Add($"{mode}: expected {(want == Serves ? $"rows [{string.Join("; ", expected)}]" : want)}, got {got}");
+                failures.Add($"{mode}: expected {(want == Serves ? $"rows [{string.Join("; ", expected)}]" : want.ToString())}, got {got}");
             }
         }
 
