@@ -275,13 +275,21 @@ Rendering (null/missing/dialect semantics):
   reads a whole complex value anywhere throws `NotSupportedException` ("... cannot be the operand of '<Op>' ...") in every
   mode (ruling R7; `ThrowIfComplexValueOperand` in `VisitMethodCall`): Distinct (incl. `Distinct().Count()`), Union,
   Concat, Intersect, Except, Contains, Cast, Select/Where/OrderBy written after a paging operator, Min/Max/Sum/Average
-  without a selector, Join, etc. Only `IsProjectedValueFreeOperator` passes: Take, Skip, predicate-less
-  First/Single/Last(OrDefault), Count, LongCount, Any. EF folds Where/OrderBy/All/Min/Max(selector) written directly after
+  without a selector, Join, ElementAt, ElementAtOrDefault, DefaultIfEmpty, etc. Only `IsProjectedValueFreeOperator`
+  passes: Take, Skip, predicate-less First/Single/Last(OrDefault), Count, LongCount, Any. ElementAt/ElementAtOrDefault/
+  DefaultIfEmpty read no value but stay refused: none has a native translation even for a scalar projection, and the
+  fallback cannot read a complex value (EF8/EF9 reject DefaultIfEmpty first with EF's own message;
+  `ComplexValueElementOperatorTests`). EF folds Where/OrderBy/All/Min/Max(selector) written directly after
   the Select onto the source, so those never see the projection (native, correct). The flag
   (`HasComplexValueShaperLeaf`) is set by ONE predicate (`RecordComplexValueShaperLeaf`) on the result of every
   `TranslateSelect` arm (shaper holds a `ComplexValueProjectionExpression`, or the native projection staged a complex
   value). A positional-ctor/container projection never stages a complex argument (`IsScalarPositionalConstruction`: its
-  index shaper would read it through a class map); it declines and the fallback refuses the memberless construction.
+  index shaper would read it through a class map); it declines and the fallback refuses the memberless construction. This
+  applies to constructions with MORE than one argument: a one-argument record/constructor of a whole complex value
+  (`new Holder(x.Home)`, renamed members too) and member-init DTOs are served in every mode
+  (`ComplexValueConstructorProjectionTests`). Known wrong read (unreleased, spec known limitation 29): two alike-stored
+  complex values of one CLR type as constructor arguments (`new P(x.Home, x.Work)`) read every argument from the last one
+  on the fallback (`W|W`) instead of being refused; the owned analogue reads correctly.
   GroupBy in which a whole complex value takes part (key, key part, read off the grouped elements in a post-group Select:
   `ThrowIfGroupByOverComplexValue`) is refused with the same message naming GroupBy (ruling R8). Where EF erases the value
   (`Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key)` becomes a leaf-key grouping over the entity; the
@@ -291,7 +299,11 @@ Rendering (null/missing/dialect semantics):
   typed as a derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other
   derived shaper does only outside a join. This also corrected a pre-existing NON-complex wrong read (owner-approved
   exception, ruling R9): `OfType<E>().Select(e => new { e, e.Name, R = e.Referrer!.Name })` read `e.Name` off the joined
-  referrer at 040cecdf (`Dev|Boss|Boss`, and so did published 10.0.4), now `Dev|Dev|Boss`. A bare-nav SelectMany's ITEM shaper
+  referrer at 040cecdf (`Dev|Boss|Boss`, and so did published 10.0.4), now `Dev|Dev|Boss`. A shaper of the root's OWN CLR
+  type in a join is the root only through that binding (`!IsJoinQuery || IsRootProjectionShaper`): a same-type joined row
+  (self-join inner side, same-type reference navigation, a BASE-typed referrer after `OfType`) projected beside the whole
+  outer entity reads the joined document (owner-approved exception (h); every released version read the outer document).
+  A bare-nav SelectMany's ITEM shaper
   (`BuildBareNavWrappedShaper`) is bound to the same empty member, so `IsRootProjectionShaper` is true for it too; this
   is harmless today because the arm is never reached for a served row (an item type in the root's EF hierarchy needs a
   reference unwind, which has no driver-LINQ fallback; the native path binds by scope depth and reads by alias; an owned

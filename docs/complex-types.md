@@ -60,9 +60,27 @@ modelBuilder.Entity<Customer>(e =>
   });
   ```
 
+  Precedence, as for entity properties: an explicit name (the annotation) wins over an attribute, which wins over a
+  convention (camel case), also when EF moves a complex property configured on a derived type to its base type. With both
+  `[BsonElement]` and `[Column]` on one member, `[BsonElement]`'s name is used (for scalars too).
   `[BsonIgnore]` and `[BsonRequired]` are honored. `BsonRepresentation` and value converters on members work as they do
-  for entity properties.
+  for entity properties. `[Column(TypeName = ...)]` on a complex property raises the same `ColumnAttributeWithTypeUsed`
+  error as on a property (suppress the event to ignore the type name).
 - The same CLR type may be used at several places with different element names; each place is configured independently.
+
+### Complex collection CLR types (EF10)
+
+Measured end to end (save, read, replace, in-place change, an element predicate in every query mode, `ExecuteUpdate`):
+
+| Declared type | Model | Read and save | Queries | `ExecuteUpdate`/`ExecuteDelete` over the elements |
+|---|---|---|---|---|
+| `List<T>`, `IList<T>` | yes | yes | yes | yes |
+| `ObservableCollection<T>`, `Collection<T>` | yes | yes | yes | refused (the bulk path cannot read a null array as empty for these types) |
+| a class deriving from `List<T>` | yes | yes | native yes; `DriverLinq` fails with an exception | refused (same reason) |
+| `T[]`, `ReadOnlyCollection<T>`, other types without a public parameterless constructor | rejected by the provider's model validation (EF Core accepts them but cannot read or save them) | | | |
+| `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `IEnumerable<T>`, `HashSet<T>` | rejected by EF Core (does not implement `IList<T>`) | | | |
+
+EF10 also rejects collections of struct complex types ("complex value type collections are not supported").
 
 ### Per-version support
 
@@ -86,7 +104,15 @@ The model validator rejects, with an `InvalidOperationException` or `NotSupporte
   member of a complex type: encryption is not supported inside complex types. Map the value as a property of an entity
   type or an owned entity type to encrypt it;
 - a **concurrency token or row version** on a member of a complex type. Put the token on the entity: it guards the whole
-  document, including its complex properties.
+  document, including its complex properties;
+- an empty or whitespace element name on a complex property (a complex value is always stored). On a member of a complex
+  type an empty name means "not stored", as for an entity property;
+- the BSON attributes the provider does not support (`[BsonDefaultValue]`, `[BsonIgnoreIfNull]`, `[BsonIgnoreIfDefault]`,
+  `[BsonSerializer]`, `[BsonExtraElements]`, `[BsonGuidRepresentation]`, `[BsonTimeSpanOptions]`,
+  `[BsonDictionaryOptions]` on a member; `[BsonDiscriminator]`, `[BsonKnownTypes]`, `[BsonNoId]`, `[BsonSerializer]`,
+  `[BsonMemberMapAttributeUsage]` on the class; `[BsonConstructor]`, `[BsonFactoryMethod]`), at any depth, with the same
+  `NotSupportedException` as for entity and owned types;
+- a complex collection whose CLR type EF Core cannot read or save (`T[]`, `ReadOnlyCollection<T>`; see the table above).
 
 ## Stored shape
 
@@ -155,12 +181,16 @@ Supported natively:
 Not supported (each fails with a clear exception in every mode, never wrong rows):
 
 - A whole complex value as the operand of `Distinct`, `Union`, `Concat`, `Intersect`, `Except`, `Contains`, `Cast`, `Join`,
-  `Min`/`Max`/`Sum`/`Average` without a selector, or of `Select`/`Where`/`OrderBy` written after a paging operator over such
-  a projection ("... cannot be the operand of '<Op>' ..."). Projections holding whole complex values allow `Take`, `Skip`,
+  `Min`/`Max`/`Sum`/`Average` without a selector, `ElementAt`, `ElementAtOrDefault`, `DefaultIfEmpty`, or of
+  `Select`/`Where`/`OrderBy` written after a paging operator over such a projection ("... cannot be the operand of '<Op>'
+  ..."; on EF8/EF9 EF itself rejects `DefaultIfEmpty` first). Projections holding whole complex values allow `Take`, `Skip`,
   `First`/`Single`/`Last`(`OrDefault`) without a predicate, `Count`, `LongCount` and `Any`. Use member projections instead.
 - `GroupBy` in which a whole complex value takes part (as the key, part of the key, or read off the grouped elements).
   Grouping by a member is supported.
-- A constructor or record projection that takes a whole complex value as an argument.
+- A constructor or record projection with MORE than one argument that includes a whole complex value
+  (`new Holder(x.Home, x.Name)`). A one-argument constructor or record (`new Holder(x.Home)`), a member-initialized DTO
+  (`new Dto { A = x.Home }`) and an anonymous type work in every mode. (One exception to "never wrong rows": see Known
+  limitations.)
 - `Sum`/`Max`/`Min`/`Average` over the members of complex collection elements, and a count projected beside an element-list
   projection (`new { N = c.Lines.Count, Xs = c.Lines.Select(l => l.X) }`).
 
@@ -233,6 +263,10 @@ These are pinned in the provider's tests; the native path answers as C# does.
 
 ## Known limitations
 
+- **Wrong read:** a constructor or record projection taking two complex values of the same CLR type that are stored alike
+  (`Select(x => new P(x.Home, x.Work))`) reads every argument from the last one in the default and `DriverLinq` modes
+  (`NativeOnly` refuses it). Use a member-initialized DTO or an anonymous type (`new { x.Home, x.Work }`), which read
+  correctly.
 - There is no fluent `HasElementName` for complex properties or their members; use the annotation spellings above.
 - A required complex property whose element is missing throws on read even when all its members are nullable (see
   Stored shape).

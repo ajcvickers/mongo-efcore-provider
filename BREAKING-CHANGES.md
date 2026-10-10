@@ -20,6 +20,8 @@ MongoDB 8, with a model `C { Id, Name, Home: Addr { City } }` and `ComplexProper
 - Querying a complex member (`Where(c => c.Home.City == "Oslo")`) threw the driver's `ExpressionNotSupportedException`.
 - The model built without validation errors for a complex property whose element name duplicated a scalar's, started with
   `$`, or contained `.`, and for an element name collision introduced by camel-casing (`Home` and a property `home`).
+- `[Column("h")]` and `[BsonElement("h")]` on a complex property set no element name (measured on 10.0.4: the attributes
+  were ignored and the element name stayed the CLR name); they are now honored (see Mitigations).
 
 #### New behavior
 
@@ -35,6 +37,14 @@ MongoDB 8, with a model `C { Id, Name, Home: Addr { City } }` and `ComplexProper
 - The model validator rejects a concurrency token or row version on a member of a complex type. It was previously accepted
   and ignored, so a conflicting `SaveChanges` succeeded and overwrote the other change. A token on the entity itself guards
   the whole document, including its complex properties.
+- New model-validation exceptions for complex types, each previously accepted and silently ignored or failing later:
+  the BSON attributes the provider does not support (`[BsonDefaultValue]`, `[BsonIgnoreIfNull]`, `[BsonIgnoreIfDefault]`,
+  `[BsonSerializer]`, `[BsonExtraElements]`, `[BsonGuidRepresentation]`, `[BsonTimeSpanOptions]`, `[BsonDictionaryOptions]`
+  on a member; `[BsonDiscriminator]`, `[BsonKnownTypes]`, `[BsonNoId]`, `[BsonSerializer]`, `[BsonMemberMapAttributeUsage]`
+  on the class; `[BsonConstructor]`, `[BsonFactoryMethod]`) throw `NotSupportedException` as they already did for owned
+  types; an empty or whitespace element name on a complex property; a `T[]` or `ReadOnlyCollection<T>` complex collection
+  (EF10; EF Core could not read or save it); and `[Column(TypeName = ...)]` on a complex property raises the
+  `ColumnAttributeWithTypeUsed` error, as on a property.
 
 Additive, not breaking: `ExecuteUpdate`/`ExecuteDelete` over complex properties (EF9+), native translation of complex-type
 queries, a public `ProcessComplexPropertyAdded` method (with `IComplexPropertyAddedConvention`) on
@@ -60,6 +70,11 @@ nor read them, so any model using them lost data on save.
     `db.cs.updateMany({ Home: { $exists: false } }, { $set: { Home: {} } })`; the nullable members of `{}` then read `null`
     (a required member would still throw). Or keep the previous behaviour by ignoring the property
     (`Ignore(c => c.Home)`) until the data is migrated.
+- If a complex property has `[Column]`/`[BsonElement]`, the element it is read from is now the attribute's name: backfill
+  using its stored element name (the attribute's, for example `db.cs.updateMany({ h: { $exists: false } }, { $set: { h: {} } })`),
+  and move any data you stored yourself under the CLR name to it, or remove the attribute to keep the CLR name.
+- Remove unsupported BSON attributes from complex types (they had no effect), give complex properties non-empty element
+  names, and declare complex collections as `List<T>` or `IList<T>`.
 - If you worked around the earlier behavior with `Ignore(c => c.Home)` nothing changes. If you kept a parallel property
   (for example a shadow property or a separately mapped owned type) under the same element name, the model validator now
   reports the collision; give one of them a different element name.
@@ -73,22 +88,40 @@ required `string` as `null`, as the driver-LINQ path in released versions did; (
 in a join correctly; (d) resolves join and sort keys through owned hops structurally instead of by the member's simple name;
 (e) applies the existing relational null guard to date-add, conditional and coalesce operands that may be null, so
 `<`/`<=` no longer match rows whose operand is null; (f) reads an owned-hop `EF.Property` projection
-(`new { C = EF.Property<string>(b.Home, "City") }`) correctly instead of as `null`; and (g) declines `OfType<T>()` followed
-by `SelectMany` projecting a derived outer member (falling back) instead of throwing `ArgumentException` in every mode.
-(a), (f) and (g) correct the unreleased native path. (c) and (d) correct wrong answers on the unreleased native path **and
-on released code**:
-- (c): on 10.0.4 (measured, MongoDB 8) `People.OfType<Employee>().Where(e => e.ReferrerId != null)
-  .Select(e => new { e, e.Name, R = e.Referrer!.Name })` answered `Dev|Boss|Boss` (`e.Name` read off the joined referrer);
-  it now answers `Dev|Dev|Boss` in the default and `DriverLinq` modes (`NativeOnly` declines the shape). 8.4.4 and 9.1.4
-  cannot translate that query (it throws).
-- (d): in 8.4.4, 9.1.4 and 10.0.4 a filtered `Include` whose `OrderBy` reads through an owned navigation
-  (`Include(b => b.Posts.OrderBy(p => p.Meta.Rank))`) and the driver-LINQ `LeftJoin` on a key read through an owned
-  navigation resolved the key by the member's simple name (`GetSortField`, `TryGetKeyFieldPath`, verified in the tagged
-  source), so when the entity itself had a property of that name they silently sorted or joined by it; they now use the
-  owned field.
+(`new { C = EF.Property<string>(b.Home, "City") }`) correctly instead of as `null`; (g) declines `OfType<T>()` followed
+by `SelectMany` projecting a derived outer member (falling back) instead of throwing `ArgumentException` in every mode;
+(h) reads the members of a same-CLR-type joined row (self-join inner side, same-type reference navigation) projected
+beside the whole outer entity off the joined document, not the outer one; (i) on EF8/EF9 declines (falling back) a compiled
+query comparing a row member with a member of an entity argument, which the native path answered with every row;
+(j) stores a `$`-prefixed constant set on a root scalar by a pipeline-form `ExecuteUpdate` literally; and (k) refuses a
+relational comparison, ordering or aggregate over a converted root scalar read through a downcast
+(`((Cat)a).Lives > 5`) with the EF-337 error instead of returning no rows. Bulk-operation failure messages now print `?` for
+literals in the captured query. (a), (f), (g) and (k) correct the unreleased native path; (i) fixes an unreleased regression
+(8.4.4, 9.1.4 and 10.0.4 answer correctly). Measured against 8.4.4, 9.1.4 and 10.0.4 on MongoDB 8, these change released
+answers:
+- (c): on 10.0.4 `People.OfType<Employee>().Where(e => e.ReferrerId != null).Select(e => new { e, e.Name,
+  R = e.Referrer!.Name })` answered `Dev|Boss|Boss` (`e.Name` read off the joined referrer); it now answers `Dev|Dev|Boss`
+  in the default and `DriverLinq` modes (`NativeOnly` declines the shape), also with the referrer typed as the hierarchy's
+  base type (10.0.4 answered `Dev/Boss/Dev` there). 8.4.4 and 9.1.4 cannot translate that query (it throws).
+- (d): only on 10.0.4, the method-syntax `LeftJoin` returning entities on a key read through an owned navigation
+  (`People.LeftJoin(Cities, p => p.Home.CityId, ..., (p, ci) => new { p, ci })`) joined by the root's same-named property
+  (`p1:TWENTY, p2:TEN`); it now joins by the owned field (`p1:TEN, p2:TWENTY`). 8.4.4 and 9.1.4 throw on that query; the
+  query-syntax projected form was already correct. The filtered-`Include` sort through an owned navigation does not change:
+  whenever the included entity has an owned navigation, every version (released and this one) drops the `Include`'s
+  `$sort` and `Take` (a pre-existing bug, unfixed).
+- (e): released versions returned rows whose nullable date-add AMOUNT was null for `x.D.AddDays(x.A!.Value) < c`
+  (`$dateAdd`; 8.4.4, 9.1.4 and 10.0.4 answer `1,2`); the default and `NativeOnly` modes now answer `2`. The `??` and `?:`
+  operand guards changed only unreleased code.
+- (h): every released version read the outer row: `People.Join(People, p => p.ReferrerId, e => (ObjectId?)e.Id,
+  (p, e) => new { p, e }).Select(x => new { x.p, x.e.Name })` answered the outer `Name` (`n2|n2`, now `n2|n1`) and an inner
+  owned leaf `x.e.Main.Text` `null` (now `t1`); `Select(p => new { p, R = p.Referrer!.Name })` answered `n2|n2` on 10.0.4
+  (now `n2|n1`; 8.4.4 and 9.1.4 throw).
+- (j): on 10.0.4 such a constant was evaluated as a field path or variable (`"$Secret"` copied another field, `"$$ROOT"`
+  stored the document).
 
 (b) restores the released driver-LINQ answer; (e) follows EF's null semantics and the native path's existing guard policy
-(driver-LINQ includes those null-operand rows, as it already did for the shapes the guard covered before).
+(`MongoQueryMode.DriverLinq` still returns those null-operand rows, as it already did for the shapes the guard covered
+before).
 
 ### A missing or `null` embedded array now materializes as an empty collection, not `null`
 
