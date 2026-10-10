@@ -181,14 +181,14 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
     }
 
     [Fact]
-    public void Explicit_self_join_mixed_projection_of_inner_members_is_a_known_pre_existing_wrong_read()
+    public void Explicit_self_join_mixed_projection_of_inner_members_reads_the_inner_document()
     {
-        // PRE-EXISTING (reproduced at 040cecdf, before complex-type materialization, with an OWNED Badge instead of a
-        // complex one): a same-type self-join whose mixed projection holds the whole outer entity beside an inner-side hop
-        // leaf reads it off the OUTER document on the driver-LINQ path (`x.e.Badge.Code` answers empty, at HEAD also
-        // `x.e.Name` answered the outer name). Not caused by this slice; pinned so a fix is noticed. Proposed Jira (not
-        // filed). Without the whole outer entity, or with the inner side projected whole, the inner members read correctly.
-        var collection = Seed(nameof(Explicit_self_join_mixed_projection_of_inner_members_is_a_known_pre_existing_wrong_read));
+        // Was `..._is_a_known_pre_existing_wrong_read` (pinned with Assert.NotEqual): a same-type self-join whose mixed
+        // projection holds the whole outer entity beside an inner-side hop leaf read the leaf off the OUTER document (at
+        // 5547cfa2 shape 0 answered `Dev|B-dev ; Guest|B-guest` in Native and DriverLinq; reproduced at 040cecdf with an
+        // OWNED Badge). The read side recognised the root shaper by CLR type; it is now structural (owner-approved exception
+        // (h)), so the inner side reads the joined document. Hand-written answers.
+        var collection = Seed(nameof(Explicit_self_join_mixed_projection_of_inner_members_reads_the_inner_document));
         IEnumerable<string> Run(PeopleContext db, int shape)
         {
             var joined = db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e }).OrderBy(x => x.p.Name);
@@ -200,11 +200,7 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
             };
         }
 
-        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
-        {
-            Assert.NotEqual(["Dev|B-boss", "Guest|B-boss"], Outcome(collection, mode, db => Run(db, 0)));
-        }
-
+        AssertPerMode(collection, db => Run(db, 0), ["Dev|B-boss", "Guest|B-boss"], NotNativeAny, Serves, Serves);
         AssertPerMode(collection, db => Run(db, 1), ["Dev|Boss|B-boss", "Guest|Boss|B-boss"], NotNativeAny, Serves, Serves);
         NativeModeAssert.NativeAndExpected(m => Outcome(collection, m, db => Run(db, 2)), ["Dev|Boss|B-boss|9", "Guest|Boss|B-boss|9"]);
     }
