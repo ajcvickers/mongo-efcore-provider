@@ -1403,8 +1403,10 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             // The query root's own shaper (bound to the root projection member), also when it is typed as a derived type
             // after OfType<TDerived>(): its members live in the root document (DocParameter; a mixed reader redirects it to
             // "_outer" under driver join fields). Decided by the binding, not the CLR type: in a join over the root's own
-            // hierarchy the joined side may have the same (derived) type.
-            if (shaperEntityType == _rootEntityType
+            // hierarchy the joined side may have the same (derived) type. The same holds for the root's OWN type: in a join
+            // (a same-type reference navigation `p.Referrer!.Badge`, the inner side of a self-join) a shaper of the root's
+            // CLR type may be the joined row, so outside the root's binding it reads the joined document (exception (h)).
+            if ((shaperEntityType == _rootEntityType && (!_queryExpression.IsJoinQuery || IsRootProjectionShaper(shaper)))
                 || IsRootProjectionShaper(shaper) && _rootEntityType.IsAssignableFrom(shaperEntityType))
             {
                 return (shaperEntityType, DocParameter);
