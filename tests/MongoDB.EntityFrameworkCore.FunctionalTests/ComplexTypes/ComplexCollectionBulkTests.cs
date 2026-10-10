@@ -484,13 +484,15 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     [Fact]
     public void Optional_collection_null_checks_are_refused()
     {
-        // FOUND IN THIS TASK: the driver renders `r.Detours == null` as `{Detours: null}`, which ALSO matches an array that
-        // CONTAINS a null element: r-null's Detours [null] is selected though it is a non-null collection (C#: the rows
-        // whose Detours is null or missing). The query's Native-mode fallback serves the same wrong row (pinned here; a
-        // pre-existing query gap, Jira candidate); a bulk operation refuses it.
+        // Ruling R25. The driver renders `r.Detours == null` as `{Detours: null}`, which ALSO matches an array that CONTAINS
+        // a null element: r-null's Detours [null] is selected though it is a non-null collection. C#: the rows whose Detours
+        // reads null (BSON null or missing): r-empty, r-emptyelem, r-missing, r-mixed, r-nullarr. The native path declines a
+        // collection null check, so the default mode REFUSES rather than falling back to the driver's rows (measured RED
+        // before the refusal: Native returned the driver's rows below); a bulk operation refuses it too.
         var store = Seed();
-        Assert.Equal(["r-empty", "r-emptyelem", "r-missing", "r-mixed", "r-null", "r-nullarr"], QueryRows(store, r => r.Detours == null, MongoQueryMode.Native));
-        Assert.Equal(["r-full"], QueryRows(store, r => r.Detours != null, MongoQueryMode.Native));
+        RefusedCollectionNullCheck(store, db => Names(db.Entities.Where(r => r.Detours == null)), "Route.Detours",
+            ["r-empty", "r-emptyelem", "r-missing", "r-mixed", "r-null", "r-nullarr"]);
+        RefusedCollectionNullCheck(store, db => Names(db.Entities.Where(r => r.Detours != null)), "Route.Detours", ["r-full"]);
         using (var db = store.Context())
         {
             AssertRefused(() => db.Entities.Where(r => r.Detours == null).ExecuteDelete(), "a read of the collection");
@@ -498,6 +500,83 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         }
 
         store.AssertUnchanged();
+    }
+
+    [Fact]
+    public void Collection_null_checks_are_refused_in_every_query_shape_the_native_path_declines()
+    {
+        // Ruling R25, per shape (RED matrix in the final-fix-wave report). Every shape below is declined by the native path
+        // (NativeOnly throws), so the default mode would serve the DRIVER's rows, pinned under explicit DriverLinq as
+        // known driver behaviour (the opt-in). C# answers in the comments.
+        var store = Seed();
+        // C#: [r-empty, r-emptyelem, r-full, r-missing, r-mixed, r-nullarr] (r-null's [null] is not null).
+        RefusedCollectionNullCheck(store, db => Names(db.Entities.Where(r => r.Detours == null || r.Rank == 3)), "Route.Detours",
+            ["r-empty", "r-emptyelem", "r-full", "r-missing", "r-mixed", "r-null", "r-nullarr"]);
+        RefusedCollectionNullCheck(store, db => Names(db.Entities.Where(r => !(r.Detours == null))), "Route.Detours", ["r-full"]);
+        RefusedCollectionNullCheck(store, db => Names(db.Entities.Where(r => null == r.Detours)), "Route.Detours",
+            ["r-empty", "r-emptyelem", "r-missing", "r-mixed", "r-null", "r-nullarr"]);
+        RefusedCollectionNullCheck(store, db => Names(db.Entities.Where(r => EF.Property<List<Stop>?>(r, nameof(Route.Detours)) == null)),
+            "Route.Detours", ["r-empty", "r-emptyelem", "r-missing", "r-mixed", "r-null", "r-nullarr"]);
+        // C#: 5.
+        RefusedCollectionNullCheck(store, db => [db.Entities.Count(r => r.Detours == null).ToString()], "Route.Detours", ["6"]);
+        // C#: r-full and r-null false, every other row true.
+        RefusedCollectionNullCheck(store,
+            db => db.Entities.AsNoTracking().Select(r => new { r.Name, B = r.Detours == null }).ToList().Select(x => $"{x.Name}:{x.B}"),
+            "Route.Detours",
+            ["r-empty:True", "r-emptyelem:True", "r-full:False", "r-missing:True", "r-mixed:True", "r-null:False", "r-nullarr:True"]);
+        // C#: 0 for the five null rows; the driver treats a MISSING array as present (only r-nullarr answers 0).
+        RefusedCollectionNullCheck(store,
+            db => db.Entities.AsNoTracking().Select(r => new { r.Name, B = r.Detours == null ? 0 : 1 }).ToList().Select(x => $"{x.Name}:{x.B}"),
+            "Route.Detours", ["r-empty:1", "r-emptyelem:1", "r-full:1", "r-missing:1", "r-mixed:1", "r-null:1", "r-nullarr:0"]);
+        RefusedCollectionNullCheck(store,
+            db => db.Entities.AsNoTracking().OrderBy(r => r.Detours == null).ThenBy(r => r.Name).Select(r => r.Name).ToList(),
+            "Route.Detours", ["r-empty", "r-emptyelem", "r-full", "r-missing", "r-mixed", "r-null", "r-nullarr"]);
+        // A REQUIRED collection's null check (C#: none; a null/missing array reads empty): the driver's `{Stops: null}`
+        // selects the missing/null arrays and the [null]-holding ones.
+        RefusedCollectionNullCheck(store, db => Names(db.Entities.Where(r => r.Stops == null)), "Route.Stops",
+            ["r-missing", "r-mixed", "r-null", "r-nullarr"]);
+
+        // The remedies the message names are native (NativeOnly) and answer C#.
+        using (var db = store.Context(MongoQueryMode.NativeOnly))
+        {
+            Assert.Equal(["r-empty", "r-emptyelem", "r-missing", "r-mixed", "r-nullarr"], Names(db.Entities.Where(r => !r.Detours!.Any())));
+            Assert.Equal(["r-empty", "r-emptyelem", "r-missing", "r-mixed", "r-nullarr"], Names(db.Entities.Where(r => r.Detours!.Count == 0)));
+        }
+
+        store.AssertUnchanged();
+    }
+
+    private const string CollectionNullCheckRefusal = "with null incorrectly";
+
+    private static List<string> Names(IQueryable<Route> query)
+        => [.. query.AsNoTracking().Select(r => r.Name).ToList().Order(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// R25: the shape is declined natively (NativeOnly throws), refused under the default Native mode with a message naming
+    /// the collection and the remedies, and served by the driver under explicit DriverLinq (<paramref name="driverRows"/>,
+    /// known driver behaviour).
+    /// </summary>
+    private static void RefusedCollectionNullCheck(
+        Store store, Func<SingleEntityDbContext<Route>, IEnumerable<string>> query, string collection, string[] driverRows)
+    {
+        using (var db = store.Context(MongoQueryMode.NativeOnly))
+        {
+            Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => query(db).ToList()));
+        }
+
+        using (var db = store.Context(MongoQueryMode.Native))
+        {
+            var refusal = Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => query(db).ToList()));
+            Assert.Contains(CollectionNullCheckRefusal, refusal.Message);
+            Assert.Contains($"'{collection}'", refusal.Message);
+            Assert.Contains("'!c.Collection.Any()'", refusal.Message);
+            Assert.Contains("MongoQueryMode.DriverLinq", refusal.Message);
+        }
+
+        using (var db = store.Context(MongoQueryMode.DriverLinq))
+        {
+            Assert.Equal(driverRows, query(db).Order(StringComparer.Ordinal));
+        }
     }
 
     [Fact]

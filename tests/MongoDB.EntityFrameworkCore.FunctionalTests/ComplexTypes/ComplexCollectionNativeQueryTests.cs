@@ -1276,8 +1276,10 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
 
         IEnumerable<string> N(IQueryable<Itinerary> q) => q.Select(i => i.Name).ToList().Order();
         // The null check of the collection itself is not a supported native shape (a whole complex value compared with
-        // null is single-valued only); the fallback answers it.
-        PerMode(m => Run(collection, m, Configure, q => N(q.Where(i => i.Extra == null))), ["i-missing", "i-null"], NotNative, Serves, Serves);
+        // null is single-valued only). Ruling R25: the driver's `{Extra: null}` also matches an array holding a null element,
+        // so the default mode refuses it (structurally: here no array holds one, and explicit DriverLinq answers right).
+        PerMode(m => Run(collection, m, Configure, q => N(q.Where(i => i.Extra == null))), ["i-missing", "i-null"], NotNative,
+            "comparison of the complex collection 'Itinerary.Extra' with null incorrectly", Serves);
         // `i.Extra!.Any()` over a null collection has no C# answer (it would throw); native reads the stored null/missing
         // array as empty ($ifNull, as for every array quantifier), while driver-LINQ's $size over the null array is a server
         // error: the optional collection is deliberately NOT normalized on the fallback (it reads null), so it stays loud.
