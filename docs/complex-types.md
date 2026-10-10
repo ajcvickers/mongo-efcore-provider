@@ -242,6 +242,9 @@ These are pinned in the provider's tests; the native path answers as C# does.
 - A positive `Any` over a complex collection is evaluated in an aggregation element scope, so it cannot use an index on
   the array's members (owned collections use `$elemMatch`).
 - `MongoQueryMode.DriverLinq` bulk operations over complex collection elements log no warning; see the warning above.
+- `collection == null` / `!= null` is refused in the default mode (the driver fallback gets it wrong for data EF can
+  write), so a defensive `Addresses != null && Addresses.Count > 0` guard fails with a message; use `.Any()` or `Count`
+  instead. Translating these comparisons natively would remove the refusal.
 
 ## Design time
 
