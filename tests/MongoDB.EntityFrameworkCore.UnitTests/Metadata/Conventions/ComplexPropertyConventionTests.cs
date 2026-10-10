@@ -398,6 +398,102 @@ public static class ComplexPropertyConventionTests
         Assert.Equal("cbson", entityType.FindComplexProperty(nameof(TwoAttrHolder.Address))!.GetElementName());
     }
 
+    // An empty element name means "not stored" for a scalar (owned ordinal-key shadow properties use it), but a complex
+    // property's value cannot be left out: the writer would store an element named "" (two such names then failed at
+    // SaveChanges with the driver's "Duplicate element name"), so the name is rejected at model validation.
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    public static void Complex_property_with_empty_or_whitespace_element_name_fails_validation(string name)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var db = new TestContext<EmptyNameHolder>(mb =>
+                mb.Entity<EmptyNameHolder>().ComplexProperty(e => e.Address).HasPropertyAnnotation(MongoAnnotationNames.ElementName, name));
+            _ = db.Model;
+        });
+
+        Assert.Equal(
+            $"Complex property 'Address' on entity type '{nameof(EmptyNameHolder)}' may not map to an empty or whitespace element name."
+            + " A complex property is always stored; map it to a non-empty BSON element name.",
+            ex.Message);
+    }
+
+    [Fact]
+    public static void Nested_complex_property_with_empty_element_name_fails_validation()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var db = new TestContext<NestedCollisionHolder>(mb =>
+                mb.Entity<NestedCollisionHolder>().ComplexProperty(e => e.Address)
+                    .ComplexProperty(a => a.Geo).HasPropertyAnnotation(MongoAnnotationNames.ElementName, ""));
+            _ = db.Model;
+        });
+
+        Assert.Contains($"Complex property 'Geo' on complex type '{nameof(NestedCollisionHolder)}.Address#{nameof(NestedCollisionAddr)}'", ex.Message);
+        Assert.Contains("empty or whitespace element name", ex.Message);
+    }
+
+    // A leaf inside a complex type keeps the scalar meaning of an empty name: it is not stored (ComplexValueWriter skips
+    // it, as MongoUpdate.WriteNonKeyProperties does for a top-level scalar), so two such leaves do not collide.
+    [Fact]
+    public static void Complex_type_leaves_with_empty_element_names_are_accepted_as_not_stored()
+    {
+        using var db = new TestContext<LeafCollisionHolder>(mb =>
+        {
+            var complex = mb.Entity<LeafCollisionHolder>().ComplexProperty(e => e.Address);
+            complex.Property(a => a.Street).Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "");
+            complex.Property(a => a.City).Metadata.SetAnnotation(MongoAnnotationNames.ElementName, "");
+        });
+
+        var complexType = db.Model.FindEntityType(typeof(LeafCollisionHolder))!.FindComplexProperty(nameof(LeafCollisionHolder.Address))!.ComplexType;
+        Assert.Equal("", complexType.FindProperty(nameof(Addr2.Street))!.GetElementName());
+    }
+
+    // Control: the owned-collection ordinal key is a shadow property with an empty element name; still accepted.
+    [Fact]
+    public static void Owned_collection_ordinal_key_with_empty_element_name_is_still_accepted()
+    {
+        using var db = new TestContext<OwnedCollectionHolder>(mb => mb.Entity<OwnedCollectionHolder>().OwnsMany(e => e.Items));
+
+        var owned = db.Model.FindEntityType(typeof(Owned))!;
+        Assert.Contains(owned.GetProperties(), p => p.IsShadowProperty() && p.GetElementName() == "");
+    }
+
+#if !EF8 && !EF9
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public static void Complex_collection_with_empty_or_whitespace_element_name_fails_validation(string name)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var db = new TestContext<ComplexCollectionHolder>(mb =>
+                mb.Entity<ComplexCollectionHolder>().ComplexCollection(e => e.Addresses).HasPropertyAnnotation(MongoAnnotationNames.ElementName, name));
+            _ = db.Model;
+        });
+
+        Assert.Contains($"Complex property 'Addresses' on entity type '{nameof(ComplexCollectionHolder)}'", ex.Message);
+        Assert.Contains("empty or whitespace element name", ex.Message);
+    }
+
+    [Fact]
+    public static void Complex_property_inside_complex_collection_with_empty_element_name_fails_validation()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var db = new TestContext<NestedCollectionHolder>(mb =>
+                mb.Entity<NestedCollectionHolder>().ComplexCollection(e => e.Addresses)
+                    .ComplexProperty(a => a.Geo).HasPropertyAnnotation(MongoAnnotationNames.ElementName, ""));
+            _ = db.Model;
+        });
+
+        Assert.Contains("Complex property 'Geo'", ex.Message);
+        Assert.Contains("empty or whitespace element name", ex.Message);
+    }
+#endif
+
     static void AssertMessage(InvalidOperationException ex, string first, string second, string element, string typeName)
     {
         Assert.Contains($"'{first}'", ex.Message);
@@ -476,6 +572,11 @@ public static class ComplexPropertyConventionTests
         [BsonElement("bson"), Column("col")] public string Name { get; set; }
         [BsonElement("cbson"), Column("ccol")] public Addr Address { get; set; }
     }
+
+    class EmptyNameHolder { public int Id { get; set; } public Addr Address { get; set; } }
+    class OwnedCollectionHolder { public int Id { get; set; } public List<Owned> Items { get; set; } }
+    class ComplexCollectionHolder { public int Id { get; set; } public List<Addr> Addresses { get; set; } }
+    class NestedCollectionHolder { public int Id { get; set; } public List<NestedCollisionAddr> Addresses { get; set; } }
 
     class IgnoredHolder
     {

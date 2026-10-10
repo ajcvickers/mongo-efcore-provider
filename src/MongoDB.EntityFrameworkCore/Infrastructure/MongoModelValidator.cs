@@ -676,7 +676,19 @@ public class MongoModelValidator : ModelValidator
             var elementName = member is IComplexProperty complexProperty
                 ? complexProperty.GetElementName()
                 : ((IProperty)member).GetElementName();
-            if (string.IsNullOrWhiteSpace(elementName)) continue;
+            if (string.IsNullOrWhiteSpace(elementName))
+            {
+                // For a scalar (including a leaf inside a complex type) an empty name means "not stored": the writers
+                // skip it. A complex property is always written, so an empty name would store an element named "".
+                if (member is IComplexProperty)
+                {
+                    throw new InvalidOperationException(MemberOnType(member)
+                        + " may not map to an empty or whitespace element name. A complex property is always stored; map it"
+                        + " to a non-empty BSON element name.");
+                }
+
+                continue;
+            }
 
             if (elementName.StartsWith("$"))
             {
