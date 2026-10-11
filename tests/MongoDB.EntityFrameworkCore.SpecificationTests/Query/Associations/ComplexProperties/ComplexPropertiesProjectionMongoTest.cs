@@ -35,10 +35,7 @@ public class ComplexPropertiesProjectionMongoTest : ComplexPropertiesProjectionT
 
     public override async Task Select_root(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Select_root(queryTrackingBehavior))).Message);
+        await base.Select_root(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -48,8 +45,7 @@ RootEntity.?
 
     public override async Task Select_scalar_property_on_required_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_scalar_property_on_required_associate(queryTrackingBehavior));
+        await base.Select_scalar_property_on_required_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -59,8 +55,7 @@ RootEntity.?
 
     public override async Task Select_property_on_optional_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_property_on_optional_associate(queryTrackingBehavior));
+        await base.Select_property_on_optional_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -70,8 +65,7 @@ RootEntity.?
 
     public override async Task Select_value_type_property_on_null_associate_throws(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: throws the driver ExpressionNotSupportedException, not EF InvalidOperationException EF-168
-        await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => base.Select_value_type_property_on_null_associate_throws(queryTrackingBehavior));
+        await base.Select_value_type_property_on_null_associate_throws(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -81,8 +75,7 @@ RootEntity.?
 
     public override async Task Select_nullable_value_type_property_on_null_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_nullable_value_type_property_on_null_associate(queryTrackingBehavior));
+        await base.Select_nullable_value_type_property_on_null_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -92,8 +85,7 @@ RootEntity.?
 
     public override async Task Select_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_associate(queryTrackingBehavior));
+        await base.Select_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -103,8 +95,7 @@ RootEntity.?
 
     public override async Task Select_optional_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_optional_associate(queryTrackingBehavior));
+        await base.Select_optional_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -114,8 +105,7 @@ RootEntity.?
 
     public override async Task Select_required_nested_on_required_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_required_nested_on_required_associate(queryTrackingBehavior));
+        await base.Select_required_nested_on_required_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -125,8 +115,7 @@ RootEntity.?
 
     public override async Task Select_optional_nested_on_required_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_optional_nested_on_required_associate(queryTrackingBehavior));
+        await base.Select_optional_nested_on_required_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -136,8 +125,7 @@ RootEntity.?
 
     public override async Task Select_required_nested_on_optional_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_required_nested_on_optional_associate(queryTrackingBehavior));
+        await base.Select_required_nested_on_optional_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -147,8 +135,7 @@ RootEntity.?
 
     public override async Task Select_optional_nested_on_optional_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_optional_nested_on_optional_associate(queryTrackingBehavior));
+        await base.Select_optional_nested_on_optional_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -158,8 +145,7 @@ RootEntity.?
 
     public override async Task Select_required_associate_via_optional_navigation(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property data not round-tripped EF-168
-        await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => base.Select_required_associate_via_optional_navigation(queryTrackingBehavior));
+        await base.Select_required_associate_via_optional_navigation(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -169,8 +155,7 @@ RootReferencingEntity.?
 
     public override async Task Select_unmapped_associate_scalar_property(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_unmapped_associate_scalar_property(queryTrackingBehavior));
+        await base.Select_unmapped_associate_scalar_property(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -180,8 +165,7 @@ RootEntity.?
 
     public override async Task Select_untranslatable_method_on_associate_scalar_property(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_untranslatable_method_on_associate_scalar_property(queryTrackingBehavior));
+        await base.Select_untranslatable_method_on_associate_scalar_property(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -191,8 +175,7 @@ RootEntity.?
 
     public override async Task Select_associate_collection(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_associate_collection(queryTrackingBehavior));
+        await base.Select_associate_collection(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -202,8 +185,7 @@ RootEntity.?
 
     public override async Task Select_nested_collection_on_required_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_nested_collection_on_required_associate(queryTrackingBehavior));
+        await base.Select_nested_collection_on_required_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -213,8 +195,7 @@ RootEntity.?
 
     public override async Task Select_nested_collection_on_optional_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_nested_collection_on_optional_associate(queryTrackingBehavior));
+        await base.Select_nested_collection_on_optional_associate(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -224,34 +205,28 @@ RootEntity.?
 
     public override async Task SelectMany_associate_collection(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.SelectMany_associate_collection(queryTrackingBehavior));
+        await base.SelectMany_associate_collection(queryTrackingBehavior);
 
         AssertMql();
     }
 
     public override async Task SelectMany_nested_collection_on_required_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.SelectMany_nested_collection_on_required_associate(queryTrackingBehavior));
+        await base.SelectMany_nested_collection_on_required_associate(queryTrackingBehavior);
 
         AssertMql();
     }
 
     public override async Task SelectMany_nested_collection_on_optional_associate(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.SelectMany_nested_collection_on_optional_associate(queryTrackingBehavior));
+        await base.SelectMany_nested_collection_on_optional_associate(queryTrackingBehavior);
 
         AssertMql();
     }
 
     public override async Task Select_root_duplicated(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Select_root_duplicated(queryTrackingBehavior))).Message);
+        await base.Select_root_duplicated(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -261,34 +236,28 @@ RootEntity.?
 
     public override async Task Select_subquery_required_related_FirstOrDefault(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_subquery_required_related_FirstOrDefault(queryTrackingBehavior));
+        await base.Select_subquery_required_related_FirstOrDefault(queryTrackingBehavior);
 
         AssertMql();
     }
 
     public override async Task Select_subquery_optional_related_FirstOrDefault(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_subquery_optional_related_FirstOrDefault(queryTrackingBehavior));
+        await base.Select_subquery_optional_related_FirstOrDefault(queryTrackingBehavior);
 
         AssertMql();
     }
 
     public override async Task Select_subquery_FirstOrDefault_complex_collection(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_subquery_FirstOrDefault_complex_collection(queryTrackingBehavior));
+        await base.Select_subquery_FirstOrDefault_complex_collection(queryTrackingBehavior);
 
         AssertMql();
     }
 
     public override async Task Select_root_with_value_types(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Select_root_with_value_types(queryTrackingBehavior))).Message);
+        await base.Select_root_with_value_types(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -298,8 +267,7 @@ ValueRootEntity.?
 
     public override async Task Select_non_nullable_value_type(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_non_nullable_value_type(queryTrackingBehavior));
+        await base.Select_non_nullable_value_type(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -309,8 +277,7 @@ ValueRootEntity.?
 
     public override async Task Select_nullable_value_type(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_nullable_value_type(queryTrackingBehavior));
+        await base.Select_nullable_value_type(queryTrackingBehavior);
 
         AssertMql(
 """
@@ -320,8 +287,7 @@ ValueRootEntity.?
 
     public override async Task Select_nullable_value_type_with_Value(QueryTrackingBehavior queryTrackingBehavior)
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_nullable_value_type_with_Value(queryTrackingBehavior));
+        await base.Select_nullable_value_type_with_Value(queryTrackingBehavior);
 
         AssertMql(
 """

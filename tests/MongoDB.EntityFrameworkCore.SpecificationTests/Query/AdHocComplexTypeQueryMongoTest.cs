@@ -37,8 +37,7 @@ public class AdHocComplexTypeQueryMongoTest : AdHocComplexTypeQueryTestBase
 
     public override async Task Complex_type_equals_parameter_with_nested_types_with_property_of_same_name()
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Complex_type_equals_parameter_with_nested_types_with_property_of_same_name());
+        await base.Complex_type_equals_parameter_with_nested_types_with_property_of_same_name();
 
         AssertMql(
 """
@@ -49,8 +48,7 @@ EntityType.
 #if EF10
     public override async Task Projecting_complex_property_does_not_auto_include_owned_types()
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Projecting_complex_property_does_not_auto_include_owned_types());
+        await base.Projecting_complex_property_does_not_auto_include_owned_types();
 
         AssertMql(
 """
@@ -60,18 +58,14 @@ EntityType.
 
     public override async Task Optional_complex_type_with_discriminator()
     {
-        // Fails: Complex Types: entities with a discriminated optional complex type get a duplicate generated key EF-168
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Optional_complex_type_with_discriminator());
+        await base.Optional_complex_type_with_discriminator();
 
         AssertMql();
     }
 
     public override async Task Complex_type_equality_with_non_default_type_mapping()
     {
-        // Fails: Complex Types: ColumnAttribute.TypeName throws as a model warning EF-168
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => base.Complex_type_equality_with_non_default_type_mapping());
-        Assert.Contains("specifies a 'ColumnAttribute.TypeName' which is not supported by MongoDB", exception.Message);
+        await base.Complex_type_equality_with_non_default_type_mapping();
 
         AssertMql();
     }
@@ -98,11 +92,7 @@ Parent.{ "$limit" : 2 }, { "$lookup" : { "from" : "Child", "localField" : "_id",
 
     public override async Task Nullable_complex_type_with_discriminator_and_shadow_property()
     {
-        // Fails: Complex Types: discriminator not persisted EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Nullable_complex_type_with_discriminator_and_shadow_property())).Message);
+        await base.Nullable_complex_type_with_discriminator_and_shadow_property();
 
         AssertMql(
 """
@@ -112,11 +102,7 @@ EntityType.
 
     public override async Task Nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
     {
-        // Fails: Complex Types: discriminator not persisted EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Nullable_complex_type_with_discriminator_null_to_non_null_roundtrip())).Message);
+        await base.Nullable_complex_type_with_discriminator_null_to_non_null_roundtrip();
 
         AssertMql(
 """
@@ -126,11 +112,7 @@ EntityType.{ "$limit" : 2 }
 
     public override async Task Nullable_complex_type_with_discriminator_non_null_to_null_roundtrip()
     {
-        // Fails: Complex Types: discriminator not persisted EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Nullable_complex_type_with_discriminator_non_null_to_null_roundtrip())).Message);
+        await base.Nullable_complex_type_with_discriminator_non_null_to_null_roundtrip();
 
         AssertMql(
 """
@@ -140,11 +122,7 @@ EntityType.{ "$limit" : 2 }
 
     public override async Task Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip()
     {
-        // Fails: Complex Types: discriminator not persisted EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip())).Message);
+        await base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip();
 
         AssertMql(
 """
@@ -154,33 +132,17 @@ EntityType.{ "$limit" : 2 }
 
     public override async Task Nullable_complex_type_with_discriminator_set_to_different_value()
     {
-        // Fails: Complex Types: discriminator not persisted EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Nullable_complex_type_with_discriminator_set_to_different_value())).Message);
-
-        // No AssertMql: the query filters on a random Guid generated inside the test.
+        await base.Nullable_complex_type_with_discriminator_set_to_different_value();
     }
 
     public override async Task Nullable_complex_type_with_discriminator_set_to_null()
     {
-        // Fails: Complex Types: discriminator not persisted EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Nullable_complex_type_with_discriminator_set_to_null())).Message);
-
-        // No AssertMql: the query filters on a random Guid generated inside the test.
+        await base.Nullable_complex_type_with_discriminator_set_to_null();
     }
 
     public override async Task Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
     {
-        // Fails: Complex Types: discriminator not persisted EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip())).Message);
+        await base.Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip();
 
         AssertMql(
 """

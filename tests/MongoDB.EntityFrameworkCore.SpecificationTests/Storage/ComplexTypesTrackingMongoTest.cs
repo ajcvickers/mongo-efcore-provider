@@ -34,56 +34,32 @@ public class ComplexTypesTrackingMongoTest(ComplexTypesTrackingMongoFixture fixt
 #if EF10
     public override async Task Can_change_state_from_Deleted_with_complex_collection(EntityState newState, bool async)
     {
-        // Fails: Complex Types: collection elements not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Can_change_state_from_Deleted_with_complex_collection(newState, async))).Message);
+        await base.Can_change_state_from_Deleted_with_complex_collection(newState, async);
     }
 
     public override async Task Can_change_state_from_Deleted_with_complex_record_collection(EntityState newState, bool async)
     {
-        // Fails: Complex Types: collection elements not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Can_change_state_from_Deleted_with_complex_record_collection(newState, async))).Message);
+        await base.Can_change_state_from_Deleted_with_complex_record_collection(newState, async);
     }
 
     public override async Task Can_change_state_from_Deleted_with_complex_field_collection(EntityState newState, bool async)
     {
-        // Fails: Complex Types: collection elements not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Can_change_state_from_Deleted_with_complex_field_collection(newState, async))).Message);
+        await base.Can_change_state_from_Deleted_with_complex_field_collection(newState, async);
     }
 
     public override async Task Can_change_state_from_Deleted_with_complex_field_record_collection(EntityState newState, bool async)
     {
-        // Fails: Complex Types: collection elements not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Can_change_state_from_Deleted_with_complex_field_record_collection(newState, async))).Message);
+        await base.Can_change_state_from_Deleted_with_complex_field_record_collection(newState, async);
     }
 
     public override async Task Can_save_default_values_in_optional_complex_property_with_multiple_properties(bool async)
     {
-        // Fails: Complex Types: optional property not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Can_save_default_values_in_optional_complex_property_with_multiple_properties(async))).Message);
+        await base.Can_save_default_values_in_optional_complex_property_with_multiple_properties(async);
     }
 
     public override async Task Can_null_complex_property_with_default_values_and_multiple_properties(bool async)
     {
-        // Fails: Complex Types: optional property not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Can_null_complex_property_with_default_values_and_multiple_properties(async))).Message);
+        await base.Can_null_complex_property_with_default_values_and_multiple_properties(async);
     }
 #endif
 }
