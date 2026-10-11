@@ -42,26 +42,21 @@ public class ComplexPropertiesBulkUpdateMongoTest : ComplexPropertiesBulkUpdateT
 
     public override async Task Delete_required_associate()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Delete_required_associate());
+        await base.Delete_required_associate();
 
         AssertMql();
     }
 
     public override async Task Delete_optional_associate()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Delete_optional_associate());
+        await base.Delete_optional_associate();
 
         AssertMql();
     }
 
     public override async Task Update_property_inside_associate()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_property_inside_associate())).Message);
+        await base.Update_property_inside_associate();
 
         AssertMql(
 """
@@ -71,8 +66,7 @@ RootEntity.?
 
     public override async Task Update_property_inside_associate_with_special_chars()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_property_inside_associate_with_special_chars());
+        await base.Update_property_inside_associate_with_special_chars();
 
         AssertMql(
 """
@@ -82,10 +76,7 @@ RootEntity.?
 
     public override async Task Update_property_inside_nested_associate()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_property_inside_nested_associate())).Message);
+        await base.Update_property_inside_nested_associate();
 
         AssertMql(
 """
@@ -95,8 +86,7 @@ RootEntity.?
 
     public override async Task Update_property_on_projected_associate()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_property_on_projected_associate());
+        await base.Update_property_on_projected_associate();
 
         AssertMql(
 """
@@ -106,8 +96,7 @@ RootEntity.?
 
     public override async Task Update_property_on_projected_associate_with_OrderBy_Skip()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_property_on_projected_associate_with_OrderBy_Skip());
+        await base.Update_property_on_projected_associate_with_OrderBy_Skip();
 
         AssertMql(
 """
@@ -117,10 +106,7 @@ RootEntity.?
 
     public override async Task Update_associate_with_null_required_property()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_associate_with_null_required_property())).Message);
+        await base.Update_associate_with_null_required_property();
 
         AssertMql(
 """
@@ -130,10 +116,7 @@ RootEntity.?
 
     public override async Task Update_associate_to_parameter()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_associate_to_parameter())).Message);
+        await base.Update_associate_to_parameter();
 
         AssertMql(
 """
@@ -143,10 +126,7 @@ RootEntity.?
 
     public override async Task Update_nested_associate_to_parameter()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_nested_associate_to_parameter())).Message);
+        await base.Update_nested_associate_to_parameter();
 
         AssertMql(
 """
@@ -156,10 +136,7 @@ RootEntity.?
 
     public override async Task Update_associate_to_another_associate()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_associate_to_another_associate())).Message);
+        await base.Update_associate_to_another_associate();
 
         AssertMql(
 """
@@ -169,10 +146,7 @@ RootEntity.?
 
     public override async Task Update_nested_associate_to_another_nested_associate()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_nested_associate_to_another_nested_associate())).Message);
+        await base.Update_nested_associate_to_another_nested_associate();
 
         AssertMql(
 """
@@ -182,10 +156,7 @@ RootEntity.?
 
     public override async Task Update_associate_to_inline()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_associate_to_inline())).Message);
+        await base.Update_associate_to_inline();
 
         AssertMql(
 """
@@ -195,10 +166,7 @@ RootEntity.?
 
     public override async Task Update_associate_to_inline_with_lambda()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_associate_to_inline_with_lambda())).Message);
+        await base.Update_associate_to_inline_with_lambda();
 
         AssertMql(
 """
@@ -208,10 +176,7 @@ RootEntity.?
 
     public override async Task Update_nested_associate_to_inline_with_lambda()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_nested_associate_to_inline_with_lambda())).Message);
+        await base.Update_nested_associate_to_inline_with_lambda();
 
         AssertMql(
 """
@@ -221,10 +186,7 @@ RootEntity.?
 
     public override async Task Update_associate_to_null()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_associate_to_null())).Message);
+        await base.Update_associate_to_null();
 
         AssertMql(
 """
@@ -234,10 +196,7 @@ RootEntity.?
 
     public override async Task Update_associate_to_null_with_lambda()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_associate_to_null_with_lambda())).Message);
+        await base.Update_associate_to_null_with_lambda();
 
         AssertMql(
 """
@@ -247,10 +206,7 @@ RootEntity.?
 
     public override async Task Update_associate_to_null_parameter()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_associate_to_null_parameter())).Message);
+        await base.Update_associate_to_null_parameter();
 
         AssertMql(
 """
@@ -260,10 +216,7 @@ RootEntity.?
 
     public override async Task Update_required_nested_associate_to_null()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_required_nested_associate_to_null())).Message);
+        await base.Update_required_nested_associate_to_null();
 
         AssertMql(
 """
@@ -273,10 +226,7 @@ RootEntity.?
 
     public override async Task Update_collection_to_parameter()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_collection_to_parameter())).Message);
+        await base.Update_collection_to_parameter();
 
         AssertMql(
 """
@@ -286,10 +236,7 @@ RootEntity.?
 
     public override async Task Update_nested_collection_to_parameter()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_nested_collection_to_parameter())).Message);
+        await base.Update_nested_collection_to_parameter();
 
         AssertMql(
 """
@@ -299,10 +246,7 @@ RootEntity.?
 
     public override async Task Update_nested_collection_to_inline_with_lambda()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_nested_collection_to_inline_with_lambda())).Message);
+        await base.Update_nested_collection_to_inline_with_lambda();
 
         AssertMql(
 """
@@ -312,8 +256,7 @@ RootEntity.?
 
     public override async Task Update_collection_referencing_the_original_collection()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_collection_referencing_the_original_collection());
+        await base.Update_collection_referencing_the_original_collection();
 
         AssertMql(
 """
@@ -323,8 +266,7 @@ RootEntity.?
 
     public override async Task Update_nested_collection_to_another_nested_collection()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_nested_collection_to_another_nested_collection());
+        await base.Update_nested_collection_to_another_nested_collection();
 
         AssertMql(
 """
@@ -334,8 +276,7 @@ RootEntity.?
 
     public override async Task Update_inside_structural_collection()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_inside_structural_collection());
+        await base.Update_inside_structural_collection();
 
         AssertMql(
 """
@@ -345,10 +286,7 @@ RootEntity.?
 
     public override async Task Update_primitive_collection_to_constant()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_primitive_collection_to_constant())).Message);
+        await base.Update_primitive_collection_to_constant();
 
         AssertMql(
 """
@@ -358,10 +296,7 @@ RootEntity.?
 
     public override async Task Update_primitive_collection_to_parameter()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_primitive_collection_to_parameter())).Message);
+        await base.Update_primitive_collection_to_parameter();
 
         AssertMql(
 """
@@ -371,10 +306,7 @@ RootEntity.?
 
     public override async Task Update_primitive_collection_to_another_collection()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_primitive_collection_to_another_collection())).Message);
+        await base.Update_primitive_collection_to_another_collection();
 
         AssertMql(
 """
@@ -384,8 +316,7 @@ RootEntity.?
 
     public override async Task Update_inside_primitive_collection()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_inside_primitive_collection());
+        await base.Update_inside_primitive_collection();
 
         AssertMql(
 """
@@ -395,10 +326,7 @@ RootEntity.?
 
     public override async Task Update_multiple_properties_inside_same_associate()
     {
-        // Fails: Complex Types: property elements not persisted / materialized EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Update_multiple_properties_inside_same_associate())).Message);
+        await base.Update_multiple_properties_inside_same_associate();
 
         AssertMql(
 """
@@ -408,8 +336,7 @@ RootEntity.?
 
     public override async Task Update_multiple_properties_inside_associates_and_on_entity_type()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_multiple_properties_inside_associates_and_on_entity_type());
+        await base.Update_multiple_properties_inside_associates_and_on_entity_type();
 
         AssertMql(
 """
@@ -419,8 +346,7 @@ RootEntity.?
 
     public override async Task Update_multiple_projected_associates_via_anonymous_type()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Update_multiple_projected_associates_via_anonymous_type());
+        await base.Update_multiple_projected_associates_via_anonymous_type();
 
         AssertMql(
 """

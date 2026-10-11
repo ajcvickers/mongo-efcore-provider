@@ -30,8 +30,7 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
 
     public override async Task Filter_on_property_inside_complex_type_after_subquery(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_property_inside_complex_type_after_subquery(async));
+        await base.Filter_on_property_inside_complex_type_after_subquery(async);
 
         AssertMql(
 """
@@ -41,8 +40,7 @@ Customer.
 
     public override async Task Filter_on_property_inside_nested_complex_type_after_subquery(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_property_inside_nested_complex_type_after_subquery(async));
+        await base.Filter_on_property_inside_nested_complex_type_after_subquery(async);
 
         AssertMql(
 """
@@ -52,8 +50,7 @@ Customer.
 
     public override async Task Filter_on_required_property_inside_required_complex_type_on_optional_navigation(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_required_property_inside_required_complex_type_on_optional_navigation(async));
+        await base.Filter_on_required_property_inside_required_complex_type_on_optional_navigation(async);
 
         AssertMql(
 """
@@ -63,8 +60,7 @@ CustomerGroup.
 
     public override async Task Filter_on_required_property_inside_required_complex_type_on_required_navigation(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_required_property_inside_required_complex_type_on_required_navigation(async));
+        await base.Filter_on_required_property_inside_required_complex_type_on_required_navigation(async);
 
         AssertMql(
 """
@@ -75,8 +71,7 @@ CustomerGroup.
 #if !EF10
     public override async Task Project_complex_type_via_optional_navigation(bool async)
     {
-        // Fails: Complex Types: query throws on this shape EF-168
-        await Assert.ThrowsAsync<System.NullReferenceException>(() => base.Project_complex_type_via_optional_navigation(async));
+        await base.Project_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
@@ -88,8 +83,7 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
 #if EF10
     public override async Task Project_complex_type_via_optional_navigation(bool async)
     {
-        // Fails: Complex Types: data not round-tripped EF-168
-        await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => base.Project_complex_type_via_optional_navigation(async));
+        await base.Project_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
@@ -101,8 +95,7 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
 #if !EF10
     public override async Task Project_complex_type_via_required_navigation(bool async)
     {
-        // Fails: Complex Types: query throws on this shape EF-168
-        await Assert.ThrowsAsync<System.NullReferenceException>(() => base.Project_complex_type_via_required_navigation(async));
+        await base.Project_complex_type_via_required_navigation(async);
 
         AssertMql(
 """
@@ -114,8 +107,7 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
 #if EF10
     public override async Task Project_complex_type_via_required_navigation(bool async)
     {
-        // Fails: Complex Types: data not round-tripped EF-168
-        await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => base.Project_complex_type_via_required_navigation(async));
+        await base.Project_complex_type_via_required_navigation(async);
 
         AssertMql(
 """
@@ -126,10 +118,7 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
 
     public override async Task Load_complex_type_after_subquery_on_entity_type(bool async)
     {
-        // Fails: Complex Types: properties not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Load_complex_type_after_subquery_on_entity_type(async))).Message);
+        await base.Load_complex_type_after_subquery_on_entity_type(async);
 
         AssertMql(
 """
@@ -139,8 +128,7 @@ Customer.{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$group" : { "_id" : "$
 
     public override async Task Select_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_complex_type(async));
+        await base.Select_complex_type(async);
 
         AssertMql(
 """
@@ -150,8 +138,7 @@ Customer.
 
     public override async Task Select_nested_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_nested_complex_type(async));
+        await base.Select_nested_complex_type(async);
 
         AssertMql(
 """
@@ -161,8 +148,7 @@ Customer.
 
     public override async Task Select_single_property_on_nested_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_single_property_on_nested_complex_type(async));
+        await base.Select_single_property_on_nested_complex_type(async);
 
         AssertMql(
 """
@@ -172,8 +158,7 @@ Customer.
 
     public override async Task Select_complex_type_Where(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_complex_type_Where(async));
+        await base.Select_complex_type_Where(async);
 
         AssertMql(
 """
@@ -183,8 +168,7 @@ Customer.
 
     public override async Task Select_complex_type_Distinct(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_complex_type_Distinct(async));
+        await base.Select_complex_type_Distinct(async);
 
         AssertMql(
 """
@@ -194,8 +178,7 @@ Customer.
 
     public override async Task Complex_type_equals_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Complex_type_equals_complex_type(async));
+        await base.Complex_type_equals_complex_type(async);
 
         AssertMql(
 """
@@ -205,8 +188,7 @@ Customer.
 
     public override async Task Complex_type_equals_constant(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Complex_type_equals_constant(async));
+        await base.Complex_type_equals_constant(async);
 
         AssertMql(
 """
@@ -216,8 +198,7 @@ Customer.
 
     public override async Task Complex_type_equals_parameter(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Complex_type_equals_parameter(async));
+        await base.Complex_type_equals_parameter(async);
 
         AssertMql(
 """
@@ -227,8 +208,7 @@ Customer.
 
     public override async Task Subquery_over_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Subquery_over_complex_type(async));
+        await base.Subquery_over_complex_type(async);
 
         AssertMql(
 """
@@ -238,8 +218,7 @@ Customer.
 
     public override async Task Contains_over_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Contains_over_complex_type(async));
+        await base.Contains_over_complex_type(async);
 
         AssertMql(
 """
@@ -249,10 +228,7 @@ Customer.
 
     public override async Task Concat_entity_type_containing_complex_property(bool async)
     {
-        // Fails: Complex Types: properties not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Concat_entity_type_containing_complex_property(async))).Message);
+        await base.Concat_entity_type_containing_complex_property(async);
 
         AssertMql(
 """
@@ -262,10 +238,7 @@ Customer.{ "$match" : { "_id" : 1 } }, { "$unionWith" : { "coll" : "Customer", "
 
     public override async Task Union_entity_type_containing_complex_property(bool async)
     {
-        // Fails: Complex Types: properties not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Union_entity_type_containing_complex_property(async))).Message);
+        await base.Union_entity_type_containing_complex_property(async);
 
         AssertMql(
 """
@@ -275,8 +248,7 @@ Customer.{ "$match" : { "_id" : 1 } }, { "$unionWith" : { "coll" : "Customer", "
 
     public override async Task Concat_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Concat_complex_type(async));
+        await base.Concat_complex_type(async);
 
         AssertMql(
 """
@@ -286,8 +258,7 @@ Customer.
 
     public override async Task Union_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_complex_type(async));
+        await base.Union_complex_type(async);
 
         AssertMql(
 """
@@ -297,8 +268,7 @@ Customer.
 
     public override async Task Concat_property_in_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Concat_property_in_complex_type(async));
+        await base.Concat_property_in_complex_type(async);
 
         AssertMql(
 """
@@ -308,8 +278,7 @@ Customer.
 
     public override async Task Union_property_in_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_property_in_complex_type(async));
+        await base.Union_property_in_complex_type(async);
 
         AssertMql(
 """
@@ -319,8 +288,7 @@ Customer.
 
     public override async Task Concat_two_different_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Concat_two_different_complex_type(async));
+        await base.Concat_two_different_complex_type(async);
 
         AssertMql(
 """
@@ -330,8 +298,7 @@ Customer.
 
     public override async Task Union_two_different_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_two_different_complex_type(async));
+        await base.Union_two_different_complex_type(async);
 
         AssertMql(
 """
@@ -341,8 +308,7 @@ Customer.
 
     public override async Task Filter_on_property_inside_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_property_inside_struct_complex_type(async));
+        await base.Filter_on_property_inside_struct_complex_type(async);
 
         AssertMql(
 """
@@ -352,8 +318,7 @@ ValuedCustomer.
 
     public override async Task Filter_on_property_inside_nested_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_property_inside_nested_struct_complex_type(async));
+        await base.Filter_on_property_inside_nested_struct_complex_type(async);
 
         AssertMql(
 """
@@ -363,8 +328,7 @@ ValuedCustomer.
 
     public override async Task Filter_on_property_inside_struct_complex_type_after_subquery(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_property_inside_struct_complex_type_after_subquery(async));
+        await base.Filter_on_property_inside_struct_complex_type_after_subquery(async);
 
         AssertMql(
 """
@@ -374,8 +338,7 @@ ValuedCustomer.
 
     public override async Task Filter_on_property_inside_nested_struct_complex_type_after_subquery(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_property_inside_nested_struct_complex_type_after_subquery(async));
+        await base.Filter_on_property_inside_nested_struct_complex_type_after_subquery(async);
 
         AssertMql(
 """
@@ -385,8 +348,7 @@ ValuedCustomer.
 
     public override async Task Filter_on_required_property_inside_required_struct_complex_type_on_optional_navigation(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_required_property_inside_required_struct_complex_type_on_optional_navigation(async));
+        await base.Filter_on_required_property_inside_required_struct_complex_type_on_optional_navigation(async);
 
         AssertMql(
 """
@@ -396,8 +358,7 @@ ValuedCustomerGroup.
 
     public override async Task Filter_on_required_property_inside_required_struct_complex_type_on_required_navigation(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_required_property_inside_required_struct_complex_type_on_required_navigation(async));
+        await base.Filter_on_required_property_inside_required_struct_complex_type_on_required_navigation(async);
 
         AssertMql(
 """
@@ -408,8 +369,7 @@ ValuedCustomerGroup.
 #if !EF10
     public override async Task Project_struct_complex_type_via_optional_navigation(bool async)
     {
-        // Fails: Complex Types: query throws on this shape EF-168
-        await Assert.ThrowsAsync<System.NullReferenceException>(() => base.Project_struct_complex_type_via_optional_navigation(async));
+        await base.Project_struct_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
@@ -421,8 +381,7 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
 #if EF10
     public override async Task Project_struct_complex_type_via_optional_navigation(bool async)
     {
-        // Fails: Complex Types: data not round-tripped EF-168
-        await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => base.Project_struct_complex_type_via_optional_navigation(async));
+        await base.Project_struct_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
@@ -434,8 +393,7 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
 #if EF10
     public override async Task Project_nullable_struct_complex_type_via_optional_navigation(bool async)
     {
-        // Fails: Complex Types: data not round-tripped EF-168
-        await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => base.Project_nullable_struct_complex_type_via_optional_navigation(async));
+        await base.Project_nullable_struct_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
@@ -446,8 +404,7 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
 
     public override async Task Project_struct_complex_type_via_required_navigation(bool async)
     {
-        // Fails: Complex Types: data not round-tripped EF-168
-        await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => base.Project_struct_complex_type_via_required_navigation(async));
+        await base.Project_struct_complex_type_via_required_navigation(async);
 
         AssertMql(
 """
@@ -457,10 +414,7 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
 
     public override async Task Load_struct_complex_type_after_subquery_on_entity_type(bool async)
     {
-        // Fails: Complex Types: properties not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Load_struct_complex_type_after_subquery_on_entity_type(async))).Message);
+        await base.Load_struct_complex_type_after_subquery_on_entity_type(async);
 
         AssertMql(
 """
@@ -470,8 +424,7 @@ ValuedCustomer.{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$group" : { "_id
 
     public override async Task Select_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_struct_complex_type(async));
+        await base.Select_struct_complex_type(async);
 
         AssertMql(
 """
@@ -481,8 +434,7 @@ ValuedCustomer.
 
     public override async Task Select_nested_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_nested_struct_complex_type(async));
+        await base.Select_nested_struct_complex_type(async);
 
         AssertMql(
 """
@@ -492,8 +444,7 @@ ValuedCustomer.
 
     public override async Task Select_single_property_on_nested_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_single_property_on_nested_struct_complex_type(async));
+        await base.Select_single_property_on_nested_struct_complex_type(async);
 
         AssertMql(
 """
@@ -503,8 +454,7 @@ ValuedCustomer.
 
     public override async Task Select_struct_complex_type_Where(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_struct_complex_type_Where(async));
+        await base.Select_struct_complex_type_Where(async);
 
         AssertMql(
 """
@@ -514,8 +464,7 @@ ValuedCustomer.
 
     public override async Task Select_struct_complex_type_Distinct(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Select_struct_complex_type_Distinct(async));
+        await base.Select_struct_complex_type_Distinct(async);
 
         AssertMql(
 """
@@ -525,8 +474,7 @@ ValuedCustomer.
 
     public override async Task Struct_complex_type_equals_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Struct_complex_type_equals_struct_complex_type(async));
+        await base.Struct_complex_type_equals_struct_complex_type(async);
 
         AssertMql(
 """
@@ -536,8 +484,7 @@ ValuedCustomer.
 
     public override async Task Struct_complex_type_equals_constant(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Struct_complex_type_equals_constant(async));
+        await base.Struct_complex_type_equals_constant(async);
 
         AssertMql(
 """
@@ -547,8 +494,7 @@ ValuedCustomer.
 
     public override async Task Struct_complex_type_equals_parameter(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Struct_complex_type_equals_parameter(async));
+        await base.Struct_complex_type_equals_parameter(async);
 
         AssertMql(
 """
@@ -558,8 +504,7 @@ ValuedCustomer.
 
     public override async Task Subquery_over_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Subquery_over_struct_complex_type(async));
+        await base.Subquery_over_struct_complex_type(async);
 
         AssertMql(
 """
@@ -569,8 +514,7 @@ ValuedCustomer.
 
     public override async Task Contains_over_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Contains_over_struct_complex_type(async));
+        await base.Contains_over_struct_complex_type(async);
 
         AssertMql(
 """
@@ -580,10 +524,7 @@ ValuedCustomer.
 
     public override async Task Concat_entity_type_containing_struct_complex_property(bool async)
     {
-        // Fails: Complex Types: properties not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Concat_entity_type_containing_struct_complex_property(async))).Message);
+        await base.Concat_entity_type_containing_struct_complex_property(async);
 
         AssertMql(
 """
@@ -593,10 +534,7 @@ ValuedCustomer.{ "$match" : { "_id" : 1 } }, { "$unionWith" : { "coll" : "Valued
 
     public override async Task Union_entity_type_containing_struct_complex_property(bool async)
     {
-        // Fails: Complex Types: properties not materialized from BSON EF-168
-        Assert.Contains(
-            "Document element is missing",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Union_entity_type_containing_struct_complex_property(async))).Message);
+        await base.Union_entity_type_containing_struct_complex_property(async);
 
         AssertMql(
 """
@@ -606,8 +544,7 @@ ValuedCustomer.{ "$match" : { "_id" : 1 } }, { "$unionWith" : { "coll" : "Valued
 
     public override async Task Concat_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Concat_struct_complex_type(async));
+        await base.Concat_struct_complex_type(async);
 
         AssertMql(
 """
@@ -617,8 +554,7 @@ ValuedCustomer.
 
     public override async Task Union_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_struct_complex_type(async));
+        await base.Union_struct_complex_type(async);
 
         AssertMql(
 """
@@ -628,8 +564,7 @@ ValuedCustomer.
 
     public override async Task Concat_property_in_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Concat_property_in_struct_complex_type(async));
+        await base.Concat_property_in_struct_complex_type(async);
 
         AssertMql(
 """
@@ -639,8 +574,7 @@ ValuedCustomer.
 
     public override async Task Union_property_in_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_property_in_struct_complex_type(async));
+        await base.Union_property_in_struct_complex_type(async);
 
         AssertMql(
 """
@@ -650,8 +584,7 @@ ValuedCustomer.
 
     public override async Task Concat_two_different_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Concat_two_different_struct_complex_type(async));
+        await base.Concat_two_different_struct_complex_type(async);
 
         AssertMql(
 """
@@ -661,8 +594,7 @@ ValuedCustomer.
 
     public override async Task Union_two_different_struct_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_two_different_struct_complex_type(async));
+        await base.Union_two_different_struct_complex_type(async);
 
         AssertMql(
 """
@@ -672,104 +604,91 @@ ValuedCustomer.
 
     public override async Task Project_same_nested_complex_type_twice_with_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_same_nested_complex_type_twice_with_pushdown(async));
+        await base.Project_same_nested_complex_type_twice_with_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Project_same_entity_with_nested_complex_type_twice_with_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_same_entity_with_nested_complex_type_twice_with_pushdown(async));
+        await base.Project_same_entity_with_nested_complex_type_twice_with_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Project_same_nested_complex_type_twice_with_double_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_same_nested_complex_type_twice_with_double_pushdown(async));
+        await base.Project_same_nested_complex_type_twice_with_double_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Project_same_entity_with_nested_complex_type_twice_with_double_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_same_entity_with_nested_complex_type_twice_with_double_pushdown(async));
+        await base.Project_same_entity_with_nested_complex_type_twice_with_double_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Project_same_struct_nested_complex_type_twice_with_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_same_struct_nested_complex_type_twice_with_pushdown(async));
+        await base.Project_same_struct_nested_complex_type_twice_with_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Project_same_entity_with_struct_nested_complex_type_twice_with_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_same_entity_with_struct_nested_complex_type_twice_with_pushdown(async));
+        await base.Project_same_entity_with_struct_nested_complex_type_twice_with_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Project_same_struct_nested_complex_type_twice_with_double_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_same_struct_nested_complex_type_twice_with_double_pushdown(async));
+        await base.Project_same_struct_nested_complex_type_twice_with_double_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Project_same_entity_with_struct_nested_complex_type_twice_with_double_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_same_entity_with_struct_nested_complex_type_twice_with_double_pushdown(async));
+        await base.Project_same_entity_with_struct_nested_complex_type_twice_with_double_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Union_of_same_entity_with_nested_complex_type_projected_twice_with_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_of_same_entity_with_nested_complex_type_projected_twice_with_pushdown(async));
+        await base.Union_of_same_entity_with_nested_complex_type_projected_twice_with_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Union_of_same_entity_with_nested_complex_type_projected_twice_with_double_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_of_same_entity_with_nested_complex_type_projected_twice_with_double_pushdown(async));
+        await base.Union_of_same_entity_with_nested_complex_type_projected_twice_with_double_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Union_of_same_nested_complex_type_projected_twice_with_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_of_same_nested_complex_type_projected_twice_with_pushdown(async));
+        await base.Union_of_same_nested_complex_type_projected_twice_with_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Union_of_same_nested_complex_type_projected_twice_with_double_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Union_of_same_nested_complex_type_projected_twice_with_double_pushdown(async));
+        await base.Union_of_same_nested_complex_type_projected_twice_with_double_pushdown(async);
 
 AssertMql();
     }
 
     public override async Task Same_entity_with_complex_type_projected_twice_with_pushdown_as_part_of_another_projection(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Same_entity_with_complex_type_projected_twice_with_pushdown_as_part_of_another_projection(async));
+        await base.Same_entity_with_complex_type_projected_twice_with_pushdown_as_part_of_another_projection(async);
 
 AssertMql();
     }
@@ -783,8 +702,7 @@ AssertMql();
 #if !EF8
     public override async Task GroupBy_over_property_in_nested_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.GroupBy_over_property_in_nested_complex_type(async));
+        await base.GroupBy_over_property_in_nested_complex_type(async);
 
         AssertMql(
 """
@@ -796,8 +714,7 @@ Customer.
 #if !EF8
     public override async Task GroupBy_over_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.GroupBy_over_complex_type(async));
+        await base.GroupBy_over_complex_type(async);
 
         AssertMql(
 """
@@ -809,8 +726,7 @@ Customer.
 #if !EF8
     public override async Task GroupBy_over_nested_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.GroupBy_over_nested_complex_type(async));
+        await base.GroupBy_over_nested_complex_type(async);
 
         AssertMql(
 """
@@ -822,8 +738,7 @@ Customer.
 #if !EF8
     public override async Task Entity_with_complex_type_with_group_by_and_first(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Entity_with_complex_type_with_group_by_and_first(async));
+        await base.Entity_with_complex_type_with_group_by_and_first(async);
 
 AssertMql();
     }
@@ -831,8 +746,7 @@ AssertMql();
 
     public override async Task Projecting_property_of_complex_type_using_left_join_with_pushdown(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Projecting_property_of_complex_type_using_left_join_with_pushdown(async));
+        await base.Projecting_property_of_complex_type_using_left_join_with_pushdown(async);
 
         AssertMql(
 """
@@ -842,8 +756,7 @@ CustomerGroup.
 
     public override async Task Projecting_complex_from_optional_navigation_using_conditional(bool async)
     {
-        // Fails: Complex Types: data not round-tripped EF-168
-        await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() => base.Projecting_complex_from_optional_navigation_using_conditional(async));
+        await base.Projecting_complex_from_optional_navigation_using_conditional(async);
 
         AssertMql(
 """
@@ -853,8 +766,7 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
 
     public override async Task Project_entity_with_complex_type_pushdown_and_then_left_join(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Project_entity_with_complex_type_pushdown_and_then_left_join(async));
+        await base.Project_entity_with_complex_type_pushdown_and_then_left_join(async);
 
         AssertMql(
 """
@@ -865,8 +777,7 @@ Customer.
 #if !EF10
     public override async Task Filter_on_property_inside_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_property_inside_complex_type(async));
+        await base.Filter_on_property_inside_complex_type(async);
 
         AssertMql(
 """
@@ -878,8 +789,7 @@ Customer.
 #if !EF10
     public override async Task Filter_on_property_inside_nested_complex_type(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Filter_on_property_inside_nested_complex_type(async));
+        await base.Filter_on_property_inside_nested_complex_type(async);
 
         AssertMql(
 """
@@ -891,8 +801,7 @@ Customer.
 #if !EF10
     public override async Task Complex_type_equals_null(bool async)
     {
-        // Fails: Complex Types: query translation not supported EF-168
-        await AssertTranslationFailed(() => base.Complex_type_equals_null(async));
+        await base.Complex_type_equals_null(async);
 
         AssertMql(
 """

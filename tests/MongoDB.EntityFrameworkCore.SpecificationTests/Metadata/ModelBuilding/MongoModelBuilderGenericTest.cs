@@ -33,203 +33,128 @@ public class MongoModelBuilderGenericTest : MongoModelBuilderTest
 
         public override void Can_set_complex_property_annotation()
         {
-            // Fails: Complex Types: model debug view differs EF-168
-            Assert.Contains(
-                "Element type: string",
-                Assert.Throws<EqualException>(() => base.Can_set_complex_property_annotation()).Message);
+            base.Can_set_complex_property_annotation();
         }
 
         public override void Access_mode_can_be_overridden_at_entity_and_property_levels()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Access_mode_can_be_overridden_at_entity_and_property_levels()).Message);
+            base.Access_mode_can_be_overridden_at_entity_and_property_levels();
         }
 
         public override void Primitive_collections_can_have_field_set()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Primitive_collections_can_have_field_set()).Message);
+            base.Primitive_collections_can_have_field_set();
         }
 
         public override void Can_call_PrimitiveCollection_on_a_field()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Can_call_PrimitiveCollection_on_a_field()).Message);
+            base.Can_call_PrimitiveCollection_on_a_field();
         }
 
 #if EF10
         public override void Can_call_Property_on_a_field()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Can_call_Property_on_a_field()).Message);
+            base.Can_call_Property_on_a_field();
         }
 
         public override void Can_ignore_a_field()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Can_ignore_a_field()).Message);
+            base.Can_ignore_a_field();
         }
 
         public override void IEnumerable_properties_with_value_converter_set_are_not_discovered_as_complex_properties()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.IEnumerable_properties_with_value_converter_set_are_not_discovered_as_complex_properties()).Message);
+            base.IEnumerable_properties_with_value_converter_set_are_not_discovered_as_complex_properties();
         }
 
         public override void Properties_can_be_ignored()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Properties_can_be_ignored()).Message);
+            base.Properties_can_be_ignored();
         }
 
         public override void Properties_can_have_field_set()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Properties_can_have_field_set()).Message);
+            base.Properties_can_have_field_set();
         }
 
         public override void Properties_can_have_value_converter_configured_by_type()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Properties_can_have_value_converter_configured_by_type()).Message);
+            base.Properties_can_have_value_converter_configured_by_type();
         }
 
         public override void Value_converter_type_is_checked()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Value_converter_type_is_checked()).Message);
+            base.Value_converter_type_is_checked();
         }
 #else
         public override void Can_add_shadow_primitive_collections_when_they_have_been_ignored()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Can_add_shadow_primitive_collections_when_they_have_been_ignored()).Message);
+            base.Can_add_shadow_primitive_collections_when_they_have_been_ignored();
         }
 
         public override void Can_set_custom_value_generator_for_primitive_collections()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Can_set_custom_value_generator_for_primitive_collections()).Message);
+            base.Can_set_custom_value_generator_for_primitive_collections();
         }
 
         public override void Can_set_max_length_for_primitive_collections()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Can_set_max_length_for_primitive_collections()).Message);
+            base.Can_set_max_length_for_primitive_collections();
         }
 
         public override void Can_set_primitive_collection_annotation_when_no_clr_property()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Can_set_primitive_collection_annotation_when_no_clr_property()).Message);
+            base.Can_set_primitive_collection_annotation_when_no_clr_property();
         }
 
         public override void Can_set_sentinel_for_primitive_collections()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Can_set_sentinel_for_primitive_collections()).Message);
+            base.Can_set_sentinel_for_primitive_collections();
         }
 
         public override void Can_set_unicode_for_primitive_collections()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Can_set_unicode_for_primitive_collections()).Message);
+            base.Can_set_unicode_for_primitive_collections();
         }
 
         public override void Primitive_collections_are_required_by_default_only_if_CLR_type_is_nullable()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Primitive_collections_are_required_by_default_only_if_CLR_type_is_nullable()).Message);
+            base.Primitive_collections_are_required_by_default_only_if_CLR_type_is_nullable();
         }
 
         public override void Primitive_collections_can_be_made_concurrency_tokens()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Primitive_collections_can_be_made_concurrency_tokens()).Message);
+            base.Primitive_collections_can_be_made_concurrency_tokens();
         }
 
         public override void Primitive_collections_can_be_made_optional()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Primitive_collections_can_be_made_optional()).Message);
+            base.Primitive_collections_can_be_made_optional();
         }
 
         public override void Primitive_collections_can_be_made_required()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Primitive_collections_can_be_made_required()).Message);
+            base.Primitive_collections_can_be_made_required();
         }
 
         public override void Primitive_collections_can_be_set_to_generate_values_on_Add()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Primitive_collections_can_be_set_to_generate_values_on_Add()).Message);
+            base.Primitive_collections_can_be_set_to_generate_values_on_Add();
         }
 
         public override void Primitive_collections_specified_by_string_are_shadow_properties_unless_already_known_to_be_CLR_properties()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Primitive_collections_specified_by_string_are_shadow_properties_unless_already_known_to_be_CLR_properties()).Message);
+            base.Primitive_collections_specified_by_string_are_shadow_properties_unless_already_known_to_be_CLR_properties();
         }
 
         public override void Properties_can_be_made_concurrency_tokens()
         {
-            // Fails: Complex Types: property model building differs EF-168
-            Assert.Contains(
-                "Expected: 6",
-                Assert.Throws<EqualException>(() => base.Properties_can_be_made_concurrency_tokens()).Message);
+            base.Properties_can_be_made_concurrency_tokens();
         }
 
         public override void Properties_can_have_access_mode_set()
         {
-            // Fails: Complex Types: primitive collection property not supported EF-168
-            Assert.Contains(
-                "could not be mapped because the database provider does not support this type",
-                Assert.Throws<InvalidOperationException>(() => base.Properties_can_have_access_mode_set()).Message);
+            base.Properties_can_have_access_mode_set();
         }
 #endif
     }
@@ -242,34 +167,22 @@ public class MongoModelBuilderGenericTest : MongoModelBuilderTest
 
         public override void Can_set_complex_property_annotation()
         {
-            // Fails: Complex Types: model debug view differs EF-168
-            Assert.Contains(
-                "Element type: string",
-                Assert.Throws<EqualException>(() => base.Can_set_complex_property_annotation()).Message);
+            base.Can_set_complex_property_annotation();
         }
 
         public override void Properties_can_be_ignored()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Properties_can_be_ignored()).Message);
+            base.Properties_can_be_ignored();
         }
 
         public override void Properties_can_have_field_set()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Properties_can_have_field_set()).Message);
+            base.Properties_can_have_field_set();
         }
 
         public override void Value_converter_type_is_checked()
         {
-            // Fails: Complex Types: model building unsupported EF-168
-            Assert.Contains(
-                "is used in multiple navigations",
-                Assert.Throws<InvalidOperationException>(() => base.Value_converter_type_is_checked()).Message);
+            base.Value_converter_type_is_checked();
         }
     }
 #endif

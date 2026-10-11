@@ -35,8 +35,7 @@ public class ComplexPropertiesMiscellaneousMongoTest : ComplexPropertiesMiscella
 
     public override async Task Where_on_associate_scalar_property()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Where_on_associate_scalar_property());
+        await base.Where_on_associate_scalar_property();
 
         AssertMql(
 """
@@ -46,8 +45,7 @@ RootEntity.?
 
     public override async Task Where_on_optional_associate_scalar_property()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Where_on_optional_associate_scalar_property());
+        await base.Where_on_optional_associate_scalar_property();
 
         AssertMql(
 """
@@ -57,8 +55,7 @@ RootEntity.?
 
     public override async Task Where_on_nested_associate_scalar_property()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Where_on_nested_associate_scalar_property());
+        await base.Where_on_nested_associate_scalar_property();
 
         AssertMql(
 """
@@ -68,8 +65,7 @@ RootEntity.?
 
     public override async Task Where_property_on_non_nullable_value_type()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Where_property_on_non_nullable_value_type());
+        await base.Where_property_on_non_nullable_value_type();
 
         AssertMql(
 """
@@ -79,8 +75,7 @@ ValueRootEntity.?
 
     public override async Task Where_property_on_nullable_value_type_Value()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Where_property_on_nullable_value_type_Value());
+        await base.Where_property_on_nullable_value_type_Value();
 
         AssertMql(
 """
@@ -90,8 +85,7 @@ ValueRootEntity.?
 
     public override async Task Where_HasValue_on_nullable_value_type()
     {
-        // Fails: Complex Types: property translation not supported EF-168
-        await AssertTranslationFailed(() => base.Where_HasValue_on_nullable_value_type());
+        await base.Where_HasValue_on_nullable_value_type();
 
         AssertMql(
 """
