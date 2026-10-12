@@ -504,7 +504,7 @@ public class NativeOwnedCollectionAllTests(TemporaryDatabaseFixture database) : 
     public void Primitive_collection_All_with_equality_reaches_the_matcher_and_declines_at_path_resolution()
     {
         // Tags.All(t => t == "x") isn't rewritten upstream and arrives as Enumerable.All with a bare lambda and no
-        // AsQueryable(). The matcher matches it, then TryResolveOwnedCollectionPath declines because Tags is a
+        // AsQueryable(). The matcher matches it, then TryResolveEmbeddedCollectionPath declines because Tags is a
         // primitive collection, not a navigation. Pins a clean decline rather than a crash.
         var collection = SeedWellFormed(
             nameof(Primitive_collection_All_with_equality_reaches_the_matcher_and_declines_at_path_resolution));

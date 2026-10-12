@@ -29,6 +29,7 @@ using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
+using MongoDB.EntityFrameworkCore.Query.Visitors;
 using MongoDB.EntityFrameworkCore.Serializers;
 
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -88,6 +89,11 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             nameof(IBsonSerializer.Deserialize),
             [typeof(BsonDeserializationContext), typeof(BsonDeserializationArgs)])!;
 
+    private static readonly MethodInfo BsonValueDeserializeMethod =
+        typeof(IBsonSerializer<BsonValue>).GetMethod(
+            nameof(IBsonSerializer.Deserialize),
+            [typeof(BsonDeserializationContext), typeof(BsonDeserializationArgs)])!;
+
     private static readonly MethodInfo StringEqualsMethod =
         typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(string)])!;
 
@@ -122,6 +128,16 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         /// identical <see cref="IProperty"/> keys and corrupt both reads.
         /// </summary>
         public required Dictionary<IProperty, ParameterExpression> AllLocals { get; init; }
+
+        /// <summary>
+        /// One <see cref="BsonValue"/> local per complex property of this entity: the property's stored element, read off
+        /// the reader whole (or left <see langword="null"/> when missing) and materialized by
+        /// <see cref="ComplexTypeMaterializationBuilder.Build"/>, the same builder the DOM shaper uses.
+        /// </summary>
+        public required Dictionary<IComplexProperty, ParameterExpression> ComplexLocals { get; init; }
+
+        /// <summary>The complex-property locals of the scope <see cref="AllLocals"/> describes (see there).</summary>
+        public required Dictionary<IComplexProperty, ParameterExpression> AllComplexLocals { get; init; }
     }
 
     /// <summary>
@@ -186,7 +202,9 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         _context = contextParameter;
         var resultType = injectedBody.Type;
 
-        var rootPlan = BuildPlan(_rootEntityType, present: null, new Dictionary<IProperty, ParameterExpression>());
+        var rootPlan = BuildPlan(
+            _rootEntityType, present: null, new Dictionary<IProperty, ParameterExpression>(),
+            new Dictionary<IComplexProperty, ParameterExpression>());
 
         var rewrittenBody = RewriteMaterializer(injectedBody, rootPlan);
 
@@ -214,9 +232,19 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         IEntityType entityType,
         ParameterExpression? present,
         Dictionary<IProperty, ParameterExpression> allLocals,
+        Dictionary<IComplexProperty, ParameterExpression> allComplexLocals,
         bool allowLookupReferences = true)
     {
         var locals = new Dictionary<IProperty, ParameterExpression>();
+        var complexLocals = new Dictionary<IComplexProperty, ParameterExpression>();
+        foreach (var complexProperty in entityType.GetComplexProperties())
+        {
+            var complexLocal = Expression.Variable(
+                typeof(BsonValue), "__c_" + entityType.ShortName() + "_" + complexProperty.Name);
+            complexLocals[complexProperty] = complexLocal;
+            allComplexLocals[complexProperty] = complexLocal;
+        }
+
         var requiredPresence = new Dictionary<IProperty, ParameterExpression>();
         foreach (var property in entityType.GetProperties())
         {
@@ -277,7 +305,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
                 var lookupPresent = Expression.Variable(typeof(bool), "__present_lookup_" + target.ShortName());
                 var lookupTarget = BuildPlan(
                     target, lookupPresent, new Dictionary<IProperty, ParameterExpression>(),
-                    allowLookupReferences: false);
+                    new Dictionary<IComplexProperty, ParameterExpression>(), allowLookupReferences: false);
                 lookupReferences.Add(new LookupReferencePlan
                 {
                     Navigation = navigation,
@@ -292,7 +320,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
                 // Owned collection: element plan locals are reused across iterations (no present flag —
                 // presence is per-array-element, governed by the loop). A 1-based counter local supplies the
                 // synthesized ordinal key; a List<TElement> accumulator collects the materialized elements.
-                var element = BuildPlan(target, present: null, allLocals, allowLookupReferences);
+                var element = BuildPlan(target, present: null, allLocals, allComplexLocals, allowLookupReferences);
                 var counter = Expression.Variable(typeof(int), "__counter_" + target.ShortName());
                 var listType = typeof(List<>).MakeGenericType(target.ClrType);
                 var list = Expression.Variable(listType, "__list_" + target.ShortName());
@@ -307,7 +335,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             }
 
             var childPresent = Expression.Variable(typeof(bool), "__present_" + target.ShortName());
-            var child = BuildPlan(target, childPresent, allLocals, allowLookupReferences);
+            var child = BuildPlan(target, childPresent, allLocals, allComplexLocals, allowLookupReferences);
             ownedNavigations.Add((navigation, child));
         }
 
@@ -320,7 +348,9 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             OwnedNavigations = ownedNavigations,
             OwnedCollections = ownedCollections,
             LookupReferences = lookupReferences,
-            AllLocals = allLocals
+            AllLocals = allLocals,
+            ComplexLocals = complexLocals,
+            AllComplexLocals = allComplexLocals
         };
     }
 
@@ -332,7 +362,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             initializers.Add(Expression.Assign(plan.Present, Expression.Constant(false)));
         }
 
-        foreach (var local in plan.Locals.Values)
+        foreach (var local in plan.Locals.Values.Concat(plan.ComplexLocals.Values))
         {
             locals.Add(local);
             initializers.Add(Expression.Assign(local, Expression.Default(local.Type)));
@@ -397,6 +427,22 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
             ifChain = Dispatch(property.GetElementName(), read, ifChain);
         }
 
+        // A complex property's element is read whole, whatever its BSON type (subdocument, array, null, or a wrong type
+        // the builder rejects), and left null when missing; ComplexTypeMaterializationBuilder applies every rule.
+        foreach (var (complexProperty, complexLocal) in plan.ComplexLocals)
+        {
+            ifChain = Dispatch(
+                complexProperty.GetElementName(),
+                Expression.Assign(
+                    complexLocal,
+                    Expression.Call(
+                        Expression.Constant(MongoDB.Bson.Serialization.Serializers.BsonValueSerializer.Instance, typeof(IBsonSerializer<BsonValue>)),
+                        BsonValueDeserializeMethod,
+                        _context,
+                        Expression.Default(typeof(BsonDeserializationArgs)))),
+                ifChain);
+        }
+
         foreach (var (navigation, child) in plan.OwnedNavigations)
         {
             var elementName = navigation.TargetEntityType.GetContainingElementName()
@@ -436,8 +482,8 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
                 Expression.Break(breakTarget)),
             breakTarget);
 
-        // Nothing to enforce or normalize after the loop: the loop is the whole fill.
-        if (plan.RequiredPresence.Count == 0 && plan.OwnedCollections.Count == 0)
+        // Nothing to reset, enforce or normalize around the loop: the loop is the whole fill.
+        if (plan.RequiredPresence.Count == 0 && plan.OwnedCollections.Count == 0 && plan.ComplexLocals.Count == 0)
         {
             return loop;
         }
@@ -455,6 +501,12 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         foreach (var collection in plan.OwnedCollections)
         {
             body.Add(Expression.Assign(collection.List, Expression.Default(collection.List.Type)));
+        }
+
+        // Missing must read as null, so an owned-collection element's complex value can't leak into the next element.
+        foreach (var complexLocal in plan.ComplexLocals.Values)
+        {
+            body.Add(Expression.Assign(complexLocal, Expression.Constant(null, typeof(BsonValue))));
         }
 
         body.Add(loop);
@@ -622,7 +674,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         // block directly, redirecting its value source to this plan's locals. When building a collection
         // element, `collection` carries the loop counter so the synthesized ordinal key resolves to counter+1.
         var materializerBlock = ExtractMaterializerBlock(body, plan.EntityType);
-        return new ConstructionRewriter(plan.AllLocals, collection).Visit(materializerBlock);
+        return new ConstructionRewriter(plan.AllLocals, plan.AllComplexLocals, collection).Visit(materializerBlock);
     }
 
     /// <summary>
@@ -751,7 +803,7 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
 
         // Rewrite the owned materializer block's value source to the child's locals (the owned subtree
         // shares the root's scope, so owned-type keys still resolve to the principal's local).
-        var rewrittenBlock = (BlockExpression)new ConstructionRewriter(child.AllLocals).Visit(materializerBlock);
+        var rewrittenBlock = (BlockExpression)new ConstructionRewriter(child.AllLocals, child.AllComplexLocals).Visit(materializerBlock);
 
         // Splice in any nested owned-reference fixup (recursively rewriting the nested navigation).
         if (navExpression is IncludeExpression include)
@@ -824,7 +876,8 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         // normal local (not an owned-type key), so ConstructionRewriter.ResolveLocal finds it directly with no
         // owner-key resolution. Using the target's own scope (not the root's) keeps a self-referential
         // reference from aliasing the root's identical-IProperty locals.
-        var rewrittenBlock = (BlockExpression)new ConstructionRewriter(lookup.Target.AllLocals).Visit(materializerBlock);
+        var rewrittenBlock = (BlockExpression)new ConstructionRewriter(lookup.Target.AllLocals, lookup.Target.AllComplexLocals)
+            .Visit(materializerBlock);
 
         // `!present ? null : <rewrittenBlock>` — an absent (BSON Null) lookup field yields a null navigation.
         return Expression.Condition(
@@ -969,13 +1022,29 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
     private sealed class ConstructionRewriter : System.Linq.Expressions.ExpressionVisitor
     {
         private readonly Dictionary<IProperty, ParameterExpression> _locals;
+        private readonly Dictionary<IComplexProperty, ParameterExpression> _complexLocals;
         private readonly CollectionPlan? _collection;
 
-        public ConstructionRewriter(Dictionary<IProperty, ParameterExpression> locals, CollectionPlan? collection = null)
+        public ConstructionRewriter(
+            Dictionary<IProperty, ParameterExpression> locals,
+            Dictionary<IComplexProperty, ParameterExpression> complexLocals,
+            CollectionPlan? collection = null)
         {
             _locals = locals;
+            _complexLocals = complexLocals;
             _collection = collection;
         }
+
+        // A complex property of the entity (ComplexTypeMaterializationBuilder.MarkComplexPropertyAssignments): build it
+        // from the element the fill loop read whole, with the builder the DOM shaper uses.
+        protected override Expression VisitExtension(Expression node)
+            => node is ComplexPropertyMaterializationExpression complexProperty
+                ? _complexLocals.TryGetValue(complexProperty.ComplexProperty, out var element)
+                    ? ComplexTypeMaterializationBuilder.Build(complexProperty.ComplexProperty, element)
+                        .ConvertIfRequired(complexProperty.Type)
+                    : throw new NativeTranslationNotSupportedException(
+                        $"No streaming plan for complex property '{complexProperty.ComplexProperty.DeclaringType.DisplayName()}.{complexProperty.ComplexProperty.Name}'.")
+                : base.VisitExtension(node);
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {

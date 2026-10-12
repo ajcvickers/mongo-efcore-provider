@@ -1028,7 +1028,7 @@ public class NativeOwnedCollectionCountTests(TemporaryDatabaseFixture database) 
     [Fact]
     public void Count_projection_through_an_owned_reference_hop_goes_native()
     {
-        // b.Home.Notes.Count: TryResolveOwnedCollectionPath walks the owned reference hop.
+        // b.Home.Notes.Count: TryResolveEmbeddedCollectionPath walks the owned reference hop.
         var collection = Seed(nameof(Count_projection_through_an_owned_reference_hop_goes_native),
             RowWithNotes("none", 0), RowWithNotes("one", 1), RowWithNotes("three", 3));
 

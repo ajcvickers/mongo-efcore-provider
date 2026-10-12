@@ -109,9 +109,12 @@ public class MongoExpressionNodeCoverageTests
 
     /// <summary>
     /// One representative instance per concrete node type — the simplest legal one, since the harness checks arm
-    /// coverage, not value space.
+    /// coverage, not value space. With <paramref name="nullSafeOperands"/> every field and element reference is
+    /// <c>NullSafe</c> (a complex element scope's read, ruling R17) and the coalesce fallback is a field, so
+    /// <c>ComplexElementNullGuardRefusalTests</c> can find the structural <c>MayBeNull</c> arms (R18) by comparing the two
+    /// sample sets.
     /// </summary>
-    private static Dictionary<Type, MongoExpression> BuildSamples(bool valueConverted = false)
+    internal static Dictionary<Type, MongoExpression> BuildSamples(bool valueConverted = false, bool nullSafeOperands = false)
     {
         var rank = PostProperty(nameof(Post.Rank), valueConverted);
         var flag = PostProperty(nameof(Post.Flag), valueConverted);
@@ -120,17 +123,19 @@ public class MongoExpressionNodeCoverageTests
         var when = PostProperty(nameof(Post.When), valueConverted);
         var stamp = PostProperty(nameof(Post.Stamp), valueConverted);
 
-        var rankField = new MongoFieldExpression(rank, "Rank");
-        var flagField = new MongoFieldExpression(flag, "Flag");
-        var headingField = new MongoFieldExpression(heading, "Heading");
+        var rankField = new MongoFieldExpression(rank, "Rank", nullSafeOperands);
+        var flagField = new MongoFieldExpression(flag, "Flag", nullSafeOperands);
+        var headingField = new MongoFieldExpression(heading, "Heading", nullSafeOperands);
         var rankConstant = new MongoConstantExpression(5, rank);
 
         var samples = new MongoExpression[]
         {
             rankField,
             new MongoOuterFieldExpression(rank, "Rank"),
-            new MongoElementRefExpression("Total", typeof(int)),
+            new MongoElementRefExpression("Total", typeof(int), nullSafe: nullSafeOperands),
             new MongoLookupNullCheckExpression("_lookup_Manager", isNotNull: false),
+            new MongoElementNullCheckExpression("Address", isNotNull: false),
+            new MongoCurrentElementNullCheckExpression(isNotNull: false),
             new MongoNumericTypeBracketExpression(rankField),
             rankConstant,
             new MongoParameterExpression("p0", rank),
@@ -158,11 +163,11 @@ public class MongoExpressionNodeCoverageTests
                 MongoExpressionTranslator.MongoQuantifierKind.Any),
             new MongoConvertExpression(rankField, typeof(long)),
             new MongoConditionalExpression(flagField, rankField, rankConstant),
-            new MongoCoalesceExpression(rankField, rankConstant),
-            new MongoDatePartExpression(new MongoFieldExpression(when, "When"), MongoDatePart.Year),
+            new MongoCoalesceExpression(rankField, nullSafeOperands ? rankField : rankConstant),
+            new MongoDatePartExpression(new MongoFieldExpression(when, "When", nullSafeOperands), MongoDatePart.Year),
             new MongoDateAddExpression(
-                new MongoFieldExpression(when, "When"), MongoDateAddUnit.Minute, new MongoConstantExpression(5, null)),
-            new MongoDateTimeOffsetLocalExpression(new MongoFieldExpression(stamp, "Stamp")),
+                new MongoFieldExpression(when, "When", nullSafeOperands), MongoDateAddUnit.Minute, new MongoConstantExpression(5, null)),
+            new MongoDateTimeOffsetLocalExpression(new MongoFieldExpression(stamp, "Stamp", nullSafeOperands)),
             new MongoConcatExpression([headingField, new MongoConstantExpression("x", heading)]),
             new MongoStringIndexOfExpression(headingField, new MongoConstantExpression("x", heading)),
             new MongoStringLengthExpression(headingField),
@@ -344,6 +349,50 @@ public class MongoExpressionNodeCoverageTests
                 + "contract is 'would Render throw' — an admitted node that throws breaks the translate-time "
                 + "decline every caller of CanRender relies on.");
         }
+    }
+
+    /// <summary>
+    /// Ruling R18: <see cref="MongoAggregationExpressionRenderer.MayBeNull"/> is structural for the nodes that take their CLR
+    /// type from one operand but are null when an operand that feeds them is (a null complex element's NullSafe leaf); the
+    /// CLR-type check stays as the fallback, so the same nodes over non-NullSafe operands are judged exactly as before.
+    /// </summary>
+    [Fact]
+    public void MayBeNull_is_structural_for_date_add_coalesce_and_conditional()
+    {
+        var rank = PostProperty(nameof(Post.Rank), valueConverted: false);
+        var when = PostProperty(nameof(Post.When), valueConverted: false);
+        var flag = PostProperty(nameof(Post.Flag), valueConverted: false);
+        var safeRank = new MongoFieldExpression(rank, "Rank", nullSafe: true);
+        var plainRank = new MongoFieldExpression(rank, "Rank");
+        var safeWhen = new MongoFieldExpression(when, "When", nullSafe: true);
+        var plainWhen = new MongoFieldExpression(when, "When");
+        var five = new MongoConstantExpression(5, null);
+        var test = new MongoFieldExpression(flag, "Flag");
+
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(safeWhen, MongoDateAddUnit.Day, five)));
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(plainWhen, MongoDateAddUnit.Day, safeRank)));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoDateAddExpression(plainWhen, MongoDateAddUnit.Day, five)));
+
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoCoalesceExpression(safeRank, safeRank)));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoCoalesceExpression(safeRank, five)));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoCoalesceExpression(plainRank, plainRank)));
+
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoConditionalExpression(test, five, safeRank)));
+        Assert.True(MongoAggregationExpressionRenderer.MayBeNull(new MongoConditionalExpression(test, safeRank, five)));
+        Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoConditionalExpression(test, plainRank, five)));
+    }
+
+    [Fact]
+    public void Prefix_rewriter_carries_a_fields_NullSafe()
+    {
+        // Defensive (no native shape reaches it today: an owned SelectMany inner filter over a complex hop declines): a
+        // re-targeted NullSafe field must keep its $ifNull, as the element-ref arm does. A plain field stays plain.
+        var rank = PostProperty(nameof(Post.Rank), valueConverted: false);
+        Assert.True(MongoFieldPrefixRewriter.TryRewrite(new MongoFieldExpression(rank, "Rank", nullSafe: true), "pfx", out var safe));
+        Assert.True(Assert.IsType<MongoFieldExpression>(safe).NullSafe);
+        Assert.Equal("pfx.Rank", ((MongoFieldExpression)safe).ElementName);
+        Assert.True(MongoFieldPrefixRewriter.TryRewrite(new MongoFieldExpression(rank, "Rank"), "pfx", out var plain));
+        Assert.False(Assert.IsType<MongoFieldExpression>(plain).NullSafe);
     }
 
     /// <summary>
@@ -571,6 +620,28 @@ public class MongoExpressionNodeCoverageTests
         ["MongoInExpression|PrefixRewriter.Rewrite"] = "rendered",
         ["MongoInExpression|QL.IsQueryDialectRenderable"] = "true",
         ["MongoInExpression|QL.Render"] = "rendered",
+
+        // Null-or-missing test of a stored element (complex value == null): both dialects, exact flip, prefixable.
+        // The current element of an aggregation element scope (`$$e`; `$$CURRENT` at the root): aggregation-only, so the
+        // query classifier refuses it (QL.Render falls open to $expr, which renders); not a path, so the prefix rewriter
+        // declines it; flips exactly; no IProperty, so both serialization columns are true.
+        ["MongoCurrentElementNullCheckExpression|Agg.CanRender"] = "true",
+        ["MongoCurrentElementNullCheckExpression|Agg.Render"] = "rendered",
+        ["MongoCurrentElementNullCheckExpression|AllFieldsDefaultSerialized"] = "true",
+        ["MongoCurrentElementNullCheckExpression|AllFieldsDefaultSerialized(converted)"] = "true",
+        ["MongoCurrentElementNullCheckExpression|Negator.TryNegate"] = "false",
+        ["MongoCurrentElementNullCheckExpression|PrefixRewriter.Rewrite"] = "declined",
+        ["MongoCurrentElementNullCheckExpression|QL.IsQueryDialectRenderable"] = "false",
+        ["MongoCurrentElementNullCheckExpression|QL.Render"] = "rendered",
+
+        ["MongoElementNullCheckExpression|Agg.CanRender"] = "true",
+        ["MongoElementNullCheckExpression|Agg.Render"] = "rendered",
+        ["MongoElementNullCheckExpression|AllFieldsDefaultSerialized"] = "true",
+        ["MongoElementNullCheckExpression|AllFieldsDefaultSerialized(converted)"] = "true",
+        ["MongoElementNullCheckExpression|Negator.TryNegate"] = "true",
+        ["MongoElementNullCheckExpression|PrefixRewriter.Rewrite"] = "rendered",
+        ["MongoElementNullCheckExpression|QL.IsQueryDialectRenderable"] = "true",
+        ["MongoElementNullCheckExpression|QL.Render"] = "rendered",
 
         // Has a query-dialect form (Where position, TryMatchInnerNullCheck) and an aggregation form (Select
         // conditional Test, TryMatchScopeNullCheck). Never nested under Not/a quantifier/$elemMatch.

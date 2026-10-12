@@ -893,6 +893,29 @@ internal sealed class MongoSelectDefinition
     /// </remarks>
     internal bool HasClientEvaluatedProjectionLeaf { get; set; }
 
+    /// <summary>
+    /// <see langword="true"/> when a <see cref="Projection"/> leaf is a whole complex value (<c>c.Address</c>,
+    /// <c>c.Address.Location</c>, a complex collection), projected as its stored subdocument/array and materialized by
+    /// the shaper (<c>ComplexTypeMaterializationBuilder</c>).
+    /// </summary>
+    /// <remarks>
+    /// The projected document holds the STORED form (element order, unmapped elements, null vs missing members), not the
+    /// CLR value. It feeds <see cref="HasComplexValueShaperLeaf"/> (one predicate, set after every <c>TranslateSelect</c>
+    /// arm), through which every value-reading later operator is refused in every mode; see that property. This native
+    /// flag also keeps such a projection out of a native set operation (<c>IsPlainProjectedSelect</c>) as defence in depth.
+    /// </remarks>
+    internal bool HasComplexValueProjectionLeaf { get; set; }
+
+    /// <summary>
+    /// <see langword="true"/> when the current projection reads a whole complex value anywhere (bare, inside an anonymous
+    /// type, member-init DTO or nested construction, beside the entity), set in every query mode by
+    /// <c>MongoQueryableMethodTranslatingExpressionVisitor.RecordComplexValueShaperLeaf</c> after every <c>TranslateSelect</c>
+    /// arm. <c>ThrowIfComplexValueOperand</c> then refuses EVERY later operator except the projected-value-free ones (Take,
+    /// Skip, predicate-less First/Single/Last(OrDefault)/Count/LongCount/Any) with <see cref="System.NotSupportedException"/>
+    /// (ruling R7): no path, native or driver-LINQ, answers it correctly. Complex types are new, so nothing released changes.
+    /// </summary>
+    internal bool HasComplexValueShaperLeaf { get; set; }
+
     private HashSet<string>? _clientConditionalMembers;
 
     /// <summary>

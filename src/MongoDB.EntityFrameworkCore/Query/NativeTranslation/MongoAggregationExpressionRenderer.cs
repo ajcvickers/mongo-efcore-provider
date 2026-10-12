@@ -57,7 +57,9 @@ internal static class MongoAggregationExpressionRenderer
             MongoElementRefExpression { NullSafe: true } nullSafeElementRef
                 => IfNull(FieldRef(nullSafeElementRef.Path, elementVariable), BsonNull.Value),
             MongoElementRefExpression elementRef => FieldRef(elementRef.Path, elementVariable),
-            // Always at document root, regardless of elementVariable.
+            // Always at document root, regardless of elementVariable. See MongoOuterFieldExpression.NullSafe.
+            MongoOuterFieldExpression { NullSafe: true } nullSafeOuter
+                => IfNull(FieldRef(nullSafeOuter.ElementName, elementVariable: null), BsonNull.Value),
             MongoOuterFieldExpression outer => FieldRef(outer.ElementName, elementVariable: null),
             // Used for a Select-side join-scope null-check ternary (`ti.Inner != null ? ti.Inner.City : null`;
             // see NativeJoinScopeProjectionBinder.TryBindConditionalProjection).
@@ -73,6 +75,15 @@ internal static class MongoAggregationExpressionRenderer
                         IfNull(FieldRef(lookupNullCheck.LookupAlias, elementVariable: null), BsonNull.Value),
                         BsonNull.Value
                     }),
+            // $ifNull-wrapped for the same reason: $eq/$ne don't equate a missing element with null. Element-relative
+            // inside a $filter/$map scope (MongoFieldPrefixRewriter prefixes the path for a SelectMany scope).
+            MongoElementNullCheckExpression elementNullCheck
+                => new BsonDocument(elementNullCheck.IsNotNull ? "$ne" : "$eq",
+                    new BsonArray { IfNull(FieldRef(elementNullCheck.Path, elementVariable), BsonNull.Value), BsonNull.Value }),
+            // The element scope's current element itself ("$$e"); at the document root, the document ("$$CURRENT", never null).
+            MongoCurrentElementNullCheckExpression currentElementNullCheck
+                => new BsonDocument(currentElementNullCheck.IsNotNull ? "$ne" : "$eq",
+                    new BsonArray { IfNull("$$" + (elementVariable ?? "CURRENT"), BsonNull.Value), BsonNull.Value }),
             MongoConstantExpression or MongoParameterExpression => MongoValueRenderer.RenderValue(node, placeholders),
             // Aggregation form of the query dialect's { field: { $type: "number" } }; see
             // MongoNumericTypeBracketExpression. $and short-circuits, so a following $toX never sees a non-number.
@@ -186,6 +197,9 @@ internal static class MongoAggregationExpressionRenderer
         => node switch
         {
             MongoFieldExpression or MongoElementRefExpression or MongoOuterFieldExpression or MongoLookupNullCheckExpression => true,
+            MongoElementNullCheckExpression => true,
+            // Only built inside an element predicate (rendered with the scope's variable); see the Render arm.
+            MongoCurrentElementNullCheckExpression => true,
             MongoNumericTypeBracketExpression => true,
             MongoConstantExpression or MongoParameterExpression => true,
             // $and/$or test a bare operand by truthiness, so a value-converted bool field (e.g. stored as "N",
@@ -781,7 +795,9 @@ internal static class MongoAggregationExpressionRenderer
     // unlike the query dialect's { field: { $nin: ... } }).
     private static BsonValue RenderIn(MongoInExpression inExpr, PlaceholderTable placeholders, string? elementVariable)
     {
-        var needle = FieldRef(inExpr.Field.ElementName, elementVariable);
+        // Through Render, so a NullSafe field (a complex element scope, ruling R17) is $ifNull'd like every other read:
+        // aggregation $in doesn't equate MISSING with a null list member. A plain field renders the same FieldRef.
+        var needle = Render(inExpr.Field, placeholders, elementVariable);
         var haystack = new BsonDocument("$literal", MongoValueRenderer.RenderInValues(inExpr.Values, placeholders));
         return NotIf(inExpr.Negated, new BsonDocument("$in", new BsonArray { needle, haystack }));
     }
@@ -927,7 +943,7 @@ internal static class MongoAggregationExpressionRenderer
         => MayBeNull(other) ? MissingAsNull(operand, rendered) : rendered;
 
     private static BsonValue MissingAsNull(MongoExpression operand, BsonValue rendered)
-        => operand is MongoFieldExpression { NullSafe: false } or MongoOuterFieldExpression
+        => operand is MongoFieldExpression { NullSafe: false } or MongoOuterFieldExpression { NullSafe: false }
                or MongoElementRefExpression { NullSafe: false, Path: not MongoElementRefExpression.WholeRootDocumentPath }
             ? IfNull(rendered, BsonNull.Value)
             : rendered;
@@ -957,12 +973,19 @@ internal static class MongoAggregationExpressionRenderer
     /// operators over such an operand. A non-null constant never does; a query parameter always may (its value is
     /// only known at execution).
     /// </summary>
+    /// <remarks>
+    /// KEEP IN STEP: an arm that is STRUCTURAL (true over a <c>NullSafe</c> complex-element operand that its CLR type alone
+    /// would not flag) makes the native path null-guard a relational comparison the driver-LINQ fallback does not, so the
+    /// R20 scanner (<c>ComplexElementNullGuardRefusal</c>) must refuse that shape. <c>ComplexElementNullGuardRefusalTests</c>
+    /// discovers the structural arms and fails for one without a paired scanner example.
+    /// </remarks>
     internal static bool MayBeNull(MongoExpression node)
         => node switch
         {
             MongoConstantExpression constant => constant.Value is null,
             // Rendered as $ifNull: [field, null], so it is null (never missing) when absent.
-            MongoFieldExpression { NullSafe: true } or MongoElementRefExpression { NullSafe: true } => true,
+            MongoFieldExpression { NullSafe: true } or MongoElementRefExpression { NullSafe: true }
+                or MongoOuterFieldExpression { NullSafe: true } => true,
             // A read of an upstream alias holding a null-propagated value behind a non-nullable type.
             MongoElementRefExpression { ThrowsOnNull: true } => true,
             MongoParameterExpression => true,
@@ -972,6 +995,23 @@ internal static class MongoAggregationExpressionRenderer
             // $toX, $year/$month/..., and the math operators all return null for a null input.
             MongoConvertExpression convert => IsNullableClrType(convert.Type) || MayBeNull(convert.Operand),
             MongoDatePartExpression datePart => MayBeNull(datePart.Operand),
+            // Structural (ruling R18): these take their CLR type from one operand, but are null whenever the operands that
+            // feed them are, e.g. a null complex element's NullSafe leaf. The type check stays as the fallback, so a node
+            // over non-NullSafe operands (owned scopes, the root) is judged as before. Operands are judged by
+            // MayBeNullOperand, so a captured non-nullable value (`x.Date.AddDays(days)`, `x.D ?? fallback`) is not
+            // "may be null" and adds no guard the CLR-type check alone did not add.
+            // $dateAdd is null for a null start date or amount.
+            MongoDateAddExpression dateAdd
+                => IsNullableClrType(dateAdd.Type) || MayBeNullOperand(dateAdd.StartDate) || MayBeNullOperand(dateAdd.Amount),
+            // $ifNull is null only when its fallback is too.
+            MongoCoalesceExpression coalesce
+                => IsNullableClrType(coalesce.Type) || (MayBeNullOperand(coalesce.Left) && MayBeNullOperand(coalesce.Right)),
+            // $cond yields either branch (a null test reads false and takes the false branch, which is covered).
+            MongoConditionalExpression conditional
+                => IsNullableClrType(conditional.Type) || MayBeNullOperand(conditional.IfTrue) || MayBeNullOperand(conditional.IfFalse),
+            // The $dateAdd local reconstruction of a stored DateTimeOffset: null when its subdocument is absent, which a
+            // NullSafe operand (a complex element scope, R17) says it may be; otherwise judged by type as before.
+            MongoDateTimeOffsetLocalExpression local => local.Operand.NullSafe || IsNullableClrType(local.Type),
             MongoMathExpression math => IsNullableClrType(math.Type) || math.Operands.Any(MayBeNull),
             // Null-guarded or null-propagating over a possibly-null string (see NullPropagating), so null where
             // EF answers null.

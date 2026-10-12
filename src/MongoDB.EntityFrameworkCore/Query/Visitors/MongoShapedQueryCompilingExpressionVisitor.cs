@@ -33,6 +33,7 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using MongoDB.Driver.Linq;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Infrastructure;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -103,7 +104,8 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // MongoBulkOperationExecutor (Storage) runs the writes, transaction, and diagnostics.
         var plan = (MongoBulkPlan)CreateBulkPlanMethodInfo
             .MakeGenericMethod(entityType.ClrType)
-            .Invoke(null, [entityType, _bsonSerializerFactory, nonQueryExpression])!;
+            .Invoke(null, [entityType, _bsonSerializerFactory, nonQueryExpression,
+                ((MongoQueryCompilationContext)QueryCompilationContext).QueryMode])!;
 
         var executor = QueryCompilationContext.IsAsync
             ? MongoBulkExecuteAsyncMethodInfo
@@ -123,7 +125,8 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     private static MongoBulkPlan CreateBulkPlan<TSource>(
         IReadOnlyEntityType entityType,
         BsonSerializerFactory bsonSerializerFactory,
-        MongoNonQueryExpression nonQuery)
+        MongoNonQueryExpression nonQuery,
+        MongoQueryMode mode)
     {
         var isUpdate = nonQuery.Kind == MongoNonQueryExpression.OperationKind.Update;
         var isTwoPhase = nonQuery.Strategy == MongoNonQueryExpression.BulkStrategy.TwoPhase;
@@ -135,14 +138,48 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             CollectionName = nonQuery.SourceQuery.CollectionExpression.CollectionName,
             BuildFilter = isTwoPhase
                 ? null
-                : qc => TranslateBulkOrThrow(nonQuery, () => BuildFilter<TSource>(qc, entityType, bsonSerializerFactory, nonQuery)),
+                : qc => TranslateBulkOrThrow(nonQuery, () =>
+                {
+                    ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
+                    return BuildFilter<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
+                }),
+            // BuildUpdate needs no check of its own: the executor always calls BuildFilter (single command) or
+            // BuildTargetIdQuery (two-phase) first, and that check covers the setter values too.
             BuildUpdate = isUpdate
                 ? qc => TranslateBulkOrThrow(nonQuery, () => BuildUpdate<TSource>(qc, entityType, bsonSerializerFactory, nonQuery))
                 : null,
             BuildTargetIdQuery = isTwoPhase
-                ? qc => BuildIdDocumentQuery<TSource>(qc, entityType, bsonSerializerFactory, nonQuery)
+                ? qc =>
+                {
+                    TranslateBulkOrThrow(nonQuery, () =>
+                    {
+                        ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
+                        return true;
+                    });
+                    return BuildIdDocumentQuery<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
+                }
                 : null,
         };
+    }
+
+    /// <summary>
+    /// Task 14: a bulk filter and its <c>SetProperty</c> values always run on the driver-LINQ bridge, so a read of a complex
+    /// collection's element that the driver evaluates differently from a query (R17) is refused before any document is
+    /// written (the strict allow-list of <c>ComplexElementNullGuardRefusal</c>). Runs in <c>BuildFilter</c> and
+    /// <c>BuildTargetIdQuery</c>, one of which <c>MongoBulkOperationExecutor</c> calls before anything else for every plan
+    /// (and before <c>BuildUpdate</c>), with this execution's parameter values. A no-op on EF9 (no complex collections) and
+    /// under explicit <see cref="MongoQueryMode.DriverLinq"/>.
+    /// </summary>
+    private static void ThrowIfBulkMisreadsNullElements(
+        QueryContext queryContext, IReadOnlyEntityType entityType, MongoNonQueryExpression nonQuery, MongoQueryMode mode)
+    {
+#if !EF8 && !EF9
+        ComplexElementNullGuardRefusal.ThrowIfBulkMisreadsNullElements(
+            // The source chain without the ExecuteUpdate/ExecuteDelete marker (whose property-selector lambdas are targets,
+            // checked by BuildSetter, not reads), and each setter value.
+            [MongoNonQueryExpression.UnwrapBulkOperator(nonQuery.SourceQuery.CapturedExpression), .. nonQuery.Setters.Select(s => s.ValueExpression)],
+            (IModel)entityType.Model, mode, name => queryContext.Parameters[name]);
+#endif
     }
 #endif
 
@@ -226,6 +263,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             ThrowIfNativeOnlyForbidsFallback(queryMode, "Query groups without a supported aggregate projection");
             ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+            ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, queryMode);
         }
 
         VerifyNoClientConstant(shapedQueryExpression.ShaperExpression);
@@ -330,6 +368,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // a coverage failure under NativeOnly.
         ThrowIfNativeOnlyForbidsFallback(queryMode, "Query projects a non-entity result");
         ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+        ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, queryMode);
 
         // HasStringSequenceProjectionLeaf restores what ProjectionAnalyzer.CanPushDown can no longer see: the
         // native string-sequence leaf (an Enumerable.* operator applied to a string) erases that call from the
@@ -499,6 +538,21 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
               ?? type;
 
     /// <summary>
+    /// Ruling R20: a declined query whose complex-collection element predicate needs a null guard the driver doesn't
+    /// apply is refused under <see cref="MongoQueryMode.Native"/> rather than served wrong (R17 reads a null element's
+    /// members as null; the driver reads them as MISSING, below every value). Called at every point where the gate commits
+    /// to the fallback; a no-op under explicit <see cref="MongoQueryMode.DriverLinq"/> and on EF8/EF9 (no complex
+    /// collections). See <c>ComplexElementNullGuardRefusal</c> (an EF10-only type).
+    /// </summary>
+    private static void ThrowIfDriverLinqMisreadsNullElements(MongoQueryExpression mongoQueryExpression, MongoQueryMode mode)
+    {
+#if !EF8 && !EF9
+        ComplexElementNullGuardRefusal.ThrowIfDriverLinqMisreadsNullElements(
+            mongoQueryExpression.CapturedExpression, mongoQueryExpression.CollectionExpression.EntityType.Model, mode);
+#endif
+    }
+
+    /// <summary>
     /// Throws when the captured chain, about to run on driver-LINQ, is a grouped query holding a case mapping
     /// (<c>ToUpper</c>/<c>ToLower</c>, incl. Invariant) in the <c>GroupBy</c>'s key/element/result selector, in an
     /// operator composed after it, or in any lambda of an ungrouped source it groups or combines with (either side of a
@@ -641,6 +695,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         if (nativeFactory == null)
         {
             ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+            ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, mode);
         }
 
         // Late-fallback strip: the driver renders the pushed-down Select with its own aliases, which disagree with
@@ -673,6 +728,9 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
 #else
         var injectedBody = InjectStructuralTypeMaterializers(shaperBody);
 #endif
+        // EF builds each complex property inline, reading its leaves as columns of the entity's value buffer; both
+        // shapers below instead materialize it from its own stored element (ComplexTypeMaterializationBuilder).
+        injectedBody = ComplexTypeMaterializationBuilder.MarkComplexPropertyAssignments(injectedBody);
 
         var standAloneStateManager = QueryCompilationContext.QueryTrackingBehavior ==
                                      QueryTrackingBehavior.NoTrackingWithIdentityResolution;
@@ -1224,7 +1282,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    nonQuery.SourceQuery.CapturedExpression?.Print(),
+                    ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression),
                     exception.Message),
                 exception);
         }
@@ -1238,7 +1296,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    nonQuery.SourceQuery.CapturedExpression?.Print(),
+                    ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression),
                     "the entity must have a primary key to use ordering, paging, or Distinct in a bulk delete or update."));
         }
     }
@@ -1343,7 +1401,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             var setDoc = new BsonDocument();
             foreach (var setter in setters)
             {
-                setDoc[setter.Property.GetElementName()] = SerializeConstant(queryContext, setter);
+                setDoc[setter.StoredPath] = SerializeConstant(queryContext, setter);
             }
 
             return new BsonDocumentUpdateDefinition<BsonDocument>(new BsonDocument("$set", setDoc));
@@ -1358,12 +1416,18 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             if (setter.IsSelfReferencing)
             {
-                setStageDoc[setter.Property.GetElementName()] = RenderSelfReferencingValue<TSource>(
+                setStageDoc[setter.StoredPath] = RenderSelfReferencingValue<TSource>(
                     queryContext, bsonSerializerFactory, entityParameter, efSerializer, setter);
             }
             else
             {
-                setStageDoc[setter.Property.GetElementName()] = SerializeConstant(queryContext, setter);
+                // `$set` in a pipeline evaluates its value as an aggregation expression, so every constant setter value is
+                // `$literal`-wrapped and stays data: a "$Field" / "$$ROOT" string (user input) would be a field path or a
+                // variable, `{}` an error, an array's "$..." items paths. Root scalars included (before, only complex targets
+                // were wrapped, so `SetProperty(c => c.Name, "$Secret")` beside a self-referencing setter copied the row's
+                // Secret). `$literal` returns its argument unchanged, so numbers, bools, dates and null keep their BSON types.
+                var constant = SerializeConstant(queryContext, setter);
+                setStageDoc[setter.StoredPath] = new BsonDocument("$literal", constant);
             }
         }
 
@@ -1380,7 +1444,22 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     private static BsonValue SerializeConstant(QueryContext queryContext, MongoNonQueryExpression.Setter setter)
     {
         var value = EvaluateToConstant(queryContext, setter.ValueExpression);
-        var serializationInfo = BsonSerializerFactory.GetPropertySerializationInfo(setter.Property);
+        if (setter.Property is IComplexProperty complexProperty)
+        {
+            // A null REQUIRED complex property or collection would be stored, then fail every read ("... is null for required
+            // complex property ..."); SaveChanges rejects the same value (EF), so this does too, before any write.
+            if (value is null && !complexProperty.IsOptional())
+            {
+                throw new InvalidOperationException(
+                    $"ExecuteUpdate cannot set the required complex property '{complexProperty.DeclaringType.DisplayName()}."
+                    + $"{complexProperty.Name}' to null. No document was modified.");
+            }
+
+            // A whole complex value: the stored form SaveChanges writes (same writer), or BSON null for an optional one.
+            return ComplexValueWriter.SerializeDetachedComplexValue(complexProperty, value);
+        }
+
+        var serializationInfo = BsonSerializerFactory.GetPropertySerializationInfo((IReadOnlyProperty)setter.Property);
         return serializationInfo.SerializeValue(value);
     }
 

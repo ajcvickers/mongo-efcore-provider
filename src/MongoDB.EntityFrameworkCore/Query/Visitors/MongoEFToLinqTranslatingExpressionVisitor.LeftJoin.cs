@@ -305,8 +305,8 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
             return null;
         }
 
-        var outerField = TryGetKeyFieldPath(outerKey.Body, outerEntityType);
-        var innerField = TryGetKeyFieldPath(innerKey.Body, innerEntityType);
+        var outerField = TryGetKeyFieldPath(outerKey, outerEntityType);
+        var innerField = TryGetKeyFieldPath(innerKey, innerEntityType);
         if (outerField == null || innerField == null)
         {
             return null;
@@ -371,32 +371,15 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
     }
 
     /// <summary>
-    /// Resolves the dotted BSON field path for a simple <c>EF.Property(p, "Name")</c> / member-access join
-    /// key selector body. Returns <see langword="null"/> for shapes we don't handle (composite/anonymous
-    /// keys, conversions, computed keys).
+    /// Resolves the dotted BSON field path of a join key selector that reads one property off its parameter, directly or
+    /// through owned-navigation / complex-property hops (<c>o =&gt; o.Ship.City</c> is <c>Ship.City</c>), via
+    /// <see cref="NativeTranslation.StructuralPath.TryResolveSelectorLeaf"/> (a composite-key leaf is <c>_id.&lt;element&gt;</c>).
+    /// Resolving by the leaf's simple name alone would answer the entity's
+    /// own same-named property. Returns <see langword="null"/> for shapes we don't handle (composite/anonymous keys,
+    /// conversions, computed keys, a hop into an array).
     /// </summary>
-    private static string? TryGetKeyFieldPath(Expression keyBody, IEntityType entityType)
-    {
-        var propertyName = keyBody.TryGetSimplePropertyName();
-        if (propertyName == null)
-        {
-            return null;
-        }
-
-        var property = entityType.FindProperty(propertyName);
-        if (property == null)
-        {
-            return null;
-        }
-
-        var elementName = property.GetElementName();
-        if (property.IsPrimaryKey() && entityType.FindPrimaryKey()?.Properties.Count > 1)
-        {
-            return $"_id.{elementName}";
-        }
-
-        return elementName;
-    }
+    private static string? TryGetKeyFieldPath(LambdaExpression keySelector, IEntityType entityType)
+        => NativeTranslation.StructuralPath.TryResolveSelectorLeaf(keySelector, entityType, out _, out var path) ? path : null;
 
     /// <summary>
     /// Appends a single raw aggregation stage via <see cref="MongoQueryable.AppendStage"/>, keeping the

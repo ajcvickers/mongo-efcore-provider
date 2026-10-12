@@ -66,6 +66,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         Expression expression)
     {
         _queryExpression = queryExpression;
+        TranslationFailed = false;
         _projectionMembers.Push(new ProjectionMember());
         _translatedRootExpression = expression;
         _aliasedConstructionMembers.Clear();
@@ -219,6 +220,16 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 when _queryExpression.Select.Route == NativeRoute.WholeEntity
                      && _queryExpression.Select.HasClientWrappedWholeEntityShaper:
                 return base.Visit(expression);
+
+            // A whole complex value (`c.Address`, `c.Address.Location`, `EF.Property<A>(c, "Address")`, a complex
+            // collection): bind it whole and materialize it in the shaper (ComplexTypeMaterializationBuilder), never
+            // through a serializer. Not inside a client-wrapped whole-entity body, whose member reads come off the
+            // materialized entity (the cases above).
+            case MemberExpression or MethodCallExpression
+                when !(_queryExpression.Select.Route == NativeRoute.WholeEntity
+                       && _queryExpression.Select.HasClientWrappedWholeEntityShaper)
+                     && ResolveComplexValueProperty(expression) is { } complexValueProperty:
+                return new ComplexValueProjectionExpression(BindWholeLeaf(expression), complexValueProperty, expression);
 
             case MemberExpression memberExpression:
                 return BindWholeLeaf(memberExpression);
@@ -553,7 +564,10 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                or MongoConvertExpression
                // A translate-time fold of a computed node (`x.S.ToLower() == "Seattle"` is false): the alias holds
                // the folded value, not the receiver the client form would read.
-               or MongoConstantExpression;
+               or MongoConstantExpression
+               // A complex value's null check (`c.Address != null`): the client form would materialize the complex value
+               // from the alias, which holds the bool.
+               or MongoElementNullCheckExpression;
 
     /// <summary>
     /// True for a computed scalar leaf that the mixed reader can re-evaluate client-side over document reads (see
@@ -587,6 +601,48 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 => ResolveReadSource(source) is { } entityType && entityType.FindProperty(name) != null,
             _ => false
         };
+
+    private static bool IsEntityShaperSource(Expression source)
+        => source.RemoveConvert() is StructuralTypeShaperExpression;
+
+    /// <summary>
+    /// The complex property <paramref name="expression"/> reads whole (single or collection): a member or EF.Property
+    /// access, typed as the property, over an entity shaper or a hop chain (<see cref="ResolveHopType"/>); otherwise
+    /// <see langword="null"/>.
+    /// </summary>
+    internal static IComplexProperty ResolveComplexValueProperty(Expression expression)
+        => expression.TryGetMemberOrEFProperty(out var owner, out var name)
+           && ResolveHopType(owner)?.FindComplexProperty(name) is { } complexProperty
+           && complexProperty.ClrType == expression.Type
+            ? complexProperty
+            : null;
+
+    // The structural type `source` denotes when it is a hop chain (embedded owned references and single complex
+    // properties, member or EF.Property spelling) over an entity shaper; null otherwise.
+    private static ITypeBase ResolveHopType(Expression source)
+        => (ITypeBase)ResolveReadSource(source) ?? ResolveComplexHopType(source);
+
+    // The complex type `source` denotes when it is a chain of single complex-property hops (member or EF.Property
+    // spelling, through embedded owned references) over an entity shaper; null otherwise.
+    private static IComplexType ResolveComplexHopType(Expression source)
+    {
+        source = source.RemoveConvert();
+        var (owner, name) = source switch
+        {
+            MemberExpression { Expression: { } memberOwner } member => (memberOwner, member.Member.Name),
+            MethodCallExpression call when call.TryGetEFPropertyArguments(out var callOwner, out var callName) => (callOwner, callName),
+            _ => (null, null)
+        };
+        if (owner == null)
+        {
+            return null;
+        }
+
+        ITypeBase ownerType = (ITypeBase)ResolveReadSource(owner) ?? ResolveComplexHopType(owner);
+        return ownerType?.FindComplexProperty(name) is { IsCollection: false } complexProperty
+            ? complexProperty.ComplexType
+            : null;
+    }
 
     private static IEntityType ResolveReadSource(Expression source)
     {
@@ -965,6 +1021,19 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
         if (methodCallExpression.TryGetEFPropertyArguments(out var source, out var memberName))
         {
+            // A scalar read through a hop: `EF.Property<T>(c.Address, "City")`, `EF.Property<T>(EF.Property<A>(c,
+            // "Address"), "City")`, over a complex property or an embedded owned reference. It is a whole leaf, as its
+            // member spelling (`c.Address.City`) is in Visit; the navigation-only arm below can't bind a scalar. Only a
+            // hop: a root scalar (`EF.Property(x, "Name")`) keeps its existing arms. Gated exactly like the member arm:
+            // every route except a client-wrapped whole-entity body, whose member reads come off the materialized entity.
+            if (!(_queryExpression.Select.Route == NativeRoute.WholeEntity
+                  && _queryExpression.Select.HasClientWrappedWholeEntityShaper)
+                && !IsEntityShaperSource(source)
+                && ResolveHopType(source)?.FindProperty(memberName) != null)
+            {
+                return BindWholeLeaf(methodCallExpression);
+            }
+
             var visitedSource = Visit(source);
 
             StructuralTypeShaperExpression shaperExpression;
@@ -1777,14 +1846,31 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         return false;
     }
 
-    private static Expression MatchTypes(
+    // A null `expression` is always a failed visit of a non-null node (every caller passes Visit(node) for a node that
+    // exists; the static-call receiver is guarded at the call site), never a legitimately-null value: a null constant
+    // or parameter visits to itself. So it is recorded as a failure (TranslationFailed) and the caller declines; the
+    // Default stand-in keeps the tree well-typed but is never executed as a native read.
+    private Expression MatchTypes(
         Expression expression,
         Type targetType)
-        => expression == null
-            ? Expression.Default(targetType)
-            : targetType != expression.Type && targetType.TryGetItemType() == null
-                ? Expression.Convert(expression, targetType)
-                : expression;
+    {
+        if (expression == null)
+        {
+            TranslationFailed = true;
+            return Expression.Default(targetType);
+        }
+
+        return targetType != expression.Type && targetType.TryGetItemType() == null
+            ? Expression.Convert(expression, targetType)
+            : expression;
+    }
+
+    /// <summary>
+    /// Set by the last <see cref="Translate"/> when some node of the selector could not be bound (a binder arm returned
+    /// <see langword="null"/>) and was replaced by a <c>default(T)</c> stand-in. The caller must decline the native
+    /// route: executing that shaper natively would silently read <c>default</c> (null rows).
+    /// </summary>
+    internal bool TranslationFailed { get; private set; }
 
     /// <summary>
     /// The bare (predicate-less) Queryable element operators the Queryable switch rebuilds against a materialized

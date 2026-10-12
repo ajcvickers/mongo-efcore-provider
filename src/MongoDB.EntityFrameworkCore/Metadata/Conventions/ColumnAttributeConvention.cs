@@ -31,7 +31,8 @@ namespace MongoDB.EntityFrameworkCore.Metadata.Conventions;
 /// </summary>
 public class ColumnAttributeConvention :
     PropertyAttributeConventionBase<ColumnAttribute>,
-    INavigationAddedConvention
+    INavigationAddedConvention,
+    IComplexPropertyAddedConvention
 {
     /// <summary>
     /// Creates a <see cref="CollectionAttributeConvention" />.
@@ -83,6 +84,37 @@ public class ColumnAttributeConvention :
         if (!string.IsNullOrWhiteSpace(attribute?.Name) && meta.TargetEntityType.IsOwned())
         {
             meta.TargetEntityType.SetContainingElementName(attribute.Name, fromDataAnnotation: true);
+        }
+    }
+
+    /// <summary>
+    /// For every complex property added to the model that has a <see cref="ColumnAttribute"/>
+    /// use the specified name as an annotation to configure the element name used in the BSON documents.
+    /// </summary>
+    /// <param name="propertyBuilder">The builder for the complex property.</param>
+    /// <param name="context">Additional information associated with convention execution.</param>
+    /// <remarks>
+    /// Overrides (rather than hides) EF's <see cref="PropertyAttributeConventionBase{TAttribute}"/> implementation, whose
+    /// attribute hook does not run for this convention's complex properties.
+    /// </remarks>
+    public override void ProcessComplexPropertyAdded(
+        IConventionComplexPropertyBuilder propertyBuilder,
+        IConventionContext<IConventionComplexPropertyBuilder> context)
+    {
+        var meta = propertyBuilder.Metadata;
+        var member = meta.PropertyInfo ?? (MemberInfo?)meta.FieldInfo;
+        var attribute = member?.GetCustomAttributes().OfType<ColumnAttribute>().FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(attribute?.Name))
+        {
+            // Through the builder, as the scalar path's HasElementName is: a name configured with a higher source
+            // (explicit configuration) is kept, e.g. when EF lifts the complex property from a derived type to its base.
+            propertyBuilder.HasAnnotation(MongoAnnotationNames.ElementName, attribute.Name, fromDataAnnotation: true);
+        }
+
+        if (!string.IsNullOrWhiteSpace(attribute?.TypeName))
+        {
+            Dependencies.Logger.ColumnAttributeWithTypeUsed(meta); // Will throw by default, as for a scalar
         }
     }
 }

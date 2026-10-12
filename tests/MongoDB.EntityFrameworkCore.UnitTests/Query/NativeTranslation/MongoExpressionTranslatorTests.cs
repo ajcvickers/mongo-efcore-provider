@@ -2555,7 +2555,7 @@ public class MongoExpressionTranslatorTests
     [Fact]
     public void Correlated_owned_collection_Any_nested_quantifier_source_is_declined()
     {
-        // TryResolveOwnedCollectionPath accepts any parameter root, so the owner's b.Comments would silently
+        // TryResolveEmbeddedCollectionPath accepts any parameter root, so the owner's b.Comments would silently
         // become the element's Comments. The correlation guard catches it (b is free in the element predicate).
         var translator = NewTranslator(GetOwnedBlogEntityType());
         var body = PredicateBody<OwnedBlog>(b => b.Posts.Any(p => b.Comments.Any(c => c.Text == "t")));
@@ -2762,7 +2762,7 @@ public class MongoExpressionTranslatorTests
     public void A_mapped_scalar_property_named_Count_still_resolves_as_a_field_inside_TranslateOperand()
     {
         // Field-to-field, so both operands go through TranslateOperand. Protection is structural
-        // (TryResolveOwnedCollectionPath's zero-hop check), not call-site order.
+        // (TryResolveEmbeddedCollectionPath's zero-hop check), not call-site order.
         var translator = NewTranslator(GetEntityType<Order>());
 
         Assert.True(translator.TryTranslate(PredicateBody<Order>(o => o.Count > o.Qty), out var translated));

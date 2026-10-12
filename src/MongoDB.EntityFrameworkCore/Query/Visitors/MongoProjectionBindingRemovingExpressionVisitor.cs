@@ -174,6 +174,33 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     {
         switch (extensionExpression)
         {
+            // A complex property of a materialized entity (ComplexTypeMaterializationBuilder.MarkComplexPropertyAssignments):
+            // materialize it from its own element of the entity's document, which the entity's materialization context
+            // is bound to (see VisitBinary).
+            case ComplexPropertyMaterializationExpression complexProperty:
+                {
+                    if (!_materializationContextBindings.TryGetValue(complexProperty.MaterializationContext, out var entityAccess))
+                    {
+                        throw new InvalidOperationException(
+                            $"The complex property '{complexProperty.ComplexProperty.DeclaringType.DisplayName()}.{complexProperty.ComplexProperty.Name}' "
+                            + "could not be materialized: its entity's document was not bound in the shaper.");
+                    }
+
+                    var entityDocument = CreateGetValueExpression(
+                        entityAccess, (string?)null, true, typeof(BsonDocument), complexProperty.ComplexProperty.DeclaringType);
+                    return ComplexTypeMaterializationBuilder.Build(
+                            complexProperty.ComplexProperty,
+                            ComplexTypeMaterializationBuilder.CreateGetElement(entityDocument, complexProperty.ComplexProperty.GetElementName()))
+                        .ConvertIfRequired(complexProperty.Type);
+                }
+
+            // A projected whole complex value (c.Address, c.Address.Location, a complex collection). The native $project
+            // (and a driver-LINQ push-down of the same Select) holds it under the alias; a whole-document reader resolves
+            // its natural path instead (ReadComplexValueElement).
+            case ComplexValueProjectionExpression complexValue:
+                return ComplexTypeMaterializationBuilder.Build(complexValue.ComplexProperty, ReadComplexValueElement(complexValue))
+                    .ConvertIfRequired(complexValue.Type);
+
             // The alias holds the whole computed value (native $project, or a driver-LINQ push-down of the same
             // Select), so read it once instead of re-applying the call over it. The mixed visitor overrides this
             // to evaluate ClientExpression over whole documents.
@@ -1280,6 +1307,48 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         }
     }
 
+    /// <summary>
+    /// The stored element of a projected whole complex value, as a <see cref="BsonValue"/> (or <see langword="null"/> when
+    /// missing): the projection alias, which the native <c>$project</c> and a driver-LINQ push-down of the same Select
+    /// both write, or, for a whole un-projected document (a late-fallback strip, the mixed shaper), the value's natural
+    /// path, resolved like a leaf's field access (<see cref="TryResolveFieldAccessSource"/>).
+    /// </summary>
+    private Expression ReadComplexValueElement(ComplexValueProjectionExpression complexValue)
+    {
+        if (!ReadsUnprojectedDocuments && GetProjection(complexValue.Binding).Alias is { } alias)
+        {
+            return ComplexTypeMaterializationBuilder.CreateGetElement(DocParameter, alias);
+        }
+
+        // A whole un-projected document (the mixed shaper): read the value at its natural path, resolving the hops as a
+        // leaf's field access does (TryResolveFieldAccessSource), so every segment is the model's element name.
+        // The value's OWN bound expression, never the registration under its projection member: the arguments of a
+        // member-less construction or a method call (`new P(c.Home, c.Work)`, `Tuple.Create(c.Home, c.Work)`) all
+        // register under one shared member, whose registration is only the LAST argument's, so every complex argument
+        // read the last one's value (W|W; spec known limitation 29). Elsewhere the registration is this same expression.
+        var bound = complexValue.Source;
+        if (bound.RemoveConvert().TryGetMemberOrEFProperty(out var receiver, out var name)
+            && TryResolveFieldAccessSource(receiver) is { EntityType: { } owner, DocumentExpression: { } ownerDocument }
+            && owner.FindComplexProperty(name) is { } complexProperty)
+        {
+            return ComplexTypeMaterializationBuilder.CreateGetElement(
+                CreateGetValueExpression(ResolveWholeDocumentSource(ownerDocument), (string?)null, false, typeof(BsonDocument)),
+                complexProperty.GetElementName());
+        }
+
+        throw new InvalidOperationException(
+            $"The projected complex value '{ExpressionShapePrinter.PrintQuery(bound)}' could not be located in the document.");
+    }
+
+    /// <summary>
+    /// The document a field access resolved to (<see cref="TryResolveFieldAccessSource"/>), as a whole-document reader reads
+    /// it; the mixed reader redirects the root to <c>"_outer"</c> under driver join fields. Also applied to the source of
+    /// every owned/complex hop, so a root hop (<c>o.Ship.City</c>) reads <c>_outer.Ship</c>, not a root <c>Ship</c> that the
+    /// joined document doesn't have.
+    /// </summary>
+    protected virtual Expression ResolveWholeDocumentSource(Expression documentExpression)
+        => documentExpression;
+
     protected ResolvedFieldAccess TryResolveFieldAccess(Expression? expression)
     {
         if (expression == null) return default;
@@ -1328,7 +1397,9 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         return new ResolvedFieldAccess(null, null, null, null);
     }
 
-    private (IEntityType? EntityType, Expression? DocumentExpression) TryResolveFieldAccessSource(Expression? expression)
+    // The structural type is an IEntityType for the root, an owned navigation's target or a join side, and an
+    // IComplexType after a complex-property hop (TryResolveComplexPropertyDocument).
+    private (ITypeBase? EntityType, Expression? DocumentExpression) TryResolveFieldAccessSource(Expression? expression)
     {
         expression = expression.RemoveConvert();
 
@@ -1349,9 +1420,16 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
         // For `new { o.Prop }`, EF stores MemberExpr(STS_root, "Prop") in the projection mapping. Recognise the root
         // entity's shaper here to resolve the property and use its own element name instead of the projected alias.
-        if (expression is StructuralTypeShaperExpression { StructuralType: IEntityType shaperEntityType })
+        if (expression is StructuralTypeShaperExpression { StructuralType: IEntityType shaperEntityType } shaper)
         {
-            if (shaperEntityType == _rootEntityType)
+            // The query root's own shaper (bound to the root projection member), also when it is typed as a derived type
+            // after OfType<TDerived>(): its members live in the root document (DocParameter; a mixed reader redirects it to
+            // "_outer" under driver join fields). Decided by the binding, not the CLR type: in a join over the root's own
+            // hierarchy the joined side may have the same (derived) type. The same holds for the root's OWN type: in a join
+            // (a same-type reference navigation `p.Referrer!.Badge`, the inner side of a self-join) a shaper of the root's
+            // CLR type may be the joined row, so outside the root's binding it reads the joined document (exception (h)).
+            if ((shaperEntityType == _rootEntityType && (!_queryExpression.IsJoinQuery || IsRootProjectionShaper(shaper)))
+                || IsRootProjectionShaper(shaper) && _rootEntityType.IsAssignableFrom(shaperEntityType))
             {
                 return (shaperEntityType, DocParameter);
             }
@@ -1378,6 +1456,12 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                     return (shaperEntityType, lookupDocument);
                 }
             }
+
+            // Outside a join, any shaper of a type derived from the root reads the root document (one document per row).
+            else if (_rootEntityType.IsAssignableFrom(shaperEntityType))
+            {
+                return (shaperEntityType, DocParameter);
+            }
         }
 
         if (expression is ParameterExpression parameterExpression)
@@ -1401,10 +1485,21 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         if (expression is MemberExpression navMemberExpression)
         {
             var navSource = TryResolveFieldAccessSource(navMemberExpression.Expression);
-            var embeddedNavDocument = TryResolveEmbeddedNavigationDocument(navSource, navSource.EntityType?.FindNavigation(navMemberExpression.Member));
+            var embeddedNavDocument = TryResolveEmbeddedNavigationDocument(
+                navSource, (navSource.EntityType as IEntityType)?.FindNavigation(navMemberExpression.Member));
             if (embeddedNavDocument != null)
             {
                 return embeddedNavDocument.Value;
+            }
+
+            // A complex-property hop (`c.Address.City`, `c.Address.Location.Lat`): the leaf lives in the complex
+            // property's sub-document, so it resolves to its own IProperty (serializer, nullability) rather than an
+            // unresolved member name read by alias.
+            var complexDocument = TryResolveComplexPropertyDocument(
+                navSource, navSource.EntityType?.FindComplexProperty(navMemberExpression.Member.Name));
+            if (complexDocument != null)
+            {
+                return complexDocument.Value;
             }
         }
 
@@ -1413,23 +1508,40 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             && navPropertyCall.Arguments[1] is ConstantExpression { Value: string navPropertyName })
         {
             var navSource = TryResolveFieldAccessSource(navPropertyCall.Arguments[0]);
-            var embeddedNavDocument = TryResolveEmbeddedNavigationDocument(navSource, navSource.EntityType?.FindNavigation(navPropertyName));
+            var embeddedNavDocument = TryResolveEmbeddedNavigationDocument(
+                navSource, (navSource.EntityType as IEntityType)?.FindNavigation(navPropertyName));
             if (embeddedNavDocument != null)
             {
                 return embeddedNavDocument.Value;
+            }
+
+            // The EF.Property spelling of a complex-property hop (`EF.Property<Addr>(c, "Address")`), as in the
+            // member arm above.
+            var complexDocument = TryResolveComplexPropertyDocument(
+                navSource, navSource.EntityType?.FindComplexProperty(navPropertyName));
+            if (complexDocument != null)
+            {
+                return complexDocument.Value;
             }
         }
 
         return (null, null);
     }
 
+    // Whether `shaper` is THIS query's root entity shaper: bound to this query's root (empty) projection member. A join's
+    // other side is bound by index or under its own member (TransparentIdentifier.Inner); an inner shaper left un-rebound
+    // carries its own (inner) query expression, so the query check keeps it off the root document.
+    protected bool IsRootProjectionShaper(StructuralTypeShaperExpression shaper)
+        => shaper.ValueBufferExpression is ProjectionBindingExpression { ProjectionMember: { Last: null }, Index: null } binding
+           && ReferenceEquals(binding.QueryExpression, _queryExpression);
+
     /// <summary>
     /// Builds the nested-document read for an embedded (owned) *reference* navigation hop, or
     /// <see langword="null"/> to let callers fall through to other resolution paths. Collection
     /// navigations are excluded: their container is a BSON array, not a <see cref="BsonDocument"/>.
     /// </summary>
-    private (IEntityType EntityType, Expression DocumentExpression)? TryResolveEmbeddedNavigationDocument(
-        (IEntityType? EntityType, Expression? DocumentExpression) navSource, INavigation? navigation)
+    private (ITypeBase EntityType, Expression DocumentExpression)? TryResolveEmbeddedNavigationDocument(
+        (ITypeBase? EntityType, Expression? DocumentExpression) navSource, INavigation? navigation)
     {
         if (navigation == null || navigation.IsCollection || !navigation.IsEmbedded() || navSource.DocumentExpression == null)
         {
@@ -1438,8 +1550,27 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
         var elementName = navigation.TargetEntityType.GetContainingElementName() ?? navigation.Name;
         var navDocumentExpression =
-            CreateGetValueExpression(navSource.DocumentExpression, elementName, false, typeof(BsonDocument));
+            CreateGetValueExpression(ResolveWholeDocumentSource(navSource.DocumentExpression), elementName, false, typeof(BsonDocument));
         return (navigation.TargetEntityType, navDocumentExpression);
+    }
+
+    /// <summary>
+    /// Builds the sub-document read for a single (non-collection) complex-property hop, or <see langword="null"/>. The
+    /// segment is the complex property's element name, the same one <c>StructuralPath</c> gives the emit side. A complex
+    /// collection is excluded: its container is a BSON array.
+    /// </summary>
+    private (ITypeBase EntityType, Expression DocumentExpression)? TryResolveComplexPropertyDocument(
+        (ITypeBase? EntityType, Expression? DocumentExpression) source, IComplexProperty? complexProperty)
+    {
+        if (complexProperty == null || complexProperty.IsCollection || source.DocumentExpression == null
+            || complexProperty.GetElementName() is not { Length: > 0 } elementName)
+        {
+            return null;
+        }
+
+        var complexDocumentExpression =
+            CreateGetValueExpression(ResolveWholeDocumentSource(source.DocumentExpression), elementName, false, typeof(BsonDocument));
+        return (complexProperty.ComplexType, complexDocumentExpression);
     }
 
     private static readonly MethodInfo MqlFieldMethodInfo =

@@ -53,7 +53,22 @@ Gate and fallback:
 - **Unsupported shapes call `MarkNotNativelyRepresentable()`** so `Route` becomes `Fallback` instead of emitting a
   pipeline that drops the operator.
 - **Bulk `ExecuteUpdate`/`ExecuteDelete` (EF9+) also uses the driver-LINQ bridge** (`MongoEFToLinqTranslatingExpressionVisitor`).
-  Retiring the query fallback does not retire it.
+  Retiring the query fallback does not retire it. Its filter and `SetProperty` values ALWAYS run on the driver, so over a
+  complex collection's elements (EF10) it is guarded by a POSITIVE list, not R20's deny-list: every element read must be an
+  atom the driver answers like R17 (`member ==/!= v` with `v` non-null and not a `false` bool; a bare non-nullable, default-serialized bool member
+  and `!`; a list that can't hold null `.Contains(member)`; `&&`/`||`/`!` over those) under `Any`/`All`/`Count`/`LongCount`/
+  `Where`/`Skip`/`Take` over a REQUIRED collection whose CLR type a `List<T>` fits (`IsNormalizableToEmptyList`, the bridge's own
+  coalesce condition: `T[]`/`ObservableCollection<T>` are refused, as are unknown extension nodes); anything else (relational, null tests, `Select`, aggregates, an optional
+  collection's operators or null check: the driver's `{p: null}` also matches `[null]`, an element lambda the keying can't
+  bind) is refused before any write (`ComplexElementNullGuardRefusal.ThrowIfBulkMisreadsNullElements`, called in every bulk
+  plan delegate with this execution's parameter values; explicit `DriverLinq` opts out). A wrong bulk filter deletes data,
+  so bulk takes the refusal cost where queries take R21's documented limits. Setters: a complex leaf through REQUIRED single
+  complex hops (dotted stored path, `StructuralPath`), a whole complex property/collection from a captured value (serialized by
+  `ComplexValueWriter`, as SaveChanges writes it; a required one can't be null); refused: a leaf under an optional complex
+  hop (the server's `$set` of a dotted path under a null parent errors mid-operation), a whole complex value read from the row,
+  a self-referencing value for a BsonRepresentation leaf (root scalars keep their pre-existing behaviour), and two setters
+  whose stored paths contain one another (`ThrowIfSetterPathsOverlap`: the server rejects such a `$set`). Refusal messages
+  print expressions through `ExpressionShapePrinter` (constants as `?`), never `Expression.ToString()`.
 - **New native join shapes must be tested under explicit `DriverLinq`** too; the native path can mask a broken
   fallback (and the reverse).
 - **A recognizer that turns a correlated `DbSet` subquery into a navigation** (`db.Orders.Where(o => o.CustomerId ==
@@ -122,7 +137,7 @@ Scope, joins, grouping:
   `.Sum/Min/Max/Average(o => o.Prop)`, also what EF makes of a `GroupJoin` with an aggregate) are projection leaves over the not-unwound
   `$lookup` array `_lookup_<Nav>`. `MongoExpressionTranslator.ReferencedCollectionResolver` (set only on the projection binder's
   root translator, `NativeProjectionBinder.ResolveReferencedCollection`) maps the strict FK correlation
-  (`NativeCorrelationMatcher`, never a target-type guess) to that array and stages the lookup; `TryResolveOwnedCollectionPath` then
+  (`NativeCorrelationMatcher`, never a target-type guess) to that array and stages the lookup; `TryResolveEmbeddedCollectionPath` then
   serves the existing `Count`/filtered-count arms unchanged. Any/All have no value-position translation (the predicate arm renders
   `$elemMatch`, query dialect only), so a projected `Any(pred)` is `Count(pred) >= 1` and `All(pred)` is `Count(not pred) == 0` (the
   aggregation dialect's `$not` is the exact complement; true for the empty group). `Sum/Min/Max/Average` of one numeric element
@@ -159,6 +174,12 @@ Scope, joins, grouping:
   declines (`JoinLookupImplementsKeySelectors`). Composite-PK components live at `_id.<Name>`
   (`LookupExpression.GetFieldPath`). "Simple" includes an anonymous key of scalar properties (same anonymous type
   both sides, one hop, `StoredSerialization.StoredAlike` per pair), rendered as `let` + `$and`.
+- **A join key is resolved by property NAME only if it is a direct read**, on BOTH sides (`IsDirectKeyRead`: the key
+  parameter or an `Outer`/`Inner` chain, no owned/complex hop): `x => x.Ship.City` shares the root `City`'s simple name, and
+  `a => a.Ref.Id` the PK's, so the raw-key `$lookup` and navigation matching silently joined on them. Hop keys decline
+  natively. Selector-addressed fields elsewhere (bridge left-join keys, filtered-Include sort keys) resolve the whole chain
+  (`StructuralPath.TryResolveSelectorLeaf`). On the bridge, join-result complex hops read through the complex
+  serializer, and the mixed reader's `_outer` redirect applies to every hop's source (`ResolveWholeDocumentSource`).
 - **Paging vs. joins.** EF hoists `Skip`/`Take`/`Where`/`OrderBy` ahead of a join's result selector; recorded ops
   are deferred until after the join unless the join is in the left-outer-reference-navigation "safe to page
   before `$lookup`" set (reducers there decline). Paging ahead of a row-multiplying join stays ahead; paging both
@@ -202,7 +223,8 @@ Rendering (null/missing/dialect semantics):
   right side) answer true where C# answers false. The renderer conjoins `$gt: [<lower side>, null]` when
   `MayBeNull`. Non-nullable-typed values that may be *missing* (unmatched left-join side) get no guard; conditions
   over them decline.
-- **Top-level aggregation `$eq`/`$ne` against null is `$ifNull`-wrapped**, but not inside a `$filter`/`$map` scope.
+- **Top-level aggregation `$eq`/`$ne` against null is `$ifNull`-wrapped**, but not inside a `$filter`/`$map` scope
+  (except `NullSafe` complex-element leaves, ruling R17 below).
 - **`$expr` inside `$elemMatch` is a hard server error**; reject at `IsQueryDialectRenderable`. `$size` on a
   missing/null array also errors: `$ifNull` around `$size`/`$filter` is mandatory.
 - **Relational comparisons, sort keys and aggregates run on the stored form**: over a converted or non-default-
@@ -295,6 +317,137 @@ Rendering (null/missing/dialect semantics):
   Whole-entity reads stay strict ("Document element ... is missing"). The exception TYPE for malformed stored data
   (native `InvalidOperationException` vs the driver's `FormatException`/converter exceptions) is not contract; the
   outcome (value vs throw) is.
+- **`StructuralPath` is the single walker of mixed owned/complex hop chains for the native translator's member-chain and
+  field-path resolution, and for join/sort keys** (`TryResolve`; `TryResolveCollection` for a chain ending in an owned or
+  complex collection; `TryResolveSelectorLeaf` for selector-addressed keys; `IsComplexElementScope` for "is this a complex
+  element scope"). Don't add another walker there or resolve a hop by simple name; a failed resolve's partial segments are
+  not usable. Collection hops without a quantifier decline. Other trees have their own hop walkers, kept in step with it by
+  hand: the bridge's `FindComplexHopTypes`/`FindComplexCollectionElementTypes` (`...LinqTranslatingExpressionVisitor.StoredOrdering.cs`,
+  also used by the empty-list coalesce), `MongoProjectionBindingExpressionVisitor.ResolveHopType`/`ResolveComplexHopType`,
+  and `MongoProjectionBindingRemovingExpressionVisitor.TryResolveComplexPropertyDocument` (read side).
+- **A binder that can't bind a selector node fails the translation, never `default(T)`**:
+  `MongoProjectionBindingExpressionVisitor.TranslationFailed` (set where `MatchTypes` receives a null binding and substitutes
+  a default stand-in; reset per `Translate`) makes `TranslateSelect` decline (NativeOnly throws, Native falls back). Silent null rows were the
+  bug class it closes (Task 9).
+- **A new `MongoExpression` node must be handled in every consumer switch** (both renderers, `IsQueryDialectRenderable`,
+  `CanRender`, the negator, `MongoFieldPrefixRewriter`, projection-binder gates); `MongoExpressionNodeCoverageTests` fails
+  for an unhandled node (complex types added `MongoElementNullCheckExpression` and `MongoCurrentElementNullCheckExpression`).
+  The read-side EF extension nodes `ComplexValueProjectionExpression` and `ComplexPropertyMaterializationExpression` are
+  outside that matrix: every shaper visitor that walks a shaper (DOM, one-pass, mixed reader) must lower or reject them.
+- **Complex-property leaves are stored scalars at a dotted path** (`StructuralPath`). The read side resolves the same
+  hops (`MongoProjectionBindingRemovingExpressionVisitor.TryResolveComplexPropertyDocument`), so a leaf reads through its
+  `IProperty` (D-F10, serializer); the EF-337 bridge refusal walks them too (`FindComplexLeafProperties`). A bare dotted
+  field (owned, complex or composite-key hop) takes the Synthetic `_v` tier (`TryDeriveSyntheticAlias` gate 1f; this
+  replaced the EF-362 owned-hop decline). The EF-362 bug (a dotted alias read back as a literal key but rendered
+  nested) can't recur: `_v` is never dotted and is what the driver's un-stripped fallback writes. Converted dotted
+  fields stay declined (gate 1f checks `HasDefaultKeySerialization`).
+  A field under an optional complex parent is MISSING whenever the parent is null/absent: ordinary data, so a projected
+  `Distinct` key over a required reference-typed scalar (`string`, `byte[]`, primitive collection) is marked (`NativeGroupByBinder.IsRequiredReferenceTypedFieldKey`).
+- **Complex values are materialized by one builder** (`Visitors/ComplexTypeMaterializationBuilder`). EF inlines each
+  complex property's construction into the entity materializer, reading its leaves as value-buffer columns;
+  `MarkComplexPropertyAssignments` replaces each with a `ComplexPropertyMaterializationExpression`, which the DOM shaper
+  and the one-pass rewriter both lower through `Build` over the property's own stored element (one-pass reads that element
+  whole off the reader into a `BsonValue` local, reset per pass). A projected whole complex value (`c.Address`,
+  `c.Address.Location`, a complex collection) is a `MongoElementRefExpression { ComplexValue }` leaf on the emit side
+  (`TryTranslateComplexValue`; a dotted one takes `_v`, gate 1g) and a `ComplexValueProjectionExpression` on the read side
+  (`ResolveComplexValueProperty`), which keeps it off the driver's typed push-down (`ComplexTypeSerializer` can't
+  deserialize). Read rules are strict, like a whole entity, not D-F10: a REQUIRED complex property missing or BSON null
+  throws ("... is missing/null for required complex property ..."), never a null instance or default struct; an OPTIONAL
+  one (EF10) reads null; `{}` is an instance; leaves use the entity-member read (`BsonBinding.CreateGetValueExpression`);
+  a required collection missing/null reads empty; a wrong BSON type throws `FormatException`. The projected document is
+  the STORED form and the driver can't read a complex value back, so EVERY value-reading operator over a projection that
+  reads a whole complex value anywhere throws `NotSupportedException` ("... cannot be the operand of '<Op>' ...") in every
+  mode (ruling R7; `ThrowIfComplexValueOperand` in `VisitMethodCall`): Distinct (incl. `Distinct().Count()`), Union,
+  Concat, Intersect, Except, Contains, Cast, Select/Where/OrderBy written after a paging operator, Min/Max/Sum/Average
+  without a selector, Join, ElementAt, ElementAtOrDefault, DefaultIfEmpty, etc. Only `IsProjectedValueFreeOperator`
+  passes: Take, Skip, predicate-less First/Single/Last(OrDefault), Count, LongCount, Any. ElementAt/ElementAtOrDefault/
+  DefaultIfEmpty read no value but stay refused: none has a native translation even for a scalar projection, and the
+  fallback cannot read a complex value (EF8/EF9 reject DefaultIfEmpty first with EF's own message;
+  `ComplexValueElementOperatorTests`). EF folds Where/OrderBy/All/Min/Max(selector) written directly after
+  the Select onto the source, so those never see the projection (native, correct). The flag
+  (`HasComplexValueShaperLeaf`) is set by ONE predicate (`RecordComplexValueShaperLeaf`) on the result of every
+  `TranslateSelect` arm (shaper holds a `ComplexValueProjectionExpression`, or the native projection staged a complex
+  value). A positional-ctor/container projection never stages a complex argument (`IsScalarPositionalConstruction`: its
+  index shaper would read it through a class map); it declines. On the fallback (mixed reader, whole documents) a
+  construction whose arguments are all whole complex values is served, and one mixing a complex value with a scalar is
+  refused by the member-less construction refusal (`AliasedConstructionMembers`). A one-argument record/constructor of a
+  whole complex value (`new Holder(x.Home)`, renamed members too) and member-init DTOs are served in every mode
+  (`ComplexValueConstructorProjectionTests`, `ComplexValueSameTypeArgumentTests`). **A whole-document read of a complex
+  value resolves from the node's own `ComplexValueProjectionExpression.Source`, never from the registration under its
+  projection member**: a member-less construction's or method call's arguments share one member whose registration is
+  the last argument's, so `new P(x.Home, x.Work)` read `W|W` (spec known limitation 29, resolved).
+  GroupBy in which a whole complex value takes part (key, key part, read off the grouped elements in a post-group Select:
+  `ThrowIfGroupByOverComplexValue`) is refused with the same message naming GroupBy (ruling R8). Where EF erases the value
+  (`Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key)` becomes a leaf-key grouping over the entity; the
+  `GroupBy(key, resultSelector)` overload) the outcome is the pre-existing one of its scalar analogue. Complex types are new
+  in this slice, so none of this changes released behaviour.
+  The query root's own shaper (bound to THIS query's empty projection member) resolves to the root document even when
+  typed as a derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other
+  derived shaper does only outside a join. This also corrected a pre-existing NON-complex wrong read (owner-approved
+  exception, ruling R9): `OfType<E>().Select(e => new { e, e.Name, R = e.Referrer!.Name })` read `e.Name` off the joined
+  referrer at 040cecdf (`Dev|Boss|Boss`, and so did published 10.0.4), now `Dev|Dev|Boss`. A shaper of the root's OWN CLR
+  type in a join is the root only through that binding (`!IsJoinQuery || IsRootProjectionShaper`): a same-type joined row
+  (self-join inner side, same-type reference navigation, a BASE-typed referrer after `OfType`) projected beside the whole
+  outer entity reads the joined document (owner-approved exception (h); every released version read the outer document).
+  A bare-nav SelectMany's ITEM shaper
+  (`BuildBareNavWrappedShaper`) is bound to the same empty member, so `IsRootProjectionShaper` is true for it too; this
+  is harmless today because the arm is never reached for a served row (an item type in the root's EF hierarchy needs a
+  reference unwind, which has no driver-LINQ fallback; the native path binds by scope depth and reads by alias; an owned
+  element type is never in the root's hierarchy). Pinned per mode in `ComplexTypeDerivedSelectManyItemTests`; if a
+  reference-unwind fallback is ever added, distinguish the item shaper first.
+- **A whole complex value in `==`/`!=`/`.Equals` is owned by `MongoExpressionTranslator.ComplexEquality.cs`** (its decline is
+  final): member-wise, never by example. Null/missing of a value is `MongoElementNullCheckExpression` (`{p: null}`, `$ifNull`
+  in `$expr`; flips exactly); each comparison is built with its complement (`EqualityPair`), so negation never wraps; stored
+  pairs need the same mapped members (both orders agree) and `StoredAlike` leaves; a captured comparand is read per execution
+  (`RuntimeEvaluator` parameters). A value with ANY optional ancestor (owned or complex) equals an instance only when its
+  own element is present; leaves are `NullSafe` so element scopes agree with the null check.
+- **Complex COLLECTIONS (EF10) share the owned-collection element machinery through one resolver**
+  (`StructuralPath.TryResolveCollection` → `TryResolveEmbeddedCollectionPath`): the array path plus the element's structural
+  type (`IComplexType` for a complex collection); the translator's scope is an `ITypeBase`, so an element-scoped predicate
+  resolves members (and nested collections) against the element's complex type. Entity-only arms (key equality, `$$ROOT`,
+  type folds) are gated on `IsSelfParamTheEntity`, false in a complex scope. EF10 stores a null ELEMENT as BSON null, and
+  `$elemMatch` never matches a non-document element, so a complex-collection quantifier always renders in an aggregation
+  element scope (`$anyElementTrue`/`$allElementsTrue` over `$map`, `RequiresAggregationElementScope`); owned collections keep
+  `$elemMatch`. Ruling R17: a null complex element reads every leaf as null. Field reads in a complex element scope are
+  `NullSafe` (`ScopeField`) and rendered through `Render(field)` (`$ifNull`), incl. `$in` needles and `UtcDateTime`; the
+  DateTimeOffset `$dateAdd` reconstruction and the array inputs read raw paths, safe because they propagate null / are
+  `$ifNull`'d to `[]`. `MayBeNull` is structural for the null-propagating nodes (NullSafe fields/refs, arithmetic, convert,
+  math, date part, DTO local, and per R18 date-add: start or amount; coalesce: both sides; conditional: either branch)
+  with the CLR-type check as fallback, so relational comparisons over them get the null guard. R18's operands are judged
+  by `MayBeNullOperand` (a captured non-nullable parameter is never null), so root queries over captured values render
+  the base MQL. R19: a non-nullable,
+  default-serialized bool leaf compared as a value reads `$ifNull: [f, false]` (`ScopeValue`), so `== false`/`!= true`/
+  `== p` agree with `!a.Verified` (true for a null element; two-valued; no owned pin exists); a `bool?` keeps null semantics;
+  owned element scopes keep the RenderBinary no-`$ifNull` rule (a missing owned leaf is malformed data, a null complex element
+  is EF-written). Driver-LINQ answers such rows differently (pinned per mode). Ruling R20: a query the native path
+  DECLINES whose complex-element predicate holds a null-guard-requiring shape (relational, `==`/`!=` null, local-list
+  `Contains` of a member, non-nullable bool equality) is refused at the compile-time gate under `Native` instead of falling
+  back to those wrong rows (`ComplexElementNullGuardRefusal`, called where the gate commits to the fallback; structural,
+  so it refuses even over data with no null element; explicit `DriverLinq` runs the driver; owned scopes untouched).
+  It is a BEST-EFFORT net for structurally keyable shapes, not a guarantee (ruling R21). The scanner RESTATES the node kinds
+  that need R17-R19's guards (`ScopeField`/`MayBeNull`/`ScopeValue`) rather than calling those predicates (design debt): a
+  new null-guard-requiring node kind must be added to both, and to the bulk allow-list's refusal side. Documented limits, pinned as
+  characterization in `ComplexCollectionNativeQueryTests.Known_limits_of_the_R20_refusal_net_...`: element predicates
+  reached through a navigation/join root (`s.Store.Tags.Any(t => t.Rank < 1)`: lambda roots are keyed by
+  `FindEntityTypes(param.Type)`, never a `TransparentIdentifier`); element-leaf `Select` chains
+  (`Select(s => s.Verified).Contains(false)`; `Select` is opaque to the keying); null tests not spelled against a null
+  CONSTANT (`Zip.HasValue`, `Zip == nullParameter`, `string.IsNullOrEmpty(Note)`, `Note == r.NullableRootMember`); an element
+  read inside a nested lambda whose result feeds a relational (`Select(s2 => s.Floor).First() < 1`: the operand check stops
+  at lambdas so `Count(s2 => s2.City == s.City) >= 1` isn't refused). Indexed overloads and `SelectMany` over a complex
+  collection are refused by EF in every mode. In those limits the default mode serves the driver's rows. The structural
+  cost: a keyed shape is refused even over clean data and even where the driver's rows would have been right
+  (`s.Tags.Count(...) >= 0`). Ruling R25: the same net refuses a complex COLLECTION itself compared with null
+  (`r.Detours == null`, `!=`, in a predicate, projection, ternary or sort key; keyed through the scanner's structural
+  resolver, owned collections untouched): native declines it, and the driver's `{Detours: null}` also matches `[null]` (and,
+  for a required collection, a missing/null array that reads empty). Remedies the message names: `!c.X.Any()`/`c.X.Count == 0`
+  (native), or explicit `DriverLinq`.
+  `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value
+  (`MongoCurrentElementNullCheckExpression`, `$$e`), `!Contains` its exact `All` complement. The bridge coalesces a REQUIRED
+  complex collection used as an operator source to `[]` (`TryRewriteRequiredComplexCollectionSource`; it reads empty, and
+  the driver's `$size`/`$map` over null is a server error; it also serves bulk ExecuteUpdate/Delete); an optional one, or a
+  `T[]`-typed one (no `List<T>` fits), is not coalesced and stays a loud server error on the fallback. EF-337's walker resolves an
+  element parameter of a complex collection to its complex type (`ComplexCollectionElementExpression`), so a relational
+  comparison over a converted element leaf is refused on the bridge.
 - **`TranslateOperand` may return an enum-typed `MongoFieldExpression` for `(int)x.E`** over a default-serialized
   enum field (`IsEnumUnderlyingRelabel`: the stored value is already the integer), so an operand's `Type` may be the
   enum, not the cast target. Callers comparing or reading by type must allow for it.

@@ -25,6 +25,11 @@ themselves live in Storage/ValueConversion.
 - **Only string dictionary keys and rank-1 arrays** are supported (the factory throws otherwise).
 - **Entity serializers are cached per `IReadOnlyEntityType`**; mutating annotations after one is built leaves it
   stale (a trap for tests that build models on the fly).
+- **Complex type serializers (`ComplexTypeSerializer<T>`) are cached per `IReadOnlyComplexType`, not CLR type**: one
+  CLR type used at two paths is two complex types with their own element names. They exist for member lookup
+  (`TryGetMemberSerializationInfo`, so driver-LINQ and the native renderer agree on paths); `Serialize` writes null but
+  THROWS for a non-null value (ruling R1: never match a complex value by example) and `Deserialize` is not implemented.
+  Writing is `Storage/ComplexValueWriter`; reading is the Query materialization builder.
 - **Comparer signatures differ between EF8/EF9 and EF10** (`StringDictionaryComparer` has `#if` variants); new
   comparer work must compile on all three.
 - Serializers read annotations, never write them.

@@ -218,12 +218,18 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (source is ShapedQueryExpression shapedQueryExpression)
         {
             var methodDefinition = method.IsGenericMethod ? method.GetGenericMethodDefinition() : method;
+            // A set operation's second source has the same element type, which holds a complex value only if it is a
+            // complex-value projection too, so checking the first source covers both.
+            ThrowIfComplexValueOperand(shapedQueryExpression, methodDefinition);
+
             var sourceHasCaseMappingLeaf =
                 ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.HasClientCaseMappingProjectionLeaf;
             var sourceHasClientEvaluatedLeaf =
                 ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.HasClientEvaluatedProjectionLeaf;
             var sourceHasClientConditionalLeaf =
                 ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.HasClientConditionalProjectionLeaf;
+            var sourceHasComplexValueLeaf =
+                ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.HasComplexValueProjectionLeaf;
             switch (method.Name)
             {
                 // Operations that need tweaks
@@ -284,7 +290,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             // The native projection holds the raw receiver of a client-reapplied ToLower/ToUpper, so an operator that
             // reads projected values (e.g. Distinct) would see the wrong value. Marked after the switch because
             // base.VisitMethodCall re-translates the source into a new query expression.
-            if (sourceHasCaseMappingLeaf && !IsProjectedValueFreeOperator(methodDefinition))
+            // A projected whole complex value is its STORED subdocument/array (element order, unmapped elements), not the
+            // CLR value, so an operator that reads projected values (Distinct, a set op, a later Where/OrderBy/Select)
+            // would compare or read the wrong thing (HasComplexValueProjectionLeaf).
+            if ((sourceHasCaseMappingLeaf || sourceHasComplexValueLeaf) && !IsProjectedValueFreeOperator(methodDefinition))
             {
                 ((MongoQueryExpression)shapedQueryExpression.QueryExpression).Select.MarkNotNativelyRepresentable();
             }
@@ -340,6 +349,192 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
            || methodDefinition == QueryableMethods.LongCountWithoutPredicate
            || methodDefinition == QueryableMethods.AnyWithoutPredicate;
 
+    /// <summary>
+    /// Refuses, in every query mode, a value-reading operator (<c>Distinct</c>, a set operation, <c>GroupBy</c>, a later
+    /// <c>Select</c>, ...) over a source whose shaper reads a whole complex value (<see cref="MongoSelectDefinition.HasComplexValueShaperLeaf"/>;
+    /// ruling R7). No path answers it correctly: natively the operator would dedupe/combine the STORED subdocuments, and
+    /// the driver-LINQ push-down can't read a complex value back (<c>ComplexTypeSerializer</c> can't deserialize; the
+    /// shaper would see a missing element and read null/empty for an optional property or a collection). Paging and
+    /// predicate-less cardinality/count terminals don't read the values (<see cref="IsProjectedValueFreeOperator"/>).
+    /// </summary>
+    private static void ThrowIfComplexValueOperand(ShapedQueryExpression source, MethodInfo methodDefinition)
+    {
+        if (((MongoQueryExpression)source.QueryExpression).Select.HasComplexValueShaperLeaf
+            && !IsProjectedValueFreeOperator(methodDefinition))
+        {
+            throw ComplexValueOperandRefusal(methodDefinition.Name);
+        }
+    }
+
+    // The single R7 message, shared by every refusal site.
+    private static NotSupportedException ComplexValueOperandRefusal(string operatorName)
+        => new(
+            $"A projected whole complex value cannot be the operand of '{operatorName}': the MongoDB provider "
+            + "can't compare or combine complex values. Project the complex type's properties you need instead, or apply "
+            + "the operator after 'AsEnumerable()'.");
+
+    /// <summary>
+    /// Refuses (ruling R8, every mode) a GroupBy whose source projection or key selector reads a whole complex value
+    /// (<c>GroupBy(c =&gt; c.Address)</c>, an anonymous key holding one, a projected complex value upstream). A complex
+    /// LEAF key (<c>GroupBy(c =&gt; c.Address.City)</c>) is a scalar and is unaffected. Selectors are checked with the
+    /// source shaper substituted for their parameter, through the same predicate the projection binder uses
+    /// (<see cref="MongoProjectionBindingExpressionVisitor.ResolveComplexValueProperty"/>).
+    /// </summary>
+    /// <remarks>
+    /// <c>Select(c =&gt; c.Address).GroupBy(a =&gt; a.City)</c> is NOT caught here: EF rewrites it to a leaf key over the
+    /// ENTITY (<c>GroupBy(c =&gt; c.Address.City)</c>) with no element selector, erasing the complex value before
+    /// translation; its outcome equals its scalar analogue's (pinned). The element-selector branch is live only for a
+    /// join-scope grouping (EF passes <c>ti =&gt; ti.Outer</c>/<c>ti.Inner</c> as the element; measured 25 of 4477
+    /// GroupBy translations over the GroupBy and ComplexType suites); a user element selector reading a complex value
+    /// (<c>GroupBy(c =&gt; c.Rank, c =&gt; c.Address)</c>) is dropped by EF when unread, else folded into the post-group
+    /// Select, which the two-argument overload below checks. EF never passed a result selector in that measurement
+    /// (<c>GroupBy(key, resultSelector)</c> fails in EF before reaching the provider); that branch is defence in depth.
+    /// </remarks>
+    private static void ThrowIfGroupByOverComplexValue(
+        ShapedQueryExpression source, LambdaExpression keySelector, LambdaExpression? elementSelector, LambdaExpression? resultSelector)
+    {
+        if (((MongoQueryExpression)source.QueryExpression).Select.HasComplexValueShaperLeaf
+            || ReadsWholeComplexValue(source, keySelector)
+            || elementSelector != null && ReadsWholeComplexValue(source, elementSelector)
+            || resultSelector != null && WholeComplexValueReadFinder.Finds(resultSelector.Body))
+        {
+            throw ComplexValueOperandRefusal(nameof(Queryable.GroupBy));
+        }
+
+        static bool ReadsWholeComplexValue(ShapedQueryExpression source, LambdaExpression selector)
+            => WholeComplexValueReadFinder.Finds(
+                ReplacingExpressionVisitor.Replace(selector.Parameters[0], source.ShaperExpression, selector.Body));
+    }
+
+    // The post-group Select variant: the selector's parameter is the grouping; a whole complex value of an element is read
+    // inside a nested element lambda (`g.Select(x => x.Address)`) or off an element (`g.First().Address`), so look for a
+    // complex-typed member access over any entity-typed receiver in the body.
+    private static void ThrowIfGroupByOverComplexValue(ShapedQueryExpression source, LambdaExpression selector)
+    {
+        if (ComplexMemberOfEntityFinder.Finds(selector.Body, source.QueryExpression is MongoQueryExpression mq ? mq.CollectionExpression.EntityType : null))
+        {
+            throw ComplexValueOperandRefusal(nameof(Queryable.GroupBy));
+        }
+    }
+
+    // A member/EF.Property access whose receiver is typed as an entity type of the model (or a hop chain to one) and that
+    // names one of its complex properties typed as the access itself: a whole complex value read.
+    private sealed class ComplexMemberOfEntityFinder(IEntityType rootEntityType) : System.Linq.Expressions.ExpressionVisitor
+    {
+        private bool _found;
+
+        internal static bool Finds(Expression body, IEntityType? rootEntityType)
+        {
+            if (rootEntityType == null)
+            {
+                return false;
+            }
+
+            var finder = new ComplexMemberOfEntityFinder(rootEntityType);
+            finder.Visit(body);
+            return finder._found;
+        }
+
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+        {
+            if (_found || node is null)
+            {
+                return node;
+            }
+
+            if (node.TryGetMemberOrEFProperty(out var receiver, out var name) && ResolveType(receiver) is { } owner)
+            {
+                if (owner.FindComplexProperty(name) is { } complexProperty && complexProperty.ClrType == node.Type)
+                {
+                    _found = true;
+                    return node;
+                }
+
+                // A leaf (or hop) over a resolvable receiver (`x.Address.Floor`): the receiver is a hop, not a value read.
+                return node;
+            }
+
+            return node is ShapedQueryExpression or StructuralTypeShaperExpression or ProjectionBindingExpression
+                   || node.NodeType == ExpressionType.Extension && !node.CanReduce
+                ? node
+                : base.Visit(node);
+        }
+
+        // The structural type a receiver denotes: an entity type of the model by CLR type (a lambda parameter over the
+        // group's elements), or a complex hop of one.
+        private ITypeBase? ResolveType(Expression receiver)
+        {
+            receiver = receiver.RemoveConvert();
+            if (receiver.TryGetMemberOrEFProperty(out var inner, out var name))
+            {
+                return ResolveType(inner) is { } owner && owner.FindComplexProperty(name) is { IsCollection: false } hop
+                    ? hop.ComplexType
+                    : null;
+            }
+
+            return rootEntityType.Model.FindEntityType(receiver.Type) is { } entityType
+                   && (rootEntityType.IsAssignableFrom(entityType) || entityType.IsAssignableFrom(rootEntityType))
+                ? entityType
+                : null;
+        }
+    }
+
+    // Finds a member/EF.Property access that reads a whole complex value of an entity shaper (directly or through hops).
+    private sealed class WholeComplexValueReadFinder : System.Linq.Expressions.ExpressionVisitor
+    {
+        private bool _found;
+
+        // A chain of member/EF.Property accesses down to an entity shaper (no other node kind in between).
+        private static bool IsHopChain(Expression expression)
+        {
+            var current = expression.RemoveConvert();
+            while (current.TryGetMemberOrEFProperty(out var inner, out _))
+            {
+                current = inner.RemoveConvert();
+            }
+
+            return current is StructuralTypeShaperExpression;
+        }
+
+        internal static bool Finds(Expression expression)
+        {
+            var finder = new WholeComplexValueReadFinder();
+            finder.Visit(expression);
+            return finder._found;
+        }
+
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+        {
+            if (_found || node is null)
+            {
+                return node;
+            }
+
+            if (node is MemberExpression or MethodCallExpression
+                && MongoProjectionBindingExpressionVisitor.ResolveComplexValueProperty(node) != null)
+            {
+                _found = true;
+                return node;
+            }
+
+            // A member/EF.Property access over a hop chain (`c.Address.City`) reads a leaf: its receiver `c.Address` is a
+            // hop, not a whole-value read, so don't visit it (the receiver can only hold a complex read as a hop).
+            if (node.TryGetMemberOrEFProperty(out var receiver, out _) && IsHopChain(receiver))
+            {
+                return node;
+            }
+
+            // Shapers and nested queries are leaves here (walking a ShapedQueryExpression throws).
+            return node is StructuralTypeShaperExpression or ShapedQueryExpression or ProjectionBindingExpression
+                ? node
+                : node.NodeType == ExpressionType.Extension && !node.CanReduce && node is not IncludeExpression
+                    ? node
+                    : base.Visit(node);
+        }
+    }
+
     private static bool IsSetOperation(MethodInfo methodDefinition)
         => methodDefinition == QueryableMethods.Union
            || methodDefinition == QueryableMethods.Concat
@@ -347,6 +542,38 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
            || methodDefinition == QueryableMethods.Except;
 
     protected override ShapedQueryExpression TranslateSelect(ShapedQueryExpression source, LambdaExpression selector)
+    {
+        // Every arm below returns its shaper through here, so the complex-value refusal flag is set from ONE predicate
+        // whichever arm built the shaper (generic fold, positional-ctor, join scope, GroupBy, SelectMany, ...).
+        // A post-group Select reading a whole complex value of the group's elements (`g.Select(x => x.Address)`,
+        // `g.First().Address`): refused like a complex grouping key (ruling R8).
+        if (source.ShaperExpression is GroupByShaperExpression)
+        {
+            ThrowIfGroupByOverComplexValue(source, selector);
+        }
+
+        var translated = TranslateSelectCore(source, selector);
+        RecordComplexValueShaperLeaf(translated);
+        return translated;
+    }
+
+    /// <summary>
+    /// Sets <see cref="MongoSelectDefinition.HasComplexValueShaperLeaf"/> when the projection reads a whole complex value:
+    /// the shaper holds a <see cref="ComplexValueProjectionExpression"/> at any depth, or the native projection staged one
+    /// (<see cref="MongoSelectDefinition.HasComplexValueProjectionLeaf"/>). The second input is a seam, not reachable today
+    /// (every arm that stages a complex value also binds the node: positional ctors decline one); kept so a future arm that
+    /// stages one without the node is still refused. The single source for <see cref="ThrowIfComplexValueOperand"/>.
+    /// </summary>
+    private static void RecordComplexValueShaperLeaf(ShapedQueryExpression translated)
+    {
+        var select = ((MongoQueryExpression)translated.QueryExpression).Select;
+        if (select.HasComplexValueProjectionLeaf || ComplexValueProjectionExpression.IsContainedIn(translated.ShaperExpression))
+        {
+            select.HasComplexValueShaperLeaf = true;
+        }
+    }
+
+    private ShapedQueryExpression TranslateSelectCore(ShapedQueryExpression source, LambdaExpression selector)
     {
         // The selector the native projection binder sees: Tuple.Create(..) normalized to a construction. Equal to `selector`
         // unless that rewrite applies and native admits it (see the native projection branch below).
@@ -760,6 +987,13 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             leafSource => ReplacingExpressionVisitor.Replace(selector.Parameters.Single(), source.ShaperExpression, leafSource));
 
         var newShaper = _projectionBindingExpressionVisitor.Translate(mongoQueryExpression, newSelectorBody);
+
+        // A selector node the binder couldn't bind became a default(T) stand-in; running that natively would silently
+        // read default (null rows). Decline so the query takes the driver-LINQ path (NativeOnly throws).
+        if (_projectionBindingExpressionVisitor.TranslationFailed)
+        {
+            mongoQueryExpression.Select.MarkNotNativelyRepresentable();
+        }
 
         return source.UpdateShaperExpression(newShaper);
     }
@@ -1264,7 +1498,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     /// projection at the element type.</item>
     /// <item>No property (scalar or complex) whose element name is <see cref="MongoReplaceRootStage.ShadowField"/>:
     /// the sentinel is merged after the element, so it would silently overwrite that field. Complex properties
-    /// need a separate check (<see cref="GetComplexPropertyElementName"/>) because
+    /// need a separate check (<see cref="MongoStructuralMemberExtensions.GetElementName(IReadOnlyComplexProperty)"/>) because
     /// <see cref="IEntityType.GetProperties"/> doesn't include them.</item>
     /// <item>Every owned-key property (<see cref="MongoPropertyExtensions.IsOwnedTypeKey"/>) has default
     /// serialization (<see cref="NativeGroupByBinder.HasDefaultKeySerialization"/>): the <c>__ownerKey</c>
@@ -1280,19 +1514,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         return !innerEntityType.GetNavigations().Any(n => !n.IsEmbedded())
                && innerEntityType.GetProperties().All(p => p.GetElementName() != MongoReplaceRootStage.ShadowField)
                && innerEntityType.GetComplexProperties().All(c =>
-                   GetComplexPropertyElementName(c) != MongoReplaceRootStage.ShadowField)
+                   c.GetElementName() != MongoReplaceRootStage.ShadowField)
                && innerEntityType.GetProperties().Where(p => p.IsOwnedTypeKey())
                    .All(NativeGroupByBinder.HasDefaultKeySerialization);
     }
-
-    /// <summary>
-    /// The element name a complex property occupies, read from the same <c>Mongo:ElementName</c> annotation as
-    /// <see cref="MongoPropertyExtensions.GetElementName(IReadOnlyProperty)"/>, falling back to the CLR name.
-    /// There is no complex-property overload of <c>GetElementName</c>.
-    /// </summary>
-    private static string GetComplexPropertyElementName(IReadOnlyComplexProperty complexProperty)
-        => (string?)complexProperty[MongoDB.EntityFrameworkCore.Metadata.MongoAnnotationNames.ElementName]
-           ?? complexProperty.Name;
 
     /// <summary>
     /// Whether <paramref name="selector"/> is the <c>Select(x =&gt; IncludeExpression)</c> nav-expansion generates
@@ -1869,6 +2094,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         var parsed = setters
             .Select(s => BuildSetter(mongoQueryExpression, s.PropertySelector, s.ValueExpression))
             .ToList();
+        ThrowIfSetterPathsOverlap(mongoQueryExpression, parsed);
         return new MongoNonQueryExpression(mongoQueryExpression, parsed, strategy);
     }
 #else
@@ -1904,12 +2130,45 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 + "to indicate the properties to be updated.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
         }
 
+        ThrowIfSetterPathsOverlap(mongoQueryExpression, parsed);
         return new MongoNonQueryExpression(mongoQueryExpression, parsed, strategy);
     }
 #endif
+
+    /// <summary>
+    /// Refuses two setters where one's stored path is a strict prefix of the other's (<c>SetProperty(c => c.Address, v)</c>
+    /// with <c>SetProperty(c => c.Address.City, x)</c>): the server rejects such a <c>$set</c> ("would create a conflict")
+    /// only when the command runs. Only complex targets have dotted paths, and the model validator keeps element names
+    /// unique per document level, so root-scalar-only updates never overlap (a strict no-op for them). The same path set
+    /// twice is not an overlap: the update document keeps the last value, as before.
+    /// </summary>
+    private void ThrowIfSetterPathsOverlap(
+        MongoQueryExpression mongoQueryExpression,
+        IReadOnlyList<MongoNonQueryExpression.Setter> setters)
+    {
+        for (var i = 1; i < setters.Count; i++)
+        {
+            var path = setters[i].StoredPath;
+            for (var j = 0; j < i; j++)
+            {
+                var earlier = setters[j].StoredPath;
+                if (path.StartsWith(earlier + ".", StringComparison.Ordinal)
+                    || earlier.StartsWith(path + ".", StringComparison.Ordinal))
+                {
+                    AddTranslationErrorDetails(
+                        $"ExecuteUpdate cannot set both '{earlier}' and '{path}' of '{mongoQueryExpression.CollectionExpression.EntityType.DisplayName()}': "
+                        + "one is stored inside the other, and MongoDB rejects an update that sets both. Set either the whole value "
+                        + "or its members, not both.");
+                    throw new InvalidOperationException(
+                        CoreStrings.NonQueryTranslationFailedWithDetails(
+                            ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Parses a <c>SetProperty(selector, value)</c> into a <see cref="MongoNonQueryExpression.Setter"/>. The selector
@@ -1929,7 +2188,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             selectorBody = convert.Operand;
         }
 
-        IProperty? property = null;
+        IPropertyBase? property = null;
+        string? complexElementPath = null;
         if (selectorBody is MemberExpression { Expression: var memberSource } member
             && memberSource != null
             && propertySelector.Parameters.Count == 1
@@ -1948,14 +2208,25 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             property = entityType.FindProperty(efPropertyName);
         }
 
+        // A complex target: a scalar leaf through single complex hops (`c => c.Address.City`, `c.Address.Location.Lat`), or
+        // a whole complex property / collection (`c => c.Address`). Resolved structurally to the stored path, so element-name
+        // overrides apply; a hop with an OPTIONAL ancestor is refused (see TryResolveComplexSetterTarget).
+        if (property == null
+            && TryResolveComplexSetterTarget(mongoQueryExpression, entityType, propertySelector, selectorBody, out var complexTarget, out var complexPath))
+        {
+            property = complexTarget;
+            complexElementPath = complexPath;
+        }
+
         if (property == null)
         {
             AddTranslationErrorDetails(
-                "Only mapped root scalar properties can be updated by a bulk update. The setter target "
-                + $"'{propertySelector.Body}' is not a mapped scalar property of '{entityType.DisplayName()}'.");
+                "Only mapped root scalar properties can be updated by a bulk update, and, through complex properties, their scalar "
+                + $"properties and whole complex properties. The setter target '{ExpressionShapePrinter.Print(propertySelector.Body)}' is not a mapped scalar "
+                + $"property of '{entityType.DisplayName()}'.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
         }
 
         // EF9 self-referencing: value is a quoted Func<T,TProp> lambda; unwrap and detect a reference to its parameter.
@@ -1974,16 +2245,115 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             isSelfReferencing = ParameterFinder.ContainsAny(value, propertySelector.Parameters);
         }
 
-        if (isSelfReferencing && property.GetTypeMapping().Converter != null)
+        if (isSelfReferencing && property is IProperty scalar && scalar.GetTypeMapping().Converter != null)
         {
             AddTranslationErrorDetails(
                 $"Self-referencing ExecuteUpdate on property '{property.Name}' is not supported because it uses a value converter.");
             throw new InvalidOperationException(
                 CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
         }
 
-        return new MongoNonQueryExpression.Setter(property, value, isSelfReferencing);
+        // A self-referencing value for a complex LEAF stored with a BsonRepresentation would be written in the value's own
+        // BSON type (an int into a field stored as a string), then miss every equality filter on the stored form. Refused for
+        // complex leaves only: root scalars have the same pre-existing behaviour, which is pinned and left unchanged.
+        if (isSelfReferencing && complexElementPath is not null && property is IProperty representedLeaf
+            && representedLeaf.GetBsonRepresentation() is not null)
+        {
+            AddTranslationErrorDetails(
+                $"Self-referencing ExecuteUpdate on property '{property.Name}' is not supported because it is stored with a "
+                + "BsonRepresentation, which the computed value would not be written in.");
+            throw new InvalidOperationException(
+                CoreStrings.NonQueryTranslationFailedWithDetails(
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
+        }
+
+        // A whole complex value computed from the row (`c.Billing = c.Shipping`) would copy the STORED subdocument, whose
+        // element names, converters and representations belong to the source property, and the driver can't render a
+        // complex value (ruling R1): refused rather than written in the wrong stored form.
+        if (isSelfReferencing && property is IComplexProperty selfReferencedComplex)
+        {
+            AddTranslationErrorDetails(
+                $"ExecuteUpdate cannot set the complex property '{selfReferencedComplex.DeclaringType.DisplayName()}.{selfReferencedComplex.Name}' "
+                + "from a value that reads the entity being updated. Set its scalar properties individually "
+                + "(SetProperty(e => e.Complex.Member, e => ...)), or set it to a value computed on the client.");
+            throw new InvalidOperationException(
+                CoreStrings.NonQueryTranslationFailedWithDetails(
+                    ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
+        }
+
+        return new MongoNonQueryExpression.Setter(property, value, isSelfReferencing, complexElementPath);
+    }
+
+    /// <summary>
+    /// Resolves a <c>SetProperty</c> target reached through complex properties: a scalar leaf of a (nested) complex property
+    /// or a whole complex property / complex collection, to the property and its dotted stored path
+    /// (<see cref="StructuralPath.TryResolve"/>, so element-name overrides apply). Leaves of complex COLLECTION elements are
+    /// not addressable by one path and are not resolved here.
+    /// </summary>
+    /// <remarks>
+    /// A target below an OPTIONAL complex property (EF10) is refused: the server's <c>$set</c> of a dotted path under a null
+    /// parent is an error ("Cannot create field ... in element {Opt: null}") raised mid-operation (documents before it are
+    /// already written), and the pipeline form silently creates a parent holding only that member (its other required
+    /// members then read as missing). Setting the optional property itself is supported.
+    /// </remarks>
+    private bool TryResolveComplexSetterTarget(
+        MongoQueryExpression mongoQueryExpression,
+        IEntityType entityType,
+        LambdaExpression propertySelector,
+        Expression selectorBody,
+        [NotNullWhen(true)] out IPropertyBase? target,
+        [NotNullWhen(true)] out string? path)
+    {
+        target = null;
+        path = null;
+        if (propertySelector.Parameters.Count != 1)
+        {
+            return false;
+        }
+
+        var names = new List<string>();
+        var current = selectorBody.RemoveConvert()!;
+        while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
+        {
+            names.Insert(0, name);
+            current = receiver.RemoveConvert()!;
+        }
+
+        if (names.Count == 0 || !ReferenceEquals(current, propertySelector.Parameters[0])
+            || !StructuralPath.TryResolve(entityType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not (IProperty or IComplexProperty))
+        {
+            return false;
+        }
+
+        // Every hop must be a complex property (an owned navigation hop is not a bulk-update target; complex properties
+        // directly on the entity have no hop).
+        ITypeBase hopScope = entityType;
+        for (var i = 0; i < names.Count - 1; i++)
+        {
+            if (hopScope.FindComplexProperty(names[i]) is not { IsCollection: false } hop)
+            {
+                return false;
+            }
+
+            if (hop.IsOptional())
+            {
+                AddTranslationErrorDetails(
+                    $"ExecuteUpdate cannot set '{ExpressionShapePrinter.Print(propertySelector.Body)}' because '{hop.DeclaringType.DisplayName()}.{hop.Name}' is an "
+                    + "optional complex property, which may be null in a stored document: the server cannot set a member of a null "
+                    + "value. Set the whole optional complex property instead (SetProperty(e => e.Optional, value)).");
+                throw new InvalidOperationException(
+                    CoreStrings.NonQueryTranslationFailedWithDetails(
+                        ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
+            }
+
+            hopScope = hop.ComplexType;
+        }
+
+        target = (IPropertyBase)resolved.Leaf;
+        path = string.Join(".", resolved.Segments);
+        return true;
     }
 
     private static bool IsQuotedLambda(Expression expression)
@@ -2080,7 +2450,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             + "operators can scope a bulk operation.");
         throw new InvalidOperationException(
             CoreStrings.NonQueryTranslationFailedWithDetails(
-                mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+                ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails));
     }
 #endif
 
@@ -2329,6 +2699,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         // The base TranslateGroupBy is abstract, so the grouped query is built here. Native supports only
         // GroupBy(key).Select(aggregate), over the root collection or an eligible join scope
         // (TryGetGroupByJoinScope); a non-null resultSelector or an unbindable key marks non-native.
+        ThrowIfGroupByOverComplexValue(source, keySelector, elementSelector, resultSelector);
         var mongoQueryExpression = (MongoQueryExpression)source.QueryExpression;
 
         // A GroupBy over an existing grouping/distinct terminal must not rebind by default: TryBindGroupKey would
@@ -2599,7 +2970,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         if (joinInfo.Navigation == null)
         {
             // Navigation-less: the Lookup was built directly from these key selectors, so it matches by
-            // construction.
+            // construction (the raw-key builder resolves only direct reads: IsDirectKeyRead).
             return true;
         }
 
@@ -2622,7 +2993,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     {
         var outerKeyName = outerKeySelector.Body.TryGetSimplePropertyName();
         var innerKeyName = innerKeySelector.Body.TryGetSimplePropertyName();
-        if (outerKeyName == null || innerKeyName == null)
+        // The inner key is looked up by name on the inner ROOT type, so it must be a direct read (IsDirectKeyRead): a hop key
+        // `a => a.Ref.Id` would otherwise match the PK `Id` and keep the navigation's `_id` $lookup. The outer key resolves on
+        // the navigation's declaring type, which already accounts for owned segments (EF-380).
+        if (outerKeyName == null || innerKeyName == null || !IsDirectKeyRead(innerKeySelector))
         {
             return false;
         }
@@ -2679,20 +3053,46 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
     }
 
     /// <summary>
-    /// Resolves the raw outer/inner key properties a navigation-less (EF-377) join <c>$lookup</c> is built from:
-    /// <paramref name="fkPropertyName"/> on <paramref name="fkOwnerEntityType"/> (the root, or a transitive hop's
-    /// target) and the inner key selector's simple property on <paramref name="innerEntityType"/>.
+    /// Resolves the raw outer/inner key properties a navigation-less (EF-377) join <c>$lookup</c> is built from: the outer
+    /// key selector's property on <paramref name="fkOwnerEntityType"/> (the root, or a transitive hop's target) and the
+    /// inner key selector's on <paramref name="innerEntityType"/>. Both must be direct reads (<see cref="IsDirectKeyRead"/>).
     /// </summary>
     private static bool TryResolveRawKeyJoinProperties(
         IEntityType fkOwnerEntityType,
         IEntityType innerEntityType,
-        string? fkPropertyName,
+        LambdaExpression outerKeySelector,
         LambdaExpression innerKeySelector,
         [NotNullWhen(true)] out IProperty? outerProperty,
         [NotNullWhen(true)] out IProperty? innerProperty)
-        => TryResolveRawKeyJoinProperties(
-            fkOwnerEntityType, innerEntityType, fkPropertyName, innerKeySelector.Body.TryGetSimplePropertyName(),
-            out outerProperty, out innerProperty);
+    {
+        if (!IsDirectKeyRead(outerKeySelector) || !IsDirectKeyRead(innerKeySelector))
+        {
+            outerProperty = innerProperty = null;
+            return false;
+        }
+
+        return TryResolveRawKeyJoinProperties(
+            fkOwnerEntityType, innerEntityType, outerKeySelector.Body.TryGetSimplePropertyName(),
+            innerKeySelector.Body.TryGetSimplePropertyName(), out outerProperty, out innerProperty);
+    }
+
+    /// <summary>
+    /// Whether a join key selector reads ONE property directly off its scope: the key parameter itself, or a
+    /// TransparentIdentifier <c>Outer</c>/<c>Inner</c> chain over it (a prior join's side), with no owned-navigation or
+    /// complex-property hop in between. Only such a key may be resolved by its property NAME (raw-key <c>$lookup</c>,
+    /// navigation key matching, the driver-LINQ bridge's key path): a hop key (<c>x =&gt; x.Ship.City</c>) has the same
+    /// simple name as the scope's own <c>City</c>, and resolving it by name silently joins on the wrong field.
+    /// </summary>
+    internal static bool IsDirectKeyRead(LambdaExpression keySelector)
+    {
+        var target = GetKeySelectorTargetObject(keySelector.Body)?.RemoveConvert();
+        while (target is MemberExpression step && step.IsTransparentIdentifierOuterOrInnerAccess())
+        {
+            target = step.Expression?.RemoveConvert();
+        }
+
+        return target != null && ReferenceEquals(target, keySelector.Parameters[0]);
+    }
 
     private static bool TryResolveRawKeyJoinProperties(
         IEntityType fkOwnerEntityType,
@@ -3017,6 +3417,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         INavigation? navigation = null;
         JoinInfo? throughJoin = null;
         string? embeddedPath = null;
+        var unresolvableKeyPath = false;
 
         // A transitive join resolves the navigation on the join hop the key selector actually reaches through (found
         // by position, not by IEntityType — see above) and remembers it so the $lookup's localField can be prefixed
@@ -3036,8 +3437,10 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 {
                     if (searchEntityType.FindNavigation(segment) is not { } segmentNavigation)
                     {
-                        // Unresolvable embedded path: search the anchor itself, as if there were no segments.
-                        searchEntityType = anchorEntityType;
+                        // Unresolvable embedded path (e.g. a complex-property hop, `x.Ship.City`): no navigation's $lookup
+                        // implements a key read inside it, and searching the anchor instead would match the leaf NAME
+                        // against the anchor's own same-named FK (silently joining on `ClientId` for `x.Ship.ClientId`).
+                        unresolvableKeyPath = true;
                         elementSegments = null;
                         break;
                     }
@@ -3052,7 +3455,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 }
             }
 
-            if (fkPropertyName != null)
+            // An unresolvable key path resolves no navigation; the raw-key branch declines a hop key too (IsDirectKeyRead).
+            if (!unresolvableKeyPath && fkPropertyName != null)
             {
                 // IsOnDependent disambiguates a self-referencing relationship declared with both a reference nav
                 // (Manager) and its inverse collection nav (DirectReports): both share the same IForeignKey, and picking
@@ -3063,8 +3467,11 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                                          && n.ForeignKey.Properties.Any(p => p.Name == fkPropertyName));
             }
 
-            navigation ??= searchEntityType.GetNavigations()
-                .FirstOrDefault(n => n.TargetEntityType == innerEntityType);
+            if (!unresolvableKeyPath)
+            {
+                navigation ??= searchEntityType.GetNavigations()
+                    .FirstOrDefault(n => n.TargetEntityType == innerEntityType);
+            }
         }
 
         // A navigation resolved above — by the FK match OR the loose "any navigation onto the joined type"
@@ -3083,7 +3490,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
                 BuildNavigationJoinLookup(navigation, alias: "", joinInfo.IsLeftOuter, throughJoin, embeddedPath),
                 navigation, innerEntityType, outerKeySelector, innerKeySelector)
             && TryResolveRawKeyJoinProperties(
-                throughJoin?.InnerEntityType ?? outerEntityType, innerEntityType, fkPropertyName, innerKeySelector,
+                throughJoin?.InnerEntityType ?? outerEntityType, innerEntityType, outerKeySelector, innerKeySelector,
                 out _, out _))
         {
             navigation = null;
@@ -3134,7 +3541,7 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
             // outer/inner key property paths. The FK-owning entity type is the root when isDirectFromRoot, else the
             // through-hop's target; localField is scoped by the through-hop's alias as for a transitive navigation hop.
             if (TryResolveRawKeyJoinProperties(
-                    throughJoin?.InnerEntityType ?? outerEntityType, innerEntityType, fkPropertyName, innerKeySelector,
+                    throughJoin?.InnerEntityType ?? outerEntityType, innerEntityType, outerKeySelector, innerKeySelector,
                     out var outerProperty, out var innerProperty))
             {
                 joinInfo.Lookup = BuildRawKeyJoinLookup(
@@ -3783,6 +4190,8 @@ internal sealed class MongoQueryableMethodTranslatingExpressionVisitor : Queryab
         => mongo.Select.Route == NativeRoute.Projection
            && mongo.Select.Projection.Count > 0
            && !mongo.Select.HasArrayProjectionLeaf
+           // A stored complex subdocument is not the CLR value the combine would dedup/compare.
+           && !mongo.Select.HasComplexValueProjectionLeaf
            // The raw case-mapping receiver would be what the combine dedups/compares.
            && !mongo.Select.HasClientCaseMappingProjectionLeaf
            // A client-evaluated leaf is never projected: the combine would dedup without it, and source1's shaper

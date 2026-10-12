@@ -173,6 +173,79 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
     private bool IsMappedEntityType(Type type)
         => _queryContext.Context.Model.FindEntityTypes(type).Any();
 
+    // A mapped scalar property `name` read through a chain of single complex-property hops over an entity
+    // (`c.Address.City`, `c.Address.Location.Lat`), or empty when `memberOwner` is not such a chain. The leaf of a complex
+    // type has no entity owner, so FindMappedProperties alone never sees it.
+    private IEnumerable<IProperty> FindComplexLeafProperties(Expression memberOwner, string name)
+        => FindComplexHopTypes(memberOwner)
+            .Select(t => t.FindProperty(name))
+            .OfType<IProperty>();
+
+    // The complex types `expression` denotes when it is a (possibly nested) single complex-property hop over a mapped
+    // entity, or a value that is an ELEMENT of a complex collection (a lambda parameter ranging over `c.Lines`, resolved
+    // through ParameterSources), or a hop below such an element; empty otherwise. A complex collection itself is an array,
+    // whose elements are reached by an operator, not a hop.
+    private IReadOnlyList<IComplexType> FindComplexHopTypes(Expression expression)
+    {
+        string hopName;
+        Expression hopOwner;
+        switch (StripConverts(expression))
+        {
+            case ComplexCollectionElementExpression element:
+                return element.ElementTypes;
+
+            case ParameterExpression parameter when !IsMappedEntityType(parameter.Type):
+                return FindParameterElements(parameter) is { Count: > 0 } elements
+                       && elements.All(e => e is ComplexCollectionElementExpression)
+                    ? [.. elements.OfType<ComplexCollectionElementExpression>().SelectMany(e => e.ElementTypes)]
+                    : [];
+
+            case MemberExpression { Expression: { } owner } member:
+                hopOwner = owner;
+                hopName = member.Member.Name;
+                break;
+            case MethodCallExpression call
+                when call.Method.IsEFPropertyMethod() && call.Arguments is [{ } source, ConstantExpression { Value: string efName }, ..]:
+                hopOwner = source;
+                hopName = efName;
+                break;
+            default:
+                return [];
+        }
+
+        // A downcast receiver (`((Cat)a).Vet`) resolves against the cast type, which declares the member.
+        var ownerType = MemberOwnerType.Of(hopOwner);
+        IEnumerable<ITypeBase> owners = IsMappedEntityType(ownerType)
+            ? _queryContext.Context.Model.FindEntityTypes(ownerType)
+            : FindComplexHopTypes(hopOwner);
+
+        return owners
+            .Select(t => t.FindComplexProperty(hopName))
+            .Where(p => p is { IsCollection: false })
+            .Select(p => p!.ComplexType)
+            .ToList();
+    }
+
+    // The element complex types of `sequence` when it is a complex collection read off a mapped entity or a complex hop.
+    private IReadOnlyList<IComplexType> FindComplexCollectionElementTypes(Expression sequence)
+    {
+        if (!StripConverts(sequence).TryGetMemberOrEFProperty(out var owner, out var name))
+        {
+            return [];
+        }
+
+        var ownerType = MemberOwnerType.Of(owner);
+        IEnumerable<ITypeBase> owners = IsMappedEntityType(ownerType)
+            ? _queryContext.Context.Model.FindEntityTypes(ownerType)
+            : FindComplexHopTypes(owner);
+
+        return owners
+            .Select(t => t.FindComplexProperty(name))
+            .Where(p => p is { IsCollection: true })
+            .Select(p => p!.ComplexType)
+            .ToList();
+    }
+
     private Dictionary<ParameterExpression, Expression[]> ParameterSources
         => _storedOrderingParameterSources ??= LambdaParameterSourceCollector.Collect(_storedOrderingQueryRoots);
 
@@ -194,6 +267,13 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
             return [];
         }
 
+        // A complex collection (`c.Lines`, `c.Address.Lines`, EF.Property spellings): its elements are complex values,
+        // whose leaves are stored scalars to check (FindComplexHopTypes resolves a member of one).
+        if (FindComplexCollectionElementTypes(sequence) is { Count: > 0 } complexElementTypes)
+        {
+            return [new ComplexCollectionElementExpression(complexElementTypes, sequence.Type.TryGetItemType()!)];
+        }
+
         // A mapped primitive collection (`x.Scores`, EF.Property(x, "Scores")): its elements are stored values of that
         // property.
         if (sequence.Type.TryGetItemType() is { } primitiveItemType)
@@ -201,8 +281,8 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
             var collectionProperties = sequence switch
             {
                 MemberExpression { Expression: { } collectionOwner, Member: var collectionMember }
-                    when IsMappedEntityType(StripConverts(collectionOwner).Type)
-                    => FindMappedProperties(StripConverts(collectionOwner).Type, collectionMember.Name).ToList(),
+                    when IsMappedEntityType(MemberOwnerType.Of(collectionOwner))
+                    => FindMappedProperties(MemberOwnerType.Of(collectionOwner), collectionMember.Name).ToList(),
                 MethodCallExpression { Method: var efProperty, Arguments: [{ } collectionSource, ConstantExpression { Value: string collectionName }, ..] }
                     when efProperty.IsEFPropertyMethod() && IsMappedEntityType(collectionSource.Type)
                     => FindMappedProperties(collectionSource.Type, collectionName).ToList(),
@@ -461,7 +541,11 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
 
                 case MethodCallExpression { Method: var efProperty, Arguments: [{ } source, ConstantExpression { Value: string name }, ..] }
                     when efProperty.IsEFPropertyMethod():
-                    if (owner.IsMappedEntityType(source.Type))
+                    if (owner.FindComplexHopTypes(source) is { Count: > 0 })
+                    {
+                        CheckProperties(owner.FindComplexLeafProperties(source, name));
+                    }
+                    else if (owner.IsMappedEntityType(source.Type))
                     {
                         CheckProperties(owner.FindMappedProperties(source.Type, name));
                     }
@@ -619,7 +703,14 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
 
         private void WalkMember(Expression memberOwner, MemberInfo member)
         {
-            var ownerType = StripConverts(memberOwner).Type;
+            // A leaf of a complex property (`c.Address.City`) is a stored scalar like an entity property.
+            if (owner.FindComplexHopTypes(memberOwner) is { Count: > 0 })
+            {
+                CheckProperties(owner.FindComplexLeafProperties(memberOwner, member.Name));
+                return;
+            }
+
+            var ownerType = MemberOwnerType.Of(memberOwner);
             if (owner.IsMappedEntityType(ownerType))
             {
                 // A scalar property is checked; a navigation yields an entity/collection, not an ordered value.
@@ -772,6 +863,18 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
         }
     }
 
+    // An element of a complex collection (`c.Lines`): a complex value whose leaves are stored scalars of these types.
+    private sealed class ComplexCollectionElementExpression(IReadOnlyList<IComplexType> elementTypes, Type elementType) : Expression
+    {
+        public IReadOnlyList<IComplexType> ElementTypes { get; } = elementTypes;
+
+        public override ExpressionType NodeType => ExpressionType.Extension;
+
+        public override Type Type { get; } = elementType;
+
+        protected override Expression VisitChildren(System.Linq.Expressions.ExpressionVisitor visitor) => this;
+    }
+
     // The element of a mapped primitive collection (`x.Scores`): a stored value of that property.
     private sealed class StoredCollectionElementExpression(IReadOnlyList<IProperty> collections, Type elementType) : Expression
     {
@@ -838,7 +941,9 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
         {
             if (node.Expression is { } memberOwner)
             {
-                Check(StripConverts(memberOwner).Type, node.Member.Name);
+                Check(MemberOwnerType.Of(memberOwner), node.Member.Name);
+                Found ??= owner.FindComplexLeafProperties(memberOwner, node.Member.Name)
+                    .FirstOrDefault(p => !owner.PreservesStoredOrdering(p, use));
             }
 
             return base.VisitMember(node);
@@ -850,6 +955,7 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
                 && node.Arguments is [{ } source, ConstantExpression { Value: string name }, ..])
             {
                 Check(source.Type, name);
+                Found ??= owner.FindComplexLeafProperties(source, name).FirstOrDefault(p => !owner.PreservesStoredOrdering(p, use));
             }
 
             // Only what flows into a sequence's elements can reach a value read from it: a filter predicate, a sort key

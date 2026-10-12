@@ -74,6 +74,7 @@ public class MongoModelValidator : ModelValidator
         ValidateMaximumOneRowVersionPerEntity(model);
         ValidateNoConcurrencyTokensOnOwnedEntities(model);
         ValidateNoUnsupportedAttributesOrAnnotations(model);
+        ValidateComplexCollectionClrTypes(model);
         ValidateElementNames(model);
         ValidateOwnedTypeMappingConsistency(model);
         ValidateNoMutableKeys(model, logger);
@@ -198,6 +199,8 @@ public class MongoModelValidator : ModelValidator
     {
         foreach (var entityType in model.GetEntityTypes())
         {
+            ValidateNoConcurrencyTokensInsideComplexTypes(entityType);
+
             if (entityType.IsDocumentRoot()) continue;
 
             var concurrencyToken = entityType.GetProperties().FirstOrDefault(p => p.IsConcurrencyToken);
@@ -213,6 +216,34 @@ public class MongoModelValidator : ModelValidator
     }
 
     /// <summary>
+    /// Validate that no property of a complex type (nested and complex collections included) is a concurrency token or
+    /// row version.
+    /// </summary>
+    /// <remarks>
+    /// The update filter is built only from the entity type's own properties (<c>MongoUpdate.WriteConcurrencyTokens</c>)
+    /// and a row version is only generated for them, so a token inside a complex type would be silently ignored: a
+    /// conflicting save would succeed and overwrite the other change. Measured on EF8, EF9 and EF10 before this check.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">When a concurrency token is configured inside a complex type.</exception>
+    private static void ValidateNoConcurrencyTokensInsideComplexTypes(ITypeBase type)
+    {
+        foreach (var complexProperty in type.GetDeclaredComplexProperties())
+        {
+            var concurrencyToken = complexProperty.ComplexType.GetDeclaredProperties().FirstOrDefault(p => p.IsConcurrencyToken);
+            if (concurrencyToken != null)
+            {
+                throw new NotSupportedException(
+                    MemberOnType(concurrencyToken) +
+                    " is configured as a concurrency token or row version, but it belongs to a complex type." +
+                    " Concurrency tokens are only supported on the document-root entity, where they" +
+                    " guard the whole document including its complex properties.");
+            }
+
+            ValidateNoConcurrencyTokensInsideComplexTypes(complexProperty.ComplexType);
+        }
+    }
+
+    /// <summary>
     /// Validate that no unsupported attributes or annotations are applied anywhere on the entities.
     /// </summary>
     /// <param name="model">The <see cref="IModel"/> to validate for correctness.</param>
@@ -221,12 +252,71 @@ public class MongoModelValidator : ModelValidator
     {
         foreach (var entityType in model.GetEntityTypes())
         {
-            ValidateNoUnsupportedClassAttributes(entityType);
-            ValidateNoUnsupportedConstructorAttributes(entityType);
-            ValidateNoUnsupportedMethodAttributes(entityType);
-            ValidateNoUnsupportedPropertyAnnotations(entityType);
+            ValidateNoUnsupportedAttributesOrAnnotations(entityType);
         }
     }
+
+    /// <summary>
+    /// Validate one entity type, and every complex type reached through its declared complex properties (references and
+    /// collections, at every depth), with the same checks and messages: a complex type's members are serialized by the
+    /// provider exactly as an owned type's are, so an attribute that would be silently ignored is rejected for both.
+    /// </summary>
+    /// <param name="type">The entity type or complex type being validated.</param>
+    /// <exception cref="NotSupportedException">When an unsupported attribute or annotation is encountered.</exception>
+    private static void ValidateNoUnsupportedAttributesOrAnnotations(ITypeBase type)
+    {
+        ValidateNoUnsupportedClassAttributes(type);
+        ValidateNoUnsupportedConstructorAttributes(type);
+        ValidateNoUnsupportedMethodAttributes(type);
+        ValidateNoUnsupportedPropertyAnnotations(type);
+
+        foreach (var complexProperty in type.GetDeclaredComplexProperties())
+        {
+            ValidateNoUnsupportedAttributesOrAnnotations(complexProperty.ComplexType);
+        }
+    }
+
+    /// <summary>
+    /// Validate that every complex collection (EF10) has a CLR type EF Core can materialize and save.
+    /// </summary>
+    /// <remarks>
+    /// EF accepts an array (<c>T[]</c>) or a collection class without a public parameterless constructor (e.g.
+    /// <c>ReadOnlyCollection&lt;T&gt;</c>) as a complex collection in the model, but every whole-entity read then fails in
+    /// EF's collection accessor ("Collection navigations cannot be arrays" / "not possible to create a concrete instance")
+    /// and SaveChanges fails ("Collection was of a fixed size"). Measured per CLR type on EF10; refused up front instead.
+    /// Interfaces EF accepts (<c>IList&lt;T&gt;</c>) are instantiated as <c>List&lt;T&gt;</c> and work.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">When a complex collection has an unusable CLR type.</exception>
+    private static void ValidateComplexCollectionClrTypes(IModel model)
+    {
+        foreach (var entityType in model.GetEntityTypes())
+        {
+            ValidateComplexCollectionClrTypes(entityType);
+        }
+    }
+
+    private static void ValidateComplexCollectionClrTypes(ITypeBase type)
+    {
+        foreach (var complexProperty in type.GetDeclaredComplexProperties())
+        {
+            var clrType = complexProperty.ClrType;
+            if (complexProperty.IsEmbeddedCollection()
+                && (clrType.IsArray
+                    || (!clrType.IsInterface && (clrType.IsAbstract || clrType.GetConstructor(Type.EmptyTypes) == null))))
+            {
+                throw new NotSupportedException(
+                    MemberOnType(complexProperty) + $" is a complex collection of CLR type '{clrType.ShortDisplayName()}', which"
+                    + " EF Core cannot materialize or save: arrays and collection types without a public parameterless"
+                    + " constructor are not supported. Declare it as List<T>, IList<T>, or another mutable collection type"
+                    + " with a public parameterless constructor.");
+            }
+
+            ValidateComplexCollectionClrTypes(complexProperty.ComplexType);
+        }
+    }
+
+    private static string TypeNoun(IReadOnlyTypeBase type)
+        => type is IReadOnlyEntityType ? "Entity" : "Complex type";
 
     /// <summary>
     /// Validate that no unsupported attributes are defined on the entity type.
@@ -239,7 +329,7 @@ public class MongoModelValidator : ModelValidator
         if (unsupported == null) return;
 
         var attributeTypeName = unsupported.GetType().ShortDisplayName();
-        throw new NotSupportedException($"Entity '{entityType.DisplayName()}' is annotated with unsupported attribute '{
+        throw new NotSupportedException($"{TypeNoun(entityType)} '{entityType.DisplayName()}' is annotated with unsupported attribute '{
             attributeTypeName}'.");
     }
 
@@ -257,7 +347,7 @@ public class MongoModelValidator : ModelValidator
 
             var attributeTypeName = unsupported.GetType().ShortDisplayName();
             throw new NotSupportedException(
-                $"Entity '{entityType.DisplayName()}' has a constructor annotated with unsupported attribute '{attributeTypeName
+                $"{TypeNoun(entityType)} '{entityType.DisplayName()}' has a constructor annotated with unsupported attribute '{attributeTypeName
                 }'.");
         }
     }
@@ -330,10 +420,66 @@ public class MongoModelValidator : ModelValidator
         IModel model,
         IDiagnosticsLogger<DbLoggerCategory.Model.Validation> logger)
     {
+        foreach (var entityType in model.GetEntityTypes())
+        {
+            ValidateNoEncryptionInsideComplexTypes(entityType);
+        }
+
         foreach (var entityType in model.GetEntityTypes().Where(e => e.IsDocumentRoot()))
         {
             ValidateEntityQueryableEncryption(entityType, false, false, [], logger);
         }
+    }
+
+    private static readonly string[] EncryptionAnnotationNames =
+    [
+        MongoAnnotationNames.EncryptionDataKeyId,
+        MongoAnnotationNames.QueryableEncryptionType,
+        MongoAnnotationNames.QueryableEncryptionRangeMin,
+        MongoAnnotationNames.QueryableEncryptionRangeMax,
+        MongoAnnotationNames.QueryableEncryptionContention,
+        MongoAnnotationNames.QueryableEncryptionTrimFactor,
+        MongoAnnotationNames.QueryableEncryptionPrecision,
+        MongoAnnotationNames.QueryableEncryptionSparsity
+    ];
+
+    /// <summary>
+    /// Validate that no encryption annotation is configured on a complex property or on any member of a complex type,
+    /// recursing through nested complex properties and complex collections.
+    /// </summary>
+    /// <param name="type">The entity type or complex type whose complex properties are checked.</param>
+    /// <remarks>
+    /// Neither the Queryable Encryption schema generator nor the model validator's encryption checks walk complex
+    /// types, so an encryption annotation inside one would otherwise be silently ignored and the value written as
+    /// plaintext. The configuration is rejected rather than failing open.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">When an encryption annotation is found inside a complex type.</exception>
+    private static void ValidateNoEncryptionInsideComplexTypes(ITypeBase type)
+    {
+        foreach (var complexProperty in type.GetDeclaredComplexProperties())
+        {
+            ThrowIfEncryptionConfigured(complexProperty, complexProperty.ComplexType);
+
+            foreach (var property in complexProperty.ComplexType.GetDeclaredProperties())
+            {
+                ThrowIfEncryptionConfigured(property, complexProperty.ComplexType);
+            }
+
+            ValidateNoEncryptionInsideComplexTypes(complexProperty.ComplexType);
+        }
+    }
+
+    private static void ThrowIfEncryptionConfigured(IPropertyBase member, IComplexType complexType)
+    {
+        if (!EncryptionAnnotationNames.Any(name => member.FindAnnotation(name) != null)) return;
+
+        throw new InvalidOperationException(
+            MemberOnType(member)
+            + (member is IComplexProperty ? $" (complex type '{complexType.DisplayName()}')" : "")
+            + " is configured for encryption."
+            + " Encryption (Queryable Encryption or client-side field level encryption) is not supported for complex"
+            + " properties or for properties inside complex types; map the value as a property of an entity type"
+            + " or an owned entity type to encrypt it.");
     }
 
     /// <summary>
@@ -555,6 +701,66 @@ public class MongoModelValidator : ModelValidator
     }
 
     /// <summary>
+    /// Validate the element names of the scalar and complex properties declared directly on an entity type or
+    /// complex type, recursing into each complex property's complex type, whose elements live in its own subdocument.
+    /// </summary>
+    /// <param name="type">The entity type or complex type whose properties and complex properties are validated.</param>
+    /// <returns>The map of element names to the properties and complex properties of <paramref name="type"/>.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when naming rules are violated or duplicate names exist.</exception>
+    private static Dictionary<string, IPropertyBase> ValidateStructuralMemberElementNames(ITypeBase type)
+    {
+        var elementPropertyMap = new Dictionary<string, IPropertyBase>();
+
+        foreach (var member in type.GetProperties().Cast<IPropertyBase>().Concat(type.GetComplexProperties()))
+        {
+            var elementName = member is IComplexProperty complexProperty
+                ? complexProperty.GetElementName()
+                : ((IProperty)member).GetElementName();
+            if (string.IsNullOrWhiteSpace(elementName))
+            {
+                // For a scalar (including a leaf inside a complex type) an empty name means "not stored": the writers
+                // skip it. A complex property is always written, so an empty name would store an element named "".
+                if (member is IComplexProperty)
+                {
+                    throw new InvalidOperationException(MemberOnType(member)
+                        + " may not map to an empty or whitespace element name. A complex property is always stored; map it"
+                        + " to a non-empty BSON element name.");
+                }
+
+                continue;
+            }
+
+            if (elementName.StartsWith("$"))
+            {
+                throw new InvalidOperationException(MemberOnType(member) + $" may not map to element '{elementName
+                }' as it starts with the reserved character '$'.");
+            }
+
+            if (elementName.Contains('.'))
+            {
+                throw new InvalidOperationException(MemberOnType(member) + $" may not map to element '{elementName
+                }' as it contains the reserved character '.'.");
+            }
+
+            if (elementPropertyMap.TryGetValue(elementName, out var otherProperty))
+            {
+                throw new InvalidOperationException(
+                    $"Properties '{member.Name}' and '{otherProperty.Name}' on {TypeKind(type)} '{type.DisplayName()
+                    }' are mapped to element '{elementName}'. Map one of them to a different BSON element.");
+            }
+
+            elementPropertyMap[elementName] = member;
+        }
+
+        foreach (var complexProperty in type.GetComplexProperties())
+        {
+            ValidateStructuralMemberElementNames(complexProperty.ComplexType);
+        }
+
+        return elementPropertyMap;
+    }
+
+    /// <summary>
     /// Validate that an entity has a valid primary key.
     /// </summary>
     /// <param name="entityType">The <see cref="IEntityType"/> to validate the primary key of.</param>
@@ -589,35 +795,7 @@ public class MongoModelValidator : ModelValidator
     /// <exception cref="InvalidOperationException">Thrown when naming rules are violated or duplicate names exist.</exception>
     private static void ValidateEntityElementNames(IEntityType entityType)
     {
-        var elementPropertyMap = new Dictionary<string, IPropertyBase>();
-
-        foreach (var property in entityType.GetProperties())
-        {
-            var elementName = property.GetElementName();
-            if (string.IsNullOrWhiteSpace(elementName)) continue;
-
-            if (elementName.StartsWith("$"))
-            {
-                throw new InvalidOperationException(PropertyOnEntity(property) + $" may not map to element '{elementName
-                }' as it starts with the reserved character '$'.");
-            }
-
-            if (elementName.Contains('.'))
-            {
-                throw new InvalidOperationException(PropertyOnEntity(property) + $" may not map to element '{elementName
-                }' as it contains the reserved character '.'.");
-            }
-
-            if (elementPropertyMap.TryGetValue(elementName, out var otherProperty))
-            {
-                throw new InvalidOperationException(
-                    $"Properties '{property.Name}' and '{otherProperty.Name}' on entity type '{entityType.DisplayName()
-                    }' are mapped to element '{elementName}'. Map one of them to a different BSON element.");
-            }
-
-            elementPropertyMap[elementName] = property;
-        }
-
+        var elementPropertyMap = ValidateStructuralMemberElementNames(entityType);
 
         var elementNavigationMap = new Dictionary<string, INavigation>();
 
@@ -742,6 +920,12 @@ public class MongoModelValidator : ModelValidator
             }
         }
     }
+
+    private static string MemberOnType(IPropertyBase member)
+        => $"{(member is IComplexProperty ? "Complex property" : "Property")} '{member.Name}' on {TypeKind(member.DeclaringType)} '{member.DeclaringType.DisplayName()}'";
+
+    private static string TypeKind(ITypeBase type)
+        => type is IEntityType ? "entity type" : "complex type";
 
     private static string PropertyOnEntity(IProperty property)
         => $"Property '{property.Name}' on entity type '{property.DeclaringType.DisplayName()}'";

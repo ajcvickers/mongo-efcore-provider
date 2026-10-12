@@ -35,7 +35,7 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// </summary>
 /// <remarks>
 /// A <c>partial</c> rather than an extracted type because these members read the private scope state
-/// (<c>_entityType</c>/<c>_outerParam</c>/<c>_outerEntityType</c>/<c>_innerPrefix</c>).
+/// (<c>_scopeType</c>/<c>_outerParam</c>/<c>_outerEntityType</c>/<c>_innerPrefix</c>).
 /// </remarks>
 internal sealed partial class MongoExpressionTranslator
 {
@@ -108,6 +108,10 @@ internal sealed partial class MongoExpressionTranslator
             default:
                 return TryResolveOwnedFieldPath(node, out property, out fieldPath, out isOuter);
         }
+
+        // An EF8/EF9 compiled-query argument is a plain prefixed ParameterExpression (`__o`), never a row root.
+        if (IsQueryParameterRoot(param))
+            return false;
 
         // Two-scope mode: a member rooted on the outer param resolves against the outer entity type at document
         // root; every other member is inner-scoped. Identity (ReferenceEquals), never name — so a member name
@@ -238,13 +242,14 @@ internal sealed partial class MongoExpressionTranslator
     /// name with different element names). Sound because a derived parameter type only reaches here after OfType, which
     /// records the discriminator conjunct; <c>Cast&lt;TDerived&gt;</c> declines at the gate. <c>((Derived)e).Member</c>
     /// is not narrowed (the rows are not) and keeps declining.
-    private IEntityType ResolveScopeEntityType(ParameterExpression param)
+    private ITypeBase ResolveScopeEntityType(ParameterExpression param)
         => _outerParam is null
            && ReferenceEquals(param, SelfParam)
-           && param.Type != _entityType.ClrType
-           && _entityType.GetDerivedTypes().FirstOrDefault(t => t.ClrType == param.Type) is { } derived
+           && param.Type != _scopeType.ClrType
+           && _scopeType is IEntityType entityScope
+           && entityScope.GetDerivedTypes().FirstOrDefault(t => t.ClrType == param.Type) is { } derived
             ? derived
-            : _entityType;
+            : _scopeType;
 
     /// Resolves <paramref name="node"/> via <see cref="TryResolveMember"/> to a field reference, declining an
     /// outer-scoped member (two-scope mode).
@@ -256,7 +261,7 @@ internal sealed partial class MongoExpressionTranslator
             return false;
         }
 
-        field = new MongoFieldExpression(property, fieldPath);
+        field = ScopeField(property, fieldPath);
         return true;
     }
 
@@ -438,7 +443,10 @@ internal sealed partial class MongoExpressionTranslator
     /// scoped to this translator's own entity type (as <see cref="TryResolveMember"/> does).
     /// </param>
     /// <param name="names">The hop names, root-first, on success.</param>
-    /// <param name="scopeType">The entity type the first hop resolves against, on success.</param>
+    /// <param name="scopeType">
+    /// The structural type the first hop resolves against, on success: an entity type, or a complex collection's element
+    /// type inside its element scope.
+    /// </param>
     /// <param name="isOuter">
     /// Whether the chain is rooted on the outer parameter. Callers that can't render an outer-scoped result must
     /// decline on it.
@@ -449,10 +457,11 @@ internal sealed partial class MongoExpressionTranslator
     /// silently resolves against the wrong scope.
     /// </para>
     /// <para>
-    /// <b>Scope-relative.</b> Callers join each hop's <see cref="MongoEntityTypeExtensions.GetContainingElementName"/>
-    /// relative to <paramref name="scopeType"/>, never <see cref="MongoEntityTypeExtensions.GetDocumentPath"/>,
-    /// which is root-relative and would double-prefix in a nested element scope whose caller prefixes the result.
-    /// Hence no <c>IsDocumentRoot</c> guard anywhere in this family.
+    /// <b>Scope-relative.</b> Callers resolve the names with <see cref="StructuralPath.TryResolve"/>, which joins each
+    /// hop's own element name relative to <paramref name="scopeType"/>, never
+    /// <see cref="MongoEntityTypeExtensions.GetDocumentPath"/>, which is root-relative and would double-prefix in a
+    /// nested element scope whose caller prefixes the result. Hence no <c>IsDocumentRoot</c> guard anywhere in this
+    /// family.
     /// </para>
     /// <para>
     /// <b>Any parameter root is accepted in single-scope mode</b> because a chain rooted on an enclosing parameter
@@ -465,7 +474,7 @@ internal sealed partial class MongoExpressionTranslator
         int minimumHops,
         bool scopeRootFallback,
         [NotNullWhen(true)] out List<string>? names,
-        [NotNullWhen(true)] out IEntityType? scopeType,
+        [NotNullWhen(true)] out ITypeBase? scopeType,
         out bool isOuter)
     {
         names = null;
@@ -490,7 +499,7 @@ internal sealed partial class MongoExpressionTranslator
             current = inner;
         }
 
-        if (current is not ParameterExpression rootParam || hopNames.Count < minimumHops)
+        if (current is not ParameterExpression rootParam || hopNames.Count < minimumHops || IsQueryParameterRoot(rootParam))
             return false;
 
         isOuter = _outerParam is not null && ReferenceEquals(rootParam, _outerParam);
@@ -500,44 +509,20 @@ internal sealed partial class MongoExpressionTranslator
         hopNames.Reverse(); // now root-first: [firstNav, ..., leaf]
 
         names = hopNames;
-        scopeType = isOuter ? _outerEntityType! : _entityType;
+        scopeType = isOuter ? _outerEntityType! : _scopeType;
         return true;
     }
 
     /// <summary>
-    /// Walks the first <paramref name="hopCount"/> hop names as embedded single-reference navigations,
-    /// appending each one's containing element name to <paramref name="segments"/> and advancing
-    /// <paramref name="scopeType"/> to the last walked hop's target.
+    /// Resolves a multi-hop chain to a dotted field path, e.g. <c>p.Address.City</c> → <c>"Address.City"</c>.
+    /// Intermediate hops are resolved by <see cref="StructuralPath"/> (embedded single-reference navigations and
+    /// single complex properties, in any mix the model allows) and the leaf must be a mapped scalar.
     /// </summary>
-    /// Declining here rejects cross-collection and owned-collection intermediates: a leaf under an array has no
-    /// single dotted path. Quantifiers over such a collection go through <see cref="TryResolveOwnedCollectionPath"/>.
-    private static bool TryWalkEmbeddedReferenceHops(
-        List<string> names, int hopCount, ref IEntityType scopeType, List<string> segments)
-    {
-        for (var i = 0; i < hopCount; i++)
-        {
-            var navigation = scopeType.FindNavigation(names[i]);
-            if (navigation is null || !navigation.IsEmbedded() || navigation.IsCollection)
-                return false;
-
-            // The navigation's containing element name is the same source the shapers and pipeline use, so the
-            // emitted path matches stored layout (including HasElementName overrides and shared types).
-            var elementName = navigation.TargetEntityType.GetContainingElementName();
-            if (string.IsNullOrEmpty(elementName))
-                return false;
-
-            segments.Add(elementName);
-            scopeType = navigation.TargetEntityType;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Resolves an owned single-reference chain to a dotted field path, e.g. <c>p.Address.City</c> →
-    /// <c>"Address.City"</c>. Intermediate hops must be embedded single-reference navigations and the leaf a
-    /// mapped scalar.
-    /// </summary>
+    /// <remarks>
+    /// A hop into an owned or complex collection declines (<see cref="StructuralPathResult.CrossesCollection"/>): a
+    /// leaf under an array has no single dotted path. Quantifiers over an embedded collection go through
+    /// <see cref="TryResolveEmbeddedCollectionPath"/>.
+    /// </remarks>
     private bool TryResolveOwnedFieldPath(
         Expression node, [NotNullWhen(true)] out IProperty? property, [NotNullWhen(true)] out string? fieldPath,
         out bool isOuter)
@@ -548,20 +533,171 @@ internal sealed partial class MongoExpressionTranslator
         if (!TryBeginOwnedHopWalk(node, minimumHops: 2, scopeRootFallback: false, out var names, out var scopeType, out isOuter))
             return false;
 
-        var segments = new List<string>(names.Count);
-        if (!TryWalkEmbeddedReferenceHops(names, names.Count - 1, ref scopeType, segments))
+        // A composite-PK leaf keeps the "_id.<name>" local to its declaring type after the hop prefix (e.g.
+        // "Author._id.City"); StructuralPath builds the leaf segment with GetPropertyFieldPath.
+        if (!StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var path)
+            || path.Leaf is not IProperty leaf)
+        {
             return false;
-
-        var leaf = scopeType.FindProperty(names[^1]);
-        if (leaf is null)
-            return false;
+        }
 
         property = leaf;
-        // A composite-PK leaf nests under an "_id" local to its declaring type, so append "_id.<name>" after the
-        // hop prefix (e.g. "Author._id.City").
-        segments.Add(GetPropertyFieldPath(leaf));
-        fieldPath = string.Join(".", segments);
+        fieldPath = string.Join(".", path.Segments);
         return true;
+    }
+
+    /// <summary>
+    /// Resolves a whole complex value (<c>c.Address</c>, <c>c.Address.Location</c>, <c>EF.Property&lt;A&gt;(c, "Address")</c>,
+    /// through owned references; single or, on EF10, a collection) to its stored element path, for a projection leaf the
+    /// shaper materializes (<c>ComplexTypeMaterializationBuilder</c>). Single-scope chains rooted on the selector
+    /// parameter only; a chain crossing an array, or any other leaf kind, declines.
+    /// </summary>
+    internal bool TryTranslateComplexValue(
+        Expression node, [NotNullWhen(true)] out string? path, [NotNullWhen(true)] out IComplexProperty? complexProperty)
+    {
+        path = null;
+        complexProperty = null;
+
+        if (!TryBeginOwnedHopWalk(node.RemoveConvert(), minimumHops: 1, scopeRootFallback: false, out var names, out var scopeType, out var isOuter)
+            || isOuter
+            || !StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not IComplexProperty leaf
+            || leaf.ClrType != node.Type)
+        {
+            return false;
+        }
+
+        path = string.Join(".", resolved.Segments);
+        complexProperty = leaf;
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves a single (non-collection) complex value used as a comparison operand (<c>c.Address</c>,
+    /// <c>c.Address.Location</c>, an optional struct's <c>c.Pin.Value</c>, through owned references) to its stored
+    /// element path and complex property, for <c>MongoExpressionTranslator.ComplexEquality.cs</c>.
+    /// </summary>
+    /// <remarks>
+    /// Single-scope chains rooted on a parameter of this translator's entity type only: an outer-scoped chain (two-scope
+    /// mode) or one rooted on a projected row (after a projected <c>Distinct</c>, whose parameter is not the entity)
+    /// declines, so a member name shared with the row can't resolve against the entity.
+    /// </remarks>
+    private bool TryResolveComplexOperand(
+        Expression node, [NotNullWhen(true)] out string? path, [NotNullWhen(true)] out IComplexProperty? complexProperty)
+        => TryResolveComplexOperand(node, out path, out complexProperty, out _);
+
+    /// <summary>
+    /// <see cref="TryResolveComplexOperand(Expression, out string?, out IComplexProperty?)"/>, also reporting whether the
+    /// value can be absent (<paramref name="mayBeAbsent"/>): the leaf itself is an optional complex property (EF10), or
+    /// any hop on the way is an optional owned reference or an optional complex property. An absent ancestor reads every
+    /// value below it as null.
+    /// </summary>
+    private bool TryResolveComplexOperand(
+        Expression node, [NotNullWhen(true)] out string? path, [NotNullWhen(true)] out IComplexProperty? complexProperty,
+        out bool mayBeAbsent)
+    {
+        path = null;
+        complexProperty = null;
+        // Inside a complex collection's element scope the element itself may be null (EF10 stores null elements), and an
+        // absent element reads every value below it as absent: an ancestor that can be absent (ruling R14).
+        mayBeAbsent = StructuralPath.IsComplexElementScope(_scopeType);
+
+        node = Unwrap(node);
+        while (node is MemberExpression { Member.Name: nameof(Nullable<int>.Value), Expression: { } nullableReceiver }
+               && Nullable.GetUnderlyingType(nullableReceiver.Type) is not null)
+        {
+            node = Unwrap(nullableReceiver);
+        }
+
+        var root = node;
+        while (root.TryGetMemberOrEFProperty(out var receiver, out _))
+        {
+            root = Unwrap(receiver);
+        }
+
+        if (root is not ParameterExpression rootParameter
+            || DistinctAliasScope is not null
+            || !_scopeType.ClrType.IsAssignableFrom(rootParameter.Type)
+            || !TryBeginOwnedHopWalk(node, minimumHops: 1, scopeRootFallback: false, out var names, out var scopeType, out var isOuter)
+            || isOuter
+            || !StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not IComplexProperty { IsCollection: false } leaf
+            || node.Type.UnwrapNullableType() != leaf.ComplexType.ClrType)
+        {
+            return false;
+        }
+
+        // Every hop, then the leaf: optional owned references and optional complex properties make the value absent-able.
+        for (var count = 1; count <= names.Count; count++)
+        {
+            var prefixNames = names.GetRange(0, count);
+            if (!StructuralPath.TryResolve(scopeType, prefixNames, count - 1, out var prefix))
+                return false;
+
+            mayBeAbsent |= prefix.Leaf switch
+            {
+                INavigation navigation => !navigation.ForeignKey.IsRequiredDependent,
+                IComplexProperty complex => complex.IsOptional(),
+                _ => false
+            };
+        }
+
+        path = string.Join(".", resolved.Segments);
+        complexProperty = leaf;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="parameter"/> is a QUERY parameter, not a lambda's row parameter: on EF8/EF9 a compiled
+    /// query's argument (<c>EF.CompileQuery((db, Customer o) =&gt; ... c.Address == o.Address)</c>) reaches the translator
+    /// as a plain <see cref="ParameterExpression"/> named with <c>QueryCompilationContext.QueryParameterPrefix</c>
+    /// (<c>__o</c>), typed as the entity, so a member chain rooted on it resolved against the scope and compared the field
+    /// with itself (every row). Never a row root; a no-op on EF10, whose query parameters are
+    /// <c>QueryParameterExpression</c> nodes.
+    /// </summary>
+    private static bool IsQueryParameterRoot(ParameterExpression parameter)
+        => NativeQueryParameter.TryGetQueryParameterName(parameter, out _);
+
+    /// <summary>
+    /// Whether the member chain <paramref name="node"/> crosses an OPTIONAL complex property (EF10) on its way to its leaf,
+    /// so the leaf is MISSING whenever that ancestor is null/absent (ruling R14). Owned hops are not counted.
+    /// </summary>
+    private bool CrossesOptionalComplexHop(Expression node)
+        => CrossesOptionalHop(node, includeOwned: false);
+
+    /// <summary>
+    /// Whether the member chain <paramref name="node"/> (rooted on a scope parameter) crosses an optional complex property,
+    /// or with <paramref name="includeOwned"/> an optional owned reference, before its leaf.
+    /// </summary>
+    private bool CrossesOptionalHop(Expression node, bool includeOwned)
+    {
+        node = Unwrap(node);
+        while (node is MemberExpression { Member.Name: nameof(Nullable<int>.Value), Expression: { } nullableReceiver }
+               && Nullable.GetUnderlyingType(nullableReceiver.Type) is not null)
+        {
+            node = Unwrap(nullableReceiver);
+        }
+
+        if (!TryBeginOwnedHopWalk(node, minimumHops: 2, scopeRootFallback: false, out var names, out var scopeType, out _))
+            return false;
+
+        for (var count = 1; count < names.Count; count++)
+        {
+            if (!StructuralPath.TryResolve(scopeType, names.GetRange(0, count), count - 1, out var prefix))
+                return false;
+
+            if (prefix.Leaf switch
+                {
+                    IComplexProperty complex => complex.IsOptional(),
+                    INavigation navigation => includeOwned && !navigation.ForeignKey.IsRequiredDependent,
+                    _ => false
+                })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// True when <paramref name="property"/> is a component of a composite primary key. The serializer nests such a
@@ -584,7 +720,7 @@ internal sealed partial class MongoExpressionTranslator
         // nullable bare aggregate must compare the alias, not "$$ROOT". See IsSelfParamTheEntity.
         if (IsSelfParamTheEntity(node))
         {
-            elementRef = new MongoElementRefExpression(MongoElementRefExpression.WholeRootDocumentPath, _entityType.ClrType);
+            elementRef = new MongoElementRefExpression(MongoElementRefExpression.WholeRootDocumentPath, _scopeType.ClrType);
             return true;
         }
 
@@ -608,9 +744,12 @@ internal sealed partial class MongoExpressionTranslator
 
         // An owned COLLECTION navigation (`p.Children == null`): the stored array is missing, BSON null, empty or
         // populated. The comparison is against the STORED state (null-safe, so a missing array equals null), not the
-        // materialized one (which normalizes missing/null to []); an empty array is not null.
+        // materialized one (which normalizes missing/null to []); an empty array is not null. Owned collections only: a
+        // COMPLEX collection's null check declines (ruling R25: a required one reads empty when null or missing, an optional
+        // one reads null for those but not for an array holding a null element, so the stored state is not the answer).
         var collectionSource = node is MaterializeCollectionNavigationExpression materialized ? materialized.Subquery : node;
-        if (TryResolveOwnedCollectionPath(UnwrapAsQueryable(collectionSource), out var collectionPath, out _, out var collectionIsOuter)
+        if (TryResolveEmbeddedCollectionPath(UnwrapAsQueryable(collectionSource), out var collectionPath, out var collectionElementType, out var collectionIsOuter)
+            && collectionElementType is IEntityType
             && !collectionIsOuter)
         {
             elementRef = new MongoElementRefExpression(collectionPath, node.Type, nullSafe: true);
@@ -634,31 +773,38 @@ internal sealed partial class MongoExpressionTranslator
         if (!TryBeginOwnedHopWalk(node, minimumHops: 1, scopeRootFallback: false, out var names, out var scopeType, out isOuter))
             return false;
 
-        // Every hop, including the last, must be an embedded single reference. minimumHops: 1 above guarantees at
-        // least one hop was walked, so scopeType is then the leaf navigation's target.
-        var segments = new List<string>(names.Count);
-        if (!TryWalkEmbeddedReferenceHops(names, names.Count, ref scopeType, segments))
+        // The leaf must itself be an embedded single-reference navigation; StructuralPath has already required it to be
+        // embedded with an element name. A complex-property leaf (`e.Address == null` over a complex Address) is not an
+        // entity-typed operand and declines here: its null/missing semantics belong to the complex read path.
+        if (!StructuralPath.TryResolve(scopeType, names, names.Count - 1, out var resolved)
+            || resolved.Leaf is not INavigation { IsCollection: false } leafNavigation)
+        {
             return false;
+        }
 
-        targetType = scopeType;
-        path = string.Join(".", segments);
+        targetType = leafNavigation.TargetEntityType;
+        path = string.Join(".", resolved.Segments);
         return true;
     }
 
     /// <summary>
-    /// Resolves the source of an owned-collection quantifier (<c>b.Posts</c>, <c>b.Address.Notes</c>) to the dotted
-    /// path of the embedded array, relative to this translator's scope entity type, and its element type. Non-final
-    /// hops must be embedded single references and the final hop an embedded collection.
+    /// Resolves the source of an element-scoped operator (<c>Any</c>/<c>All</c>/<c>Count</c>) over an embedded collection
+    /// (an owned collection <c>b.Posts</c>, <c>b.Address.Notes</c>, or a complex collection <c>c.Addresses</c>,
+    /// <c>c.Profile.Addresses</c>, through any mix of owned references and single complex properties) to the dotted path
+    /// of the array, relative to this translator's scope, and the structural type of its elements.
     /// </summary>
     /// <remarks>
-    /// The path is scope-relative (see <see cref="TryBeginOwnedHopWalk"/>), which composes with
-    /// <see cref="MongoFieldPrefixRewriter"/> and makes nested <c>Any</c>-within-<c>Any</c> correct. An outer-rooted
-    /// array is returned with <c>isOuter</c> set; the quantifier/<c>Count</c> arms decline that combination.
+    /// The ONE resolver for every array quantifier/count arm, owned or complex: the hops and the final-name rule are
+    /// <see cref="StructuralPath.TryResolveCollection"/>'s. The path is scope-relative (see <see cref="TryBeginOwnedHopWalk"/>),
+    /// which composes with <see cref="MongoFieldPrefixRewriter"/> and makes nested <c>Any</c>-within-<c>Any</c> correct,
+    /// including a collection inside a complex collection's element (resolved against the element's complex type by the
+    /// element-scoped translator). An outer-rooted array is returned with <c>isOuter</c> set; the quantifier/<c>Count</c>
+    /// arms decline that combination.
     /// </remarks>
-    private bool TryResolveOwnedCollectionPath(
+    private bool TryResolveEmbeddedCollectionPath(
         Expression source,
         [NotNullWhen(true)] out string? arrayPath,
-        [NotNullWhen(true)] out IEntityType? elementType,
+        [NotNullWhen(true)] out ITypeBase? elementType,
         out bool isOuter)
     {
         arrayPath = null;
@@ -673,33 +819,21 @@ internal sealed partial class MongoExpressionTranslator
             return true;
         }
 
-        // EF-446: a non-outer root is scoped to this translator's entity type rather than declined, mirroring
+        // EF-446: a non-outer root is scoped to this translator's own scope type rather than declined, mirroring
         // TryResolveMember. A plain nested quantifier over the element's own collection can then sit inside an
         // already-correlated quantifier (`b.Posts.Any(p => p.Comments.Any(c => c.Title == b.Title))`); an array
-        // reached THROUGH the outer scope is still declined by the callers' isOuter check.
-        if (!TryBeginOwnedHopWalk(source, minimumHops: 1, scopeRootFallback: true, out var names, out var scopeType, out isOuter))
+        // reached THROUGH the outer scope is still declined by the callers' isOuter check. Every hop but the last is a
+        // StructuralPath hop (never a collection); the FINAL name must be an embedded (owned) or complex COLLECTION
+        // (StructuralPath.TryResolveCollection): a primitive collection property or a reference navigation declines, so a
+        // mapped scalar property sharing a navigation's name is never taken for an array.
+        if (!TryBeginOwnedHopWalk(source, minimumHops: 1, scopeRootFallback: true, out var names, out var scopeType, out isOuter)
+            || !StructuralPath.TryResolveCollection(scopeType, names, out var collection))
+        {
             return false;
+        }
 
-        // Every hop but the last must be an embedded single reference; the FINAL hop is the quantifier's own
-        // source and must be an embedded COLLECTION navigation. That final-hop rule is the structural
-        // protection against a mapped scalar property sharing a navigation's name — a scalar's receiver is
-        // never a collection.
-        var segments = new List<string>(names.Count);
-        if (!TryWalkEmbeddedReferenceHops(names, names.Count - 1, ref scopeType, segments))
-            return false;
-
-        var collectionNavigation = scopeType.FindNavigation(names[^1]);
-        if (collectionNavigation is null || !collectionNavigation.IsEmbedded() || !collectionNavigation.IsCollection)
-            return false; // a primitive collection property, a reference nav, or a non-collection final hop
-
-        var collectionElementName = collectionNavigation.TargetEntityType.GetContainingElementName();
-        if (string.IsNullOrEmpty(collectionElementName))
-            return false;
-
-        segments.Add(collectionElementName);
-
-        arrayPath = string.Join(".", segments);
-        elementType = collectionNavigation.TargetEntityType;
+        arrayPath = collection.ArrayPath;
+        elementType = collection.ElementType;
         return true;
     }
 }

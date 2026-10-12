@@ -67,10 +67,10 @@ internal sealed partial class MongoExpressionTranslator
         }
 
         // A hierarchy needs a discriminator predicate, not a constant.
-        if (_entityType.IsInHierarchy())
+        if (ScopeEntityType.IsInHierarchy())
             return TryTranslateHierarchyTypeTest(comparisonType, exact: true, negated: !isEqual, out result);
 
-        var matches = _entityType.ClrType == comparisonType;
+        var matches = _scopeType.ClrType == comparisonType;
         result = new MongoConstantExpression(matches == isEqual, forSerialization: null);
         return true;
     }
