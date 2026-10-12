@@ -26,6 +26,7 @@ using Microsoft.EntityFrameworkCore.Query;
 using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
+using MongoDB.EntityFrameworkCore.Serializers;
 using MongoDB.EntityFrameworkCore.Storage;
 
 namespace MongoDB.EntityFrameworkCore.Query.Visitors;
@@ -50,6 +51,7 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
     /// <param name="queryExpression">The query being shaped.</param>
     /// <param name="docParameter">The shaper's <see cref="BsonDocument"/> parameter.</param>
     /// <param name="trackingBehavior">The query's tracking behavior.</param>
+    /// <param name="bsonSerializerFactory">The context's serializer factory, for complex-property alias reads.</param>
     /// <param name="pushedDownSelectRetained">
     /// <see langword="true"/> when the projecting <c>Select</c> could not be stripped because an operator composes
     /// over its result (<c>Distinct</c>, <c>Union</c>, <c>Concat</c>, ...). The driver then returns projected
@@ -60,8 +62,9 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
         MongoQueryExpression queryExpression,
         ParameterExpression docParameter,
         QueryTrackingBehavior trackingBehavior,
+        BsonSerializerFactory bsonSerializerFactory,
         bool pushedDownSelectRetained = false)
-        : base(rootEntityType, queryExpression, docParameter, trackingBehavior)
+        : base(rootEntityType, queryExpression, docParameter, trackingBehavior, bsonSerializerFactory)
     {
         _queryExpression = queryExpression;
         _rootEntityType = rootEntityType;
