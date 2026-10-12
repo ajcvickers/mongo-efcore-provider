@@ -573,17 +573,19 @@ public static class StructuralPathTests
     }
 
     [Fact]
-    public static void Translator_does_not_treat_owned_collection_as_entity_typed_null_operand()
+    public static void Translator_treats_owned_collection_null_check_as_null_safe_array_reference()
     {
         var root = EntityType<TranslatorCollectionNullHolder>(mb => mb.Entity<TranslatorCollectionNullHolder>().OwnsMany(e => e.Posts));
         var translator = new MongoExpressionTranslator(root);
 
-        // Only a single owned reference is an entity-typed operand; an owned collection compared with null must not
-        // become a sub-document null check on the array.
-        // Measured: the translator declines outright (the comparison has no native rendering here), so the caller
-        // routes the query to the fallback rather than emitting any predicate over the array.
-        Assert.False(translator.TryTranslate(Predicate<TranslatorCollectionNullHolder>(e => e.Posts == null), out var result));
-        Assert.Null(result);
+        // An owned collection compared with null is a null check on the STORED array (EF-322 native owned-collection null
+        // checks, NativeOwnedCollectionNullCheckTests): a null-safe element reference to the array path, not a sub-document
+        // null check on a single owned reference.
+        Assert.True(translator.TryTranslate(Predicate<TranslatorCollectionNullHolder>(e => e.Posts == null), out var result));
+        var binary = Assert.IsType<MongoBinaryExpression>(result);
+        var array = Assert.IsType<MongoElementRefExpression>(binary.Left);
+        Assert.Equal("Posts", array.Path);
+        Assert.True(array.NullSafe);
     }
 
     [Fact]

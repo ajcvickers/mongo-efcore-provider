@@ -412,10 +412,11 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         NativeModeAssert.NativeAndExpected(m => Customers(collection, m, q => q.OrderBy(c => c.Name)
             .Select(c => new PairDto { Name = c.Name, Address = c.Address }).ToList().Select(x => x.Name + "|" + Fmt(x.Address))),
             ["Ann|Main|Paris|1.5,10|2|7|Gold", "Bob|High|London|0.5,20|5|-|Bronze", "Cid|Low|Rome|2.5,30|1|-|Silver"]);
-        // A nested construction only admits plain top-level fields natively (TryGetDocumentConstructionLeaf), so it declines;
-        // the mixed shaper reads the complex value off the whole document.
-        Assert.Equal(["Ann|Paris", "Bob|London", "Cid|Rome"], NativeModeAssert.DeclinesCleanly(m => Customers(collection, m, q => q.OrderBy(c => c.Name)
-            .Select(c => new { c.Name, Inner = new { c.Address } }).ToList().Select(x => x.Name + "|" + x.Inner.Address.City))));
+        // A nested construction holding a complex value is native too (the EF-322c nested-construction support composes
+        // with the whole-complex-value read).
+        NativeModeAssert.NativeAndExpected(m => Customers(collection, m, q => q.OrderBy(c => c.Name)
+            .Select(c => new { c.Name, Inner = new { c.Address } }).ToList().Select(x => x.Name + "|" + x.Inner.Address.City)),
+            ["Ann|Paris", "Bob|London", "Cid|Rome"]);
     }
 
     [Fact]
@@ -1193,10 +1194,11 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         NativeModeAssert.NativeAndExpected(
             m => Run(collection, m, q => q.OfType<Employee>().ToList().Select(FmtPerson), Configure),
             ["E:Bob|c|9,8"]);
-        // Projecting a member declared only on the derived type after OfType declines natively, a scalar (`e.Level`) as
-        // much as a complex value (`e.Desk`): the selector is translated against the collection's root type
-        // (pre-existing; follow-up). The fallback answers correctly.
-        Assert.Equal([4], NativeModeAssert.DeclinesCleanly(m => Run(collection, m, q => q.OfType<Employee>().Select(e => e.Level), Configure)));
+        // A scalar declared only on the derived type (`e.Level`) is native after OfType (the selector resolves against the
+        // derived type set the OfType narrowed to, EF-322c). A complex value declared only on the derived type (`e.Desk`)
+        // still declines natively (pre-existing; follow-up). The fallback answers correctly.
+        NativeModeAssert.NativeAndExpected(
+            m => Run(collection, m, q => q.OfType<Employee>().Select(e => e.Level), Configure), [4]);
         Assert.Equal(["9,8"], NativeModeAssert.DeclinesCleanly(
             m => Run(collection, m, q => q.OfType<Employee>().Select(e => e.Desk).ToList().Select(Fmt), Configure)));
         // A complex value declared on the base type projects natively over the hierarchy.

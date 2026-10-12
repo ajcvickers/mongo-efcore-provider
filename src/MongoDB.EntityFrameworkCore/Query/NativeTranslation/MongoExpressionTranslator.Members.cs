@@ -744,9 +744,12 @@ internal sealed partial class MongoExpressionTranslator
 
         // An owned COLLECTION navigation (`p.Children == null`): the stored array is missing, BSON null, empty or
         // populated. The comparison is against the STORED state (null-safe, so a missing array equals null), not the
-        // materialized one (which normalizes missing/null to []); an empty array is not null.
+        // materialized one (which normalizes missing/null to []); an empty array is not null. Owned collections only: a
+        // COMPLEX collection's null check declines (ruling R25: a required one reads empty when null or missing, an optional
+        // one reads null for those but not for an array holding a null element, so the stored state is not the answer).
         var collectionSource = node is MaterializeCollectionNavigationExpression materialized ? materialized.Subquery : node;
-        if (TryResolveEmbeddedCollectionPath(UnwrapAsQueryable(collectionSource), out var collectionPath, out _, out var collectionIsOuter)
+        if (TryResolveEmbeddedCollectionPath(UnwrapAsQueryable(collectionSource), out var collectionPath, out var collectionElementType, out var collectionIsOuter)
+            && collectionElementType is IEntityType
             && !collectionIsOuter)
         {
             elementRef = new MongoElementRefExpression(collectionPath, node.Type, nullSafe: true);

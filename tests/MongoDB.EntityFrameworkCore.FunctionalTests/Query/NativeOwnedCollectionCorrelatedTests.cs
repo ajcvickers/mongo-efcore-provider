@@ -243,7 +243,7 @@ public class NativeOwnedCollectionCorrelatedTests(TemporaryDatabaseFixture datab
 
     // GATE AUDIT (spike/gate-audit): a nested (non-correlated) quantifier over the ELEMENT's OWN collection,
     // sitting inside an outer quantifier that IS correlated back to the root — e.g.
-    // `b.Posts.Any(p => p.Comments.Any(c => c.Text == b.Title))`. TryResolveOwnedCollectionPath's two-scope
+    // `b.Posts.Any(p => p.Comments.Any(c => c.Text == b.Title))`. TryResolveEmbeddedCollectionPath's two-scope
     // branch used to decline ANY quantifier source not rooted on the outer param, which blocked this shape
     // even though it isn't the "array reached through the outer scope" case EF-421 explicitly declines —
     // p.Comments is a perfectly ordinary element-scoped collection; only its element PREDICATE reaches back to

@@ -108,7 +108,7 @@ internal sealed partial class MongoExpressionTranslator
     /// </summary>
     /// <remarks>
     /// The quantifier, <c>Count</c> and filtered-count arms that serve owned collections consume the result through
-    /// <see cref="TryResolveOwnedCollectionPath"/>, so a referenced collection needs no second copy of their logic. The
+    /// <see cref="TryResolveEmbeddedCollectionPath"/>, so a referenced collection needs no second copy of their logic. The
     /// resolver stages the lookup into the binder's pending lists, which are committed only if the whole projection is accepted
     /// and deduplicate by alias, so resolving the same source twice is harmless.
     /// </remarks>

@@ -1426,17 +1426,17 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         "NativeOnly=NativeTranslationNotSupportedException: Query projects a non-entity result and MongoQueryMode.NativeOnly forbids the driver-LINQ fallback.";
 
     // Measured exceptions to "native and right in every mode". Each is IDENTICAL for the same root scalar (asserted
-    // above), so none is complex-specific: native gaps (the fallback serves the right rows) and two pre-existing
-    // root-scalar problems (a dictionary Count the driver refuses, and an empty byte[] Length that returns NO ROWS:
-    // Jira candidate, wrong rows on the driver path for root and leaf alike).
+    // above), so none is complex-specific: native gaps (the fallback serves the right rows; list Count and array Length are
+    // now native in every mode) and two pre-existing root-scalar problems (a dictionary Count the driver refuses, and an
+    // empty byte[] Length that returns NO ROWS: Jira candidate, wrong rows on the driver path for root and leaf alike).
     private static readonly Dictionary<string, string[]> LeafPredicateOutcomes = new()
     {
         ["datetime-utc"] = [NativeOnlyDecline, "Native=a", "DriverLinq=a"],
         ["dto"] = [NativeOnlyDecline, "Native=a", "DriverLinq=a"],
         ["dateonly"] = [NativeOnlyDecline, "Native=a", "DriverLinq=a"],
         ["timeonly"] = [NativeOnlyDecline, "Native=b", "DriverLinq=b"],
-        ["list-count"] = [NativeOnlyDecline, "Native=a", "DriverLinq=a"],
-        ["array-length"] = [NativeOnlyDecline, "Native=b", "DriverLinq=b"],
+        ["list-count"] = ["NativeOnly=a", "Native=a", "DriverLinq=a"],
+        ["array-length"] = ["NativeOnly=b", "Native=b", "DriverLinq=b"],
         ["bytes-length"] = [NativeOnlyDecline, "Native=", "DriverLinq="],
         ["dictionary-count"] =
         [

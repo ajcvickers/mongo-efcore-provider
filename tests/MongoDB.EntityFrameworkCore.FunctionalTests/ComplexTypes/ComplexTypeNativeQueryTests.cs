@@ -601,11 +601,11 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
 
         Assert.Equal(["Ann", "Cid"], Both(q => q.Where(c => c.Box.Count == 3).OrderBy(c => c.Name).Select(c => c.Name)));
         Assert.Equal(["Bob"], Both(q => q.Where(c => c.Box.Code == 2).Select(c => c.Name)));
-        // Projecting a converted/represented dotted leaf declines (NativeProjectionBinder.TryTranslateLeaf's
-        // non-default-serialized dotted-leaf guard, shared with owned hops); the fallback reads it through the converter.
+        // A bare projected converted/represented dotted leaf still declines natively (measured); the fallback reads it through
+        // the converter. Inside a wrapped (anonymous) body the EF-322c base reads such a leaf natively through the property's
+        // serializer (it dropped the dotted-leaf guard), and every mode agrees.
         Assert.Equal([3, 12, 3], NativeModeAssert.DeclinesCleanly(m => Run(collection, m, q => q.OrderBy(c => c.Name).Select(c => c.Box.Count), ConfigureConverted)));
-        Assert.Equal([10, 2, 7], NativeModeAssert.DeclinesCleanly(m => Run(collection, m,
-            q => q.OrderBy(c => c.Name).Select(c => new { c.Box.Code }).ToList().Select(x => x.Code), ConfigureConverted)));
+        Assert.Equal([10, 2, 7], Both(q => q.OrderBy(c => c.Name).Select(c => new { c.Box.Code }).ToList().Select(x => x.Code)));
         // A default-serialized sibling leaf of the same complex property still projects natively.
         Assert.Equal(["x", "y", "z"], Both(q => q.OrderBy(c => c.Name).Select(c => c.Box.Label)));
 

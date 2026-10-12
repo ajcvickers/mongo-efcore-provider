@@ -196,11 +196,14 @@ public class ComplexTypeDerivedSelectManyItemTests(TemporaryDatabaseFixture data
         AssertPerMode(m => People(collection, m),
             db => db.People.SelectMany(p => p.Reports, (p, e) => new { p.Name, E = e.Name, e.Level }).ToList().Select(x => $"{x.Name}|{x.E}|{x.Level}"),
             ["Boss|Dev|2"], Serves, Serves, CrossDbSet);
-        // The explicit correlated-subquery spelling nav-expansion produces.
+        // The explicitly written correlated subquery over the derived set. The EF-322c base narrows a derived-type root to
+        // OfType<Employee>(root) before nav-expansion (DerivedEntityRootNarrower), so the native SelectMany correlation matcher
+        // (a bare root Where) no longer sees it and EF refuses it in every mode, loudly and never with rows. The `p.Reports`
+        // navigation spelling above is unaffected: nav-expansion builds its root after the narrowing.
         AssertPerMode(m => People(collection, m),
             db => db.People.SelectMany(p => db.Set<Employee>().Where(e => e.ManagerId == p.Id), (p, e) => new { p.Name, E = e.Name, e.Level })
                 .ToList().Select(x => $"{x.Name}|{x.E}|{x.Level}"),
-            ["Boss|Dev|2"], Serves, Serves, CrossDbSet);
+            ["Boss|Dev|2"], NotTranslatedOrCrossDbSet, NotTranslatedOrCrossDbSet, NotTranslatedOrCrossDbSet);
     }
 
     [Fact]

@@ -208,18 +208,21 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
 #endif
 
     [Fact]
-    public void GroupJoin_on_complex_leaf_keys_is_the_known_main_bug_M35()
+    public void GroupJoin_on_complex_leaf_keys_with_a_projected_count_is_refused_not_miscounted_M35()
     {
         // The correct answer is Ann|1, Bob|1, Cid|2, Hid|2. Client and Order are also related by a navigation
-        // (Client.Orders), and the projected-count binder (MongoProjectionBindingExpressionVisitor.ResolveCollectionNavigation)
-        // turns `os.Count()` into that navigation's FK $lookup without checking the predicate (`c.Shipping.City ==
-        // o.Ship.City`), so Native (fallback) and DriverLinq answer the per-client ORDER count. This is main bug M35,
-        // identical for scalar keys (NativeNonKeyCorrelationTests.Bare_projected_non_key_count_declines_natively_and_falls_back_to_main_behavior
-        // pins it as parity with main); out of scope here (owner decision recorded in the native-parity plan). Pinned so a fix
-        // is noticed. NativeOnly declines.
+        // (Client.Orders), and on main the projected-count binder turned `os.Count()` into that navigation's FK $lookup
+        // without checking the predicate (`c.Shipping.City == o.Ship.City`), answering the per-client ORDER count (Ann|2, Bob|1,
+        // Cid|0, Hid|1). The EF-322c base fixed that for scalar keys (NativeNonKeyCorrelationTests): a correlation that is not the
+        // navigation's foreign key is a keyed $lookup built from the two compared properties (NativeCorrelationMatcher.
+        // TryMatchRawKeyCorrelation), never the navigation. That matcher takes a direct scalar property of each side, so a
+        // complex-leaf key (`c.Shipping.City`) is not matched and the query is refused in every mode (as it is for a
+        // non-key correlation main could not translate), never miscounted. Native complex-leaf keys here are a follow-up.
         PerMode(Shop(db => [.. db.Clients.GroupJoin(db.Orders, c => c.Shipping.City, o => o.Ship.City, (c, os) => new { c.Name, N = os.Count() })
                 .OrderBy(x => x.Name).ToList().Select(x => $"{x.Name}|{x.N}")]),
-            ["Ann|2", "Bob|1", "Cid|0", "Hid|1"], NotNative, Serves, Serves);
+            ["Ann|1", "Bob|1", "Cid|2", "Hid|2"],
+            Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"),
+            Throws<InvalidOperationException>("could not be translated"));
     }
 
     // ── SelectMany ──────────────────────────────────────────────────────────────────────────────────────────────

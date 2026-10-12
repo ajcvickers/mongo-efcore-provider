@@ -101,7 +101,7 @@ types are pinned by `Operators_over_other_non_list_collection_types_are_refused_
 | 8 | M4 | composite `_id.` leaf path | caught | — | composite-key leaf tests | task-8 report |
 | 8 | M5, M6 | complex segment `GetElementName()` / owned `GetContainingElementName()` | caught | — | override, two-path, camel-case, mixed chain | task-8 report (→ A: T8a; B: T8a-EF9) |
 | 8 | M7, M8 | `CrossesCollection` only for collections; nav leaf must be embedded | caught | — | reference-navigation test | task-8 report |
-| 8 | M9, M10 | entity-operand / collection-path leaf navigation kinds | caught | after tests added | `Translator_does_not_treat_owned_collection_as_entity_typed_null_operand`; `Translator_resolves_owned_collection_array_but_not_owned_reference` | task-8 report |
+| 8 | M9, M10 | entity-operand / collection-path leaf navigation kinds | caught | after tests added | `Translator_treats_owned_collection_null_check_as_null_safe_array_reference`; `Translator_resolves_owned_collection_array_but_not_owned_reference` | task-8 report |
 | 8 | M11, M12 | `LeafOwner`; field path joins all segments | caught | — | 6 / 9 | task-8 report |
 | 9 | MA | read-side `TryResolveComplexPropertyDocument` resolves the hop | caught | — | 3 | task-9 report |
 | 9 | MC, N5 | gate 1f dotted leaf → `_v` | caught | — | 13 / 19 | task-9 report |

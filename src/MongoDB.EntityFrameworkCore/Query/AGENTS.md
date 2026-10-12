@@ -137,7 +137,7 @@ Scope, joins, grouping:
   `.Sum/Min/Max/Average(o => o.Prop)`, also what EF makes of a `GroupJoin` with an aggregate) are projection leaves over the not-unwound
   `$lookup` array `_lookup_<Nav>`. `MongoExpressionTranslator.ReferencedCollectionResolver` (set only on the projection binder's
   root translator, `NativeProjectionBinder.ResolveReferencedCollection`) maps the strict FK correlation
-  (`NativeCorrelationMatcher`, never a target-type guess) to that array and stages the lookup; `TryResolveOwnedCollectionPath` then
+  (`NativeCorrelationMatcher`, never a target-type guess) to that array and stages the lookup; `TryResolveEmbeddedCollectionPath` then
   serves the existing `Count`/filtered-count arms unchanged. Any/All have no value-position translation (the predicate arm renders
   `$elemMatch`, query dialect only), so a projected `Any(pred)` is `Count(pred) >= 1` and `All(pred)` is `Count(not pred) == 0` (the
   aggregation dialect's `$not` is the exact complement; true for the empty group). `Sum/Min/Max/Average` of one numeric element

@@ -393,11 +393,11 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddYears(1) < May)))), [], ["r-mixed", "r-null"]);
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => !(s.When.AddDays(1) < May))))), ["r-full", "r-mixed", "r-null"], ["r-full", "r-mixed"]);
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.When.AddDays(1) > May)))), ["r-full"]);
-        // A date part over a date-add has no native translation (declines). The fallback is driver-LINQ, whose unguarded
-        // `$lt` reads the null element's missing value as below every value (R17 answer [r-full, r-mixed]), so ruling R20
-        // REFUSES it in Native mode instead of serving wrong rows; explicit DriverLinq runs the driver (its rows pinned).
-        // See Null_element_shapes_the_native_path_declines_are_refused_rather_than_served_wrong.
-        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed", "r-null"]);
+        // A date part over a date-add is native since the EF-322c base (null-guarded, so R17's [r-full, r-mixed]); driver-LINQ's
+        // unguarded `$lt` reads the null element's missing value as below every value and adds r-null (pinned, explicit
+        // DriverLinq only). The still-declined shapes are in
+        // Null_element_shapes_the_native_path_declines_are_refused_rather_than_served_wrong.
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed"], ["r-full", "r-mixed", "r-null"]);
 
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => (s.Zip ?? s.Floor) < 1)))), [], ["r-mixed", "r-null"]);
         // A constant fallback: the null element's Zip reads null and coalesces to 0, so `0 < 1` holds.
@@ -429,30 +429,33 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
     {
         // r-full [Oslo(When May+5d, Floor = Zip = 5, verified)], r-mixed [Oslo, null], r-null [null]. R17 answers in the
         // comments; the driver's measured rows are the pins.
-        // Date part over a date-add: R17 [r-full, r-mixed]; the driver includes r-null.
-        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed", "r-null"]);
-        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddMonths(1).Month < 13)))), ["r-full", "r-mixed", "r-null"]);
+        // The EF-322c base made a date part over a date-add native (null-guarded: R17 [r-full, r-mixed]; the driver adds r-null);
+        // TimeOfDay still declines, so the declined shape here is a relational comparison over `When.TimeOfDay` (R17
+        // [r-full, r-mixed]; the driver includes r-null).
+        var noon = TimeSpan.FromHours(30);
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.TimeOfDay < noon)))), ["r-full", "r-mixed", "r-null"]);
+        NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddMonths(1).Month < 13)))), ["r-full", "r-mixed"], ["r-full", "r-mixed", "r-null"]);
         // Count(pred) PROJECTION with the same element predicate: the projection binder can't bind the declined element
         // predicate and the fallback can't either: "could not be translated" in EVERY mode (loud, never rows; pre-existing
         // outcome of an unbindable count leaf, not R20's category).
-        PerMode(Routes(q => RPerRow(q, r => r.Stops.Count(s => s.When.AddDays(1).Year < 2030))), [], NotTranslated, NotTranslated, NotTranslated);
+        PerMode(Routes(q => RPerRow(q, r => r.Stops.Count(s => s.When.TimeOfDay < noon))), [], NotTranslated, NotTranslated, NotTranslated);
         // Count(pred) in a PREDICATE: R17 [r-full, r-mixed]; the driver counts the null element ([all 3]): refused.
-        Refused(Routes(q => RNames(q.Where(r => r.Stops.Count(s => s.When.AddDays(1).Year < 2030) > 0))), ["r-full", "r-mixed", "r-null"]);
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Count(s => s.When.TimeOfDay < noon) > 0))), ["r-full", "r-mixed", "r-null"]);
         // All with the same predicate: R17 [r-full]; the driver's missing-below-everything makes every element pass.
-        Refused(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.When.AddDays(1).Year < 2030)))), ["r-full", "r-mixed", "r-null"]);
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.All(s => s.When.TimeOfDay < noon)))), ["r-full", "r-mixed", "r-null"]);
         // The declined computation beside a comparison with null: R17 [r-mixed, r-null]; the driver's `$eq` isn't
         // missing-safe ([]).
-        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030 && s.Note == null)))), []);
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.TimeOfDay < noon && s.Note == null)))), []);
         // Element predicate under a pass-through operator before the quantifier (Where(...).Any()): same refusal, same
         // driver rows.
-        Refused(Routes(q => RNames(q.Where(r => r.Stops.Where(s => s.When.AddDays(1).Year < 2030).Any()))), ["r-full", "r-mixed", "r-null"]);
+        Refused(Routes(q => RNames(q.Where(r => r.Stops.Where(s => s.When.TimeOfDay < noon).Any()))), ["r-full", "r-mixed", "r-null"]);
 
         // Controls (NOT refused):
         // (1) the same date-add comparison WITHOUT the date part is native (R18): served correctly in every native mode.
         NullElement(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1) < May)))), [], ["r-mixed", "r-null"]);
-        // (2) a declined shape whose predicate needs no null guard (equality with a constant over the declined date part):
+        // (2) a declined shape whose predicate needs no null guard (equality with a constant over the declined TimeOfDay):
         // the fallback's answer equals R17's, so it falls back and serves.
-        PerMode(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year == 2024)))), ["r-full", "r-mixed"], NotNative, Serves, Serves);
+        PerMode(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.When.TimeOfDay == TimeSpan.Zero)))), ["r-full", "r-mixed"], NotNative, Serves, Serves);
         // (3) a declined shape with no element LAMBDA (an indexer read) has no element scope to key on: falls back and serves
         // (the null element's City reads missing, never "Oslo", in every mode).
         PerMode(Routes(q => RNames(q.Where(r => r.Stops[0].City == "Oslo"))), ["r-full", "r-mixed"], NotNative, Serves, Serves);
@@ -464,7 +467,7 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         {
             s.ComplexProperty(x => x.Location);
             s.ComplexCollection(x => x.Tags);
-        }), q => RNames(q.Where(r => r.Stops.Any(s => s.When.AddDays(1).Year < 2030)))), ["r-full"]);
+        }), q => RNames(q.Where(r => r.Stops.Any(s => s.When.TimeOfDay < noon)))), ["r-full"]);
     }
 
     public class OwnedStop
@@ -662,10 +665,11 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.At.Ticks < 1)))), [], NotNative,
             R20Refusal, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("does not represent members as fields"));
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Marks.HasFlag(Mark.A))))), [], NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"));
-        // A primitive-collection leaf on an element: no native element-scope rendering ($in over an array field is
-        // query-dialect only); the fallback's $in/$size over the null element's missing array is a server error.
+        // A primitive-collection leaf on an element: Contains has no native element-scope rendering ($in over an array field is
+        // query-dialect only) and the fallback's $in over the null element's missing array is a server error. Its size is native
+        // since the EF-322c base (a null element's missing array reads empty, as the nested complex collection does).
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x"))))), [], NotNative, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"), Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
-        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Count == 0)))), [], NotNative, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"), Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Count == 0)))), ["mixed", "null"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
         // Sum over an element leaf: refused in every mode.
         PerMode(Q(q => q.OrderBy(h => h.Name).Select(h => h.Ps.Sum(p => p.Zip)).ToList().Select(x => x?.ToString() ?? "<null>")), [],
             NotTranslated, NotTranslated, NotTranslated);
@@ -1540,19 +1544,20 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         // projected list holds MISSING for the null element, which the driver's $in never equates with false: [].
         KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Select(s => s.Verified).Contains(false)))), ["r-mixed", "r-null"], []);
 
-        // Null tests NOT spelled `== null` inside a declined predicate (the date part over a date-add declines; the disjunct is
-        // never true). The scanner looks for `==`/`!=` against a null CONSTANT only.
+        // Null tests NOT spelled `== null` inside a declined predicate (an equality over `When.TimeOfDay` declines natively; the
+        // disjunct is never true). The scanner looks for `==`/`!=` against a null CONSTANT only.
+        var never = TimeSpan.FromHours(30);
         // `Zip.HasValue`: R17 [r-full, r-mixed] (the null element's Zip is null); the driver's `$ne: [missing, null]` adds r-null.
-        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip.HasValue || s.When.AddDays(1).Year == 1999)))),
+        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip.HasValue || s.When.TimeOfDay == never)))),
             ["r-full", "r-mixed"], ["r-full", "r-mixed", "r-null"]);
         // `Zip == none` (a null PARAMETER): R17 [r-mixed, r-null]; the driver's `$eq` isn't missing-safe: [].
         int? none = null;
-        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip == none || s.When.AddDays(1).Year == 1999)))), ["r-mixed", "r-null"], []);
+        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => s.Zip == none || s.When.TimeOfDay == never)))), ["r-mixed", "r-null"], []);
         // `string.IsNullOrEmpty(Note)`: R17 [r-mixed, r-null] (Oslo's Note is "n"); the driver: [].
-        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => string.IsNullOrEmpty(s.Note) || s.When.AddDays(1).Year == 1999)))),
+        KnownLimit(Routes(q => RNames(q.Where(r => r.Stops.Any(s => string.IsNullOrEmpty(s.Note) || s.When.TimeOfDay == never)))),
             ["r-mixed", "r-null"], []);
         // `Note == r.Alias` (a null ROOT member): R17 [r-mixed, r-null] (null == null); the driver: [].
-        KnownLimit(AliasedRoutes(q => q.Where(r => r.Stops.Any(s => s.Note == r.Alias || s.When.AddDays(1).Year == 1999)).Select(r => r.Name).ToList().Order(StringComparer.Ordinal)),
+        KnownLimit(AliasedRoutes(q => q.Where(r => r.Stops.Any(s => s.Note == r.Alias || s.When.TimeOfDay == never)).Select(r => r.Name).ToList().Order(StringComparer.Ordinal)),
             ["r-mixed", "r-null"], []);
 
         // Indexed overloads: EF itself refuses `Where((s, i) => ...)` over the collection in EVERY mode (loud, never rows), so

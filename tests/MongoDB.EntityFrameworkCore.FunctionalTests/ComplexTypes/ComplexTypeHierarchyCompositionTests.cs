@@ -155,10 +155,11 @@ public class ComplexTypeHierarchyCompositionTests(TemporaryDatabaseFixture datab
         Native(Zoo(db => [.. db.Animals.OfType<Dog>().OrderBy(d => d.Name).Select(d => d.Home.City)]), "Paris", "Rome");
         Native(Zoo(db => [.. db.Animals.OfType<Dog>().OrderBy(d => d.Name).Select(d => new { d.Name, d.Home.Geo.Lat }).ToList().Select(x => x.Name + ":" + x.Lat)]),
             "Fido:3", "Rex:2");
-        // Derived-only members projected after OfType decline natively (pre-existing scalar limitation, Task 10): pinned.
+        // A derived-only complex leaf projected after OfType declines natively (pre-existing; follow-up): pinned. A
+        // derived-only scalar is native now (the selector resolves against the derived type set, EF-322c).
         Declines(Zoo(db => [.. db.Animals.OfType<Dog>().OrderBy(d => d.Name).Select(d => d.Kennel.Lat).ToList().Select(x => x.ToString())]), "5", "2");
         Declines(Zoo(db => [.. db.Animals.OfType<Cat>().Select(c => new { c.Name, c.Vet.City }).ToList().Select(x => x.Name + ":" + x.City)]), "Tom:Oslo");
-        Declines(Zoo(db => [.. db.Animals.OfType<Dog>().OrderBy(d => d.Name).Select(d => d.Age).ToList().Select(x => x.ToString())]), "7", "3");
+        Native(Zoo(db => [.. db.Animals.OfType<Dog>().OrderBy(d => d.Name).Select(d => d.Age).ToList().Select(x => x.ToString())]), "7", "3");
     }
 
     [Fact]

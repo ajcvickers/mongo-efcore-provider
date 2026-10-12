@@ -400,7 +400,7 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
         var collection = Seed(nameof(Primitive_element_collection_filtered_count_declines), RowWithTags("x", "a", "bb"));
         using var db = CreateContext(collection, MongoQueryMode.NativeOnly, BlogModel);
 
-        // Tags is a primitive-collection property, not a navigation — TryResolveOwnedCollectionPath's final-hop
+        // Tags is a primitive-collection property, not a navigation — TryResolveEmbeddedCollectionPath's final-hop
         // check declines it.
         Assert.Throws<NativeTranslationNotSupportedException>(
             () => db.Entities.AsNoTracking().Where(b => b.Tags.Count(t => t.Length > 1) > 0).ToList());
@@ -498,7 +498,7 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
     // every mode; none ever worked.
     //
     // Primitive (b.Tags.Count(pred)): Tags is a primitive-collection property, so
-    // TryResolveOwnedCollectionPath declines, the whole leaf fails to translate, Route = Fallback, and
+    // TryResolveEmbeddedCollectionPath declines, the whole leaf fails to translate, Route = Fallback, and
     // MongoProjectionBindingExpressionVisitor's predicated-Count arm declines too (the source is not a
     // CollectionShaperExpression), reaching the generic `methodCallExpression.Update(...)` rebuild that crashes.
     //
@@ -524,7 +524,7 @@ public class NativeOwnedCollectionFilteredCountTests(TemporaryDatabaseFixture da
             }
         }
 
-        // Primitive collection: declined by TryResolveOwnedCollectionPath's final-hop check.
+        // Primitive collection: declined by TryResolveEmbeddedCollectionPath's final-hop check.
         AssertHardFailsEverywhere(
             q => q.Select(b => new { b.Title, N = b.Tags.Count(t => t.Length > 1) }).Cast<object>());
 

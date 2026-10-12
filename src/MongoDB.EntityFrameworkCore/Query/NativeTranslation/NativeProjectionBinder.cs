@@ -240,9 +240,14 @@ internal static class NativeProjectionBinder
                     var alias = DeriveWrappedLeafAlias(mongoQ, selector.Parameters[0], memberValue, memberName);
                     if (!TryTranslateLeaf(mongoQ, translator, selector.Parameters[0], memberValue, alias, pendingLookups, pendingReducerLeaves, pendingBareCountStamps, out var leaf, out var isArrayLeaf, out var isOwnedNavEntityLeaf, out var throwsOnNull, allowWholeRootEntityLeaf: true))
                         return false;
+                    // An owned-reference argument (`new Pair(x.Home, x.Work)`) can't be read by the index-based positional shaper:
+                    // the driver reads the argument through the entity serializer, which does not deserialize. Decline, so the
+                    // late fallback reads it off the whole document like any other owned entity argument.
+                    if (isOwnedNavEntityLeaf)
+                        return false;
                     if (!TryStageLeaf(alias, leaf, memberValue, throwsOnNull, isArrayLeaf, isOwnedNavEntityLeaf))
                         return false;
-                    if (alias != memberName || isOwnedNavEntityLeaf)
+                    if (alias != memberName)
                         namedAliasOverrides.Add((memberName, alias));
                 }
 
