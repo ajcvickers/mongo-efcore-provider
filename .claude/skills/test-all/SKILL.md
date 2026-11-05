@@ -40,6 +40,11 @@ Each agent runs, against the whole `$SLN` (all of `UnitTests`, `FunctionalTests`
 2. `$ENCRYPTION_ENV dotnet test  $SLN -c "Debug EF{version}" --no-build --logger "console;verbosity=normal" -v quiet`
    (`$ENCRYPTION_ENV` is the literal prefix from Phase 1 step 4, written inline before `dotnet` so it applies to that process; omit it only when both variables were already set. Pass it to every sub-agent verbatim.)
 
+**EF11 exception:** the EF11 `SpecificationTests` project cannot run under `dotnet test` (xUnit v3 4.x is Microsoft.Testing.Platform only; see AGENTS.md).
+For EF11 run `dotnet test` on `UnitTests` and `FunctionalTests`, then run the spec executable directly:
+`tests/MongoDB.EntityFrameworkCore.SpecificationTests/bin/Debug EF11/net11.0/MongoDB.EntityFrameworkCore.SpecificationTests.exe -noColor > <logfile> 2>&1`,
+and take the totals from its `=== TEST EXECUTION SUMMARY ===` line. A whole-solution `dotnet test` on EF11 prints an error for the spec project; that is expected.
+
 Append the user's `--filter "<expr>"` or project path to the test command if given. Drop `--no-build` if the build step did not run in the same invocation (stale binaries give a false green).
 
 ### Execution hygiene (include verbatim in every sub-agent's prompt)

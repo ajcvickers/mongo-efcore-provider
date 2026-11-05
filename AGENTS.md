@@ -33,6 +33,12 @@ dotnet test  MongoDB.EFCoreProvider.sln -c "Debug EF10" --no-build --filter "Ful
 
 For all four versions in parallel, invoke the `/test-all` skill. EF11 needs the .NET 11 SDK.
 
+**EF11 SpecificationTests run through their own executable, not `dotnet test`.** They use xUnit v3 4.x (EF11's
+Specification.Tests package requires it), which only supports Microsoft.Testing.Platform, and `dotnet test` on SDK 10+ rejects that
+unless the repo opts in via `global.json` (which would break the xUnit v2 projects on EF8-EF10). Build with `dotnet build ... -c "Debug EF11"`,
+then run `tests/MongoDB.EntityFrameworkCore.SpecificationTests/bin/Debug EF11/net11.0/MongoDB.EntityFrameworkCore.SpecificationTests.exe`
+(accepts `-class`, `-method`, `-noColor`). A whole-solution `dotnet test -c "Debug EF11"` therefore reports an error for that one project.
+
 ## Testing
 
 **Recommended: run with both `MONGODB_URI` and `ATLAS_URI` unset.** `TestServer` then has TestContainers boot a
