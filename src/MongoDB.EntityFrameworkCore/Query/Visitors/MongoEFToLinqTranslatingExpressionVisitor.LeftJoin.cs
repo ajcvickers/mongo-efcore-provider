@@ -396,13 +396,20 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
             serializerExpression);
     }
 
+    // The result-selector overload. .NET 11 added Join/GroupJoin overloads that take an IEqualityComparer as the fifth
+    // parameter instead, so the parameter count alone is no longer unique.
+    private static bool HasResultSelectorAsFifthParameter(MethodInfo method)
+        => method.GetParameters() is { Length: 5 } parameters
+           && parameters[4].ParameterType is { IsGenericType: true } fifth
+           && fifth.GetGenericTypeDefinition() == typeof(Expression<>);
+
     private static readonly MethodInfo QueryableJoinMethod =
         typeof(Queryable).GetMethods()
-            .Single(m => m.Name == nameof(Queryable.Join) && m.GetParameters().Length == 5);
+            .Single(m => m.Name == nameof(Queryable.Join) && HasResultSelectorAsFifthParameter(m));
 
     private static readonly MethodInfo QueryableGroupJoinMethod =
         typeof(Queryable).GetMethods()
-            .Single(m => m.Name == nameof(Queryable.GroupJoin) && m.GetParameters().Length == 5);
+            .Single(m => m.Name == nameof(Queryable.GroupJoin) && HasResultSelectorAsFifthParameter(m));
 
     private static readonly MethodInfo QueryableSelectManyMethod =
         typeof(Queryable).GetMethods()
