@@ -52,6 +52,12 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         null;
 #endif
 
+#if EF11
+    protected override ShapedQueryExpression? TranslateFullJoin(ShapedQueryExpression outer, ShapedQueryExpression inner,
+        LambdaExpression outerKeySelector, LambdaExpression innerKeySelector, LambdaExpression resultSelector) =>
+        null;
+#endif
+
     protected override ShapedQueryExpression? TranslateJoin(ShapedQueryExpression outer, ShapedQueryExpression inner,
         LambdaExpression outerKeySelector, LambdaExpression innerKeySelector, LambdaExpression resultSelector)
         => TranslateJoinCore(outer, inner, outerKeySelector, innerKeySelector, resultSelector, isLeftOuter: false);

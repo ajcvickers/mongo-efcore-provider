@@ -106,22 +106,27 @@ internal static class MongoBulkPlanBuilder
         }
         catch (Exception exception) when (exception is not InvalidOperationException)
         {
-            throw new InvalidOperationException(
-                CoreStrings.NonQueryTranslationFailedWithDetails(
-                    nonQuery.SourceQuery.CapturedExpression?.Print(),
-                    exception.Message),
-                exception);
+            throw NonQueryTranslationFailed(
+                nonQuery.SourceQuery.CapturedExpression?.Print(), exception.Message, exception);
         }
     }
+
+    // EF11 dropped the "with details" message: the details travel as the inner exception instead.
+    internal static InvalidOperationException NonQueryTranslationFailed(
+        object? expression, string? details, Exception? innerException = null)
+#if EF11
+        => new(CoreStrings.NonQueryTranslationFailed(expression), innerException ?? new InvalidOperationException(details));
+#else
+        => new(CoreStrings.NonQueryTranslationFailedWithDetails(expression, details), innerException);
+#endif
 
     internal static void EnsureKeyOrThrow(IReadOnlyEntityType entityType, MongoNonQueryExpression nonQuery)
     {
         if (entityType.FindPrimaryKey() == null)
         {
-            throw new InvalidOperationException(
-                CoreStrings.NonQueryTranslationFailedWithDetails(
-                    nonQuery.SourceQuery.CapturedExpression?.Print(),
-                    "the entity must have a primary key to use ordering, paging, or Distinct in a bulk delete or update."));
+            throw NonQueryTranslationFailed(
+                nonQuery.SourceQuery.CapturedExpression?.Print(),
+                "the entity must have a primary key to use ordering, paging, or Distinct in a bulk delete or update.");
         }
     }
 
