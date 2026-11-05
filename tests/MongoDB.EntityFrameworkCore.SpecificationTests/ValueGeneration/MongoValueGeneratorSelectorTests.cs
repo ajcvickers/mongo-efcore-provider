@@ -72,8 +72,14 @@ public class MongoValueGeneratorSelectorTests
     [Fact]
     public void Create_throws_NotSupportedException_for_mapped_int()
     {
+#if EF11
+        // EF11's TrySelect reports "no generator" by returning false; the caller raises the error.
+        Assert.False(_valueGeneratorSelector.TrySelect(_entityType.FindProperty("someInt")!, _entityType, out var generator));
+        Assert.Null(generator);
+#else
         Assert.Throws<NotSupportedException>(() =>
             Select(_entityType.FindProperty("someInt")!, _entityType));
+#endif
     }
 
     [Fact]

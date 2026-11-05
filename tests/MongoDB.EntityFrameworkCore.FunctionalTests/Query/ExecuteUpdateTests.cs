@@ -240,7 +240,7 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
             () => db.Entities.OrderBy(o => o.Quantity).Take(2)
                 .ExecuteUpdate(s => s.SetProperty(o => o.Status, "archived")));
 
-        Assert.Contains("AutoTransactionBehavior", ex.Message);
+        Assert.Contains("AutoTransactionBehavior", AllMessages(ex));
         Assert.Equal(0, db.Entities.Count(o => o.Status == "archived")); // nothing updated
     }
 
@@ -255,7 +255,7 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         // A setter lambda with no SetProperty call must be rejected, not run as a no-op updateMany.
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s));
-        Assert.Contains("SetProperty", ex.Message);
+        Assert.Contains("SetProperty", AllMessages(ex));
     }
 #endif
 
@@ -266,8 +266,14 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Unmapped, "x")));
-        Assert.Contains("Only mapped root scalar properties can be updated", ex.Message);
+        Assert.Contains("Only mapped root scalar properties can be updated", AllMessages(ex));
     }
+
+    // EF11 reports the translation failure details as the inner exception rather than in the message.
+    private static string AllMessages(Exception exception)
+        => string.Join(" ", exception.InnerException is null
+            ? [exception.Message]
+            : [exception.Message, AllMessages(exception.InnerException)]);
 
     private static int Foo(int quantity) => quantity + 1;
 
@@ -279,8 +285,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => Foo(o.Quantity))));
 
-        Assert.DoesNotContain("target of an invocation", ex.Message);
-        Assert.Contains("Foo", ex.Message);
+        Assert.DoesNotContain("target of an invocation", AllMessages(ex));
+        Assert.Contains("Foo", AllMessages(ex));
         Assert.Equal(3, db.Entities.Count(o => o.Quantity > 0)); // nothing updated
     }
 
@@ -292,8 +298,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Status.GetHashCode())));
 
-        Assert.DoesNotContain("target of an invocation", ex.Message);
-        Assert.Contains("GetHashCode", ex.Message);
+        Assert.DoesNotContain("target of an invocation", AllMessages(ex));
+        Assert.Contains("GetHashCode", AllMessages(ex));
     }
 
     [Fact]
@@ -304,8 +310,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Quantity + 1)));
-        Assert.Contains("Self-referencing ExecuteUpdate on property", ex.Message);
-        Assert.Contains("value converter", ex.Message);
+        Assert.Contains("Self-referencing ExecuteUpdate on property", AllMessages(ex));
+        Assert.Contains("value converter", AllMessages(ex));
     }
 
     [Fact]
