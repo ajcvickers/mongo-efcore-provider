@@ -22,7 +22,9 @@ using MongoDB.Driver;
 using MongoDB.Driver.Linq;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 using Xunit.Sdk;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;

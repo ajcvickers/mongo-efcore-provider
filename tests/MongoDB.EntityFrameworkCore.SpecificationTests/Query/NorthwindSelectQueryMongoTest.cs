@@ -19,7 +19,9 @@ using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.Driver;
 using MongoDB.Driver.Core.Misc;
 using MongoDB.Driver.Linq;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 using Xunit.Sdk;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;

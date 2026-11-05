@@ -22,7 +22,9 @@ using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 using MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 using Xunit;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 using Xunit.Sdk;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query.Translations;
@@ -42,9 +44,15 @@ public class StringTranslationsMongoTest : StringTranslationsTestBase<MongoBasic
     // The base test is named "Equals", which xUnit1024 flags as colliding with object.Equals; the override
     // can't be renamed.
 #pragma warning disable xUnit1024
+#if EF11
+    public override async Task Instance_Equals()
+    {
+        await base.Instance_Equals();
+#else
     public override async Task Equals()
     {
         await base.Equals();
+#endif
 
         AssertMql(
             """

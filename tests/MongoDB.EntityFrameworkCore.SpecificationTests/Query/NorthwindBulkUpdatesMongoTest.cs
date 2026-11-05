@@ -22,7 +22,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.BulkUpdates;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using Xunit;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
@@ -70,7 +72,7 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
     public override Task Update_Where_set_constant_TagWith(bool async)
         => base.Update_Where_set_constant_TagWith(async);
 
-#if EF10
+#if EF10 || EF11
     public override Task Update_Where_set_constant_via_lambda(bool async)
         => base.Update_Where_set_constant_via_lambda(async);
 #endif
@@ -203,19 +205,19 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
     public override Task Delete_non_entity_projection_3(bool async)
         => AssertTranslationFailed(() => base.Delete_non_entity_projection_3(async));
 
-#if EF10
+#if EF10 || EF11
     // Fails: ExecuteUpdate/ExecuteDelete source restricted to a Where predicate; joins / correlated subqueries unsupported EF-X016
     public override Task Delete_with_LeftJoin(bool async)
         => AssertTranslationFailed(() => base.Delete_with_LeftJoin(async));
 #endif
 
-#if EF10
+#if EF10 || EF11
     // Fails: ExecuteUpdate/ExecuteDelete source restricted to a Where predicate; joins / correlated subqueries unsupported EF-X016
     public override Task Delete_with_LeftJoin_via_flattened_GroupJoin(bool async)
         => AssertTranslationFailed(() => base.Delete_with_LeftJoin_via_flattened_GroupJoin(async));
 #endif
 
-#if EF10
+#if EF10 || EF11
     // Fails: ExecuteUpdate/ExecuteDelete source restricted to a Where predicate; joins / correlated subqueries unsupported EF-X016
     public override Task Delete_with_RightJoin(bool async)
         => AssertTranslationFailed(() => base.Delete_with_RightJoin(async));
@@ -328,7 +330,7 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
     public override Task Update_Where_set_constant_using_ef_property(bool async)
         => base.Update_Where_set_constant_using_ef_property(async);
 
-#if EF10
+#if EF10 || EF11
     public override Task Update_Where_set_nullable_int_constant_via_discard_lambda(bool async)
         => base.Update_Where_set_nullable_int_constant_via_discard_lambda(async);
 #endif
@@ -348,7 +350,7 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
     public override Task Update_unmapped_property_throws(bool async)
         => AssertTranslationFailed(() => base.Update_unmapped_property_throws(async));
 
-#if EF10
+#if EF10 || EF11
     // Fails: cross-collection join (translatable post-EF-117) — the conformance asserter's before/after
     // snapshot reads the filtered-inner join, which the driver's LINQ provider cannot translate, so a
     // non-translation exception surfaces before the bulk path's own rejection, but still throws EF-X002
@@ -356,7 +358,7 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
         => Assert.ThrowsAnyAsync<Exception>(() => base.Update_with_LeftJoin(async));
 #endif
 
-#if EF10
+#if EF10 || EF11
     // Fails: cross-collection join (translatable post-EF-117) — the conformance asserter's before/after
     // snapshot reads the filtered-inner join, which the driver's LINQ provider cannot translate, so a
     // non-translation exception surfaces before the bulk path's own rejection, but still throws EF-X002
@@ -364,13 +366,13 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
         => Assert.ThrowsAnyAsync<Exception>(() => base.Update_with_LeftJoin_via_flattened_GroupJoin(async));
 #endif
 
-#if EF10
+#if EF10 || EF11
     // Fails: ExecuteUpdate/ExecuteDelete source restricted to a Where predicate; joins / correlated subqueries unsupported EF-X016
     public override Task Update_with_PK_pushdown_and_join_and_multiple_setters(bool async)
         => AssertTranslationFailed(() => base.Update_with_PK_pushdown_and_join_and_multiple_setters(async));
 #endif
 
-#if EF10
+#if EF10 || EF11
     // Fails: ExecuteUpdate/ExecuteDelete source restricted to a Where predicate; joins / correlated subqueries unsupported EF-X016
     public override Task Update_with_RightJoin(bool async)
         => AssertTranslationFailed(() => base.Update_with_RightJoin(async));

@@ -999,7 +999,7 @@ public abstract class VectorSearchMongoTestBase
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.IsAtlas);
             _testStoreFactory = new MongoTestStoreFactory(server);

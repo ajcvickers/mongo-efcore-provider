@@ -25,7 +25,9 @@ using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 using MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 using Xunit;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query.Translations;
 
