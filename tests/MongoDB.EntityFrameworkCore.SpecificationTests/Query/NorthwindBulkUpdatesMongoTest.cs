@@ -51,6 +51,13 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
+#if EF11
+
+    public override Task Update_set_constant_TagWith_null(bool async)
+        => base.Update_set_constant_TagWith_null(async);
+
+#endif
+
     public override Task Delete_Where(bool async)
         => base.Delete_Where(async);
 

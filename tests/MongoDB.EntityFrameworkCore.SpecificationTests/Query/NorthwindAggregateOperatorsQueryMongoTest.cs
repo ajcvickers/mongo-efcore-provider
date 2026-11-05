@@ -40,6 +40,210 @@ public class NorthwindAggregateOperatorsQueryMongoTest
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
+#if EF11
+
+    public override async Task MinBy(bool async)
+    {
+        await base.MinBy(async);
+
+        AssertMql(
+            """
+Orders.{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }
+""");
+    }
+
+    public override async Task MinBy_no_data_value_type(bool async)
+    {
+        await base.MinBy_no_data_value_type(async);
+
+        AssertMql(
+            """
+Orders.{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }, { "$project" : { "_id" : "$_id" } }
+""");
+    }
+
+    public override async Task MinBy_no_data_nullable_source(bool async)
+    {
+        await base.MinBy_no_data_nullable_source(async);
+
+        AssertMql(
+            """
+Products.{ "$match" : { "SupplierID" : -1 } }, { "$set" : { "__sort0" : { "$ifNull" : ["$SupplierID", { "$literal" : 0 }] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }, { "$project" : { "SupplierID" : "$SupplierID", "_id" : 0 } }
+""");
+    }
+
+    public override async Task MinBy_no_data_reference_type_source(bool async)
+    {
+        await base.MinBy_no_data_reference_type_source(async);
+
+        AssertMql(
+            """
+Products.{ "$match" : { "SupplierID" : -1 } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }
+""");
+    }
+
+    public override async Task MinBy_no_data_nullable_selector(bool async)
+    {
+        await base.MinBy_no_data_nullable_selector(async);
+
+        AssertMql(
+            """
+Orders.{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }, { "$project" : { "_id" : "$_id" } }
+""");
+    }
+
+    public override async Task MinBy_no_data_subquery_reference_type(bool async)
+    {
+        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
+        await AssertTranslationFailed(() => base.MinBy_no_data_subquery_reference_type(async));
+    }
+
+    public override async Task MinBy_no_data_subquery_value_type(bool async)
+    {
+        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
+        await AssertTranslationFailed(() => base.MinBy_no_data_subquery_value_type(async));
+    }
+
+    public override async Task MaxBy_no_data_value_type(bool async)
+    {
+        await base.MaxBy_no_data_value_type(async);
+
+        AssertMql(
+            """
+Orders.{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : -1 } }, { "$limit" : 1 }, { "$project" : { "_id" : "$_id" } }
+""");
+    }
+
+    public override async Task MaxBy_no_data_nullable_source(bool async)
+    {
+        await base.MaxBy_no_data_nullable_source(async);
+
+        AssertMql(
+            """
+Products.{ "$match" : { "SupplierID" : -1 } }, { "$set" : { "__sort0" : { "$ifNull" : ["$SupplierID", { "$literal" : 0 }] } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }, { "$project" : { "SupplierID" : "$SupplierID", "_id" : 0 } }
+""");
+    }
+
+    public override async Task MaxBy_no_data_reference_type_source(bool async)
+    {
+        await base.MaxBy_no_data_reference_type_source(async);
+
+        AssertMql(
+            """
+Products.{ "$match" : { "SupplierID" : -1 } }, { "$sort" : { "_id" : -1 } }, { "$limit" : 1 }
+""");
+    }
+
+    public override async Task MaxBy_no_data_nullable_selector(bool async)
+    {
+        await base.MaxBy_no_data_nullable_selector(async);
+
+        AssertMql(
+            """
+Orders.{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : -1 } }, { "$limit" : 1 }, { "$project" : { "_id" : "$_id" } }
+""");
+    }
+
+    public override async Task MaxBy_no_data_subquery_reference_type(bool async)
+    {
+        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
+        await AssertTranslationFailed(() => base.MaxBy_no_data_subquery_reference_type(async));
+    }
+
+    public override async Task MaxBy_no_data_subquery_value_type(bool async)
+    {
+        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
+        await AssertTranslationFailed(() => base.MaxBy_no_data_subquery_value_type(async));
+    }
+
+    public override async Task MinBy_with_coalesce(bool async)
+    {
+        await base.MinBy_with_coalesce(async);
+
+        AssertMql(
+            """
+Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$set" : { "__sort0" : { "$ifNull" : ["$UnitPrice", { "$literal" : { "$numberDecimal" : "0" } }] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
+    }
+
+    public override async Task MinBy_over_subquery(bool async)
+    {
+        await base.MinBy_over_subquery(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$set" : { "__sort0" : { "$sum" : "$_lookup_Orders._id" } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
+    }
+
+    public override async Task MinBy_over_nested_subquery(bool async)
+    {
+        // Fails: MinBy/MaxBy over correlated cross-collection subqueries are rejected. https://github.com/ajcvickers/mongo-efcore-provider/issues/15
+        await AssertTranslationFailed(() => base.MinBy_over_nested_subquery(async));
+    }
+
+    public override async Task MinBy_over_max_subquery(bool async)
+    {
+        // Fails: MinBy/MaxBy over correlated cross-collection subqueries are rejected. https://github.com/ajcvickers/mongo-efcore-provider/issues/15
+        await AssertTranslationFailed(() => base.MinBy_over_max_subquery(async));
+    }
+
+    public override async Task MaxBy(bool async)
+    {
+        await base.MaxBy(async);
+
+        AssertMql(
+            """
+Orders.{ "$sort" : { "_id" : -1 } }, { "$limit" : 1 }
+""");
+    }
+
+    public override async Task MaxBy_with_coalesce(bool async)
+    {
+        await base.MaxBy_with_coalesce(async);
+
+        AssertMql(
+            """
+Products.{ "$match" : { "_id" : { "$lt" : 40 } } }, { "$set" : { "__sort0" : { "$ifNull" : ["$UnitPrice", { "$literal" : { "$numberDecimal" : "0" } }] } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
+    }
+
+    public override async Task MaxBy_over_subquery(bool async)
+    {
+        await base.MaxBy_over_subquery(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$set" : { "__sort0" : { "$sum" : "$_lookup_Orders._id" } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
+    }
+
+    public override async Task MaxBy_over_nested_subquery(bool async)
+    {
+        // Fails: MinBy/MaxBy over correlated cross-collection subqueries are rejected. https://github.com/ajcvickers/mongo-efcore-provider/issues/15
+        await AssertTranslationFailed(() => base.MaxBy_over_nested_subquery(async));
+    }
+
+    public override async Task MaxBy_over_sum_subquery(bool async)
+    {
+        // Fails: MinBy/MaxBy over correlated cross-collection subqueries are rejected. https://github.com/ajcvickers/mongo-efcore-provider/issues/15
+        await AssertTranslationFailed(() => base.MaxBy_over_sum_subquery(async));
+    }
+
+    public override async Task MaxBy_after_DefaultIfEmpty_does_not_throw(bool async)
+    {
+        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
+        await AssertTranslationFailed(() => base.MaxBy_after_DefaultIfEmpty_does_not_throw(async));
+    }
+
+    public override async Task MinBy_after_DefaultIfEmpty_does_not_throw(bool async)
+    {
+        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
+        await AssertTranslationFailed(() => base.MinBy_after_DefaultIfEmpty_does_not_throw(async));
+    }
+
+#endif
+
     public override async Task Last_when_no_order_by(bool async)
     {
         await base.Last_when_no_order_by(async);
@@ -2414,6 +2618,14 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^A", "o
 
     public override async Task Type_casting_inside_sum(bool async)
     {
+#if EF11
+        await base.Type_casting_inside_sum(async);
+
+        AssertMql(
+            """
+OrderDetails.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$toDecimal" : "$Discount" } } } }
+""");
+#else
         // Fails: Truncation data loss issue EF-228
         // Returns 121.04000180587159838 instead of 121.040. Native and driver-LINQ render the same $toDecimal
         // pipeline and hit the same precision bug in every mode.
@@ -2424,6 +2636,7 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^A", "o
             """
             OrderDetails.{ "$group" : { "_id" : null, "v" : { "$sum" : { "$toDecimal" : "$Discount" } } } }
             """);
+#endif
     }
 
 #endif

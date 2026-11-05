@@ -85,12 +85,21 @@ public class NorthwindMiscellaneousQueryMongoTest
 
     public override async Task Coalesce_Correct_Multiple_Same_TypeMapping(bool async)
     {
+#if EF11
+        await base.Coalesce_Correct_Multiple_Same_TypeMapping(async);
+
+        AssertMql(
+            """
+Employees.{ "$sort" : { "_id" : 1 } }, { "$match" : { "$expr" : { "$ne" : [{ "$ifNull" : [{ "$add" : [{ "$toLong" : "$ReportsTo" }, 1] }, { "$ifNull" : [{ "$add" : [{ "$toLong" : "$ReportsTo" }, 2] }, { "$add" : [{ "$toLong" : "$ReportsTo" }, 3] }] }] }, null] } } }, { "$project" : { "_v" : { "$ifNull" : [{ "$add" : ["$ReportsTo", 1] }, { "$ifNull" : [{ "$add" : ["$ReportsTo", 2] }, { "$add" : ["$ReportsTo", 3] }] }] }, "_id" : 0 } }
+""");
+#else
         await base.Coalesce_Correct_Multiple_Same_TypeMapping(async);
 
         AssertMql(
             """
             Employees.{ "$sort" : { "_id" : 1 } }, { "$project" : { "_v" : { "$ifNull" : [{ "$add" : ["$ReportsTo", 1] }, { "$ifNull" : [{ "$add" : ["$ReportsTo", 2] }, { "$add" : ["$ReportsTo", 3] }] }] }, "_id" : 0 } }
             """);
+#endif
     }
 
     public override async Task DefaultIfEmpty_top_level_followed_by_constant_Select(bool async)
@@ -1565,40 +1574,76 @@ public class NorthwindMiscellaneousQueryMongoTest
 
     public override async Task Where_Join_Exists(bool async)
     {
+#if EF11
+        await base.Where_Join_Exists(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "_id" : "ALFKI", "_lookup_Orders" : { "$elemMatch" : { "OrderDate" : { "$date" : "2008-10-23T23:00:00Z" } } } } }
+""");
+#else
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
         await AssertNoMultiCollectionQuerySupport(() => AssertQuery(
             async,
             ss => ss.Set<Customer>().Where(c =>
                 c.CustomerID == "ALFKI" && c.Orders.Exists(o => o.OrderDate == new DateTime(2008, 10, 24)))));
+#endif
     }
 
     public override async Task Where_Join_Exists_Inequality(bool async)
     {
+#if EF11
+        await base.Where_Join_Exists_Inequality(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "_id" : "ALFKI", "_lookup_Orders" : { "$elemMatch" : { "OrderDate" : { "$ne" : { "$date" : "2008-10-23T23:00:00Z" } } } } } }
+""");
+#else
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
         await AssertNoMultiCollectionQuerySupport(() => AssertQuery(
             async,
             ss => ss.Set<Customer>().Where(c =>
                 c.CustomerID == "ALFKI" && c.Orders.Exists(o => o.OrderDate != new DateTime(2008, 10, 24)))));
+#endif
     }
 
     public override async Task Where_Join_Exists_Constant(bool async)
     {
+#if EF11
+        await base.Where_Join_Exists_Constant(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "_id" : "ALFKI", "_lookup_Orders" : { "$elemMatch" : { "_id" : { "$type" : -1 } } } } }
+""");
+#else
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
         await AssertNoMultiCollectionQuerySupport(() => AssertQuery(
             async,
             ss => ss.Set<Customer>().Where(c => c.CustomerID == "ALFKI" && c.Orders.Exists(o => false))));
 
         AssertMql();
+#endif
     }
 
     public override async Task Where_Join_Not_Exists(bool async)
     {
+#if EF11
+        await base.Where_Join_Not_Exists(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "_id" : "ALFKI", "_lookup_Orders" : { "$not" : { "$elemMatch" : { "_id" : { "$type" : -1 } } } } } }
+""");
+#else
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
         await AssertNoMultiCollectionQuerySupport(() => AssertQuery(
             async,
             ss => ss.Set<Customer>().Where(c => c.CustomerID == "ALFKI" && !c.Orders.Exists(o => false))));
 
         AssertMql();
+#endif
     }
 
     public override async Task Join_OrderBy_Count(bool async)

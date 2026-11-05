@@ -93,6 +93,10 @@ public class MongoComplianceTest : ComplianceTestBase
         typeof(IncludeOneToOneTestBase<>),
         typeof(InheritanceQueryTestBase<>),
         typeof(InheritanceRelationshipsQueryTestBase<>),
+#if EF11
+        // Complex type inheritance is not supported; tracked in https://github.com/ajcvickers/mongo-efcore-provider/issues/22
+        typeof(InheritanceComplexTypesQueryTestBase<>),
+#endif
         typeof(ManyToManyNoTrackingQueryTestBase<>),
         typeof(ManyToManyQueryTestBase<>),
 #if !EF11

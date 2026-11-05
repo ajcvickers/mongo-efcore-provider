@@ -44,6 +44,13 @@ Customers.{ "$match" : { "City" : "London" } }
 
     public override async Task KeylessEntity_by_database_view(bool async)
     {
+#if EF11
+        // Fails: Views are not supported EF-X007. On EF11 the query now fails materializing the mapped collection
+        // instead of returning wrong data. https://github.com/ajcvickers/mongo-efcore-provider/issues/23
+        Assert.Contains(
+            "Document element is missing for required non-nullable property 'CategoryName'",
+            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.KeylessEntity_by_database_view(async))).Message);
+#else
         // Fails: Views are not supported, so this returns all entities from mapped collection (driver-LINQ
         // mode, which executes and returns wrong data). EF-X007. Native-only mode also rejects the query as
         // a translation failure, but only after logging the same bare collection scan.
@@ -54,6 +61,7 @@ Customers.{ "$match" : { "City" : "London" } }
             """
             Products.
             """);
+#endif
     }
 
     public override async Task Entity_mapped_to_view_on_right_side_of_join(bool async)
