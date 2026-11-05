@@ -15,7 +15,7 @@ permissions:
 
 env:
   PACKAGE_ID: Unicorn.EntityFrameworkCore.MongoDB
-  PACKAGE_DESCRIPTION: Unofficial community build of the MongoDB provider for Entity Framework Core, including changes not yet merged upstream. Not supported by MongoDB. See https://github.com/ajcvickers/mongo-efcore-provider/blob/release/FORK.md
+  PACKAGE_DESCRIPTION: Unofficial community build of the MongoDB provider for Entity Framework Core that includes changes not yet merged upstream. Not supported by MongoDB. See https://github.com/ajcvickers/mongo-efcore-provider/blob/release/FORK.md
 
 jobs:
   publish:
