@@ -6,11 +6,12 @@ The MongoDB database provider for [Entity Framework Core](https://github.com/dot
 ## Tech stack & layout
 
 - **Multi-EF-version targeting via build *configurations*, not target frameworks:** `Debug|Release EF8`, `EF9`,
-  `EF10` (EF8/EF9 build `net8.0`, EF10 `net10.0`), selected by the `EF8`/`EF9`/`EF10` define constant (see the
+  `EF10`, `EF11` (EF8/EF9 build `net8.0`, EF10 `net10.0`, EF11 `net11.0`), selected by the `EF8`/`EF9`/`EF10`/`EF11` define constant (see the
   `.csproj`). EF and driver versions are pinned in `Versions.props`; `DRIVER_VERSION` overrides the driver.
 - `src/` is `<Nullable>enable</Nullable>`. `EF1001` is suppressed: the provider intentionally uses EF internals.
 - xUnit with **plain `Assert.*`** (no FluentAssertions). `UnitTests` and `FunctionalTests` use xUnit v3
-  (`xunit.v3`); `SpecificationTests` stays on xUnit v2. `SpecificationTests` disables test parallelization
+  (`xunit.v3`); `SpecificationTests` uses xUnit v2 for EF8-EF10 and xUnit v3 for EF11 (`#if EF11`; EF11's
+  Specification.Tests package is built on xUnit v3). `SpecificationTests` disables test parallelization
   (`Usings.cs`); `FunctionalTests` does not and relies on a unique database per fixture. CI runs the projects,
   and on MongoDB 5.0/6.0 the test collections, one at a time — see Testing.
 - `tests/…UnitTests` (no database), `…FunctionalTests` (real MongoDB), `…SpecificationTests` (EF Core's conformance suite).
@@ -18,19 +19,19 @@ The MongoDB database provider for [Entity Framework Core](https://github.com/dot
 ## Editing
 
 - **Preserve file BOMs.** Annotate new `src/` types for nullability.
-- Version-conditional code uses `#if EF8 || EF9` (legacy) and `#if !EF8` (EF9+); see
+- Version-conditional code uses `#if EF8 || EF9` (legacy), `#if !EF8` (EF9+) and `#if EF10 || EF11` (EF10+); see
   `Storage/MongoTypeMappingSource.cs`, `Query/QueryingEnumerable.cs`.
 
 ## Commands
 
 ```bash
-# Build / test one EF version (replace EF10 with EF8 or EF9)
+# Build / test one EF version (replace EF10 with EF8, EF9 or EF11)
 dotnet build MongoDB.EFCoreProvider.sln -c "Debug EF10"
 dotnet test  MongoDB.EFCoreProvider.sln -c "Debug EF10" --no-build
 dotnet test  MongoDB.EFCoreProvider.sln -c "Debug EF10" --no-build --filter "FullyQualifiedName~ClassName"
 ```
 
-For all three versions in parallel, invoke the `/test-all` skill.
+For all four versions in parallel, invoke the `/test-all` skill. EF11 needs the .NET 11 SDK.
 
 ## Testing
 

@@ -2,7 +2,7 @@ name: Publish NuGet
 
 # Fork-only workflow. Lives on the `release` branch, never on `main` (which mirrors upstream).
 # Push a tag like v10.0.5.1 (upstream base version 10.0.5, fork revision 1) to publish.
-# The first number of the tag selects the EF Core line: 8 -> Release EF8, 9 -> Release EF9, 10 -> Release EF10.
+# The first number of the tag selects the EF Core line: 8 -> Release EF8, 9 -> Release EF9, 10 -> Release EF10, 11 -> Release EF11.
 
 on:
   push:
@@ -32,12 +32,19 @@ jobs:
             8.0.x
             10.0.x
 
+      # EF11 builds for net11.0. Quality 'preview' also resolves release candidates; drop it once .NET 11 is GA.
+      - name: Setup .NET 11
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+
       - name: Resolve version and configuration
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           EF_MAJOR="${VERSION%%.*}"
           case "$EF_MAJOR" in
-            8|9|10) ;;
+            8|9|10|11) ;;
             *) echo "Unsupported EF major version in tag: $GITHUB_REF_NAME"; exit 1 ;;
           esac
           echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"

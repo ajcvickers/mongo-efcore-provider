@@ -22,7 +22,7 @@ upstream later.
 
 ## Versions
 
-Tags are `v<upstream version>.<fork revision>`, e.g. `v10.0.5.1`, and select the EF Core line by their first number (8, 9 or 10).
+Tags are `v<upstream version>.<fork revision>`, e.g. `v10.0.5.1`, and select the EF Core line by their first number (8, 9, 10 or 11).
 The upstream part is the nearest upstream release, not a promise that the code matches that release exactly. The fork is
 usually well ahead of it. Use revision `.1` or higher: NuGet drops a trailing `.0`.
 
