@@ -18,10 +18,9 @@ Work that does not depend on fork-only code branches from `upstream/main` instea
 git config rerere.enabled true      # remember conflict resolutions and replay them on later merges
 ```
 
-On GitHub:
-- Make `release` the fork's default branch, so it is where PRs and visitors land.
-- Add `release` to the PR triggers of `.github/workflows/github-actions-atlastest.yml`. It lists `main` and `release/*`, which does not
-  match a branch named exactly `release`. (Not done yet.)
+Already done on GitHub (listed here for reference if the fork is ever recreated):
+- `release` is the fork's default branch, so it is where PRs and visitors land.
+- `.github/workflows/github-actions-atlastest.yml` runs on PRs to `release` (it originally listed only `main` and `release/*`).
 
 ---
 
