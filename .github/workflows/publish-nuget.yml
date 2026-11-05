@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # Required for NuGet trusted publishing (OIDC)
 
 env:
   PACKAGE_ID: Unicorn.EntityFrameworkCore.MongoDB
@@ -60,10 +61,18 @@ jobs:
           -p:Description="$PACKAGE_DESCRIPTION"
           --include-symbols -p:SymbolPackageFormat=snupkg -p:ContinuousIntegrationBuild=true
 
+      # Trusted publishing: exchanges this run's OIDC token for a short-lived API key. No long-lived secret is stored.
+      # Needs a trusted publishing policy on nuget.org for this repo and workflow file, and the NUGET_USER repository variable.
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
       - name: Push to NuGet.org
         run: >
           dotnet nuget push "./artifacts/nuget/$PACKAGE_ID.$PACKAGE_VERSION.nupkg"
-          --source https://api.nuget.org/v3/index.json --api-key "${{ secrets.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
 
       - name: Attach packages to the GitHub release
         env:

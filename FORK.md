@@ -19,7 +19,7 @@ Assembly names and namespaces are unchanged, so it is a drop-in replacement for 
 2. Also merge it into `release`.
 3. Sync with upstream: fast-forward `main` (`git fetch upstream && git switch main && git merge --ff-only upstream/main && git push origin main`), then `git switch release && git merge main`.
 4. Publish: tag `release` as `v<upstream version>.<fork revision>`, e.g. `v10.0.5.1`, and push the tag. The first number selects the EF Core line (8, 9 or 10).
-   Needs the `NUGET_API_KEY` repository secret.
+   Publishing uses NuGet trusted publishing (OIDC): it needs a trusted publishing policy on nuget.org for this repo and `publish-nuget.yml`, and the `NUGET_USER` repository variable (your nuget.org username). No API key secret is stored.
 
 ## Changes not yet in upstream
 
