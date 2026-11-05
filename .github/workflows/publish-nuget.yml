@@ -71,7 +71,7 @@ jobs:
 
       - name: Push to NuGet.org
         run: >
-          dotnet nuget push "./artifacts/nuget/$PACKAGE_ID.$PACKAGE_VERSION.nupkg"
+          dotnet nuget push ./artifacts/nuget/*.nupkg
           --source https://api.nuget.org/v3/index.json --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
 
       - name: Attach packages to the GitHub release
