@@ -1,0 +1,71 @@
+name: Publish NuGet
+
+# Fork-only workflow. Lives on the `release` branch, never on `main` (which mirrors upstream).
+# Push a tag like v10.0.5.1 (upstream base version 10.0.5, fork revision 1) to publish.
+# The first number of the tag selects the EF Core line: 8 -> Release EF8, 9 -> Release EF9, 10 -> Release EF10.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*.*'
+
+permissions:
+  contents: write
+
+env:
+  PACKAGE_ID: Unicorn.EntityFrameworkCore.MongoDB
+  PACKAGE_DESCRIPTION: Unofficial community build of the MongoDB provider for Entity Framework Core, including changes not yet merged upstream. Not supported by MongoDB. See https://github.com/ajcvickers/mongo-efcore-provider/blob/release/FORK.md
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Resolve version and configuration
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          EF_MAJOR="${VERSION%%.*}"
+          case "$EF_MAJOR" in
+            8|9|10) ;;
+            *) echo "Unsupported EF major version in tag: $GITHUB_REF_NAME"; exit 1 ;;
+          esac
+          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_CONFIGURATION=Release EF$EF_MAJOR" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: dotnet build MongoDB.EFCoreProvider.sln -c "$BUILD_CONFIGURATION"
+
+      - name: Unit tests
+        run: dotnet test tests/MongoDB.EntityFrameworkCore.UnitTests -c "$BUILD_CONFIGURATION" --no-build
+
+      # No MONGODB_URI/ATLAS_URI is set, so the tests boot a mongodb-atlas-local container (Docker is available on the runner).
+      - name: Functional tests
+        run: dotnet test tests/MongoDB.EntityFrameworkCore.FunctionalTests -c "$BUILD_CONFIGURATION" --no-build
+
+      - name: Pack
+        run: >
+          dotnet pack src/MongoDB.EntityFrameworkCore/MongoDB.EntityFrameworkCore.csproj
+          -o ./artifacts/nuget -c "$BUILD_CONFIGURATION"
+          -p:PackageId="$PACKAGE_ID" -p:Version="$PACKAGE_VERSION"
+          -p:Description="$PACKAGE_DESCRIPTION"
+          --include-symbols -p:SymbolPackageFormat=snupkg -p:ContinuousIntegrationBuild=true
+
+      - name: Push to NuGet.org
+        run: >
+          dotnet nuget push "./artifacts/nuget/$PACKAGE_ID.$PACKAGE_VERSION.nupkg"
+          --source https://api.nuget.org/v3/index.json --api-key "${{ secrets.NUGET_API_KEY }}"
+
+      - name: Attach packages to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" ./artifacts/nuget/*nupkg --title "$GITHUB_REF_NAME" --generate-notes --prerelease=false
