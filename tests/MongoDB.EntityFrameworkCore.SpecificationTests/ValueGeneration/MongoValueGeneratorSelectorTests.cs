@@ -52,7 +52,7 @@ public class MongoValueGeneratorSelectorTests
     }
 #else
     private ValueGenerator Select(IProperty property, IEntityType entityType)
-        => _valueGeneratorSelector.Select(property, entityType);
+        => _valueGeneratorSelector.Select(property, entityType)!;
 #endif
 
     [Fact]

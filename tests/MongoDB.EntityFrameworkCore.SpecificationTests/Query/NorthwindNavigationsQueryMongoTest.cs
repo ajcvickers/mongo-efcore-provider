@@ -572,7 +572,7 @@ OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "f
             ss => from p in ss.Set<Product>()
                   where p.OrderDetails.Contains(
                       ss.Set<OrderDetail>().OrderByDescending(o => o.OrderID).ThenBy(o => o.ProductID)
-                          .FirstOrDefault(orderDetail => orderDetail.Quantity == 1))
+                          .FirstOrDefault(orderDetail => orderDetail.Quantity == 1)!)
                   select p));
     }
 
@@ -583,7 +583,7 @@ OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "f
             async,
             ss => from p in ss.Set<Product>()
                   where p.OrderDetails.Contains(
-                      ss.Set<OrderDetail>().OrderByDescending(o => o.OrderID).ThenBy(o => o.ProductID).FirstOrDefault())
+                      ss.Set<OrderDetail>().OrderByDescending(o => o.OrderID).ThenBy(o => o.ProductID).FirstOrDefault()!)
                   select p));
     }
 

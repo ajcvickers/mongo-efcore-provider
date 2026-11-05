@@ -1117,7 +1117,7 @@ Orders.{ "$project" : { "One" : "$CustomerID", "Two" : { "$cond" : { "if" : { "$
         // Default ordering on Mongo is different from .NET, so just compare the first three items.
         await AssertQuery(
             async,
-            ss => ss.Set<Customer>().Select(c => new CustomerListItem(c.CustomerID, c.City)).OrderBy(c => c.City).Take(3),
+            ss => ss.Set<Customer>().Select(c => new CustomerListItem(c.CustomerID, c.City!)).OrderBy(c => c.City).Take(3),
             assertOrder: true);
 
         AssertMql(

@@ -772,7 +772,7 @@ BasicTypesEntities.{ "$project" : { "_v" : { "$switch" : { "branches" : [{ "case
 
         var results = await context.Set<BasicTypesEntity>()
             .Select(b => Math.Round(b.Double - b.Double + 8.5))
-            .ToListAsync();
+            .ToListAsync(TestCancellation.Token);
 
         Assert.NotEmpty(results);
         Assert.All(results, r => Assert.Equal(Math.Round(8.5), r));
