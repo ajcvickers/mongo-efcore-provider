@@ -114,6 +114,12 @@ surface, even though users are warned not to implement these); default-value cha
   unchanged, unsupported shapes fall back automatically, and `UseQueryMode(MongoQueryMode.DriverLinq)` restores
   the previous path.
 
+## Several checkouts at once
+
+This fork is worked on from several clones concurrently (`D:\code\mongo-efcore-provider`, `D:\code\provider2`, …), each with its
+own agent and branch. Stay in your own checkout, never touch a sibling's files, branches or Docker containers, and check
+`gh issue list` / `gh pr list` before filing. See `FORK-WORKFLOW.md` §7.
+
 ## Async conventions
 
 Follows EF Core's pattern, not the driver's: **no enforced sync/async pairing**. Async surfaces exist where EF Core

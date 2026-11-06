@@ -213,6 +213,40 @@ Notes:
 
 ---
 
+## 7. Several checkouts at once
+
+This fork is usually worked on from **more than one checkout at the same time**, each with its own Claude session (and sometimes an
+IDE open on it): `D:\code\mongo-efcore-provider`, `D:\code\provider2`, and later `provider3`, and so on. They are independent full
+clones of `origin`, not `git worktree`s, so they share nothing except GitHub, the machine, Docker and the NuGet cache. Each
+checkout normally has a different branch and task. (A throwaway worktree such as `%TEMP%\ef479-benchefore` is a baseline
+for benchmarking, not a place to work.)
+
+Rules for an agent in any checkout:
+
+1. **Stay in your own checkout.** Don't read, edit, build, test or run git in a sibling checkout unless the user asks. Another
+   session may be in the middle of an edit or a test run there. Find your root with `git rev-parse --show-toplevel`.
+2. **One branch per checkout.** Don't check out a branch that is checked out in another clone, and don't assume a branch you
+   see on `origin` is yours: it may be another session's work. `git fetch origin` before you push; never force-push, and never
+   rebase, reset or delete a branch you did not create in this session without asking.
+3. **GitHub is the shared state.** Issue and PR numbers are global to the fork. `gh issue list` / `gh pr list` before filing, so
+   two sessions don't open duplicates, and reference the existing one.
+4. **Docker and ports.** Every test process starts its own container on a random port, so concurrent runs don't collide. Don't
+   stop, remove or prune containers you did not start in this session: they may belong to a run in another checkout. If
+   `MONGODB_URI` or `ATLAS_URI` points at a real server, all checkouts share it: run serially (see `/test-all`, `SHARED_DB`).
+5. **Expect load.** Two full test runs at once are slow and can cause timeouts that are not real failures; if a failure looks
+   like a timeout or a Docker error, re-run it alone before concluding anything.
+6. **Checkouts differ.** An older branch may lack files and conventions that exist elsewhere (this document included). Read the
+   files in *your* checkout, not what you remember from another.
+7. **Memory and scratch are per checkout.** Claude's project memory is keyed by directory, so it does not carry across clones.
+   Anything another checkout needs to know goes in a tracked doc (or a GitHub issue), not only in memory. Use the session
+   scratchpad for temporary files, never a shared path such as `/tmp`.
+
+New checkout: `git clone https://github.com/ajcvickers/mongo-efcore-provider.git D:\code\providerN`, then
+`git remote add upstream https://github.com/mongodb/mongo-efcore-provider.git` and `git config rerere.enabled true`. The user-level
+`~/.claude/CLAUDE.md` already applies these rules to `D:\code\provider*`, including checkouts that predate this section.
+
+---
+
 ## Quick reference
 
 | I want to... | Do |
