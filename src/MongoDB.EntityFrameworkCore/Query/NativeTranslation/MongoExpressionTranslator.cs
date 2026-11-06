@@ -78,6 +78,11 @@ internal sealed partial class MongoExpressionTranslator
     // accepted, deduplicated by alias), so resolving the same source twice is harmless.
     internal Func<Expression, ReferencedCollectionSource?>? ReferencedCollectionResolver { get; set; }
 
+    // As ReferencedCollectionResolver, for a subquery whose per-element key reads arrays of its own (`c.Orders.MinBy(o => o.Details.Max(..))`):
+    // the lookups given are run inside the sub-pipeline that builds the array, so every element holds them. Set by the same binders; null
+    // where nothing can stage such an array.
+    internal Func<Expression, IReadOnlyList<LookupExpression>, ReferencedCollectionSource?>? ReferencedCollectionWithNestedResolver { get; set; }
+
     // When set, a single-hop member on SelfParam resolves against these grouping key parts (a projected Distinct()'s
     // output schema) instead of the entity. A Distinct member name can coincide with an unrelated entity property
     // (Select(o => new { Country = o.City })), so resolving by entity-property name would filter the wrong field. A name
@@ -558,7 +563,8 @@ internal sealed partial class MongoExpressionTranslator
             // which errors for a non-string stored representation.
             MongoRegexExpression regex => AllFieldsDefaultSerialized(regex.Field) && AllFieldsDefaultSerialized(regex.Term),
             MongoTupleExpression tuple => tuple.Elements.All(AllFieldsDefaultSerialized),
-            MongoMappedArrayReduceExpression mappedReduce => AllFieldsDefaultSerialized(mappedReduce.ElementExpression),
+            MongoMappedArrayReduceExpression mappedReduce => AllFieldsDefaultSerialized(mappedReduce.ElementExpression)
+                && (mappedReduce.ResultExpression is null || AllFieldsDefaultSerialized(mappedReduce.ResultExpression)),
             // No arm needed (catch-all): MongoInExpression serializes candidates through the field's own serializer,
             // so it compares like-for-like; MongoSizeExpression has no property serialization; and
             // MongoArrayContainsExpression's Value is pre-rendered via the element serializer, with whole-collection
@@ -1781,6 +1787,15 @@ internal sealed partial class MongoExpressionTranslator
             && TryMatchElementAggregateMethod(aggregateValueCall, out var aggregateOperator, out var aggregateSource, out var aggregateSelector))
         {
             return TranslateReferencedArrayAggregate(aggregateValueCall, aggregateOperator, aggregateSource, aggregateSelector);
+        }
+
+        // MinBy/MaxBy(key).Member over a referenced collection (nav-expansion's `OrderBy(key).Select(member).FirstOrDefault()`).
+        if (node is MethodCallExpression orderedFirstCall
+            && ReferencedCollectionResolver is not null
+            && orderedFirstCall.Method.Name == nameof(Queryable.FirstOrDefault)
+            && TranslateReferencedOrderedFirst(orderedFirstCall) is { } orderedFirst)
+        {
+            return orderedFirst;
         }
 
         // Any()/Any(pred)/All(pred) over a referenced collection as a projected VALUE. The predicate arm renders

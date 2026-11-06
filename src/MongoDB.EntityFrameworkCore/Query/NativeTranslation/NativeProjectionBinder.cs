@@ -2165,10 +2165,13 @@ internal static class NativeProjectionBinder
         MongoQueryExpression mongoQ,
         ParameterExpression outerParameter,
         Expression source,
-        PendingProjectionStaging staged)
+        PendingProjectionStaging staged,
+        IReadOnlyList<LookupExpression>? nestedLookups = null)
     {
-        // The foreign-key correlation of a collection navigation: the navigation's own lookup.
-        if (NativeCorrelationMatcher.TryMatchCorrelatedRootWhere(mongoQ, outerParameter, source, out var navigation)
+        // The foreign-key correlation of a collection navigation: the navigation's own lookup. Not with nested lookups: the navigation's
+        // lookup is shared, and only an array of its own can hold the arrays a per-element key reads.
+        if ((nestedLookups is null || nestedLookups.Count == 0)
+            && NativeCorrelationMatcher.TryMatchCorrelatedRootWhere(mongoQ, outerParameter, source, out var navigation)
             && NativeCorrelationMatcher.TryBuildReferenceCollectionCountLookup(
                 mongoQ, navigation, staged.Lookups, typeof(int), out var lookupToStamp, out _))
         {
@@ -2202,7 +2205,7 @@ internal static class NativeProjectionBinder
                 && TryStageKeyedArrayLookup(
                     mongoQ, outerParameter, root.EntityType, keyParts,
                     wheres.Where((_, i) => i != correlated[0]).Concat(conditions.Element).ToList(), staged,
-                    out var stagedKeyed, outerConditions: outerConditions))
+                    out var stagedKeyed, outerConditions: outerConditions, nestedLookups: nestedLookups))
             {
                 return new MongoExpressionTranslator.ReferencedCollectionSource(stagedKeyed.As, root.EntityType);
             }
@@ -2227,11 +2230,13 @@ internal static class NativeProjectionBinder
         IReadOnlyList<(string Field, int Direction)>? elementSort = null,
         MongoExpression? elementLimit = null,
         MongoExpression? elementSkip = null,
-        IReadOnlyList<LookupOuterCondition>? outerConditions = null)
+        IReadOnlyList<LookupOuterCondition>? outerConditions = null,
+        IReadOnlyList<LookupExpression>? nestedLookups = null)
     {
         keyedLookup = null;
         elementSort ??= [];
         outerConditions ??= [];
+        nestedLookups ??= [];
 
         // A TPH-derived target needs the lookup narrowed by discriminator, as the navigation lookup's constructor does; a keyed lookup has no such stage and would count sibling-type documents. Declined.
         if (targetEntityType.BaseType is not null)
@@ -2241,7 +2246,8 @@ internal static class NativeProjectionBinder
         var aliasSuffix = "";
 
         // An element sort or limit changes what the array holds, so it too needs its own alias.
-        var hasElementStages = elementSort.Count > 0 || elementLimit is not null || elementSkip is not null || outerConditions.Count > 0;
+        var hasElementStages = elementSort.Count > 0 || elementLimit is not null || elementSkip is not null || outerConditions.Count > 0
+                               || nestedLookups.Count > 0;
 
         if (filters.Count > 0 || hasElementStages)
         {
@@ -2266,14 +2272,15 @@ internal static class NativeProjectionBinder
             var same = existing.FirstOrDefault(
                 l => SameFilters(l.ElementFilters, filters) && l.ElementSort.SequenceEqual(elementSort) && LookupExpression.SameElementCount(l.ElementLimit, elementLimit)
                      && LookupExpression.SameElementCount(l.ElementSkip, elementSkip)
-                     && LookupExpression.SameOuterConditions(l.OuterConditions, outerConditions));
+                     && LookupExpression.SameOuterConditions(l.OuterConditions, outerConditions)
+                     && LookupExpression.SameNestedLookups(l.ElementNestedLookups, nestedLookups));
             aliasSuffix = same is not null
                 ? same.As[baseAlias.Length..]
                 : "_f" + (existing.Select(l => l.As).Distinct().Count() + 1);
         }
 
         var keyed = NativeCorrelationMatcher.BuildCorrelatedArrayLookup(
-            targetEntityType, keyParts, filters, filterPredicate, aliasSuffix, elementSort, elementLimit, elementSkip, outerConditions);
+            targetEntityType, keyParts, filters, filterPredicate, aliasSuffix, elementSort, elementLimit, elementSkip, outerConditions, nestedLookups);
         if (!NativeCorrelationMatcher.TryStageNativeCollectionLookup(mongoQ, keyed, staged.Lookups, out keyedLookup))
             return false;
 

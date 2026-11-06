@@ -545,13 +545,13 @@ internal static class NativeCorrelationMatcher
         IEntityType targetEntityType, IProperty outerProperty, IProperty innerProperty, bool guarded,
         IReadOnlyList<LambdaExpression>? filters = null, MongoExpression? filterPredicate = null, string aliasSuffix = "",
         IReadOnlyList<(string Field, int Direction)>? elementSort = null, MongoExpression? elementLimit = null, MongoExpression? elementSkip = null,
-        IReadOnlyList<LookupOuterCondition>? outerConditions = null)
+        IReadOnlyList<LookupOuterCondition>? outerConditions = null, IReadOnlyList<LookupExpression>? nestedLookups = null)
         => BuildCorrelatedArrayLookup(
             targetEntityType, [new CorrelationKeyPart(outerProperty, innerProperty, guarded)], filters, filterPredicate, aliasSuffix,
-            elementSort, elementLimit, elementSkip, outerConditions);
+            elementSort, elementLimit, elementSkip, outerConditions, nestedLookups);
 
     /// <summary>
-    /// <see cref="BuildCorrelatedArrayLookup(IEntityType, IProperty, IProperty, bool, IReadOnlyList{LambdaExpression}?, MongoExpression?, string, IReadOnlyList{ValueTuple{string, int}}?, MongoExpression?, MongoExpression?, IReadOnlyList{LookupOuterCondition}?)"/>
+    /// <see cref="BuildCorrelatedArrayLookup(IEntityType, IProperty, IProperty, bool, IReadOnlyList{LambdaExpression}?, MongoExpression?, string, IReadOnlyList{ValueTuple{string, int}}?, MongoExpression?, MongoExpression?, IReadOnlyList{LookupOuterCondition}?, IReadOnlyList{LookupExpression}?)"/>
     /// over one or several key pairs. Several pairs are a composite-key lookup (the <c>let</c> + <c>$expr</c> form), each pair
     /// null-normalized when either property is nullable and optionally excluding a null outer value.
     /// </summary>
@@ -559,7 +559,7 @@ internal static class NativeCorrelationMatcher
         IEntityType targetEntityType, IReadOnlyList<CorrelationKeyPart> parts,
         IReadOnlyList<LambdaExpression>? filters = null, MongoExpression? filterPredicate = null, string aliasSuffix = "",
         IReadOnlyList<(string Field, int Direction)>? elementSort = null, MongoExpression? elementLimit = null, MongoExpression? elementSkip = null,
-        IReadOnlyList<LookupOuterCondition>? outerConditions = null)
+        IReadOnlyList<LookupOuterCondition>? outerConditions = null, IReadOnlyList<LookupExpression>? nestedLookups = null)
     {
         LookupExpression lookup;
         if (parts.Count == 1)
@@ -584,7 +584,8 @@ internal static class NativeCorrelationMatcher
                 ElementSort = elementSort ?? [],
                 ElementLimit = elementLimit,
                 ElementSkip = elementSkip,
-                OuterConditions = outerConditions ?? []
+                OuterConditions = outerConditions ?? [],
+                ElementNestedLookups = nestedLookups ?? []
             };
         }
         else
@@ -613,7 +614,8 @@ internal static class NativeCorrelationMatcher
                 ElementSort = elementSort ?? [],
                 ElementLimit = elementLimit,
                 ElementSkip = elementSkip,
-                OuterConditions = outerConditions ?? []
+                OuterConditions = outerConditions ?? [],
+                ElementNestedLookups = nestedLookups ?? []
             };
         }
 

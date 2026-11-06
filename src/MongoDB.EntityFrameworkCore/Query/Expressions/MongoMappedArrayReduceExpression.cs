@@ -27,16 +27,35 @@ namespace MongoDB.EntityFrameworkCore.Query.Expressions;
 /// <see cref="MongoFilteredSizeExpression"/>, so a field prefix rewrite moves only <see cref="ArrayPath"/>. The array is wrapped in
 /// <c>$ifNull</c>: <c>$map</c> over a missing or null array is a server error. An empty array reduces to <c>0</c> for <c>$sum</c> and
 /// <c>null</c> for the others, as LINQ answers for a nullable result.
+/// <para>
+/// <see cref="MinByOperator"/> and <see cref="MaxByOperator"/> are not MQL operators: they select the element whose
+/// <see cref="ElementExpression"/> (the key) is the smallest or largest, the first of them on a tie as <c>MinBy</c>/<c>MaxBy</c> answer,
+/// and the value is <see cref="ResultExpression"/> (element-relative) of that element. An empty array answers <c>null</c>.
+/// </para>
 /// </remarks>
 internal sealed class MongoMappedArrayReduceExpression : MongoExpression
 {
-    public MongoMappedArrayReduceExpression(string operatorName, string arrayPath, MongoExpression elementExpression, Type type)
+    /// <summary>The <see cref="OperatorName"/> of <c>MinBy(key).Member</c>: the member of the element with the smallest key.</summary>
+    public const string MinByOperator = "$minBy";
+
+    /// <summary>The <see cref="OperatorName"/> of <c>MaxBy(key).Member</c>: the member of the element with the largest key.</summary>
+    public const string MaxByOperator = "$maxBy";
+
+    public MongoMappedArrayReduceExpression(
+        string operatorName, string arrayPath, MongoExpression elementExpression, Type type, MongoExpression? resultExpression = null)
     {
         OperatorName = operatorName;
         ArrayPath = arrayPath;
         ElementExpression = elementExpression;
         Type = type;
+        ResultExpression = resultExpression;
     }
+
+    /// <summary>Whether this selects an element by its key (<see cref="MinByOperator"/>, <see cref="MaxByOperator"/>) rather than reducing the per-element values.</summary>
+    public bool IsElementSelection => OperatorName is MinByOperator or MaxByOperator;
+
+    /// <summary>For an element selection, the element-relative value read from the selected element; otherwise <see langword="null"/>.</summary>
+    public MongoExpression? ResultExpression { get; }
 
     /// <summary>The MQL array-reduce operator: <c>"$avg"</c>, <c>"$max"</c>, <c>"$min"</c>, or <c>"$sum"</c>.</summary>
     public string OperatorName { get; }

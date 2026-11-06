@@ -100,10 +100,12 @@ OrderDetails.{ "$match" : { "$expr" : { "$eq" : [{ "$mod" : ["$_id.OrderID", 23]
 
     public override async Task Include_collection_order_by_collection_column(bool async)
     {
-        await AssertUnsupportedCrossDbSetQuery(() => base.Include_collection_order_by_collection_column(async));
+        await base.Include_collection_order_by_collection_column(async);
 
         AssertMql(
-        );
+            """
+Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^W", "options" : "s" } } } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Orders", []] }, "as" : "e", "in" : { "k" : "$$e.OrderDate", "m" : "$$e.OrderDate" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$gt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
     }
 
     public override async Task Include_collection_alias_generation(bool async)
@@ -912,10 +914,12 @@ Orders.{ "$match" : { "CustomerID" : "ALFKI" } }, { "$lookup" : { "from" : "Cust
 
     public override async Task Include_collection_order_by_subquery(bool async)
     {
-        await AssertUnsupportedCrossDbSetQuery(() => base.Include_collection_order_by_subquery(async));
+        await base.Include_collection_order_by_subquery(async);
 
         AssertMql(
-        );
+            """
+Customers.{ "$match" : { "_id" : "ALFKI" } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Orders", []] }, "as" : "e", "in" : { "k" : "$$e.EmployeeID", "m" : "$$e.OrderDate" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$lt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
     }
 
     public override async Task Include_reference_and_collection_order_by(bool async)
@@ -929,10 +933,12 @@ Orders.{ "$match" : { "CustomerID" : { "$regularExpression" : { "pattern" : "^F"
 
     public override async Task Then_include_collection_order_by_collection_column(bool async)
     {
-        await AssertUnsupportedCrossDbSetQuery(() => base.Then_include_collection_order_by_collection_column(async));
+        await base.Then_include_collection_order_by_collection_column(async);
 
         AssertMql(
-        );
+            """
+Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^W", "options" : "s" } } } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$lookup" : { "from" : "Orders", "let" : { "localField" : "$_id" }, "pipeline" : [{ "$match" : { "$expr" : { "$eq" : ["$CustomerID", "$$localField"] } } }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetails" } }], "as" : "_lookup_Orders_include" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Orders", []] }, "as" : "e", "in" : { "k" : "$$e.OrderDate", "m" : "$$e.OrderDate" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$gt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
     }
 
     public override async Task Include_multiple_references_then_include_multi_level(bool async)

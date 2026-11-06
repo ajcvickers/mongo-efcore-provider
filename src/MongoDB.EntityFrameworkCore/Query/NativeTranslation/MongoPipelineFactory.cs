@@ -542,6 +542,10 @@ internal sealed class MongoPipelineFactory
         if (lookup.InnerPredicate is { } innerPredicate)
             stages.Add(new BsonDocument("$match", renderer.Render(innerPredicate, placeholders)));
 
+        // The arrays of the collections the element is itself correlated with, which a per-element key reads.
+        foreach (var nested in lookup.ElementNestedLookups)
+            stages.Add(RenderLookup(nested, renderer, placeholders));
+
         // Sort, then limit: the first element is the first by the ordering. Element stages are constants (field paths, directions), baked.
         if (lookup.ElementSort.Count > 0)
         {

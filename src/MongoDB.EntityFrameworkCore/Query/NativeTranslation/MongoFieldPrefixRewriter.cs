@@ -80,7 +80,7 @@ internal static class MongoFieldPrefixRewriter
             MongoFilteredSizeExpression f => new MongoFilteredSizeExpression(prefix + "." + f.ArrayPath, f.ElementPredicate, f.Type),
             // Array path only; the element expression is relative to the $map variable.
             MongoMappedArrayReduceExpression m => new MongoMappedArrayReduceExpression(
-                m.OperatorName, prefix + "." + m.ArrayPath, m.ElementExpression, m.Type),
+                m.OperatorName, prefix + "." + m.ArrayPath, m.ElementExpression, m.Type, m.ResultExpression),
             MongoConvertExpression c => new MongoConvertExpression(Rewrite(c.Operand, prefix), c.Type),
             MongoNumericTypeBracketExpression b => new MongoNumericTypeBracketExpression(
                 (MongoFieldExpression)Rewrite(b.Field, prefix)),

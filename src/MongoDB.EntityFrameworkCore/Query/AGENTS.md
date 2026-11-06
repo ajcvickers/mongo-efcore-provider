@@ -196,6 +196,19 @@ Scope, joins, grouping:
     until the whole predicate/key translated, then relocate a trailing sort
     (`DeferTrailingSortPastConfirmedJoin`: one ordering must stay one `$sort`) and flip to `PostJoinOps`. Ops recorded
     earlier stay ahead (`Take(n).Where(Any(..))` pages first). A join scope or terminal operator declines.
+  - **`MinBy`/`MaxBy(key).Member` as a `Where`/`OrderBy`/aggregate-operand value** (nav-expansion's `Where(corr).OrderBy(key).Select(member).FirstOrDefault()`)
+    is `MongoMappedArrayReduceExpression` with `MinByOperator`/`MaxByOperator` (`TranslateReferencedOrderedFirst`): a `$map` of `{k: key, m: member}` pairs,
+    a `$reduce` that keeps the FIRST pair with the smallest (largest) key (strict `$lt`/`$gt`, so a tie keeps the earlier element as LINQ does, which a
+    `$sort` + `$limit` would not guarantee), and `$ifNull: ["$$best.m", null]` (`$$best.m` of an empty group is MISSING, and `$eq: [missing, null]` is false).
+    An empty group answers null; LINQ throws for a non-nullable member, as for the aggregates above. Only the referenced-collection binder wires
+    `ReferencedCollectionWithNestedResolver` (the projection binder does not, so projections are unchanged: the arm declines there).
+    - **The key may read the collections its element is correlated with** (`5 + o.OrderDetails.Max(d => d.ProductID)`, or another `MinBy`). Each becomes a
+      keyed lookup in `LookupExpression.ElementNestedLookups`, rendered as a `$lookup` stage inside the element array's sub-pipeline (after the element
+      filter, before the element ordering), so every element carries the arrays the key reads; the element-relative key then reads them as `$$e.<alias>`.
+      The array gets its own `_fN` alias (never the shared navigation lookup, which holds no nested arrays); `SameNestedLookups` is part of what makes two
+      arrays the same. Only a plain correlation resolves in the element scope (no extra filter, no condition on a side, no derived target), the key
+      and member lambdas may not read the enclosing entity (single-scope translation resolves a member by name), and the key must be CLR-ordered
+      (`SortKeyPreservesClrOrdering`). A lookup with nested lookups has `HasElementStages`, so the driver-LINQ bridge refuses it, as for other element stages.
   - **The driver-LINQ bridge answers the aggregate, quantifier and count leaves itself**
     (`MongoEFToLinqTranslatingExpressionVisitor.ReferencedCollection.cs`): the terminal operator and the `Where`/`Select`/`OrderBy`
     chain under it become the `Enumerable` operators over `Mql.Field(outerDoc, <array alias>, serializer)`. It reads only PLAIN arrays

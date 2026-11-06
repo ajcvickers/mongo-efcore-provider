@@ -3277,12 +3277,22 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
 
     public override async Task Subquery_is_null_translated_correctly(bool async)
     {
-        await AssertNoMultiCollectionQuerySupport(() => base.Subquery_is_null_translated_correctly(async));
+        await base.Subquery_is_null_translated_correctly(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "$expr" : { "$eq" : [{ "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Orders", []] }, "as" : "e", "in" : { "k" : "$$e._id", "m" : "$$e.CustomerID" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$gt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } }, null] } } }
+""");
     }
 
     public override async Task Subquery_is_not_null_translated_correctly(bool async)
     {
-        await AssertNoMultiCollectionQuerySupport(() => base.Subquery_is_not_null_translated_correctly(async));
+        await base.Subquery_is_not_null_translated_correctly(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "$expr" : { "$ne" : [{ "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Orders", []] }, "as" : "e", "in" : { "k" : "$$e._id", "m" : "$$e.CustomerID" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$gt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } }, null] } } }
+""");
     }
 
     public override async Task Select_take_average(bool async)
