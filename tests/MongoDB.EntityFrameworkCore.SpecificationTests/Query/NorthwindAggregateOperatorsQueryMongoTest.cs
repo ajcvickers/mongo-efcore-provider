@@ -232,14 +232,22 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
 
     public override async Task MaxBy_after_DefaultIfEmpty_does_not_throw(bool async)
     {
-        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
-        await AssertTranslationFailed(() => base.MaxBy_after_DefaultIfEmpty_does_not_throw(async));
+        await base.MaxBy_after_DefaultIfEmpty_does_not_throw(async);
+
+        AssertMql(
+            """
+Orders.{ "$match" : { "_id" : 10243 } }, { "$sort" : { "_id" : -1 } }, { "$limit" : 1 }, { "$project" : { "_id" : "$_id" } }
+""");
     }
 
     public override async Task MinBy_after_DefaultIfEmpty_does_not_throw(bool async)
     {
-        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
-        await AssertTranslationFailed(() => base.MinBy_after_DefaultIfEmpty_does_not_throw(async));
+        await base.MinBy_after_DefaultIfEmpty_does_not_throw(async);
+
+        AssertMql(
+            """
+Orders.{ "$match" : { "_id" : 10243 } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }, { "$project" : { "_id" : "$_id" } }
+""");
     }
 
 #endif

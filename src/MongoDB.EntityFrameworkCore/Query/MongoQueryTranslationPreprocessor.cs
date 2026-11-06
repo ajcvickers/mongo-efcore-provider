@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +40,9 @@ public class MongoQueryTranslationPreprocessor : QueryTranslationPreprocessor
         query = FinalPredicateHoistingVisitor.Hoist(query);
         query = new EntityFrameworkDetourExpressionVisitor(QueryCompilationContext).Visit(query);
         query = new LocalCollectionFilterFoldingVisitor(QueryCompilationContext).Visit(query);
+#if EF11
+        query = DefaultIfEmptyBeforeFirstRewriter.Rewrite(query);
+#endif
 
         // Nav expansion throws for IQueryable methods that it is not aware of, so we remove
         // any VectorSearch call from the root and then put it back after. This only works because
@@ -94,6 +99,108 @@ public class MongoQueryTranslationPreprocessor : QueryTranslationPreprocessor
             return base.VisitExtension(node);
         }
     }
+
+#if EF11
+
+    /// <summary>
+    /// Rewrites <c>source.DefaultIfEmpty().MinBy(k)</c>, <c>MaxBy(k)</c> and <c>source.DefaultIfEmpty().OrderBy(k)....First()</c>
+    /// to <c>source.OrderBy(k)....FirstOrDefault()</c>.
+    /// </summary>
+    /// <remarks>
+    /// Without an explicit default value, <c>DefaultIfEmpty</c> is the identity on a non-empty source and yields a single
+    /// <c>default(T)</c> on an empty one. The first element is therefore the first ordered element, or <c>default(T)</c> for an
+    /// empty source: what <c>FirstOrDefault</c> returns. Ordering one defaulted element is a no-op, so the keys are never
+    /// evaluated against it. The rewrite runs before navigation expansion, which cannot fold a projection into a sort key across
+    /// <c>DefaultIfEmpty</c>, and before EF normalizes <c>MinBy</c>/<c>MaxBy</c> to <c>First</c>, which would throw for an empty
+    /// value-type source. Any other use of <c>DefaultIfEmpty</c> is left alone. Applies wherever the pattern appears, including
+    /// subqueries.
+    /// </remarks>
+    private sealed class DefaultIfEmptyBeforeFirstRewriter : ExpressionVisitor
+    {
+        public static Expression Rewrite(Expression query)
+            => new DefaultIfEmptyBeforeFirstRewriter().Visit(query);
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            var visited = base.VisitMethodCall(node);
+            if (visited is not MethodCallExpression call
+                || call.Method.DeclaringType != typeof(Queryable)
+                || !call.Method.IsGenericMethod)
+            {
+                return visited;
+            }
+
+            var definition = call.Method.GetGenericMethodDefinition();
+            var elementType = call.Method.GetGenericArguments()[0];
+
+            if (definition == QueryableMethods.MinBy || definition == QueryableMethods.MaxBy)
+            {
+                if (!TryGetDefaultIfEmptySource(call.Arguments[0], out var source))
+                {
+                    return call;
+                }
+
+                var keyType = call.Method.GetGenericArguments()[1];
+                var ordered = Expression.Call(
+                    (definition == QueryableMethods.MinBy ? QueryableMethods.OrderBy : QueryableMethods.OrderByDescending)
+                    .MakeGenericMethod(elementType, keyType),
+                    source,
+                    call.Arguments[1]);
+
+                return FirstOrDefault(elementType, ordered);
+            }
+
+            if (definition != QueryableMethods.FirstWithoutPredicate
+                && definition != QueryableMethods.FirstOrDefaultWithoutPredicate)
+            {
+                return call;
+            }
+
+            var orderings = new List<MethodCallExpression>();
+            var current = call.Arguments[0];
+            while (current is MethodCallExpression ordering
+                   && ordering.Method.DeclaringType == typeof(Queryable)
+                   && ordering.Method.Name is nameof(Queryable.OrderBy) or nameof(Queryable.OrderByDescending)
+                       or nameof(Queryable.ThenBy) or nameof(Queryable.ThenByDescending))
+            {
+                orderings.Add(ordering);
+                current = ordering.Arguments[0];
+            }
+
+            if (!TryGetDefaultIfEmptySource(current, out var rebuilt))
+            {
+                return call;
+            }
+
+            for (var i = orderings.Count - 1; i >= 0; i--)
+            {
+                var arguments = orderings[i].Arguments.ToArray();
+                arguments[0] = rebuilt;
+                rebuilt = orderings[i].Update(orderings[i].Object, arguments);
+            }
+
+            return FirstOrDefault(elementType, rebuilt);
+        }
+
+        private static bool TryGetDefaultIfEmptySource(Expression expression, out Expression source)
+        {
+            if (expression is MethodCallExpression { Method: { DeclaringType: var type, IsGenericMethod: true } method } call
+                && type == typeof(Queryable)
+                && method.GetGenericMethodDefinition() == QueryableMethods.DefaultIfEmptyWithoutArgument)
+            {
+                source = call.Arguments[0];
+                return true;
+            }
+
+            source = expression;
+            return false;
+        }
+
+        private static MethodCallExpression FirstOrDefault(Type elementType, Expression source)
+            => Expression.Call(QueryableMethods.FirstOrDefaultWithoutPredicate.MakeGenericMethod(elementType), source);
+    }
+
+#endif
 
     private sealed class VectorSearchExtractor : ExpressionVisitor
     {
