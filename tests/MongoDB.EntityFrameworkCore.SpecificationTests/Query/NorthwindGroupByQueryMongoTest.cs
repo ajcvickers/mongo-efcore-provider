@@ -130,9 +130,17 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
     public override async Task GroupBy_ResultSelector_Entire_Entity_Where(bool async)
     {
         // Fails: GroupBy with entire-entity/grouping-element projections is not supported https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        Assert.Contains(
-            "Document element is missing for required non-nullable property",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.GroupBy_ResultSelector_Entire_Entity_Where(async))).Message);
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly refuses the driver-LINQ fallback that produces the materialization failure below.
+            await AssertTranslationFailed(() => base.GroupBy_ResultSelector_Entire_Entity_Where(async));
+        }
+        else
+        {
+            Assert.Contains(
+                "Document element is missing for required non-nullable property",
+                (await Assert.ThrowsAsync<InvalidOperationException>(() => base.GroupBy_ResultSelector_Entire_Entity_Where(async))).Message);
+        }
     }
 
     public override async Task GroupBy_Select_Entire_Entity_GroupBy(bool async)

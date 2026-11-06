@@ -30,3 +30,50 @@ jobs:
 
       - name: Test
         run: dotnet test
+
+  # The native translator with no driver-LINQ fallback (MongoQueryMode.NativeOnly) must pass every suite too.
+  # See MongoSpecTestHelpers.IsNativeOnly for tests whose expectation depends on the mode.
+  native-only:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: ["Debug EF10", "Debug EF11"]
+    env:
+      MONGODB_EF_QUERY_MODE: NativeOnly
+      BUILD_CONFIGURATION: ${{ matrix.configuration }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      # EF11 builds for net11.0. Quality 'preview' also resolves release candidates; drop it once .NET 11 is GA.
+      - name: Setup .NET 11
+        if: matrix.configuration == 'Debug EF11'
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+
+      - name: Build
+        run: dotnet build MongoDB.EFCoreProvider.sln -c "$BUILD_CONFIGURATION"
+
+      - name: Unit tests
+        run: dotnet test tests/MongoDB.EntityFrameworkCore.UnitTests -c "$BUILD_CONFIGURATION" --no-build
+
+      - name: Functional tests
+        run: dotnet test tests/MongoDB.EntityFrameworkCore.FunctionalTests -c "$BUILD_CONFIGURATION" --no-build
+
+      - name: Specification tests
+        if: matrix.configuration != 'Debug EF11'
+        run: dotnet test tests/MongoDB.EntityFrameworkCore.SpecificationTests -c "$BUILD_CONFIGURATION" --no-build
+
+      # EF11's SpecificationTests (xUnit v3 4.x) do not run under `dotnet test`; run the built test host directly.
+      - name: Specification tests (EF11)
+        if: matrix.configuration == 'Debug EF11'
+        run: dotnet "tests/MongoDB.EntityFrameworkCore.SpecificationTests/bin/Debug EF11/net11.0/MongoDB.EntityFrameworkCore.SpecificationTests.dll" -noColor

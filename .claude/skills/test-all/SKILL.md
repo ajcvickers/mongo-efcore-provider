@@ -1,7 +1,7 @@
 ---
 name: test-all
 description: Build and run tests against all four EF version targets (EF8, EF9, EF10, EF11)
-argument-hint: "[optional: test filter or project name] [--model haiku|sonnet|opus]"
+argument-hint: "[optional: test filter or project name] [--model haiku|sonnet|opus] [--native]"
 allowed-tools: Bash(dotnet *), Bash(docker info), Bash(printenv:*), Read, Glob, Grep, Agent
 ---
 
@@ -13,7 +13,8 @@ allowed-tools: Bash(dotnet *), Bash(docker info), Bash(printenv:*), Read, Glob, 
 
 Parse `$ARGUMENTS`:
 1. `--model <model>`: extract and remove it; use it as the `model` for spawned agents (default `haiku`).
-2. Remaining text is an optional filter: empty runs everything on all four versions; a project name (e.g. "UnitTests") runs only that project; otherwise pass it via `--filter`.
+2. `--native`: extract and remove it; set `NATIVE = true`. Each version then runs a second test pass with `MONGODB_EF_QUERY_MODE=NativeOnly` (the native translator with no driver-LINQ fallback; CI runs this mode too, and it must have no failures). Default `false`.
+3. Remaining text is an optional filter: empty runs everything on all four versions; a project name (e.g. "UnitTests") runs only that project; otherwise pass it via `--filter`.
 
 ## Phase 1: Pre-flight (must pass first)
 
@@ -45,6 +46,8 @@ For EF11 run `dotnet test` on `UnitTests` and `FunctionalTests`, then run the sp
 `tests/MongoDB.EntityFrameworkCore.SpecificationTests/bin/Debug EF11/net11.0/MongoDB.EntityFrameworkCore.SpecificationTests.exe -noColor > <logfile> 2>&1`,
 and take the totals from its `=== TEST EXECUTION SUMMARY ===` line. A whole-solution `dotnet test` on EF11 prints an error for the spec project; that is expected.
 
+**`NATIVE = true`:** after the default test pass (same build, no rebuild), the agent repeats the test step with `MONGODB_EF_QUERY_MODE=NativeOnly` set inline before `dotnet` (for EF11, set it for the spec executable and the `dotnet test` runs alike), with logs named `*-native.log`, and reports the totals separately. Never set `MONGODB_EF_NATIVE_ONLY` as well: the resolver throws on a conflict. Tests that need a mode-specific expectation branch on `MongoSpecTestHelpers.IsNativeOnly`.
+
 Append the user's `--filter "<expr>"` or project path to the test command if given. Drop `--no-build` if the build step did not run in the same invocation (stale binaries give a false green).
 
 ### Execution hygiene (include verbatim in every sub-agent's prompt)
@@ -71,6 +74,8 @@ Fill the table from real results. Sum all three assembly blocks per version; if 
 | EF9     | <actual> | <actual> | <actual> | <actual> |
 | EF10    | <actual> | <actual> | <actual> | <actual> |
 | EF11    | <actual> | <actual> | <actual> | <actual> |
+
+With `NATIVE = true`, add a second table of the same shape titled "NativeOnly" with the totals from the NativeOnly passes. A NativeOnly failure that also fails in the default pass is a plain failure; one that only fails under NativeOnly means a test needs an `IsNativeOnly` branch (or a translator gap).
 
 If any version had failures, list failing test names grouped by version.
 

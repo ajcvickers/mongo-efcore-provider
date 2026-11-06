@@ -7,9 +7,9 @@ if [ "$DRIVER_VERSION" = "latest" ]; then
   export DRIVER_VERSION="*"
 fi
 
-echo "Running EF Core tests for '${BUILD_CONFIGURATION}' configuration"
+echo "Running EF Core tests for '${BUILD_CONFIGURATION}' configuration (query mode: ${MONGODB_EF_QUERY_MODE:-default})"
 dotnet clean "./MongoDB.EFCoreProvider.sln"
-test_args=(-e MONGODB_URI="${MONGODB_URI}" -c "${BUILD_CONFIGURATION}" --results-directory "./artifacts/test-results/${BUILD_CONFIGURATION// /}" --logger "junit;LogFileName=TEST_{assembly}.xml;FailureBodyFormat=Verbose" --logger "console;verbosity=detailed")
+test_args=(-e MONGODB_URI="${MONGODB_URI}" -c "${BUILD_CONFIGURATION}" --results-directory "./artifacts/test-results/${BUILD_CONFIGURATION// /}${MONGODB_EF_QUERY_MODE:+-${MONGODB_EF_QUERY_MODE}}" --logger "junit;LogFileName=TEST_{assembly}.xml;FailureBodyFormat=Verbose" --logger "console;verbosity=detailed")
 
 case "${MONGODB_VERSION}" in
   5.0|6.0)
