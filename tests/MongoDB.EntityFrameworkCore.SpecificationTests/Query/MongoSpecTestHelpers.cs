@@ -52,6 +52,10 @@ internal static class MongoSpecTestHelpers
                 Message: var message
             }
             && (message.StartsWith("The LINQ expression ", StringComparison.Ordinal)
+#if EF11
+                // EF11's wording for an ExecuteUpdate/ExecuteDelete that cannot be translated; the details are the inner exception.
+                || message.StartsWith("The following 'ExecuteUpdate' or 'ExecuteDelete' expression could not be translated", StringComparison.Ordinal)
+#endif
                 || message.Contains("ShapedQueryExpression.VisitChildren", StringComparison.Ordinal)
                 || message.Contains("Unsupported cross-DbSet query", StringComparison.Ordinal));
 

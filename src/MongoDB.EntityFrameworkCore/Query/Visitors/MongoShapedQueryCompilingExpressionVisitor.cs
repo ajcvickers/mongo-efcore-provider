@@ -1294,7 +1294,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     // row (malformed document), which driver-LINQ rejected (FormatException): throw EF's "Nullable object must have a value.", not read 0.
     private static TResult ReadNullScalar<TResult>()
         => typeof(TResult).IsValueType && Nullable.GetUnderlyingType(typeof(TResult)) is null
-            ? throw new InvalidOperationException("Nullable object must have a value.")
+            ? throw new InvalidOperationException(NullableValueMessage.Text)
             : default!;
 
     private static TResult DeserializeScalar<TResult>(BsonDocument doc)

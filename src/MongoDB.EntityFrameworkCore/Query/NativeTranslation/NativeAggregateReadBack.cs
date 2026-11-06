@@ -112,7 +112,7 @@ internal static class NativeAggregateReadBack
 
         return MongoAggregationExpressionRenderer.DriverReadsNullAsDefault(resultType)
             ? null
-            : throw new InvalidOperationException("Nullable object must have a value.");
+            : throw new InvalidOperationException(NullableValueMessage.Text);
     }
 
     /// <summary>

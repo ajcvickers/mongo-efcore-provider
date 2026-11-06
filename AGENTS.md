@@ -6,11 +6,12 @@ The MongoDB database provider for [Entity Framework Core](https://github.com/dot
 ## Tech stack & layout
 
 - **Multi-EF-version targeting via build *configurations*, not target frameworks:** `Debug|Release EF8`, `EF9`,
-  `EF10` (EF8/EF9 build `net8.0`, EF10 `net10.0`), selected by the `EF8`/`EF9`/`EF10` define constant (see the
+  `EF10`, `EF11` (EF8/EF9 build `net8.0`, EF10 `net10.0`, EF11 `net11.0`), selected by the `EF8`/`EF9`/`EF10`/`EF11` define constant (see the
   `.csproj`). EF and driver versions are pinned in `Versions.props`; `DRIVER_VERSION` overrides the driver.
 - `src/` is `<Nullable>enable</Nullable>`. `EF1001` is suppressed: the provider intentionally uses EF internals.
 - xUnit with **plain `Assert.*`** (no FluentAssertions). `UnitTests` and `FunctionalTests` use xUnit v3
-  (`xunit.v3`); `SpecificationTests` stays on xUnit v2. `SpecificationTests` disables test parallelization
+  (`xunit.v3`); `SpecificationTests` uses xUnit v2 for EF8-EF10 and xUnit v3 for EF11 (`#if EF11`; EF11's
+  Specification.Tests package is built on xUnit v3). `SpecificationTests` disables test parallelization
   (`Usings.cs`); `FunctionalTests` does not and relies on a unique database per fixture. CI runs the projects,
   and on MongoDB 5.0/6.0 the test collections, one at a time — see Testing.
 - `tests/…UnitTests` (no database), `…FunctionalTests` (real MongoDB), `…SpecificationTests` (EF Core's conformance suite).
@@ -18,19 +19,28 @@ The MongoDB database provider for [Entity Framework Core](https://github.com/dot
 ## Editing
 
 - **Preserve file BOMs.** Annotate new `src/` types for nullability.
-- Version-conditional code uses `#if EF8 || EF9` (legacy) and `#if !EF8` (EF9+); see
+- Version-conditional code uses `#if EF8 || EF9` (legacy), `#if !EF8` (EF9+) and `#if EF10 || EF11` (EF10+); see
   `Storage/MongoTypeMappingSource.cs`, `Query/QueryingEnumerable.cs`.
 
 ## Commands
 
 ```bash
-# Build / test one EF version (replace EF10 with EF8 or EF9)
+# Build / test one EF version (replace EF10 with EF8, EF9 or EF11)
 dotnet build MongoDB.EFCoreProvider.sln -c "Debug EF10"
 dotnet test  MongoDB.EFCoreProvider.sln -c "Debug EF10" --no-build
 dotnet test  MongoDB.EFCoreProvider.sln -c "Debug EF10" --no-build --filter "FullyQualifiedName~ClassName"
 ```
 
-For all three versions in parallel, invoke the `/test-all` skill.
+For all four versions in parallel, invoke the `/test-all` skill. EF11 needs the .NET 11 SDK.
+Every suite must also pass with `MONGODB_EF_QUERY_MODE=NativeOnly` (no driver-LINQ fallback): `/test-all --native` adds that
+pass, and CI runs it (GitHub Actions `native-only` job for EF10 and EF11, Evergreen for EF10). A test whose expected outcome
+differs by mode branches on `MongoSpecTestHelpers.IsNativeOnly`.
+
+**EF11 SpecificationTests run through their own executable, not `dotnet test`.** They use xUnit v3 4.x (EF11's
+Specification.Tests package requires it), which only supports Microsoft.Testing.Platform, and `dotnet test` on SDK 10+ rejects that
+unless the repo opts in via `global.json` (which would break the xUnit v2 projects on EF8-EF10). Build with `dotnet build ... -c "Debug EF11"`,
+then run `tests/MongoDB.EntityFrameworkCore.SpecificationTests/bin/Debug EF11/net11.0/MongoDB.EntityFrameworkCore.SpecificationTests.exe`
+(accepts `-class`, `-method`, `-noColor`). A whole-solution `dotnet test -c "Debug EF11"` therefore reports an error for that one project.
 
 ## Testing
 
@@ -103,6 +113,12 @@ surface, even though users are warned not to implement these); default-value cha
   MQL emitted**. In particular, the native translator being the **default** is not a break: results are
   unchanged, unsupported shapes fall back automatically, and `UseQueryMode(MongoQueryMode.DriverLinq)` restores
   the previous path.
+
+## Several checkouts at once
+
+This fork is worked on from several clones concurrently (`D:\code\mongo-efcore-provider`, `D:\code\provider2`, …), each with its
+own agent and branch. Stay in your own checkout, never touch a sibling's files, branches or Docker containers, and check
+`gh issue list` / `gh pr list` before filing. See `FORK-WORKFLOW.md` §7.
 
 ## Async conventions
 

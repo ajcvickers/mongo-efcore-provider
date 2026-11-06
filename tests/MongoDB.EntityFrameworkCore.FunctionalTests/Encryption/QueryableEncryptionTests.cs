@@ -438,6 +438,14 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
         var samplePatients = CreateSamplePatients;
         var collectionName = TemporaryDatabaseFixture.CreateCollectionName(values: [cryptProvider, storageType]);
 
+#if EF11
+        if (storageType == BsonType.Double)
+        {
+            AssertDecimalStoredAsDoubleFails(cryptProvider, ModelConfig, samplePatients);
+            return;
+        }
+#endif
+
         {
             using var db = CreateContext(cryptProvider, ModelConfig);
             db.Patients.AddRange(samplePatients);
@@ -1362,6 +1370,14 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
         var samplePatients = CreateSamplePatients;
         var collectionName = TemporaryDatabaseFixture.CreateCollectionName(values: [cryptProvider, storageType]);
 
+#if EF11
+        if (storageType == BsonType.Double)
+        {
+            AssertDecimalStoredAsDoubleFails(cryptProvider, ModelConfig, samplePatients);
+            return;
+        }
+#endif
+
         {
             using var db = CreateContext(cryptProvider, ModelConfig);
             db.Patients.AddRange(samplePatients);
@@ -1406,6 +1422,14 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
         var dataKeyId = CreateDataKey();
         var samplePatients = CreateSamplePatients;
         var collectionName = TemporaryDatabaseFixture.CreateCollectionName(values: [cryptProvider, storageType]);
+
+#if EF11
+        if (storageType == BsonType.Double)
+        {
+            AssertDecimalStoredAsDoubleFails(cryptProvider, ModelConfig, samplePatients);
+            return;
+        }
+#endif
 
         {
             using var db = CreateContext(cryptProvider, ModelConfig);
@@ -1543,6 +1567,21 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
                 throw new ArgumentOutOfRangeException(nameof(encryptionType), encryptionType, null);
         }
     }
+
+#if EF11
+    // Fails: .NET 11 made the double -> decimal conversion exact, so the driver's lossless check in
+    // RepresentationConverter.ToDouble rejects nearly every decimal stored as BsonType.Double.
+    // https://github.com/ajcvickers/mongo-efcore-provider/issues/24
+    private void AssertDecimalStoredAsDoubleFails(
+        CryptProvider cryptProvider,
+        Action<ModelBuilder> modelBuilderAction,
+        IEnumerable<Patient> patients)
+    {
+        using var db = CreateContext(cryptProvider, modelBuilderAction);
+        db.Patients.AddRange(patients);
+        Assert.Throws<TruncationException>(() => db.SaveChanges());
+    }
+#endif
 
     private MedicalContext CreateContext(
         CryptProvider cryptProvider,

@@ -153,7 +153,12 @@ public class MongoBulkPlanBuilderTests
             () => MongoBulkPlanBuilder.EnsureKeyOrThrow(
                 entityType, new MongoNonQueryExpression(new MongoQueryExpression(entityType))));
 
+#if EF11
+        // EF11 reports the translation failure details as the inner exception.
+        Assert.Contains("primary key", ex.InnerException!.Message);
+#else
         Assert.Contains("primary key", ex.Message);
+#endif
     }
 }
 

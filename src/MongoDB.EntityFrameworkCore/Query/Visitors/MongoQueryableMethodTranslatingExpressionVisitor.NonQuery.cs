@@ -36,15 +36,15 @@ namespace MongoDB.EntityFrameworkCore.Query.Visitors;
 internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
 {
 #if !EF8
-    protected override Expression? TranslateExecuteDelete(ShapedQueryExpression source)
+    protected override Expression TranslateExecuteDelete(ShapedQueryExpression source)
     {
         var mongoQueryExpression = (MongoQueryExpression)source.QueryExpression;
         var strategy = ClassifyBulkSource(mongoQueryExpression);
         return new MongoNonQueryExpression(mongoQueryExpression, strategy);
     }
 
-#if EF10
-    protected override Expression? TranslateExecuteUpdate(
+#if EF10 || EF11
+    protected override Expression TranslateExecuteUpdate(
         ShapedQueryExpression source,
         IReadOnlyList<ExecuteUpdateSetter> setters)
     {
@@ -84,9 +84,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             AddTranslationErrorDetails(
                 "An 'ExecuteUpdate' call must specify at least one 'SetProperty' invocation, "
                 + "to indicate the properties to be updated.");
-            throw new InvalidOperationException(
-                CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+            throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+                mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails);
         }
 
         return new MongoNonQueryExpression(mongoQueryExpression, parsed, strategy);
@@ -134,9 +133,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             AddTranslationErrorDetails(
                 "Only mapped root scalar properties can be updated by a bulk update. The setter target "
                 + $"'{propertySelector.Body}' is not a mapped scalar property of '{entityType.DisplayName()}'.");
-            throw new InvalidOperationException(
-                CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+            throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+                mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails);
         }
 
         // EF9 self-referencing: value is a quoted Func<T,TProp> lambda; unwrap and detect a reference to its parameter.
@@ -159,9 +157,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         {
             AddTranslationErrorDetails(
                 $"Self-referencing ExecuteUpdate on property '{property.Name}' is not supported because it uses a value converter.");
-            throw new InvalidOperationException(
-                CoreStrings.NonQueryTranslationFailedWithDetails(
-                    mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+            throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+                mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails);
         }
 
         return new MongoNonQueryExpression.Setter(property, value, isSelfReferencing);
@@ -231,9 +228,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             $"The '{operatorName}' operator is not supported in a bulk delete or update. Only 'Where' predicates "
             + "and the 'OrderBy', 'OrderByDescending', 'ThenBy', 'ThenByDescending', 'Skip', 'Take', and 'Distinct' "
             + "operators can scope a bulk operation.");
-        throw new InvalidOperationException(
-            CoreStrings.NonQueryTranslationFailedWithDetails(
-                mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails));
+        throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+            mongoQueryExpression.CapturedExpression?.Print(), TranslationErrorDetails);
     }
 #endif
 }

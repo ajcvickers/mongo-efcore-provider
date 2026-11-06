@@ -15,7 +15,9 @@
 
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.TestUtilities;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
@@ -32,6 +34,15 @@ public class NorthwindCompiledQueryMongoTest : NorthwindCompiledQueryTestBase<No
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
+
+#if EF11
+    public override void Compiled_query_with_EF_Constant_throws()
+        => base.Compiled_query_with_EF_Constant_throws();
+
+    public override void Compiled_query_with_EF_Parameter_throws()
+        => base.Compiled_query_with_EF_Parameter_throws();
+
+#endif
 
     public override void DbSet_query()
     {

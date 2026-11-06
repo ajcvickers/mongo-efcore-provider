@@ -19,7 +19,9 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Linq;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 using Xunit.Sdk;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
@@ -38,6 +40,152 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
+
+#if EF11
+
+    public override async Task GroupBy_Property_Select_MaxBy(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Property_Select_MaxBy(async));
+    }
+
+    public override async Task GroupBy_Property_Select_MinBy(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Property_Select_MinBy(async));
+    }
+
+    public override async Task GroupBy_multiple_aggregates_sharing_same_navigation(bool async)
+    {
+        // Fails: GroupBy aggregates through navigation properties are not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/17
+        await AssertTranslationFailed(() => base.GroupBy_multiple_aggregates_sharing_same_navigation(async));
+    }
+
+    public override async Task GroupBy_aggregate_through_two_level_navigation(bool async)
+    {
+        // Fails: GroupBy aggregates through navigation properties are not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/17
+        await AssertTranslationFailed(() => base.GroupBy_aggregate_through_two_level_navigation(async));
+    }
+
+    public override async Task GroupBy_Count_with_predicate_through_navigation_property(bool async)
+    {
+        // Fails: GroupBy aggregates through navigation properties are not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/17
+        await AssertTranslationFailed(() => base.GroupBy_Count_with_predicate_through_navigation_property(async));
+    }
+
+    public override async Task GroupBy_key_and_aggregate_through_same_navigation(bool async)
+    {
+        // Fails: GroupBy aggregates through navigation properties are not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/17
+        await AssertTranslationFailed(() => base.GroupBy_key_and_aggregate_through_same_navigation(async));
+    }
+
+    public override async Task GroupBy_aggregate_through_navigation_in_intermediate_projection(bool async)
+    {
+        // Fails: GroupBy aggregates through navigation properties are not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/17
+        await AssertTranslationFailed(() => base.GroupBy_aggregate_through_navigation_in_intermediate_projection(async));
+    }
+
+    public override async Task GroupBy_ValueTuple_projection_joined_on_tuple_member(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_ValueTuple_projection_joined_on_tuple_member(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_Where(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Where(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_Where_Select(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Where_Select(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_Select(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Select(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_Order(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Order(async));
+    }
+
+    public override async Task GroupBy_Select_Anonymous_Type_With_Entire_Entity(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Anonymous_Type_With_Entire_Entity(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_FirstOrDefault_Where(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_FirstOrDefault_Where(async));
+    }
+
+    public override async Task GroupBy_ResultSelector_Entire_Entity_Where(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly refuses the driver-LINQ fallback that produces the materialization failure below.
+            await AssertTranslationFailed(() => base.GroupBy_ResultSelector_Entire_Entity_Where(async));
+        }
+        else
+        {
+            Assert.Contains(
+                "Document element is missing for required non-nullable property",
+                (await Assert.ThrowsAsync<InvalidOperationException>(() => base.GroupBy_ResultSelector_Entire_Entity_Where(async))).Message);
+        }
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_GroupBy(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_GroupBy(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_composite_key_Select(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_composite_key_Select(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_OrderBy_navigation(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_OrderBy_navigation(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_Select_navigation_member(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Select_navigation_member(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_Where_navigation(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Where_navigation(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_Select_referenced_twice(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Select_referenced_twice(async));
+    }
+
+    public override async Task GroupBy_Select_Entire_Entity_Join(bool async)
+    {
+        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Join(async));
+    }
+
+#endif
 
 #if !EF8 && !EF9
 

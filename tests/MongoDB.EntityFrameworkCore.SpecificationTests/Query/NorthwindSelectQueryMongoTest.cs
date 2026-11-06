@@ -19,7 +19,9 @@ using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.Driver;
 using MongoDB.Driver.Core.Misc;
 using MongoDB.Driver.Linq;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 using Xunit.Sdk;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
@@ -37,6 +39,22 @@ public class NorthwindSelectQueryMongoTest : NorthwindSelectQueryTestBase<Northw
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
+
+#if EF11
+
+    public override async Task SelectMany_over_inline_array_projecting_range_variable_and_outer(bool async)
+    {
+        // Fails: SelectMany over an inline array is not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/21
+        await AssertTranslationFailed(() => base.SelectMany_over_inline_array_projecting_range_variable_and_outer(async));
+    }
+
+    public override async Task Multiple_members_of_correlated_single_result_subquery_lift_to_single_join(bool async, string method)
+    {
+        // Fails: Correlated single-result subquery lifting is not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/21
+        await AssertTranslationFailed(() => base.Multiple_members_of_correlated_single_result_subquery_lift_to_single_join(async, method));
+    }
+
+#endif
 
 #if !EF8 && !EF9
     public override async Task SelectMany_with_nested_DefaultIfEmpty(bool async)
@@ -1099,7 +1117,7 @@ Orders.{ "$project" : { "One" : "$CustomerID", "Two" : { "$cond" : { "if" : { "$
         // Default ordering on Mongo is different from .NET, so just compare the first three items.
         await AssertQuery(
             async,
-            ss => ss.Set<Customer>().Select(c => new CustomerListItem(c.CustomerID, c.City)).OrderBy(c => c.City).Take(3),
+            ss => ss.Set<Customer>().Select(c => new CustomerListItem(c.CustomerID, c.City!)).OrderBy(c => c.City).Take(3),
             assertOrder: true);
 
         AssertMql(

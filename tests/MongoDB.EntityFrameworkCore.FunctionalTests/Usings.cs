@@ -15,4 +15,5 @@
 
 global using Xunit;
 global using XUnitCollection = Xunit.CollectionAttribute;
+global using NullableValueMessage = MongoDB.EntityFrameworkCore.Query.NullableValueMessage;
 global using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;

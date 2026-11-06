@@ -1,7 +1,7 @@
 ---
 name: test-all
-description: Build and run tests against all three EF version targets (EF8, EF9, EF10)
-argument-hint: "[optional: test filter or project name] [--model haiku|sonnet|opus]"
+description: Build and run tests against all four EF version targets (EF8, EF9, EF10, EF11)
+argument-hint: "[optional: test filter or project name] [--model haiku|sonnet|opus] [--native]"
 allowed-tools: Bash(dotnet *), Bash(docker info), Bash(printenv:*), Read, Glob, Grep, Agent
 ---
 
@@ -13,13 +13,14 @@ allowed-tools: Bash(dotnet *), Bash(docker info), Bash(printenv:*), Read, Glob, 
 
 Parse `$ARGUMENTS`:
 1. `--model <model>`: extract and remove it; use it as the `model` for spawned agents (default `haiku`).
-2. Remaining text is an optional filter: empty runs everything on all three versions; a project name (e.g. "UnitTests") runs only that project; otherwise pass it via `--filter`.
+2. `--native`: extract and remove it; set `NATIVE = true`. Each version then runs a second test pass with `MONGODB_EF_QUERY_MODE=NativeOnly` (the native translator with no driver-LINQ fallback; CI runs this mode too, and it must have no failures). Default `false`.
+3. Remaining text is an optional filter: empty runs everything on all four versions; a project name (e.g. "UnitTests") runs only that project; otherwise pass it via `--filter`.
 
 ## Phase 1: Pre-flight (must pass first)
 
 A variable is a **real external database** only if it is set, not empty/whitespace, and not `"Disabled"` (case-insensitive; that is the skip-Atlas sentinel). This mirrors `TestServer.GetOrInitialize`.
 
-1. `dotnet --list-sdks` must show a 10.x SDK, else stop: "net10.0 SDK is not installed."
+1. `dotnet --list-sdks` must show a 10.x SDK and an 11.x SDK, else stop: "net10.0 / net11.0 SDK is not installed."
 2. `docker info` succeeds OR `MONGODB_URI` (via `printenv`) is a real external database, else stop: "No database available. Start Docker or set `MONGODB_URI`." `ATLAS_URI` alone does not satisfy this: the default server every test uses comes from `MONGODB_URI` or a testcontainer.
 3. `SHARED_DB = true` if `MONGODB_URI` **or** `ATLAS_URI` is a real external database (tests then hit a shared database); otherwise `false` (each EF version gets its own testcontainer).
 4. Encryption libraries: CSFLE / Queryable Encryption tests skip unless **both** `CRYPT_SHARED_LIB_PATH` and `MONGODB_BINARIES` (folder containing `mongocryptd`) are set; with only the first, the `Mongocryptd` cases fail instead of skipping. Check both via `printenv`:
@@ -29,9 +30,9 @@ A variable is a **real external database** only if it is set, not empty/whitespa
 
 ## Phase 2: Build & test via sub-agents
 
-One build+test pass per EF version (EF8, EF9, EF10), each via the Agent tool with `model` set.
+One build+test pass per EF version (EF8, EF9, EF10, EF11), each via the Agent tool with `model` set.
 
-- `SHARED_DB = false`: spawn all three **in parallel** (one message, three `Agent` blocks); separate output dirs and containers mean no contention.
+- `SHARED_DB = false`: spawn all four **in parallel** (one message, four `Agent` blocks); separate output dirs and containers mean no contention.
 - `SHARED_DB = true`: run **serially** (dispatch, wait, dispatch next). The versions would race on shared global state in the same database (intra-assembly parallelization is disabled for that reason, `tests/.../FunctionalTests/Usings.cs`).
 
 Each agent runs, against the whole `$SLN` (all of `UnitTests`, `FunctionalTests`, `SpecificationTests`; don't narrow unless the user passed a filter):
@@ -39,6 +40,13 @@ Each agent runs, against the whole `$SLN` (all of `UnitTests`, `FunctionalTests`
 1. `dotnet build $SLN -c "Debug EF{version}" -v quiet`
 2. `$ENCRYPTION_ENV dotnet test  $SLN -c "Debug EF{version}" --no-build --logger "console;verbosity=normal" -v quiet`
    (`$ENCRYPTION_ENV` is the literal prefix from Phase 1 step 4, written inline before `dotnet` so it applies to that process; omit it only when both variables were already set. Pass it to every sub-agent verbatim.)
+
+**EF11 exception:** the EF11 `SpecificationTests` project cannot run under `dotnet test` (xUnit v3 4.x is Microsoft.Testing.Platform only; see AGENTS.md).
+For EF11 run `dotnet test` on `UnitTests` and `FunctionalTests`, then run the spec executable directly:
+`tests/MongoDB.EntityFrameworkCore.SpecificationTests/bin/Debug EF11/net11.0/MongoDB.EntityFrameworkCore.SpecificationTests.exe -noColor > <logfile> 2>&1`,
+and take the totals from its `=== TEST EXECUTION SUMMARY ===` line. A whole-solution `dotnet test` on EF11 prints an error for the spec project; that is expected.
+
+**`NATIVE = true`:** after the default test pass (same build, no rebuild), the agent repeats the test step with `MONGODB_EF_QUERY_MODE=NativeOnly` set inline before `dotnet` (for EF11, set it for the spec executable and the `dotnet test` runs alike), with logs named `*-native.log`, and reports the totals separately. Never set `MONGODB_EF_NATIVE_ONLY` as well: the resolver throws on a conflict. Tests that need a mode-specific expectation branch on `MongoSpecTestHelpers.IsNativeOnly`.
 
 Append the user's `--filter "<expr>"` or project path to the test command if given. Drop `--no-build` if the build step did not run in the same invocation (stale binaries give a false green).
 
@@ -65,6 +73,9 @@ Fill the table from real results. Sum all three assembly blocks per version; if 
 | EF8     | <actual> | <actual> | <actual> | <actual> |
 | EF9     | <actual> | <actual> | <actual> | <actual> |
 | EF10    | <actual> | <actual> | <actual> | <actual> |
+| EF11    | <actual> | <actual> | <actual> | <actual> |
+
+With `NATIVE = true`, add a second table of the same shape titled "NativeOnly" with the totals from the NativeOnly passes. A NativeOnly failure that also fails in the default pass is a plain failure; one that only fails under NativeOnly means a test needs an `IsNativeOnly` branch (or a translator gap).
 
 If any version had failures, list failing test names grouped by version.
 

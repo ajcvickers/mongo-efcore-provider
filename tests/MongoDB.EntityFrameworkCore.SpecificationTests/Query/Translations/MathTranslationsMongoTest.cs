@@ -25,7 +25,9 @@ using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 using MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 using Xunit;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query.Translations;
 
@@ -398,24 +400,76 @@ public class MathTranslationsMongoTest : MathTranslationsTestBase<MongoBasicType
             BasicTypesEntities.{ "$match" : { "$and" : [{ "Float" : { "$gt" : 0.0 } }, { "$expr" : { "$gt" : [{ "$sqrt" : "$Float" }, 0.0] } }] } }
             """);
     }
+#if EF11
+    public override async Task Sign_int()
+    {
+        await base.Sign_int();
+
+        AssertMql(
+            """
+BasicTypesEntities.{ "$match" : { "$expr" : { "$gt" : [{ "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Int", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Int", 0] }, "then" : -1 }], "default" : 0 } }, 0] } } }
+""",
+            //
+            """
+BasicTypesEntities.{ "$project" : { "_v" : { "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Int", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Int", 0] }, "then" : -1 }], "default" : 0 } }, "_id" : 0 } }
+""");
+    }
+
+    public override async Task Sign_decimal()
+    {
+        await base.Sign_decimal();
+
+        AssertMql(
+            """
+BasicTypesEntities.{ "$match" : { "$expr" : { "$gt" : [{ "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Decimal", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Decimal", 0] }, "then" : -1 }], "default" : 0 } }, 0] } } }
+""",
+            //
+            """
+BasicTypesEntities.{ "$project" : { "_v" : { "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Decimal", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Decimal", 0] }, "then" : -1 }], "default" : 0 } }, "_id" : 0 } }
+""");
+    }
+
+#endif
     public override async Task Sign()
     {
         await base.Sign();
 
+#if EF11
+        AssertMql(
+            """
+            BasicTypesEntities.{ "$match" : { "$expr" : { "$gt" : [{ "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Double", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Double", 0] }, "then" : -1 }], "default" : 0 } }, 0] } } }
+            """,
+            //
+            """
+            BasicTypesEntities.{ "$project" : { "_v" : { "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Double", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Double", 0] }, "then" : -1 }], "default" : 0 } }, "_id" : 0 } }
+            """);
+#else
         AssertMql(
             """
             BasicTypesEntities.{ "$match" : { "$expr" : { "$gt" : [{ "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Double", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Double", 0] }, "then" : -1 }], "default" : 0 } }, 0] } } }
             """);
+#endif
     }
 
     public override async Task Sign_float()
     {
         await base.Sign_float();
 
+#if EF11
+        AssertMql(
+            """
+            BasicTypesEntities.{ "$match" : { "$expr" : { "$gt" : [{ "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Float", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Float", 0] }, "then" : -1 }], "default" : 0 } }, 0] } } }
+            """,
+            //
+            """
+            BasicTypesEntities.{ "$project" : { "_v" : { "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Float", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Float", 0] }, "then" : -1 }], "default" : 0 } }, "_id" : 0 } }
+            """);
+#else
         AssertMql(
             """
             BasicTypesEntities.{ "$match" : { "$expr" : { "$gt" : [{ "$switch" : { "branches" : [{ "case" : { "$gt" : ["$Float", 0] }, "then" : 1 }, { "case" : { "$lt" : ["$Float", 0] }, "then" : -1 }], "default" : 0 } }, 0] } } }
             """);
+#endif
     }
     public override async Task Max()
     {
@@ -718,7 +772,7 @@ public class MathTranslationsMongoTest : MathTranslationsTestBase<MongoBasicType
 
         var results = await context.Set<BasicTypesEntity>()
             .Select(b => Math.Round(b.Double - b.Double + 8.5))
-            .ToListAsync();
+            .ToListAsync(TestCancellation.Token);
 
         Assert.NotEmpty(results);
         Assert.All(results, r => Assert.Equal(Math.Round(8.5), r));

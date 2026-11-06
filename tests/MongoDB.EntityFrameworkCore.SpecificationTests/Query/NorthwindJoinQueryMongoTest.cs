@@ -15,7 +15,9 @@
 
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.TestUtilities;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
@@ -32,6 +34,37 @@ public class NorthwindJoinQueryMongoTest : NorthwindJoinQueryTestBase<NorthwindQ
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
+
+#if EF11
+
+    public override async Task RightJoin_with_filtered_outer(bool async)
+    {
+        // Fails: FullJoin and RightJoin with a filtered outer are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/18
+        await AssertTranslationFailed(() => base.RightJoin_with_filtered_outer(async));
+    }
+
+    public override async Task FullJoin(bool async)
+    {
+        // Fails: FullJoin and RightJoin with a filtered outer are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/18
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.FullJoin(async), typeof(ArgumentException));
+    }
+
+    public override async Task FullJoin_with_unmatched_rows_on_both_sides(bool async)
+    {
+        // Fails: FullJoin and RightJoin with a filtered outer are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/18
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.FullJoin_with_unmatched_rows_on_both_sides(async), typeof(ArgumentException));
+    }
+
+    public override async Task FullJoin_with_custom_comparer_does_not_translate(bool async)
+    {
+        await base.FullJoin_with_custom_comparer_does_not_translate(async);
+
+        AssertMql();
+    }
+
+#endif
 
 #if !EF8 && !EF9
 
@@ -739,9 +772,14 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
 
     public override async Task Join_local_string_closure_is_cached_correctly(bool async)
     {
+#if EF11
+        // Fails: Join against a parameter collection with a uint key conversion is not translated https://github.com/ajcvickers/mongo-efcore-provider/issues/19
+        await AssertTranslationFailed(() => base.Join_local_string_closure_is_cached_correctly(async));
+#else
         await base.Join_local_string_closure_is_cached_correctly(async);
 
         AssertMql();
+#endif
     }
 
     public override async Task Join_local_bytes_closure_is_cached_correctly(bool async)

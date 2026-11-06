@@ -15,7 +15,9 @@
 
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.TestUtilities;
+#if !EF11
 using Xunit.Abstractions;
+#endif
 using Xunit.Sdk;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
@@ -34,6 +36,30 @@ public class NorthwindQueryFiltersQueryMongoTest
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
+
+#if EF11
+
+    public override async Task GroupBy_aggregate_through_filtered_navigation(bool async)
+    {
+        // Fails: GroupBy aggregates through navigation properties are not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/17
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.GroupBy_aggregate_through_filtered_navigation(async), typeof(ArgumentException));
+    }
+
+    public override async Task GroupBy_aggregate_through_filtered_navigation_with_total(bool async)
+    {
+        // Fails: GroupBy aggregates through navigation properties are not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/17
+        await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(
+            () => base.GroupBy_aggregate_through_filtered_navigation_with_total(async), typeof(ArgumentException));
+    }
+
+    public override async Task GroupBy_aggregate_through_filtered_navigation_ignore_query_filters(bool async)
+    {
+        // Fails: GroupBy aggregates through navigation properties are not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/17
+        await AssertTranslationFailed(() => base.GroupBy_aggregate_through_filtered_navigation_ignore_query_filters(async));
+    }
+
+#endif
 
     public override async Task Count_query(bool async)
     {
