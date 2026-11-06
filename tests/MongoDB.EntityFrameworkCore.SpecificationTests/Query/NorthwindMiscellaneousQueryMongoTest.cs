@@ -1572,14 +1572,21 @@ Employees.{ "$sort" : { "_id" : 1 } }, { "$match" : { "$expr" : { "$ne" : [{ "$i
             """);
     }
 
+#if EF11
+    // The base tests compare against new DateTime(2008, 10, 24), which has an unspecified kind and so is converted
+    // from local time when serialized: the expected UTC value depends on the machine's time zone.
+    private static readonly string Oct24Utc = new DateTime(2008, 10, 24).ToUniversalTime()
+        .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+#endif
+
     public override async Task Where_Join_Exists(bool async)
     {
 #if EF11
         await base.Where_Join_Exists(async);
 
         AssertMql(
-            """
-Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "_id" : "ALFKI", "_lookup_Orders" : { "$elemMatch" : { "OrderDate" : { "$date" : "2008-10-23T23:00:00Z" } } } } }
+            $$"""
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "_id" : "ALFKI", "_lookup_Orders" : { "$elemMatch" : { "OrderDate" : { "$date" : "{{Oct24Utc}}" } } } } }
 """);
 #else
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
@@ -1596,8 +1603,8 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
         await base.Where_Join_Exists_Inequality(async);
 
         AssertMql(
-            """
-Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "_id" : "ALFKI", "_lookup_Orders" : { "$elemMatch" : { "OrderDate" : { "$ne" : { "$date" : "2008-10-23T23:00:00Z" } } } } } }
+            $$"""
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$match" : { "_id" : "ALFKI", "_lookup_Orders" : { "$elemMatch" : { "OrderDate" : { "$ne" : { "$date" : "{{Oct24Utc}}" } } } } } }
 """);
 #else
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
