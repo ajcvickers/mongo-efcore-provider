@@ -54,7 +54,7 @@ Customers.{ "$match" : { "_id" : { "$type" : -1 } } }
         }
         else
         {
-            // Fails: Queryable Contains with a conditional null check fails driver translation when withNull is false https://github.com/ajcvickers/mongo-efcore-provider/issues/20
+            // Fails: a Queryable Contains over a second Customers query is a cross-collection subquery, which is unsupported https://github.com/ajcvickers/mongo-efcore-provider/issues/20
             await AssertTranslationFailed(() => base.Where_Queryable_conditional_not_null_check_with_Contains(async, withNull));
         }
     }
@@ -72,7 +72,7 @@ Customers.{ "$match" : { } }
         }
         else
         {
-            // Fails: Queryable Contains with a conditional null check fails driver translation when withNull is false https://github.com/ajcvickers/mongo-efcore-provider/issues/20
+            // Fails: a Queryable Contains over a second Customers query is a cross-collection subquery, which is unsupported https://github.com/ajcvickers/mongo-efcore-provider/issues/20
             await AssertTranslationFailed(() => base.Where_Queryable_conditional_null_check_with_Contains(async, withNull));
         }
     }
