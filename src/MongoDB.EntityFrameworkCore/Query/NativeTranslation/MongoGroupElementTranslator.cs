@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -41,6 +42,7 @@ internal sealed class MongoGroupElementTranslator
     internal MongoGroupElementTranslator(IEntityType rootEntityType, MongoJoinScope? joinScope, MongoGrouping? priorGrouping)
     {
         _rootTranslator = new MongoExpressionTranslator(rootEntityType);
+        RootClrType = rootEntityType.ClrType;
 
         // A GroupBy over a prior finalized grouping resolves against that stage's flattened alias, not the entity
         // (see MongoExpressionTranslator.DistinctAliasScope); TranslateGroupBy never enables join mode then.
@@ -51,6 +53,9 @@ internal sealed class MongoGroupElementTranslator
     }
 
     internal bool IsJoinScoped => _joinScope != null;
+
+    /// <summary>The CLR type of the grouped root entity.</summary>
+    internal Type RootClrType { get; }
 
     /// <summary>Whether the grouped join scope has any left-outer level (a row whose inner side may be unmatched).</summary>
     internal bool HasLeftOuterJoinLevel

@@ -39,3 +39,4 @@ username). No API key is stored.
 | Change | State |
 |---|---|
 | EF-322d | Foundation for most other fork work. Merged into `release` (PR #8). Not offered upstream. |
+| EF11 GroupBy whole-entity projections (#16) | `GroupBy(k).Select(g => g.First()/FirstOrDefault()/OrderBy(..).First()/MinBy/MaxBy)` translate natively. In PR #30 into `release`; #16 stays open for the result-selector overload and the navigation/`Join` cases. Not offered upstream. |

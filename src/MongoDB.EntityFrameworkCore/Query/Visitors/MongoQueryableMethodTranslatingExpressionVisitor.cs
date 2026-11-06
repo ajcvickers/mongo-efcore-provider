@@ -396,7 +396,10 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
 
             // Keyed on the binder's answer so the shaper can't disagree with what was bound: a bare result selector is
             // read under the alias the binder returned, otherwise walk the construction member by member.
-            var groupShaper = bareGroupLeafAlias != null
+            // A whole-document leaf (`g.First()`) is read as the plain entity: the lowerer replaces the root with that document.
+            var groupShaper = mongoQueryExpression.Select.GroupsToWholeDocument
+                ? ((GroupByShaperExpression)source.ShaperExpression).GroupingEnumerable.ShaperExpression
+                : bareGroupLeafAlias != null
                 ? BindGroupMember(mongoQueryExpression, bareGroupLeafAlias, selector.Body)
                 : TryBuildGroupResultShaper(mongoQueryExpression, selector);
 
@@ -574,7 +577,9 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
             // Appending field refs would reference fields that no longer exist after $group (silent nulls). Mirrors
             // TranslateGroupBy. A set-op-only terminal is exempt (the lowerer emits the $project after the set-op stage);
             // IsSetOpTerminalOnly requires Projection.Count == 0, so a second projection still falls back.
-            if (mongoQueryExpression.Select.HasTerminalOperator && !mongoQueryExpression.Select.IsSetOpTerminalOnly)
+            // A group of whole documents is exempt: its rows are plain entities (GroupsToWholeDocument), so the projection binds against the entity.
+            if (mongoQueryExpression.Select.HasTerminalOperator && !mongoQueryExpression.Select.IsSetOpTerminalOnly
+                && !mongoQueryExpression.Select.GroupsToWholeDocument)
             {
                 mongoQueryExpression.Select.MarkNotNativelyRepresentable();
             }
@@ -1329,6 +1334,11 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
         mongoQueryExpression.Select.IsGroupBy = true;
 
         if (hadTerminalGrouping && !hasFinalizedPriorGrouping && !wasSetOpTerminalOnly)
+        {
+            mongoQueryExpression.Select.MarkNotNativelyRepresentable();
+        }
+        // A GroupBy over a group of whole documents would resolve against the entity, not the prior grouping's aliases: decline.
+        else if (mongoQueryExpression.Select.GroupsToWholeDocument)
         {
             mongoQueryExpression.Select.MarkNotNativelyRepresentable();
         }

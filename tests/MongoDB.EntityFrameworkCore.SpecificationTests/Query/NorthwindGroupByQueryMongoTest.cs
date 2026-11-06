@@ -45,14 +45,18 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupBy_Property_Select_MaxBy(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Property_Select_MaxBy(async));
+        await base.GroupBy_Property_Select_MaxBy(async);
+        AssertMql("""
+Orders.{ "$sort" : { "_id" : -1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }
+""");
     }
 
     public override async Task GroupBy_Property_Select_MinBy(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Property_Select_MinBy(async));
+        await base.GroupBy_Property_Select_MinBy(async);
+        AssertMql("""
+Orders.{ "$sort" : { "_id" : 1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }
+""");
     }
 
     public override async Task GroupBy_multiple_aggregates_sharing_same_navigation(bool async)
@@ -93,26 +97,42 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupBy_Select_Entire_Entity_Where(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Where(async));
+        await base.GroupBy_Select_Entire_Entity_Where(async);
+
+        AssertMql(
+            """
+Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$match" : { "EmployeeID" : 6 } }
+""");
     }
 
     public override async Task GroupBy_Select_Entire_Entity_Where_Select(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Where_Select(async));
+        await base.GroupBy_Select_Entire_Entity_Where_Select(async);
+
+        AssertMql(
+            """
+Orders.{ "$group" : { "_id" : "$_id", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$match" : { "_id" : { "$gt" : 10 } } }, { "$project" : { "EmployeeID" : "$EmployeeID", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Select_Entire_Entity_Select(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Select(async));
+        await base.GroupBy_Select_Entire_Entity_Select(async);
+
+        AssertMql(
+            """
+Orders.{ "$group" : { "_id" : "$_id", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$project" : { "EmployeeID" : "$EmployeeID", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Select_Entire_Entity_Order(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Order(async));
+        await base.GroupBy_Select_Entire_Entity_Order(async);
+
+        AssertMql(
+            """
+Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$sort" : { "EmployeeID" : 1, "_id" : 1 } }
+""");
     }
 
     public override async Task GroupBy_Select_Anonymous_Type_With_Entire_Entity(bool async)
@@ -123,8 +143,10 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupBy_Select_Entire_Entity_FirstOrDefault_Where(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_FirstOrDefault_Where(async));
+        await base.GroupBy_Select_Entire_Entity_FirstOrDefault_Where(async);
+        AssertMql("""
+Orders.{ "$sort" : { "OrderDate" : -1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$match" : { "EmployeeID" : 5 } }
+""");
     }
 
     public override async Task GroupBy_ResultSelector_Entire_Entity_Where(bool async)
@@ -145,14 +167,25 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupBy_Select_Entire_Entity_GroupBy(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_GroupBy(async));
+        // Fails: a GroupBy over a group of whole documents is not supported natively; the driver-LINQ fallback answers it. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_GroupBy(async));
+        }
+        else
+        {
+            await base.GroupBy_Select_Entire_Entity_GroupBy(async);
+        }
     }
 
     public override async Task GroupBy_Select_Entire_Entity_composite_key_Select(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_composite_key_Select(async));
+        await base.GroupBy_Select_Entire_Entity_composite_key_Select(async);
+
+        AssertMql(
+            """
+Orders.{ "$group" : { "_id" : { "CustomerID" : { "$ifNull" : ["$CustomerID", null] }, "EmployeeID" : { "$ifNull" : ["$EmployeeID", null] } }, "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$project" : { "_id" : "$_id" } }
+""");
     }
 
     public override async Task GroupBy_Select_Entire_Entity_OrderBy_navigation(bool async)
@@ -175,8 +208,10 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupBy_Select_Entire_Entity_Select_referenced_twice(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Select_referenced_twice(async));
+        await base.GroupBy_Select_Entire_Entity_Select_referenced_twice(async);
+        AssertMql("""
+Orders.{ "$sort" : { "_id" : 1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$project" : { "First" : "$$ROOT", "Second" : "$$ROOT", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Select_Entire_Entity_Join(bool async)
@@ -1810,11 +1845,12 @@ Orders.{ "$group" : { "_id" : { "CustomerID" : { "$ifNull" : ["$CustomerID", nul
 
     public override async Task GroupBy_Shadow2(bool async)
     {
-        // Fails: GroupBy issue EF-149
-        await AssertTranslationFailed(() => base.GroupBy_Shadow2(async));
+        await base.GroupBy_Shadow2(async);
 
         AssertMql(
-        );
+            """
+Employees.{ "$match" : { "Title" : "Sales Representative", "_id" : 1 } }, { "$group" : { "_id" : "$Title", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }
+""");
     }
 
     public override async Task GroupBy_Shadow3(bool async)
