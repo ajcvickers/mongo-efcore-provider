@@ -15,8 +15,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using MongoDB.EntityFrameworkCore.Query.Visitors;
@@ -42,6 +44,7 @@ public class MongoQueryTranslationPreprocessor : QueryTranslationPreprocessor
         query = new LocalCollectionFilterFoldingVisitor(QueryCompilationContext).Visit(query);
 #if EF11
         query = DefaultIfEmptyBeforeFirstRewriter.Rewrite(query);
+        query = LetSingleResultMemberRewriter.Rewrite(query);
 #endif
 
         // Nav expansion throws for IQueryable methods that it is not aware of, so we remove
@@ -198,6 +201,219 @@ public class MongoQueryTranslationPreprocessor : QueryTranslationPreprocessor
 
         private static MethodCallExpression FirstOrDefault(Type elementType, Expression source)
             => Expression.Call(QueryableMethods.FirstOrDefaultWithoutPredicate.MakeGenericMethod(elementType), source);
+    }
+
+    /// <summary>
+    /// Rewrites <c>from o in source let c = subquery.First(pred) select new { o.A, c.B, c.C }</c> (and the other single-result
+    /// operators: <c>FirstOrDefault</c>, <c>Single</c>, <c>SingleOrDefault</c>, <c>Last</c>, <c>LastOrDefault</c>,
+    /// <c>ElementAt</c>, <c>ElementAtOrDefault</c>) to <c>source.Select(o =&gt; new { o.A, B = subquery.Where(pred).Select(c =&gt; c.B).First(), ... })</c>.
+    /// </summary>
+    /// <remarks>
+    /// Relational providers lift the several members of one correlated single-result subquery to a single join. This provider has
+    /// no join to lift to, but reads the same member off the one element a keyed array lookup holds, so each read becomes a
+    /// member-selecting single-result subquery of its own, which shares that lookup. Only a <c>let</c> whose every use is a member
+    /// read is rewritten: the entity itself (<c>select c</c>) stays as it is. An <c>OrDefault</c> operator also needs a member that
+    /// can be <see langword="null"/>, because the member of a missing element is null where a value type would be its default.
+    /// Runs before navigation expansion, while the <c>let</c> is still a transparent-identifier <c>Select</c> pair.
+    /// </remarks>
+    private sealed class LetSingleResultMemberRewriter : ExpressionVisitor
+    {
+        public static Expression Rewrite(Expression query)
+            => new LetSingleResultMemberRewriter().Visit(query);
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            var visited = base.VisitMethodCall(node);
+            return visited is MethodCallExpression call && TryRewrite(call, out var rewritten) ? rewritten : visited;
+        }
+
+        private static bool TryRewrite(MethodCallExpression outer, [NotNullWhen(true)] out Expression? rewritten)
+        {
+            rewritten = null;
+
+            // Select(Select(source, o => new TI(o, subquery)), ti => body)
+            if (!IsSelect(outer)
+                || outer.Arguments[0] is not MethodCallExpression inner
+                || !IsSelect(inner)
+                || Unquote(inner.Arguments[1]) is not { Body: NewExpression { Members.Count: 2, Arguments: [var first, var subquery] } letNew } letLambda
+                || first != letLambda.Parameters[0]
+                || Unquote(outer.Arguments[1]) is not { Parameters: [var ti] } bodyLambda
+                || !TryGetSingleResult(subquery, out var single))
+            {
+                return false;
+            }
+
+            var firstName = MemberName(letNew.Members![0]);
+            var letName = MemberName(letNew.Members![1]);
+            var replacer = new TransparentIdentifierReplacer(ti, firstName, letName, letLambda.Parameters[0], single);
+            var newBody = replacer.Visit(bodyLambda.Body);
+            if (replacer.Failed || !replacer.RewroteAny)
+            {
+                return false;
+            }
+
+            var newLambda = Expression.Lambda(newBody, letLambda.Parameters[0]);
+            rewritten = Expression.Call(
+                QueryableMethods.Select.MakeGenericMethod(letLambda.Parameters[0].Type, newBody.Type),
+                inner.Arguments[0],
+                Expression.Quote(newLambda));
+            return true;
+        }
+
+        private static bool IsSelect(MethodCallExpression call)
+            => call.Method.DeclaringType == typeof(Queryable)
+               && call.Method.IsGenericMethod
+               && call.Method.GetGenericMethodDefinition() == QueryableMethods.Select;
+
+        private static LambdaExpression? Unquote(Expression expression)
+            => expression switch
+            {
+                UnaryExpression { NodeType: ExpressionType.Quote, Operand: LambdaExpression quoted } => quoted,
+                LambdaExpression lambda => lambda,
+                _ => null
+            };
+
+        private static string MemberName(MemberInfo member)
+            => member.Name.StartsWith("get_", StringComparison.Ordinal) ? member.Name[4..] : member.Name;
+
+        private sealed record SingleResult(
+            MethodCallExpression Call, Expression Source, Expression? Predicate, Expression? Index, bool OrDefault, Type ElementType);
+
+        private static bool TryGetSingleResult(Expression expression, [NotNullWhen(true)] out SingleResult? single)
+        {
+            single = null;
+            if (expression is not MethodCallExpression { Method: { DeclaringType: var declaring, IsGenericMethod: true } method } call
+                || declaring != typeof(Queryable))
+            {
+                return false;
+            }
+
+            var elementType = method.GetGenericArguments()[0];
+            var name = method.Name;
+            switch (name)
+            {
+                case nameof(Queryable.First) or nameof(Queryable.FirstOrDefault) or nameof(Queryable.Single)
+                    or nameof(Queryable.SingleOrDefault) or nameof(Queryable.Last) or nameof(Queryable.LastOrDefault):
+                    if (call.Arguments.Count is < 1 or > 2)
+                        return false;
+                    single = new SingleResult(
+                        call, call.Arguments[0], call.Arguments.Count == 2 ? call.Arguments[1] : null, null,
+                        name.EndsWith("OrDefault", StringComparison.Ordinal), elementType);
+                    return true;
+
+                case nameof(Queryable.ElementAt) or nameof(Queryable.ElementAtOrDefault):
+                    if (call.Arguments.Count != 2)
+                        return false;
+                    single = new SingleResult(
+                        call, call.Arguments[0], null, call.Arguments[1],
+                        name.EndsWith("OrDefault", StringComparison.Ordinal), elementType);
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        // Applies the predicate below any ordering, where the keyed-lookup shape expects the correlation.
+        private static Expression ApplyWhere(Expression source, Expression predicate, Type elementType)
+        {
+            if (source is MethodCallExpression { Method: { DeclaringType: var declaring, IsGenericMethod: true } method } call
+                && declaring == typeof(Queryable))
+            {
+                switch (method.Name)
+                {
+                    case nameof(Queryable.OrderBy) or nameof(Queryable.OrderByDescending):
+                    {
+                        var arguments = call.Arguments.ToArray();
+                        arguments[0] = ApplyWhere(arguments[0], predicate, elementType);
+                        return call.Update(call.Object, arguments);
+                    }
+                    case nameof(Queryable.ThenBy) or nameof(Queryable.ThenByDescending):
+                    {
+                        var arguments = call.Arguments.ToArray();
+                        arguments[0] = ApplyWhere(arguments[0], predicate, elementType);
+                        return call.Update(call.Object, arguments);
+                    }
+                }
+            }
+
+            return Expression.Call(QueryableMethods.Where.MakeGenericMethod(elementType), source, predicate);
+        }
+
+        private static Expression BuildMemberSubquery(SingleResult single, MemberInfo member, Type memberType)
+        {
+            var source = single.Predicate is null ? single.Source : ApplyWhere(single.Source, single.Predicate, single.ElementType);
+            var element = Expression.Parameter(single.ElementType, "e");
+            var selector = Expression.Lambda(Expression.MakeMemberAccess(element, member), element);
+            var selected = Expression.Call(
+                QueryableMethods.Select.MakeGenericMethod(single.ElementType, memberType), source, Expression.Quote(selector));
+
+            var method = single.Call.Method.Name switch
+            {
+                nameof(Queryable.First) => QueryableMethods.FirstWithoutPredicate,
+                nameof(Queryable.FirstOrDefault) => QueryableMethods.FirstOrDefaultWithoutPredicate,
+                nameof(Queryable.Single) => QueryableMethods.SingleWithoutPredicate,
+                nameof(Queryable.SingleOrDefault) => QueryableMethods.SingleOrDefaultWithoutPredicate,
+                nameof(Queryable.Last) => QueryableMethods.LastWithoutPredicate,
+                nameof(Queryable.LastOrDefault) => QueryableMethods.LastOrDefaultWithoutPredicate,
+                nameof(Queryable.ElementAt) => QueryableMethods.ElementAt,
+                _ => QueryableMethods.ElementAtOrDefault
+            };
+
+            return single.Index is null
+                ? Expression.Call(method.MakeGenericMethod(memberType), selected)
+                : Expression.Call(method.MakeGenericMethod(memberType), selected, single.Index);
+        }
+
+        /// <summary>
+        /// Replaces <c>ti.o</c> by the new lambda parameter and <c>ti.c.Member</c> by a member subquery; any other use of <c>ti</c>
+        /// (the <c>let</c> value itself) fails the rewrite.
+        /// </summary>
+        private sealed class TransparentIdentifierReplacer(
+            ParameterExpression ti, string firstName, string letName, ParameterExpression replacement, SingleResult single)
+            : ExpressionVisitor
+        {
+            public bool Failed { get; private set; }
+
+            public bool RewroteAny { get; private set; }
+
+            protected override Expression VisitMember(MemberExpression node)
+            {
+                if (node.Expression == ti)
+                {
+                    if (MemberName(node.Member) == firstName)
+                        return replacement;
+
+                    Failed = true;
+                    return node;
+                }
+
+                if (node.Expression is MemberExpression { Expression: var tiOwner } letAccess
+                    && tiOwner == ti
+                    && MemberName(letAccess.Member) == letName)
+                {
+                    var memberType = node.Type;
+                    if (single.OrDefault && memberType.IsValueType && Nullable.GetUnderlyingType(memberType) is null)
+                    {
+                        Failed = true;
+                        return node;
+                    }
+
+                    RewroteAny = true;
+                    return BuildMemberSubquery(single, node.Member, memberType);
+                }
+
+                return base.VisitMember(node);
+            }
+
+            protected override Expression VisitParameter(ParameterExpression node)
+            {
+                if (node == ti)
+                    Failed = true;
+
+                return node;
+            }
+        }
     }
 
 #endif

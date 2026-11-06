@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,17 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// </summary>
 internal sealed class ReferencedElementShape
 {
-    /// <summary>Whether the leaf is <c>FirstOrDefault</c> (one element or <see langword="null"/>) rather than <c>ToList</c>.</summary>
-    public required bool IsFirst { get; init; }
+    /// <summary>The operator the leaf ends in.</summary>
+    public required ElementTerminal Terminal { get; init; }
+
+    /// <summary>Whether the leaf is a list (<c>ToList</c>) rather than one element.</summary>
+    public bool IsList => Terminal == ElementTerminal.ToList;
+
+    /// <summary>Whether the leaf is <c>Last</c>/<c>LastOrDefault</c>, the first element of the reversed ordering.</summary>
+    public bool ReversesSort => Terminal is ElementTerminal.Last or ElementTerminal.LastOrDefault;
+
+    /// <summary>The <c>ElementAt</c> index (a constant or a query parameter), or <see langword="null"/>.</summary>
+    public Expression? ElementIndex { get; init; }
 
     /// <summary>The query root of the subquery's entity type.</summary>
     public required EntityQueryRootExpression Root { get; init; }
@@ -45,7 +54,7 @@ internal sealed class ReferencedElementShape
 
     /// <summary>
     /// The element selector of <c>Select(o =&gt; o.Total).ToList()</c>, or <see langword="null"/> for a list of the entities themselves.
-    /// Only a <c>ToList</c> carries one: a scalar <c>FirstOrDefault().Member</c> is the correlated-reducer leaf.
+    /// A single-element terminal carries one too (<c>Select(o =&gt; o.Total).First()</c>), as nav-expansion lowers <c>First().Total</c>.
     /// </summary>
     public LambdaExpression? Selector { get; init; }
 
@@ -54,6 +63,20 @@ internal sealed class ReferencedElementShape
 
     /// <summary>The <c>Take</c> count applied after the skip (a constant or a query parameter; a <c>ToList</c> only), or <see langword="null"/>.</summary>
     public Expression? Take { get; init; }
+}
+
+/// <summary>The operator an element leaf ends in.</summary>
+internal enum ElementTerminal
+{
+    ToList,
+    First,
+    FirstOrDefault,
+    Single,
+    SingleOrDefault,
+    Last,
+    LastOrDefault,
+    ElementAt,
+    ElementAtOrDefault
 }
 
 /// <summary>
@@ -67,7 +90,8 @@ internal static class NativeReferencedElementMatcher
     {
         shape = null;
 
-        bool isFirst;
+        ElementTerminal terminal;
+        Expression? elementIndex = null;
         Expression source;
         switch (leaf)
         {
@@ -76,28 +100,40 @@ internal static class NativeReferencedElementMatcher
                 Method: { Name: nameof(Enumerable.ToList), DeclaringType: var toListDeclaring },
                 Arguments: [var toListSource]
             } when toListDeclaring == typeof(Enumerable):
-                isFirst = false;
+                terminal = ElementTerminal.ToList;
                 source = toListSource;
                 break;
 
             case MethodCallExpression
             {
-                Method: { Name: nameof(Queryable.FirstOrDefault), DeclaringType: var firstDeclaring },
-                Arguments: [var firstSource]
-            } when firstDeclaring == typeof(Queryable):
-                isFirst = true;
-                source = firstSource;
+                Method: { DeclaringType: var terminalDeclaring } terminalMethod,
+                Arguments: [var terminalSource]
+            } when terminalDeclaring == typeof(Queryable) && TryGetTerminal(terminalMethod.Name, out terminal):
+                source = terminalSource;
+                break;
+
+            // ElementAt(index): the index is a constant or a query parameter, like a Skip count.
+            case MethodCallExpression
+            {
+                Method: { Name: nameof(Queryable.ElementAt) or nameof(Queryable.ElementAtOrDefault), DeclaringType: var elementAtDeclaring } elementAtMethod,
+                Arguments: [var elementAtSource, var indexArgument]
+            } when elementAtDeclaring == typeof(Queryable)
+                   && (indexArgument is ConstantExpression { Value: int } || NativeQueryParameter.TryGetQueryParameterName(indexArgument, out _)):
+                terminal = elementAtMethod.Name == nameof(Queryable.ElementAt) ? ElementTerminal.ElementAt : ElementTerminal.ElementAtOrDefault;
+                elementIndex = indexArgument;
+                source = elementAtSource;
                 break;
 
             default:
                 return false;
         }
 
-        // `Select(o => o.Total).ToList()`: the selector is applied to the materialized entities. An identity selector (what a ThenInclude
-        // leaves behind) is none.
+        var isList = terminal == ElementTerminal.ToList;
+
+        // `Select(o => o.Total).ToList()` or `.First()`: the selector is applied to the materialized entities. An identity selector (what a
+        // ThenInclude leaves behind) is none.
         LambdaExpression? selector = null;
-        if (!isFirst
-            && source is MethodCallExpression
+        if (source is MethodCallExpression
             {
                 Method: { Name: nameof(Queryable.Select), DeclaringType: var selectDeclaring },
                 Arguments: [var selectSource, var selectorArgument]
@@ -115,7 +151,7 @@ internal static class NativeReferencedElementMatcher
         // the page, not the group, and is declined by the loop below (it meets Skip/Take where it expects a filter or an ordering).
         Expression? take = null;
         Expression? skip = null;
-        if (!isFirst && TryPeelPaging(ref source, nameof(Queryable.Take), out var takeCount))
+        if (isList && TryPeelPaging(ref source, nameof(Queryable.Take), out var takeCount))
             take = takeCount;
 
         if (TryPeelPaging(ref source, nameof(Queryable.Skip), out var skipCount))
@@ -124,10 +160,15 @@ internal static class NativeReferencedElementMatcher
         // A constant Take keeps a positive count and a constant Skip is not negative; a parameter's value is checked per execution, where
         // zero is an empty list and a negative count throws, as in LINQ.
         if (take is ConstantExpression { Value: int constantTake and <= 0 }
-            || skip is ConstantExpression { Value: int constantSkip and < 0 })
+            || skip is ConstantExpression { Value: int constantSkip and < 0 }
+            || elementIndex is ConstantExpression { Value: int constantIndex and < 0 })
         {
             return false;
         }
+
+        // The index is the skip, so a Skip already in the chain (the index counts from its result) is not expressible as one count.
+        if (elementIndex is not null && skip is not null)
+            return false;
 
         var wheres = new List<LambdaExpression>();
         var sorts = new List<(LambdaExpression Key, bool Ascending)>();
@@ -187,13 +228,18 @@ internal static class NativeReferencedElementMatcher
         if (!previousWasWhere || wheres.Count == 0 || primarySorts > 1)
             return false;
 
+        // Last is the first element of the reversed ordering, which needs an ordering to reverse and no paging ahead of it.
+        if (terminal is ElementTerminal.Last or ElementTerminal.LastOrDefault && (sorts.Count == 0 || skip is not null))
+            return false;
+
         // Collected outermost first.
         sorts.Reverse();
         wheres.Reverse();
 
         shape = new ReferencedElementShape
         {
-            IsFirst = isFirst,
+            Terminal = terminal,
+            ElementIndex = elementIndex,
             Root = (EntityQueryRootExpression)current,
             Correlation = wheres[0],
             Filters = wheres.Skip(1).ToList(),
@@ -203,6 +249,22 @@ internal static class NativeReferencedElementMatcher
             Take = take
         };
         return true;
+    }
+
+    private static bool TryGetTerminal(string methodName, out ElementTerminal terminal)
+    {
+        terminal = methodName switch
+        {
+            nameof(Queryable.First) => ElementTerminal.First,
+            nameof(Queryable.FirstOrDefault) => ElementTerminal.FirstOrDefault,
+            nameof(Queryable.Single) => ElementTerminal.Single,
+            nameof(Queryable.SingleOrDefault) => ElementTerminal.SingleOrDefault,
+            nameof(Queryable.Last) => ElementTerminal.Last,
+            nameof(Queryable.LastOrDefault) => ElementTerminal.LastOrDefault,
+            _ => ElementTerminal.ToList
+        };
+
+        return terminal != ElementTerminal.ToList;
     }
 
     private static bool TryPeelPaging(ref Expression source, string methodName, [NotNullWhen(true)] out Expression? count)

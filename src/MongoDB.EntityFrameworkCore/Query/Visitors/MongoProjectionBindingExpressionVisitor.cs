@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1537,6 +1537,12 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// before descending, because visiting the outer shaper calls <c>AddToProjection</c>.
     /// </para>
     /// </remarks>
+    private static readonly MethodInfo ElementAtMethod = typeof(Enumerable).GetMethods().Single(
+        m => m.Name == nameof(Enumerable.ElementAt) && m.GetParameters() is [_, { ParameterType: var index }] && index == typeof(int));
+
+    private static readonly MethodInfo ElementAtOrDefaultMethod = typeof(Enumerable).GetMethods().Single(
+        m => m.Name == nameof(Enumerable.ElementAtOrDefault) && m.GetParameters() is [_, { ParameterType: var index }] && index == typeof(int));
+
     private bool TryBindReferencedElementLeaf(MethodCallExpression methodCallExpression, out Expression result)
     {
         result = null!;
@@ -1547,20 +1553,19 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             return false;
         }
 
+        // A bare selector body has no last member: the alias override registered for it resolves from a null name.
         var arrayProjectionMember = GetCurrentProjectionMember();
-        if (arrayProjectionMember.Last?.Name is not { } memberName)
+        var arrayAlias = _queryExpression.Select.ResolveProjectionAlias(arrayProjectionMember.Last?.Name);
+        if (arrayAlias is null)
             return false;
 
-        var arrayAlias = _queryExpression.Select.ResolveProjectionAlias(memberName);
         var targetType = shape.Root.EntityType;
         var lookup = _queryExpression.GetPendingLookups().FirstOrDefault(
             l => l.IsCorrelatedArraySource
                  && l.TargetEntityType == targetType
                  && l.ElementLeafAliases.Contains(arrayAlias)
-                 && LookupExpression.SameElementCount(
-                     l.ElementLimit,
-                     shape.IsFirst ? new MongoConstantExpression(1, forSerialization: null) : NativeProjectionBinder.TranslateElementCount(shape.Take))
-                 && LookupExpression.SameElementCount(l.ElementSkip, NativeProjectionBinder.TranslateElementCount(shape.Skip)));
+                 && LookupExpression.SameElementCount(l.ElementLimit, NativeProjectionBinder.TranslateElementLimit(shape))
+                 && LookupExpression.SameElementCount(l.ElementSkip, NativeProjectionBinder.TranslateElementSkip(shape)));
         if (lookup is null)
             return false;
 
@@ -1575,9 +1580,31 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             navigation: null,
             targetType.ClrType);
 
-        if (shape.IsFirst)
+        if (!shape.IsList)
         {
-            result = Expression.Call(EnumerableMethods.FirstOrDefaultWithoutPredicate.MakeGenericMethod(targetType.ClrType), collection);
+            // The terminal runs over the (at most one, or for Single two) materialized entities the lookup kept, so it throws for an empty or
+            // ambiguous group as LINQ does. Last read the reversed ordering and ElementAt skipped to its index, so each is the first element.
+            var elementType = shape.Selector?.ReturnType ?? targetType.ClrType;
+            var elements = shape.Selector is { } elementSelector
+                ? Expression.Call(
+                    EnumerableMethods.Select.MakeGenericMethod(targetType.ClrType, elementSelector.ReturnType), collection, elementSelector)
+                : collection;
+            result = shape.Terminal switch
+            {
+                ElementTerminal.First or ElementTerminal.Last
+                    => Expression.Call(EnumerableMethods.FirstWithoutPredicate.MakeGenericMethod(elementType), elements),
+                ElementTerminal.FirstOrDefault or ElementTerminal.LastOrDefault
+                    => Expression.Call(EnumerableMethods.FirstOrDefaultWithoutPredicate.MakeGenericMethod(elementType), elements),
+                ElementTerminal.Single
+                    => Expression.Call(EnumerableMethods.SingleWithoutPredicate.MakeGenericMethod(elementType), elements),
+                ElementTerminal.SingleOrDefault
+                    => Expression.Call(EnumerableMethods.SingleOrDefaultWithoutPredicate.MakeGenericMethod(elementType), elements),
+                ElementTerminal.ElementAt
+                    => Expression.Call(
+                        ElementAtMethod.MakeGenericMethod(elementType), elements, Expression.Constant(0)),
+                _ => Expression.Call(
+                    ElementAtOrDefaultMethod.MakeGenericMethod(elementType), elements, Expression.Constant(0))
+            };
         }
         else if (shape.Selector is { } selector)
         {

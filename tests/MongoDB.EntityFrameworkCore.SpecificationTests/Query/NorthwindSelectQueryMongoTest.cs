@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,8 +50,25 @@ public class NorthwindSelectQueryMongoTest : NorthwindSelectQueryTestBase<Northw
 
     public override async Task Multiple_members_of_correlated_single_result_subquery_lift_to_single_join(bool async, string method)
     {
-        // Fails: Correlated single-result subquery lifting is not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/21
-        await AssertTranslationFailed(() => base.Multiple_members_of_correlated_single_result_subquery_lift_to_single_join(async, method));
+        await base.Multiple_members_of_correlated_single_result_subquery_lift_to_single_join(async, method);
+
+        // The three members read one keyed $lookup of the customer; the terminal operator decides how many elements it keeps and in what order.
+        AssertMql(
+            method switch
+            {
+                "First" or "FirstOrDefault" => """
+Orders.{ "$match" : { "CustomerID" : { "$ne" : null } } }, { "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "foreignField" : "_id", "pipeline" : [{ "$limit" : 1 }], "as" : "_lookup_Customer__id_CustomerID_f1" } }, { "$project" : { "OrderID" : "$_id", "City" : "$_lookup_Customer__id_CustomerID_f1", "Country" : "$_lookup_Customer__id_CustomerID_f1", "ContactName" : "$_lookup_Customer__id_CustomerID_f1", "_id" : 0 } }
+""",
+                "Single" or "SingleOrDefault" => """
+Orders.{ "$match" : { "CustomerID" : { "$ne" : null } } }, { "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "foreignField" : "_id", "pipeline" : [{ "$limit" : 2 }], "as" : "_lookup_Customer__id_CustomerID_f1" } }, { "$project" : { "OrderID" : "$_id", "City" : "$_lookup_Customer__id_CustomerID_f1", "Country" : "$_lookup_Customer__id_CustomerID_f1", "ContactName" : "$_lookup_Customer__id_CustomerID_f1", "_id" : 0 } }
+""",
+                "Last" or "LastOrDefault" => """
+Orders.{ "$match" : { "CustomerID" : { "$ne" : null } } }, { "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "foreignField" : "_id", "pipeline" : [{ "$sort" : { "_id" : -1 } }, { "$limit" : 1 }], "as" : "_lookup_Customer__id_CustomerID_f1" } }, { "$project" : { "OrderID" : "$_id", "City" : "$_lookup_Customer__id_CustomerID_f1", "Country" : "$_lookup_Customer__id_CustomerID_f1", "ContactName" : "$_lookup_Customer__id_CustomerID_f1", "_id" : 0 } }
+""",
+                _ => """
+Orders.{ "$match" : { "CustomerID" : { "$ne" : null } } }, { "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "foreignField" : "_id", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$skip" : 0 }, { "$limit" : 1 }], "as" : "_lookup_Customer__id_CustomerID_f1" } }, { "$project" : { "OrderID" : "$_id", "City" : "$_lookup_Customer__id_CustomerID_f1", "Country" : "$_lookup_Customer__id_CustomerID_f1", "ContactName" : "$_lookup_Customer__id_CustomerID_f1", "_id" : 0 } }
+"""
+            });
     }
 
 #endif
@@ -394,10 +411,12 @@ Customers.{ "$match" : { "City" : "London" } }, { "$project" : { "City" : "$City
 
     public override async Task Select_nested_collection(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() => base.Select_nested_collection(async));
+        await base.Select_nested_collection(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Customers.{ "$match" : { "City" : "London" } }, { "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$match" : { "$expr" : { "$eq" : [{ "$year" : "$OrderDate" }, 1997] } } }, { "$sort" : { "_id" : 1 } }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_nested_collection_multi_level(bool async)
@@ -711,11 +730,12 @@ Orders.{ "$project" : { "_v" : { "$cond" : { "if" : { "$cond" : { "if" : { "$eq"
 
     public override async Task Project_single_element_from_collection_with_OrderBy_Skip_and_FirstOrDefault(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() =>
-            base.Project_single_element_from_collection_with_OrderBy_Skip_and_FirstOrDefault(async));
+        await base.Project_single_element_from_collection_with_OrderBy_Skip_and_FirstOrDefault(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_single_element_from_collection_with_OrderBy_Distinct_and_FirstOrDefault(bool async)
@@ -1230,10 +1250,12 @@ Orders.{ "$match" : { "CustomerID" : "ALFKI" } }, { "$lookup" : { "from" : "Cust
 
     public override async Task Collection_FirstOrDefault_with_nullable_unsigned_int_column(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() => base.Collection_FirstOrDefault_with_nullable_unsigned_int_column(async));
+        await base.Collection_FirstOrDefault_with_nullable_unsigned_int_column(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task ToList_Count_in_projection_works(bool async)
@@ -1250,10 +1272,12 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^A", "o
 
     public override async Task LastOrDefault_member_access_in_projection_translates_to_server(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() => base.LastOrDefault_member_access_in_projection_translates_to_server(async));
+        await base.LastOrDefault_member_access_in_projection_translates_to_server(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^A", "options" : "s" } } } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "c" : "$$ROOT", "OrderDate" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_with_parameterized_constructor(bool async)
@@ -1296,18 +1320,22 @@ Orders.{ "$project" : { "_v" : { "$ifNull" : ["$EmployeeID", { "$literal" : 0 }]
 
     public override async Task Project_uint_through_collection_FirstOrDefault(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() => base.Project_uint_through_collection_FirstOrDefault(async));
+        await base.Project_uint_through_collection_FirstOrDefault(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_keyless_entity_FirstOrDefault_without_orderby(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() => base.Project_keyless_entity_FirstOrDefault_without_orderby(async));
+        await base.Project_keyless_entity_FirstOrDefault_without_orderby(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Customers.{ "$lookup" : { "from" : "Customers", "localField" : "CompanyName", "foreignField" : "CompanyName", "pipeline" : [{ "$limit" : 1 }], "as" : "_lookup_CustomerQuery_CompanyName_CompanyName_f1" } }, { "$project" : { "_lookup_CustomerQuery_CompanyName_CompanyName_f1" : "$_lookup_CustomerQuery_CompanyName_CompanyName_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Reverse_changes_asc_order_to_desc(bool async)

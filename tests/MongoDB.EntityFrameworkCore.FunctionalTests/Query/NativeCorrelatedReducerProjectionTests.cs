@@ -186,28 +186,43 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
     }
 
     /// <summary>
-    /// <c>First()</c> over a nullable member (<c>Method</c>) can't distinguish "no row" from "row with null
-    /// Method", so it declines at translate time rather than wrongly throwing. No driver-LINQ fallback exists for
-    /// this shape, so the decline surfaces as EF's "could not be translated".
+    /// <c>First()</c> over a nullable member (<c>Method</c>): the correlated reducer can't tell "no row" from "row with a null Method" and
+    /// declines it, but the element leaf keeps the row and runs the real <c>First</c> over it in the shaper, so the row's member is read.
     /// </summary>
     [Fact]
-    public void First_over_nullable_typed_member_declines()
+    public void First_over_nullable_typed_member_reads_the_member_of_the_first_row()
     {
         using var db = CreateContext(
-            MongoQueryMode.Native, nameof(First_over_nullable_typed_member_declines),
+            MongoQueryMode.NativeOnly, nameof(First_over_nullable_typed_member_reads_the_member_of_the_first_row),
             out var withMethods, out _);
 
-        var query = db.Animals
+        var result = db.Animals
             .Where(a => a.Id == withMethods)
-            .Select(a => new { a.Id, M = a.IdentificationMethods.First().Method });
+            .Select(a => new { a.Id, M = a.IdentificationMethods.OrderBy(m => m.Rank).First().Method })
+            .Single();
+
+        Assert.Equal("Microchip", result.M);
+    }
+
+    /// <summary>The empty group still throws, as LINQ's <c>First</c> does, rather than reading a null member.</summary>
+    [Fact]
+    public void First_over_nullable_typed_member_of_an_empty_collection_throws()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(First_over_nullable_typed_member_of_an_empty_collection_throws),
+            out _, out var withoutMethods);
+
+        var query = db.Animals
+            .Where(a => a.Id == withoutMethods)
+            .Select(a => new { a.Id, M = a.IdentificationMethods.OrderBy(m => m.Rank).First().Method });
 
         var ex = Assert.Throws<InvalidOperationException>(() => query.Single());
-        Assert.Contains("could not be translated", ex.Message);
+        Assert.Equal("Sequence contains no elements", ex.Message);
     }
 
     /// <summary>
-    /// Control for <see cref="First_over_nullable_typed_member_declines"/>: <c>FirstOrDefault()</c> over the same
-    /// nullable member still goes native and reads correctly.
+    /// Control for <see cref="First_over_nullable_typed_member_reads_the_member_of_the_first_row"/>: <c>FirstOrDefault()</c> over the same
+    /// nullable member reads correctly too.
     /// </summary>
     [Fact]
     public void FirstOrDefault_over_nullable_typed_member_still_works()
@@ -222,6 +237,156 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
             .Single();
 
         Assert.Equal("Microchip", result.M);
+    }
+
+    // The shapes the correlated reducer leaf declines (it has one row per animal and one sub-pipeline per alias) are element leaves: a keyed
+    // lookup per distinct (filter, sort, skip, limit) that the shaper reads with the real LINQ operator. Run under NativeOnly, so each is
+    // answered natively or the test fails. Rex holds Microchip (rank 1) and Tattoo (rank 2).
+
+    [Fact]
+    public void Two_leaves_over_one_navigation_read_their_own_rows()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Two_leaves_over_one_navigation_read_their_own_rows), out var withMethods, out _);
+
+        var result = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new
+            {
+                Low = a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault()!.Method,
+                High = a.IdentificationMethods.OrderByDescending(m => m.Rank).FirstOrDefault()!.Method
+            })
+            .Single();
+
+        Assert.Equal("Microchip", result.Low);
+        Assert.Equal("Tattoo", result.High);
+    }
+
+    /// <summary>
+    /// An unordered leaf (the correlated reducer's) beside an ordered one (an element leaf) over the same navigation: the second must read its own
+    /// row, not the row the first one's lookup holds under the shared navigation alias.
+    /// </summary>
+    [Fact]
+    public void A_reducer_leaf_beside_an_element_leaf_over_one_navigation_reads_their_own_rows()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_reducer_leaf_beside_an_element_leaf_over_one_navigation_reads_their_own_rows),
+            out var withMethods, out _);
+
+        var result = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new
+            {
+                Any = a.IdentificationMethods.FirstOrDefault()!.Method,
+                Best = a.IdentificationMethods.OrderByDescending(m => m.Rank).FirstOrDefault()!.Method
+            })
+            .Single();
+
+        Assert.Contains(result.Any, new[] { "Microchip", "Tattoo" });
+        Assert.Equal("Tattoo", result.Best);
+    }
+
+    /// <summary>
+    /// <c>Single</c> keeps two rows in its lookup so a second match is seen and throws, as LINQ does; a single match is read.
+    /// </summary>
+    [Fact]
+    public void Single_over_a_navigation_throws_for_two_rows_and_reads_one()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Single_over_a_navigation_throws_for_two_rows_and_reads_one), out var withMethods, out var withoutMethods);
+
+        var ambiguous = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new { M = a.IdentificationMethods.OrderBy(m => m.Rank).Single().Method });
+        Assert.Throws<InvalidOperationException>(() => ambiguous.Single());
+
+        var one = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new { M = a.IdentificationMethods.Single(m => m.Rank == 2).Method })
+            .Single();
+        Assert.Equal("Tattoo", one.M);
+
+        var none = db.Animals
+            .Where(a => a.Id == withoutMethods)
+            .Select(a => new { M = a.IdentificationMethods.SingleOrDefault(m => m.Rank == 2)!.Method })
+            .Single();
+        Assert.Null(none.M);
+    }
+
+    [Fact]
+    public void ThenBy_and_Skip_in_the_navigation_chain_read_the_right_row()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(ThenBy_and_Skip_in_the_navigation_chain_read_the_right_row), out var withMethods, out _);
+
+        var result = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new
+            {
+                Chained = a.IdentificationMethods.OrderBy(m => m.Rank).ThenBy(m => m.Method).FirstOrDefault()!.Method,
+                Skipped = a.IdentificationMethods.OrderBy(m => m.Rank).Skip(1).FirstOrDefault()!.Method,
+                PastTheEnd = a.IdentificationMethods.OrderBy(m => m.Rank).Skip(2).FirstOrDefault()!.Method
+            })
+            .Single();
+
+        Assert.Equal("Microchip", result.Chained);
+        Assert.Equal("Tattoo", result.Skipped);
+        Assert.Null(result.PastTheEnd);
+    }
+
+    [Fact]
+    public void A_count_beside_a_leaf_over_the_same_navigation_reads_both()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_count_beside_a_leaf_over_the_same_navigation_reads_both), out var withMethods, out _);
+
+        var result = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new
+            {
+                N = a.IdentificationMethods.Count,
+                M = a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault()!.Method
+            })
+            .Single();
+
+        Assert.Equal(2, result.N);
+        Assert.Equal("Microchip", result.M);
+    }
+
+    [Fact]
+    public void A_captured_predicate_value_is_read_per_execution()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_captured_predicate_value_is_read_per_execution), out var withMethods, out _);
+
+        string? Run(int threshold)
+            => db.Animals
+                .Where(a => a.Id == withMethods)
+                .Select(a => new
+                {
+                    M = a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault(m => m.Rank > threshold)!.Method
+                })
+                .Single().M;
+
+        Assert.Equal("Microchip", Run(0));
+        Assert.Equal("Tattoo", Run(1));
+        Assert.Null(Run(2));
+    }
+
+    [Fact]
+    public void A_bare_selector_body_reads_the_leaf()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_bare_selector_body_reads_the_leaf), out var withMethods, out var withoutMethods);
+
+        var methods = db.Animals
+            .Where(a => a.Id == withMethods || a.Id == withoutMethods)
+            .OrderBy(a => a.Name)
+            .Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault()!.Method)
+            .ToList();
+
+        // Fido (no methods) sorts before Rex.
+        Assert.Equal([null, "Microchip"], methods);
     }
 
     // No driver-LINQ oracle: expected values are hand-computed from the seed, with several candidates per case so a

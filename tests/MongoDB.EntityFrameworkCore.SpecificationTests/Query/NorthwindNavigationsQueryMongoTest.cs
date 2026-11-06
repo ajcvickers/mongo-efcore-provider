@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,65 +68,72 @@ OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "f
 
     public override async Task Take_Select_Navigation(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Take_Select_Navigation(async));
+        await base.Take_Select_Navigation(async);
 
         AssertMql(
-        );
+"""
+Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_collection_FirstOrDefault_project_single_column1(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Select_collection_FirstOrDefault_project_single_column1(async));
+        await base.Select_collection_FirstOrDefault_project_single_column1(async);
 
         AssertMql(
-        );
+"""
+Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_collection_FirstOrDefault_project_single_column2(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Select_collection_FirstOrDefault_project_single_column2(async));
+        await base.Select_collection_FirstOrDefault_project_single_column2(async);
 
         AssertMql(
-        );
+"""
+Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_collection_FirstOrDefault_project_anonymous_type(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Select_collection_FirstOrDefault_project_anonymous_type(async));
+        await base.Select_collection_FirstOrDefault_project_anonymous_type(async);
 
         AssertMql(
-        );
+"""
+Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_collection_FirstOrDefault_project_anonymous_type_client_eval(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Select_collection_FirstOrDefault_project_anonymous_type_client_eval(async));
+        await base.Select_collection_FirstOrDefault_project_anonymous_type_client_eval(async);
 
         AssertMql(
-        );
+"""
+Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_collection_FirstOrDefault_project_entity(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Select_collection_FirstOrDefault_project_entity(async));
+        await base.Select_collection_FirstOrDefault_project_entity(async);
 
         AssertMql(
-        );
+"""
+Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Skip_Select_Navigation(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Skip_Select_Navigation(async));
+        await base.Skip_Select_Navigation(async);
 
         AssertMql(
-        );
+"""
+Customers.{ "$sort" : { "_id" : 1 } }, { "$skip" : 20 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_Where_Navigation_Included(bool async)
@@ -598,11 +605,12 @@ OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "f
 
     public override async Task Project_single_scalar_value_subquery_is_properly_inlined(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Project_single_scalar_value_subquery_is_properly_inlined(async));
+        await base.Project_single_scalar_value_subquery_is_properly_inlined(async);
 
         AssertMql(
-        );
+"""
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "CustomerID" : "$_id", "OrderId" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_single_entity_value_subquery_works(bool async)
