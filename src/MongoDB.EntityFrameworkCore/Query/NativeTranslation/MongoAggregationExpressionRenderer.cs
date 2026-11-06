@@ -177,7 +177,8 @@ internal static class MongoAggregationExpressionRenderer
             MongoArrayReduceExpression => true,
             MongoFieldPresenceExpression => true,
             MongoFilteredSizeExpression filtered => CanRender(filtered.ElementPredicate),
-            MongoMappedArrayReduceExpression mappedReduce => CanRender(mappedReduce.ElementExpression),
+            MongoMappedArrayReduceExpression mappedReduce => CanRender(mappedReduce.ElementExpression)
+                && (mappedReduce.ResultExpression is null || CanRender(mappedReduce.ResultExpression)),
             MongoInExpression inExpr => MongoValueRenderer.IsRenderableInValues(inExpr.Values),
             MongoComputedInExpression computedIn
                 => CanRender(computedIn.Needle) && MongoValueRenderer.IsRenderableInValues(computedIn.Values),
@@ -577,6 +578,9 @@ internal static class MongoAggregationExpressionRenderer
     {
         var variable = NestedElementVariable(elementVariable);
 
+        if (node.IsElementSelection)
+            return RenderElementSelection(node, placeholders, elementVariable, variable);
+
         return new BsonDocument(node.OperatorName, new BsonDocument("$map", new BsonDocument
         {
             // $map over a missing or null array is a server error; [] reduces to 0 ($sum) or null, as LINQ answers.
@@ -584,6 +588,55 @@ internal static class MongoAggregationExpressionRenderer
             { "as", variable },
             { "in", Render(node.ElementExpression, placeholders, variable) }
         }));
+    }
+
+    // MinBy/MaxBy(key).Member: each element becomes a { k: key, m: member } pair, and a $reduce keeps the first pair with the smallest (largest)
+    // key. The comparison is strict, so a later element with an equal key never replaces the earlier one, as in LINQ. An empty array leaves
+    // the initial null, and `$$best.m` of null is null.
+    private static BsonValue RenderElementSelection(
+        MongoMappedArrayReduceExpression node, PlaceholderTable placeholders, string? elementVariable, string variable)
+    {
+        var comparison = node.OperatorName == MongoMappedArrayReduceExpression.MinByOperator ? "$lt" : "$gt";
+
+        var pairs = new BsonDocument("$map", new BsonDocument
+        {
+            // $map over a missing or null array is a server error.
+            { "input", IfNull(FieldRef(node.ArrayPath, elementVariable), new BsonArray()) },
+            { "as", variable },
+            {
+                "in", new BsonDocument
+                {
+                    { "k", Render(node.ElementExpression, placeholders, variable) },
+                    { "m", Render(node.ResultExpression!, placeholders, variable) }
+                }
+            }
+        });
+
+        var reduce = new BsonDocument("$reduce", new BsonDocument
+        {
+            { "input", pairs },
+            { "initialValue", BsonNull.Value },
+            {
+                "in", new BsonDocument("$cond", new BsonArray
+                {
+                    new BsonDocument("$or", new BsonArray
+                    {
+                        new BsonDocument("$eq", new BsonArray { "$$value", BsonNull.Value }),
+                        new BsonDocument(comparison, new BsonArray { "$$this.k", "$$value.k" })
+                    }),
+                    "$$this",
+                    "$$value"
+                })
+            }
+        });
+
+        // `$$best.m` of a null `best` (no element) is MISSING, not null, and `$eq: [missing, null]` is false: coalesce, so an empty group
+        // is the null LINQ compares with. (A member that is itself missing in the selected element reads as null here too.)
+        return new BsonDocument("$let", new BsonDocument
+        {
+            { "vars", new BsonDocument("best", reduce) },
+            { "in", IfNull("$$best.m", BsonNull.Value) }
+        });
     }
 
     private static BsonValue RenderQuantifier(
@@ -968,7 +1021,7 @@ internal static class MongoAggregationExpressionRenderer
             // on read like LINQ's Min/Max/Average over an empty sequence. $sum of an empty array is 0.
             // ElementRef: an upstream alias the emit side flagged MongoProjection.ThrowsOnNull.
             MongoArrayReduceExpression { OperatorName: "$min" or "$max" or "$avg" } => new(true, false),
-            MongoMappedArrayReduceExpression { OperatorName: "$min" or "$max" or "$avg" } => new(true, false),
+            MongoMappedArrayReduceExpression { OperatorName: "$min" or "$max" or "$avg" or MongoMappedArrayReduceExpression.MinByOperator or MongoMappedArrayReduceExpression.MaxByOperator } => new(true, false),
             MongoElementRefExpression { ThrowsOnNull: true } => new(true, false),
             MongoBinaryExpression { IsArithmetic: true } arithmetic
                 => WalkNullBehindNonNullableType(arithmetic.Left, nonNull, dateParts, missingFields, storedFields)

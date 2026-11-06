@@ -205,6 +205,135 @@ internal sealed partial class MongoExpressionTranslator
         return new MongoMappedArrayReduceExpression(mqlOperator, referenced.ArrayPath, element, call.Type);
     }
 
+    /// <summary>
+    /// <c>c.Orders.MinBy(o =&gt; key).Member</c> / <c>MaxBy</c> over a referenced collection, as nav-expansion lowers it:
+    /// <c>Where(Orders, correlation).OrderBy(o =&gt; key).Select(o =&gt; o.Member).FirstOrDefault()</c>. The value is the member of the element
+    /// with the smallest (largest) key, the first of them on a tie (<see cref="MongoMappedArrayReduceExpression.MinByOperator"/>); an empty
+    /// group answers <see langword="null"/>, where LINQ throws for a non-nullable result (as the aggregates here do).
+    /// </summary>
+    /// <remarks>
+    /// The key is translated in the element's own scope and may read the collections its element is correlated with
+    /// (<c>5 + o.OrderDetails.Max(d =&gt; d.ProductID)</c>, or another <c>MinBy</c>): those become keyed lookups inside the sub-pipeline of
+    /// the element array (<see cref="LookupExpression.ElementNestedLookups"/>), so each element carries the arrays the key reads. Nothing
+    /// is staged until every part has translated. The key must be a CLR-ordered value and neither lambda may read the enclosing entity
+    /// (the subquery's correlation does, and is resolved by the binder's resolver).
+    /// </remarks>
+    private MongoExpression? TranslateReferencedOrderedFirst(MethodCallExpression call)
+    {
+        if (call.Method.DeclaringType != typeof(Queryable)
+            || call.Arguments.Count != 1
+            || ReferencedCollectionWithNestedResolver is not { } resolveWithNested
+            || UnwrapAsQueryable(call.Arguments[0]) is not MethodCallExpression
+            {
+                Method: { Name: nameof(Queryable.Select), DeclaringType: var selectDeclaring },
+                Arguments: [var ordered, var memberArgument]
+            }
+            || selectDeclaring != typeof(Queryable)
+            || memberArgument.UnwrapLambdaFromQuote() is not { Parameters.Count: 1 } memberLambda
+            || ordered is not MethodCallExpression
+            {
+                Method: { Name: nameof(Queryable.OrderBy) or nameof(Queryable.OrderByDescending), DeclaringType: var orderDeclaring } orderMethod,
+                Arguments: [var source, var keyArgument]
+            }
+            || orderDeclaring != typeof(Queryable)
+            || keyArgument.UnwrapLambdaFromQuote() is not { Parameters.Count: 1 } keyLambda
+            || !NativeCorrelationMatcher.TryMatchRootWhereChain(UnwrapAsQueryable(source), out var root, out _)
+            || root.EntityType.BaseType is not null)
+        {
+            return null;
+        }
+
+        var elementType = root.EntityType;
+        var keyParameter = keyLambda.Parameters[0];
+        var memberParameter = memberLambda.Parameters[0];
+
+        // Single-scope translation resolves a member by name, so a lambda reading anything but its own element must not be translated.
+        if (ReferencesEnclosingScope(keyLambda.Body, keyParameter, out _) || ReferencesEnclosingScope(memberLambda.Body, memberParameter, out _))
+            return null;
+
+        // The member: a plain, default-stored top-level field of the element (a nullable widening of it is peeled).
+        var memberBody = memberLambda.Body;
+        if (memberBody is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Operand: var widened } widening
+            && Nullable.GetUnderlyingType(widening.Type) == widened.Type)
+        {
+            memberBody = widened;
+        }
+
+        if (!memberBody.TryGetMemberOrEFProperty(out var memberReceiver, out _)
+            || !ReferenceEquals(memberReceiver, memberParameter)
+            || !new MongoExpressionTranslator(elementType, memberParameter).TryTranslateField(memberBody, out var member)
+            || !StoredSerialization.HasDefaultKeySerialization(member.Property))
+        {
+            return null;
+        }
+
+        var nestedLookups = new List<LookupExpression>();
+        var keyTranslator = CreateElementScopeTranslator(elementType, keyParameter, nestedLookups);
+        if (!keyTranslator.TryTranslateValue(keyLambda.Body, out var key)
+            || !StoredOrdering.SortKeyPreservesClrOrdering(key)
+            || !MongoAggregationExpressionRenderer.CanRender(key))
+        {
+            return null;
+        }
+
+        if (resolveWithNested(UnwrapAsQueryable(source), nestedLookups) is not { } referenced || referenced.ElementType != elementType)
+            return null;
+
+        return new MongoMappedArrayReduceExpression(
+            orderMethod.Name == nameof(Queryable.OrderBy)
+                ? MongoMappedArrayReduceExpression.MinByOperator
+                : MongoMappedArrayReduceExpression.MaxByOperator,
+            referenced.ArrayPath, key, call.Type, member);
+    }
+
+    // A translator for a lambda over an element of a referenced collection, which resolves the collections its element is correlated with
+    // (`Where(OrderDetails, d => d.OrderID == o.OrderID)`) to keyed lookups collected into `collector`, to be run inside the element's
+    // array. Only a plain correlation resolves: no extra filter, no condition on a side, no derived target.
+    private static MongoExpressionTranslator CreateElementScopeTranslator(
+        IEntityType elementType, ParameterExpression parameter, List<LookupExpression> collector)
+    {
+        var translator = new MongoExpressionTranslator(elementType, parameter);
+        translator.ReferencedCollectionWithNestedResolver
+            = (source, subLookups) => ResolveElementScopeCollection(elementType, parameter, source, subLookups, collector);
+        translator.ReferencedCollectionResolver = source => ResolveElementScopeCollection(elementType, parameter, source, [], collector);
+        return translator;
+    }
+
+    private static ReferencedCollectionSource? ResolveElementScopeCollection(
+        IEntityType elementType,
+        ParameterExpression parameter,
+        Expression source,
+        IReadOnlyList<LookupExpression> subLookups,
+        List<LookupExpression> collector)
+    {
+        if (!NativeCorrelationMatcher.TryMatchRootWhereChain(source, out var root, out var wheres)
+            || wheres.Count != 1
+            || root.EntityType.BaseType is not null
+            || !NativeCorrelationMatcher.TryMatchCorrelation(
+                wheres[0].Body, elementType, parameter, root.EntityType, out var keyParts, out var conditions)
+            || !conditions.IsEmpty)
+        {
+            return null;
+        }
+
+        var lookup = NativeCorrelationMatcher.BuildCorrelatedArrayLookup(root.EntityType, keyParts);
+        if (subLookups.Count > 0)
+        {
+            // The alias says which arrays an element holds: the same sub-lookups share it, different ones get their own.
+            var baseAlias = lookup.As + "_n";
+            var existing = collector.FirstOrDefault(
+                l => l.As.StartsWith(baseAlias, StringComparison.Ordinal) && LookupExpression.SameNestedLookups(l.ElementNestedLookups, subLookups));
+            lookup = existing ?? NativeCorrelationMatcher.BuildCorrelatedArrayLookup(
+                root.EntityType, keyParts, aliasSuffix: "_n" + (collector.Count(l => l.As.StartsWith(baseAlias, StringComparison.Ordinal)) + 1),
+                nestedLookups: subLookups);
+        }
+
+        if (collector.All(l => l.As != lookup.As))
+            collector.Add(lookup);
+
+        return new ReferencedCollectionSource(lookup.As, root.EntityType);
+    }
+
     private static bool IsNumericArithmeticOverElement(MongoExpression expression, bool numericReduction)
         => expression switch
         {

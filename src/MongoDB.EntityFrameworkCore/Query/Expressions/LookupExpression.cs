@@ -329,7 +329,19 @@ internal sealed class LookupExpression
     /// Whether the sub-pipeline sorts or limits the array. Like <see cref="HasInnerPredicate"/>, only the native renderer honors it, so
     /// a non-native consumer must not read such an array as the whole group.
     /// </summary>
-    public bool HasElementStages => ElementSort.Count > 0 || ElementLimit is not null || ElementSkip is not null;
+    public bool HasElementStages => ElementSort.Count > 0 || ElementLimit is not null || ElementSkip is not null || ElementNestedLookups.Count > 0;
+
+    /// <summary>
+    /// The keyed array lookups a keyed array lookup runs inside its own sub-pipeline, one per collection its element is correlated with
+    /// (<c>c.Orders.MinBy(o =&gt; o.OrderDetails.Max(d =&gt; d.ProductID))</c>: the <c>OrderDetails</c> array sits in each order, so the
+    /// per-element key can read it). Rendered after the element filter and before the element ordering by
+    /// <c>MongoPipelineFactory.RenderLookup</c>. Their aliases are part of what makes two arrays the same one.
+    /// </summary>
+    public IReadOnlyList<LookupExpression> ElementNestedLookups { get; init; } = [];
+
+    /// <summary>Whether two sets of nested lookups are the same: the same aliases, in order (an alias encodes target, keys and element stages).</summary>
+    public static bool SameNestedLookups(IReadOnlyList<LookupExpression> left, IReadOnlyList<LookupExpression> right)
+        => left.Count == right.Count && left.Zip(right).All(pair => pair.First.As == pair.Second.As);
 
     /// <summary>
     /// The projection aliases of the element leaves (<c>Os = c.Orders.OrderBy(..).ToList()</c>) this array backs; the read side

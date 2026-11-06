@@ -178,14 +178,22 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
 
     public override async Task MinBy_over_nested_subquery(bool async)
     {
-        // Fails: MinBy/MaxBy over correlated cross-collection subqueries are rejected. https://github.com/ajcvickers/mongo-efcore-provider/issues/15
-        await AssertTranslationFailed(() => base.MinBy_over_nested_subquery(async));
+        await base.MinBy_over_nested_subquery(async);
+
+        AssertMql(
+            """
+Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 3 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Order_CustomerID__id_f1", []] }, "as" : "e", "in" : { "k" : { "$add" : [5, { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$$e._lookup_OrderDetail__id_OrderID__id", []] }, "as" : "ee", "in" : { "k" : "$$ee._id.ProductID", "m" : "$$ee._id.ProductID" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$lt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } }] }, "m" : "$$e._id" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$lt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
     }
 
     public override async Task MinBy_over_max_subquery(bool async)
     {
-        // Fails: MinBy/MaxBy over correlated cross-collection subqueries are rejected. https://github.com/ajcvickers/mongo-efcore-provider/issues/15
-        await AssertTranslationFailed(() => base.MinBy_over_max_subquery(async));
+        await base.MinBy_over_max_subquery(async);
+
+        AssertMql(
+            """
+Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 3 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Order_CustomerID__id_f1", []] }, "as" : "e", "in" : { "k" : { "$add" : [5, { "$max" : "$$e._lookup_OrderDetail__id_OrderID__id._id.ProductID" }] }, "m" : "$$e._id" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$lt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
     }
 
     public override async Task MaxBy(bool async)
@@ -220,14 +228,22 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
 
     public override async Task MaxBy_over_nested_subquery(bool async)
     {
-        // Fails: MinBy/MaxBy over correlated cross-collection subqueries are rejected. https://github.com/ajcvickers/mongo-efcore-provider/issues/15
-        await AssertTranslationFailed(() => base.MaxBy_over_nested_subquery(async));
+        await base.MaxBy_over_nested_subquery(async);
+
+        AssertMql(
+            """
+Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 3 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Order_CustomerID__id_f1", []] }, "as" : "e", "in" : { "k" : { "$add" : [5, { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$$e._lookup_OrderDetail__id_OrderID__id", []] }, "as" : "ee", "in" : { "k" : "$$ee._id.ProductID", "m" : "$$ee._id.ProductID" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$gt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } }] }, "m" : "$$e._id" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$gt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
     }
 
     public override async Task MaxBy_over_sum_subquery(bool async)
     {
-        // Fails: MinBy/MaxBy over correlated cross-collection subqueries are rejected. https://github.com/ajcvickers/mongo-efcore-provider/issues/15
-        await AssertTranslationFailed(() => base.MaxBy_over_sum_subquery(async));
+        await base.MaxBy_over_sum_subquery(async);
+
+        AssertMql(
+            """
+Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 3 }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Order_CustomerID__id_f1", []] }, "as" : "e", "in" : { "k" : { "$add" : [5, { "$sum" : "$$e._lookup_OrderDetail__id_OrderID__id._id.ProductID" }] }, "m" : "$$e._id" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$gt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 1 }
+""");
     }
 
     public override async Task MaxBy_after_DefaultIfEmpty_does_not_throw(bool async)

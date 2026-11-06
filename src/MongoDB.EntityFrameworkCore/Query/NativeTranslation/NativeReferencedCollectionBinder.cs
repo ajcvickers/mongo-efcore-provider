@@ -122,6 +122,13 @@ internal static class NativeReferencedCollectionBinder
                     mongoQ, outerParameter, source, staging);
                 resolvedAny |= resolved is not null;
                 return resolved;
+            },
+            ReferencedCollectionWithNestedResolver = (source, nested) =>
+            {
+                var resolved = NativeProjectionBinder.ResolveReferencedCollection(
+                    mongoQ, outerParameter, source, staging, nested);
+                resolvedAny |= resolved is not null;
+                return resolved;
             }
         };
 
