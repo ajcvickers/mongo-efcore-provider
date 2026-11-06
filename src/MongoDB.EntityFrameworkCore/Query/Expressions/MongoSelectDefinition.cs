@@ -549,6 +549,12 @@ internal sealed class MongoSelectDefinition
     internal bool GroupsToWholeDocument { get; set; }
 
     /// <summary>
+    /// The sort emitted immediately before the <c>$group</c>, so a <c>$first: "$$ROOT"</c> accumulator takes the group's first document in that order
+    /// (<c>g.OrderBy(k).First()</c>). Set only together with <see cref="GroupsToWholeDocument"/>, where that accumulator is the grouping's only one.
+    /// </summary>
+    internal MongoSortOp? GroupFirstSort { get; set; }
+
+    /// <summary>
     /// Installs both <see cref="Grouping"/> and <see cref="Cardinality"/>, the one sanctioned exception to their mutual
     /// exclusion (a scalar aggregate directly on a bare <c>GroupBy(key)</c>); writes the backing fields so the setter
     /// asserts still guard every other path.

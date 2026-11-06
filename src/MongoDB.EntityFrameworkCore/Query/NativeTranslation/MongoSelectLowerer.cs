@@ -230,6 +230,12 @@ internal sealed class MongoSelectLowerer
         List<MongoPipelineStage> stages,
         SyntheticSortFieldAllocator sortFields)
     {
+        // An ordered g.First(): $first takes the first document in arrival order, so the group's documents are sorted ahead of the $group.
+        if (select.GroupFirstSort is { } groupFirstSort)
+        {
+            AppendSortStages(groupFirstSort, stages, sortFields);
+        }
+
         stages.Add(new MongoGroupStage(grouping));
 
         // A scalar aggregate directly on a bare GroupBy(key) also sets Cardinality; its post-group predicate emits here, then

@@ -45,14 +45,18 @@ public class NorthwindGroupByQueryMongoTest : NorthwindGroupByQueryTestBase<
 
     public override async Task GroupBy_Property_Select_MaxBy(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Property_Select_MaxBy(async));
+        await base.GroupBy_Property_Select_MaxBy(async);
+        AssertMql("""
+Orders.{ "$sort" : { "_id" : -1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }
+""");
     }
 
     public override async Task GroupBy_Property_Select_MinBy(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Property_Select_MinBy(async));
+        await base.GroupBy_Property_Select_MinBy(async);
+        AssertMql("""
+Orders.{ "$sort" : { "_id" : 1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }
+""");
     }
 
     public override async Task GroupBy_multiple_aggregates_sharing_same_navigation(bool async)
@@ -139,8 +143,10 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } },
 
     public override async Task GroupBy_Select_Entire_Entity_FirstOrDefault_Where(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_FirstOrDefault_Where(async));
+        await base.GroupBy_Select_Entire_Entity_FirstOrDefault_Where(async);
+        AssertMql("""
+Orders.{ "$sort" : { "OrderDate" : -1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$match" : { "EmployeeID" : 5 } }
+""");
     }
 
     public override async Task GroupBy_ResultSelector_Entire_Entity_Where(bool async)
@@ -202,8 +208,10 @@ Orders.{ "$group" : { "_id" : { "CustomerID" : { "$ifNull" : ["$CustomerID", nul
 
     public override async Task GroupBy_Select_Entire_Entity_Select_referenced_twice(bool async)
     {
-        // Fails: GroupBy with entire-entity/grouping-element projections is not supported. https://github.com/ajcvickers/mongo-efcore-provider/issues/16
-        await AssertTranslationFailed(() => base.GroupBy_Select_Entire_Entity_Select_referenced_twice(async));
+        await base.GroupBy_Select_Entire_Entity_Select_referenced_twice(async);
+        AssertMql("""
+Orders.{ "$sort" : { "_id" : 1 } }, { "$group" : { "_id" : "$CustomerID", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }, { "$project" : { "First" : "$$ROOT", "Second" : "$$ROOT", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupBy_Select_Entire_Entity_Join(bool async)

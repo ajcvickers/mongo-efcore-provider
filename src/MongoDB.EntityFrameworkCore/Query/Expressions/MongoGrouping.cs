@@ -57,4 +57,12 @@ internal sealed record MongoGroupingKeyPart(
 }
 
 /// <summary>One <c>$group</c> accumulator. <paramref name="Operand"/> is null for count (<c>$sum: 1</c>).</summary>
-internal sealed record MongoGroupAccumulator(string OutputField, string Operator, MongoExpression? Operand);
+/// <param name="OutputField">The output field.</param>
+/// <param name="Operator">The accumulator operator.</param>
+/// <param name="Operand">The accumulated value, or null for count.</param>
+/// <param name="SortBy">
+/// For <c>$first</c> over an ordered group (<c>g.OrderBy(k).First()</c>): the ordering the group's documents must have been sorted into
+/// before the <c>$group</c>. Only valid when this is the grouping's sole accumulator, since the sort changes what any other order-sensitive accumulator sees.
+/// </param>
+internal sealed record MongoGroupAccumulator(
+    string OutputField, string Operator, MongoExpression? Operand, IReadOnlyList<MongoOrdering>? SortBy = null);

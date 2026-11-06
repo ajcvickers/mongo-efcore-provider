@@ -292,7 +292,18 @@ internal static class NativeGroupByBinder
         var havingAccumulators = havingPredicate?.Accumulator is { } havingAcc
             ? new[] { havingAcc }
             : Array.Empty<MongoGroupAccumulator>();
+        // An ordered First sorts the group's documents before the $group, which changes what every other order-sensitive accumulator sees: it is admitted only as
+        // the grouping's sole accumulator, reading the group's first document as the whole row.
+        var sortedFirst = accumulators.FirstOrDefault(a => a.SortBy != null);
+        var groupsToWholeDocument = isBareBody
+                                    && accumulators is [{ Operator: "$first", Operand: MongoElementRefExpression { Path: MongoElementRefExpression.WholeRootDocumentPath } }]
+                                    && flatten is [{ Expression: MongoElementRefExpression { Path: not null } }];
+        if (sortedFirst != null
+            && (!groupsToWholeDocument || orderAccumulators.Count > 0 || havingAccumulators.Length > 0))
+            return false;
+
         select.Grouping = new MongoGrouping(keyParts, [..orderAccumulators, ..havingAccumulators, ..accumulators]);
+        select.GroupFirstSort = sortedFirst?.SortBy is { } sortBy ? new MongoSortOp(sortBy) : null;
         select.GroupHavingPredicate = havingPredicate?.Comparison;
         select.GroupOrderOp = resolvedOrderings.Count > 0 ? new MongoSortOp(resolvedOrderings) : null;
         select.PendingGroupOrderings = null;
@@ -300,9 +311,6 @@ internal static class NativeGroupByBinder
         select.PendingGroupPaging = null;
         // The Select's one value is the group's whole first document (`g.First()`, `$first: "$$ROOT"`): the lowerer replaces the root with it, so the
         // rows are plain entities and there is nothing to flatten.
-        var groupsToWholeDocument = isBareBody
-                                    && accumulators is [{ Operator: "$first", Operand: MongoElementRefExpression { Path: MongoElementRefExpression.WholeRootDocumentPath } }]
-                                    && flatten is [{ Expression: MongoElementRefExpression { Path: not null } }];
         select.GroupsToWholeDocument = groupsToWholeDocument;
         if (!groupsToWholeDocument)
         {
@@ -614,6 +622,49 @@ internal static class NativeGroupByBinder
         return MongoExpressionTranslator.Unwrap(otherOperand) is ConstantExpression { Value: null };
     }
 
+    // Peels OrderBy/OrderByDescending/ThenBy/ThenByDescending calls off `source` until the grouping parameter, translating each key over the group's documents.
+    // A later OrderBy replaces earlier orderings, so the walk (outermost first) stops at the first OrderBy. Keys must translate to default-serialized values
+    // that sort in CLR order, since the sort runs on stored values.
+    private static bool TryBindOrderedGroupSource(
+        Expression source, GroupBindingScope scope, [NotNullWhen(true)] out IReadOnlyList<MongoOrdering>? orderings)
+    {
+        orderings = null;
+        var collected = new List<MongoOrdering>();
+        var current = MongoExpressionTranslator.Unwrap(source);
+        while (true)
+        {
+            if (current is not MethodCallExpression { Arguments.Count: 2 } orderCall
+                || orderCall.Method.DeclaringType != typeof(Queryable)
+                || orderCall.Method.Name is not (nameof(Queryable.OrderBy) or nameof(Queryable.OrderByDescending)
+                    or nameof(Queryable.ThenBy) or nameof(Queryable.ThenByDescending))
+                || orderCall.Arguments[1].UnwrapLambdaFromQuote() is not { } keySelector
+                || !scope.Translator.TryTranslateValue(keySelector.Body, out var key)
+                || key is not MongoFieldExpression)
+            {
+                return false;
+            }
+
+            collected.Insert(0, new MongoOrdering(
+                key, orderCall.Method.Name is nameof(Queryable.OrderBy) or nameof(Queryable.ThenBy)));
+
+            var isLeadingOrdering = orderCall.Method.Name is nameof(Queryable.OrderBy) or nameof(Queryable.OrderByDescending);
+            if (!IsGroupingSource(orderCall.Arguments[0], scope.GroupingParameter))
+            {
+                if (isLeadingOrdering)
+                    return false;
+
+                current = MongoExpressionTranslator.Unwrap(orderCall.Arguments[0]);
+                continue;
+            }
+
+            if (!isLeadingOrdering)
+                return false;
+
+            orderings = collected;
+            return true;
+        }
+    }
+
     // g.Count()/g.LongCount() -> $sum: 1; g.Sum/Average/Min/Max(x => ...) -> the operator over the translated operand. The aggregate's source must be the grouping
     // parameter itself: binding a correlated subquery (`Customers.Where(c => c.CustomerID == g.Key).Count()`) as an accumulator would silently return the group's row count.
     private static bool TryBindAccumulator(
@@ -643,6 +694,22 @@ internal static class NativeGroupByBinder
 
         if (TryBindFilteredAccumulator(call, outputField, scope, out accumulator, out flattenRead))
             return true;
+
+        // g.OrderBy(k)[.ThenBy(..)].First() / .FirstOrDefault() over the grouped root entity: the documents are sorted before the $group, so $first: "$$ROOT" is
+        // the group's first in that order. (EF11 rewrites MinBy/MaxBy to OrderBy(k)/OrderByDescending(k).First().) The sort is carried on the accumulator.
+        if (call.Arguments.Count == 1
+            && call.Method.Name is nameof(Queryable.First) or nameof(Queryable.FirstOrDefault)
+            && !scope.Translator.IsJoinScoped
+            && call.Method.ReturnType == scope.Translator.RootClrType
+            && TryBindOrderedGroupSource(call.Arguments[0], scope, out var sortBy))
+        {
+            accumulator = new MongoGroupAccumulator(
+                outputField, "$first",
+                new MongoElementRefExpression(MongoElementRefExpression.WholeRootDocumentPath, call.Method.ReturnType),
+                sortBy);
+            flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType);
+            return true;
+        }
 
         if (call.Arguments.Count == 0 || !IsGroupingSource(call.Arguments[0], scope.GroupingParameter))
             return false;
@@ -680,6 +747,7 @@ internal static class NativeGroupByBinder
         var op = MapSelectorAccumulatorOperator(call.Method);
         if (op is null || call.Arguments.Count != 2)
             return false;
+
 
         // Any translatable selector value; TryTranslateValue requires default serialization, so a value-converted member falls back rather than aggregating the raw stored value.
         // EF inlines a GroupBy(key, elementSelector)'s element selector into this lambda.
