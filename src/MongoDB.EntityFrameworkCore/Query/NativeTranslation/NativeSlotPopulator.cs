@@ -162,11 +162,18 @@ internal static class NativeSlotPopulator
             // Only an output alias is a sort key (never an entity member an alias shadows); declines otherwise.
             var postGroupKeySelector = call.Arguments[1].UnwrapLambdaFromQuote();
             translator.SelfParam = postGroupKeySelector.Parameters[0];
-            translator.ProjectedAliasScope = new MongoProjectedAliasScope(
-                postGroupKeySelector.Parameters[0], mongoQ.Select.Projection);
+
+            // A group of whole documents has plain entity rows: its keys are entity members, not output aliases.
+            var postGroupRowsAreEntities = mongoQ.Select.GroupsToWholeDocument;
+            if (!postGroupRowsAreEntities)
+            {
+                translator.ProjectedAliasScope = new MongoProjectedAliasScope(
+                    postGroupKeySelector.Parameters[0], mongoQ.Select.Projection);
+            }
+
             var postGroupAscending = methodDefinition == QueryableMethods.OrderBy || methodDefinition == QueryableMethods.ThenBy;
             if (translator.TryTranslateValue(postGroupKeySelector.Body, out var postGroupKey)
-                && postGroupKey is MongoElementRefExpression)
+                && (postGroupRowsAreEntities ? postGroupKey is MongoFieldExpression : postGroupKey is MongoElementRefExpression))
             {
                 var postGroupOrdering = new MongoOrdering(postGroupKey, postGroupAscending);
                 if (methodDefinition == QueryableMethods.OrderBy || methodDefinition == QueryableMethods.OrderByDescending)
@@ -188,8 +195,12 @@ internal static class NativeSlotPopulator
             // or a join scope by name, which an alias can shadow.
             var postGroupPredicate = call.Arguments[1].UnwrapLambdaFromQuote();
             translator.SelfParam = postGroupPredicate.Parameters[0];
-            translator.ProjectedAliasScope = new MongoProjectedAliasScope(
-                postGroupPredicate.Parameters[0], mongoQ.Select.Projection);
+            if (!mongoQ.Select.GroupsToWholeDocument)
+            {
+                translator.ProjectedAliasScope = new MongoProjectedAliasScope(
+                    postGroupPredicate.Parameters[0], mongoQ.Select.Projection);
+            }
+
             if (translator.TryTranslate(postGroupPredicate.Body, out var postGroupNode))
                 mongoQ.Select.AddPredicateConjunct(postGroupNode);
             else

@@ -298,11 +298,21 @@ internal static class NativeGroupByBinder
         select.PendingGroupOrderings = null;
         select.GroupPagingOps = select.PendingGroupPaging ?? [];
         select.PendingGroupPaging = null;
-        foreach (var projection in flatten)
-            select.AddProjection(projection);
+        // The Select's one value is the group's whole first document (`g.First()`, `$first: "$$ROOT"`): the lowerer replaces the root with it, so the
+        // rows are plain entities and there is nothing to flatten.
+        var groupsToWholeDocument = isBareBody
+                                    && accumulators is [{ Operator: "$first", Operand: MongoElementRefExpression { Path: MongoElementRefExpression.WholeRootDocumentPath } }]
+                                    && flatten is [{ Expression: MongoElementRefExpression { Path: not null } }];
+        select.GroupsToWholeDocument = groupsToWholeDocument;
+        if (!groupsToWholeDocument)
+        {
+            foreach (var projection in flatten)
+                select.AddProjection(projection);
+        }
+
         if (hasCaseMappedMember)
             select.HasClientCaseMappingProjectionLeaf = true;
-        if (isBareBody)
+        if (isBareBody && !groupsToWholeDocument)
             bareLeafAlias = NativeProjectionBinder.SyntheticBareProjectionAlias;
         ConfirmGroupByJoinScope(mongoQ);
         return true;
@@ -650,6 +660,19 @@ internal static class NativeGroupByBinder
             && TryTranslateAccumulatorCondition(countPred.Body, scope, out _, out var countCond))
         {
             accumulator = CountWhereAccumulator(outputField, countCond);
+            flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType);
+            return true;
+        }
+
+        // g.First() / g.FirstOrDefault() over the grouped root entity: the group's first whole document ($first: "$$ROOT"), read back as an entity.
+        if (call.Arguments.Count == 1
+            && call.Method.Name is nameof(Queryable.First) or nameof(Queryable.FirstOrDefault)
+            && !scope.Translator.IsJoinScoped
+            && call.Method.ReturnType == scope.Translator.RootClrType)
+        {
+            accumulator = new MongoGroupAccumulator(
+                outputField, "$first",
+                new MongoElementRefExpression(MongoElementRefExpression.WholeRootDocumentPath, call.Method.ReturnType));
             flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType);
             return true;
         }

@@ -119,7 +119,7 @@ internal sealed class MongoSelectLowerer
         if (select.Grouping is { } grouping
             && (select.SetOperation is not { OperandsProjected: true } || select.PriorGrouping != null))
         {
-            if (!AppendGroupingStages(select, grouping, stages, sortFields))
+            if (!AppendGroupingStages(select, grouping, stages, sortFields) && !select.GroupsToWholeDocument)
             {
                 return stages;
             }
@@ -127,7 +127,7 @@ internal sealed class MongoSelectLowerer
 
         // Terminal $project, after ops and lookups. Not re-emitted when a projected-operand set op or the
         // Grouping block above already emitted it.
-        if (select.Grouping == null
+        if ((select.Grouping == null || select.GroupsToWholeDocument)
             && select.Projection.Count > 0 && !(select.SetOperation?.OperandsProjected ?? false))
         {
             stages.Add(new MongoProjectStage(select.Projection));
@@ -259,7 +259,12 @@ internal sealed class MongoSelectLowerer
             AppendSelectOpStages(select.GroupPagingOps, stages, sortFields);
         }
 
-        if (select.Projection.Count > 0)
+        if (select.GroupsToWholeDocument)
+        {
+            // GroupBy(key).Select(g => g.First()): the group's whole first document is the row, so the plain entity shaper reads it.
+            stages.Add(new MongoReplaceRootStage(NativeProjectionBinder.SyntheticBareProjectionAlias, mergeOwnerKeySentinels: false));
+        }
+        else if (select.Projection.Count > 0)
         {
             stages.Add(new MongoProjectStage(select.Projection));
         }

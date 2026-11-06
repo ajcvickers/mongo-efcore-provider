@@ -541,6 +541,14 @@ internal sealed class MongoSelectDefinition
     }
 
     /// <summary>
+    /// The grouping yields one whole document per group (<c>GroupBy(key).Select(g =&gt; g.First())</c>: <c>$first: "$$ROOT"</c>), and the lowerer
+    /// replaces the root with it. The rows are then plain entity documents: operators recorded after it resolve against the entity (not the
+    /// grouping's output aliases), there is no flattening <see cref="Projection"/> for the group itself, and <see cref="Route"/> is that of an
+    /// ungrouped query.
+    /// </summary>
+    internal bool GroupsToWholeDocument { get; set; }
+
+    /// <summary>
     /// Installs both <see cref="Grouping"/> and <see cref="Cardinality"/>, the one sanctioned exception to their mutual
     /// exclusion (a scalar aggregate directly on a bare <c>GroupBy(key)</c>); writes the backing fields so the setter
     /// asserts still guard every other path.
@@ -1107,7 +1115,7 @@ internal sealed class MongoSelectDefinition
             // A GroupBy key was bound but no aggregate Select finalized it: fall back rather than emit an ungrouped scan.
             : PendingGroupKey != null && Grouping == null ? NativeRoute.Fallback
             : Cardinality?.Aggregate != null ? NativeRoute.ScalarAggregate
-            : Grouping != null ? NativeRoute.GroupBy
+            : Grouping != null && !GroupsToWholeDocument ? NativeRoute.GroupBy
             : _projections.Count > 0 ? NativeRoute.Projection
             : NativeRoute.WholeEntity;
 }
