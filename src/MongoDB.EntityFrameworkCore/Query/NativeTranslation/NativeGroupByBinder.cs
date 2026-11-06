@@ -302,6 +302,13 @@ internal static class NativeGroupByBinder
             && (!groupsToWholeDocument || orderAccumulators.Count > 0 || havingAccumulators.Length > 0))
             return false;
 
+        // A whole-document accumulator is read back as an entity only through the plain entity shaper (GroupsToWholeDocument). Beside other members
+        // (`new { Entity = g.First(), N = g.Count() }`) it would be read through a generic alias serializer, ignoring element-name mappings and value converters.
+        if (!groupsToWholeDocument
+            && accumulators.Concat(orderAccumulators).Concat(havingAccumulators).Any(
+                a => a.Operand is MongoElementRefExpression { Path: MongoElementRefExpression.WholeRootDocumentPath }))
+            return false;
+
         select.Grouping = new MongoGrouping(keyParts, [..orderAccumulators, ..havingAccumulators, ..accumulators]);
         select.GroupFirstSort = sortedFirst?.SortBy is { } sortBy ? new MongoSortOp(sortBy) : null;
         select.GroupHavingPredicate = havingPredicate?.Comparison;
@@ -638,6 +645,7 @@ internal static class NativeGroupByBinder
                 || orderCall.Method.Name is not (nameof(Queryable.OrderBy) or nameof(Queryable.OrderByDescending)
                     or nameof(Queryable.ThenBy) or nameof(Queryable.ThenByDescending))
                 || orderCall.Arguments[1].UnwrapLambdaFromQuote() is not { } keySelector
+                || keySelector.Body.ReferencesParameter(scope.GroupingParameter)
                 || !scope.Translator.TryTranslateValue(keySelector.Body, out var key)
                 || key is not MongoFieldExpression)
             {
@@ -660,7 +668,15 @@ internal static class NativeGroupByBinder
             if (!isLeadingOrdering)
                 return false;
 
-            orderings = collected;
+            // A repeated field (`OrderBy(a).ThenByDescending(a)`) keeps its first direction: $sort's document form cannot hold a name twice (cf. MongoSelectDefinition.AppendThenBy).
+            var distinct = new List<MongoOrdering>(collected.Count);
+            foreach (var ordering in collected)
+            {
+                if (!distinct.Any(o => ((MongoFieldExpression)o.KeySelector).ElementName == ((MongoFieldExpression)ordering.KeySelector).ElementName))
+                    distinct.Add(ordering);
+            }
+
+            orderings = distinct;
             return true;
         }
     }
@@ -698,6 +714,7 @@ internal static class NativeGroupByBinder
         // g.OrderBy(k)[.ThenBy(..)].First() / .FirstOrDefault() over the grouped root entity: the documents are sorted before the $group, so $first: "$$ROOT" is
         // the group's first in that order. (EF11 rewrites MinBy/MaxBy to OrderBy(k)/OrderByDescending(k).First().) The sort is carried on the accumulator.
         if (call.Arguments.Count == 1
+            && (call.Method.DeclaringType == typeof(Queryable) || call.Method.DeclaringType == typeof(Enumerable))
             && call.Method.Name is nameof(Queryable.First) or nameof(Queryable.FirstOrDefault)
             && !scope.Translator.IsJoinScoped
             && call.Method.ReturnType == scope.Translator.RootClrType
@@ -733,6 +750,7 @@ internal static class NativeGroupByBinder
 
         // g.First() / g.FirstOrDefault() over the grouped root entity: the group's first whole document ($first: "$$ROOT"), read back as an entity.
         if (call.Arguments.Count == 1
+            && (call.Method.DeclaringType == typeof(Queryable) || call.Method.DeclaringType == typeof(Enumerable))
             && call.Method.Name is nameof(Queryable.First) or nameof(Queryable.FirstOrDefault)
             && !scope.Translator.IsJoinScoped
             && call.Method.ReturnType == scope.Translator.RootClrType)
