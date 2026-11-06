@@ -313,6 +313,73 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         Assert.Null(none.M);
     }
 
+    /// <summary>
+    /// A scalar selector over a single-result terminal projects the stored value: it must not resolve the identity of, or track, the intermediate
+    /// entity, so an unsaved change to an already tracked row is not returned. Tracking is the default, and the row is tracked here.
+    /// </summary>
+    [Theory(Skip = "Fails: the selector runs on the tracked instance, so it returns the unsaved value. https://github.com/ajcvickers/mongo-efcore-provider/issues/32")]
+    [InlineData("First")]
+    [InlineData("FirstOrDefault")]
+    [InlineData("Single")]
+    [InlineData("Last")]
+    [InlineData("ElementAt")]
+    public void A_scalar_selector_returns_the_stored_value_not_an_unsaved_change_to_a_tracked_row(string terminal)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_scalar_selector_returns_the_stored_value_not_an_unsaved_change_to_a_tracked_row)
+            + terminal, out var withMethods, out _);
+
+        // Rank 2 is the only row each query below can return.
+        var tracked = db.IdentificationMethods.Single(m => m.AnimalId == withMethods && m.Rank == 2);
+        tracked.Method = "Unsaved";
+        var trackedBefore = db.ChangeTracker.Entries<IdentificationMethod>().Count();
+
+        var query = db.Animals.Where(a => a.Id == withMethods);
+        var result = terminal switch
+        {
+            "First" => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).OrderBy(m => m.Rank).First().Method),
+            "FirstOrDefault" => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).OrderBy(m => m.Rank).FirstOrDefault()!.Method),
+            "Single" => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Single().Method),
+            "Last" => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Last().Method),
+            _ => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).ElementAt(1).Method)
+        };
+
+        Assert.Equal("Tattoo", result.Single());
+        Assert.Equal("Unsaved", tracked.Method);
+        // Nothing was tracked for the projection: the one tracked row is still the only one.
+        Assert.Equal(trackedBefore, db.ChangeTracker.Entries<IdentificationMethod>().Count());
+    }
+
+    /// <summary>
+    /// A captured index is read per execution: <c>ElementAtOrDefault</c> of a negative one is the default (as in LINQ), while <c>ElementAt</c> of it
+    /// throws. The same projection runs with index 0 first, so a cached plan cannot hide the difference.
+    /// </summary>
+    [Fact]
+    public void A_negative_captured_ElementAt_index_is_default_for_OrDefault_and_throws_for_ElementAt()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_negative_captured_ElementAt_index_is_default_for_OrDefault_and_throws_for_ElementAt),
+            out var withMethods, out _);
+
+        string? OrDefault(int index)
+            => db.Animals.Where(a => a.Id == withMethods)
+                .Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).ElementAtOrDefault(index)!.Method)
+                .Single();
+
+        string AtIndex(int index)
+            => db.Animals.Where(a => a.Id == withMethods)
+                .Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).ElementAt(index).Method)
+                .Single();
+
+        Assert.Equal("Microchip", OrDefault(0));
+        Assert.Null(OrDefault(-1));
+        Assert.Equal("Tattoo", OrDefault(1));
+        Assert.Null(OrDefault(2));
+
+        Assert.Equal("Microchip", AtIndex(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AtIndex(-1));
+    }
+
     [Fact]
     public void ThenBy_and_Skip_in_the_navigation_chain_read_the_right_row()
     {

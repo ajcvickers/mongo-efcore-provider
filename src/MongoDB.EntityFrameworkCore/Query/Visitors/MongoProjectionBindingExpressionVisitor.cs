@@ -1565,7 +1565,8 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                  && l.TargetEntityType == targetType
                  && l.ElementLeafAliases.Contains(arrayAlias)
                  && LookupExpression.SameElementCount(l.ElementLimit, NativeProjectionBinder.TranslateElementLimit(shape))
-                 && LookupExpression.SameElementCount(l.ElementSkip, NativeProjectionBinder.TranslateElementSkip(shape)));
+                 && LookupExpression.SameElementCount(l.ElementSkip, NativeProjectionBinder.TranslateElementSkip(shape))
+                 && l.ElementSkipNegativeIsEmpty == (shape.Terminal == ElementTerminal.ElementAtOrDefault));
         if (lookup is null)
             return false;
 

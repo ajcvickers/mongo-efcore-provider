@@ -2237,7 +2237,8 @@ internal static class NativeProjectionBinder
         MongoExpression? elementLimit = null,
         MongoExpression? elementSkip = null,
         IReadOnlyList<LookupOuterCondition>? outerConditions = null,
-        IReadOnlyList<LookupExpression>? nestedLookups = null)
+        IReadOnlyList<LookupExpression>? nestedLookups = null,
+        bool negativeSkipIsEmpty = false)
     {
         keyedLookup = null;
         elementSort ??= [];
@@ -2278,6 +2279,7 @@ internal static class NativeProjectionBinder
             var same = existing.FirstOrDefault(
                 l => SameFilters(l.ElementFilters, filters) && l.ElementSort.SequenceEqual(elementSort) && LookupExpression.SameElementCount(l.ElementLimit, elementLimit)
                      && LookupExpression.SameElementCount(l.ElementSkip, elementSkip)
+                     && l.ElementSkipNegativeIsEmpty == negativeSkipIsEmpty
                      && LookupExpression.SameOuterConditions(l.OuterConditions, outerConditions)
                      && LookupExpression.SameNestedLookups(l.ElementNestedLookups, nestedLookups));
             aliasSuffix = same is not null
@@ -2287,6 +2289,7 @@ internal static class NativeProjectionBinder
 
         var keyed = NativeCorrelationMatcher.BuildCorrelatedArrayLookup(
             targetEntityType, keyParts, filters, filterPredicate, aliasSuffix, elementSort, elementLimit, elementSkip, outerConditions, nestedLookups);
+        keyed.ElementSkipNegativeIsEmpty = negativeSkipIsEmpty;
         if (!NativeCorrelationMatcher.TryStageNativeCollectionLookup(mongoQ, keyed, staged.Lookups, out keyedLookup))
             return false;
 
@@ -2399,7 +2402,8 @@ internal static class NativeProjectionBinder
             || ((shape.Skip ?? shape.ElementIndex) is not null && skip is null)
             || !TryStageKeyedArrayLookup(
                 mongoQ, outerParameter, target, keyParts, shape.Filters.Concat(conditions.Element).ToList(),
-                staged, out var keyedLookup, sort, limit, skip, outerConditions))
+                staged, out var keyedLookup, sort, limit, skip, outerConditions,
+                negativeSkipIsEmpty: shape.Terminal == ElementTerminal.ElementAtOrDefault))
         {
             return false;
         }

@@ -192,6 +192,12 @@ Scope, joins, grouping:
       disagree. `ElementAt` with a `Skip` in the chain declines.
     - **Bare bodies are admitted** (`Select(c => c.Orders.OrderBy(..).FirstOrDefault())`). The emit side stages the leaf under the provisional bare alias and
       `TryBindAsBareProjection` remaps it to the derived alias; the read side resolves a null member name through the bare-body alias override.
+    - **Known gap (#32): a scalar selector runs on the materialized, and under `TrackAll` tracked, entity**, so an unsaved change to an already tracked row
+      is returned instead of the stored value. The `ToList` + `Select` form had it already. The fix is to read a direct scalar member from the element
+      document in both materialization paths, not to materialize the entity.
+    - **`ElementAtOrDefault` of a negative index selects nothing** where `ElementAt` and `Skip` throw: the `$skip` stage carries a marker
+      (`LookupExpression.ElementSkipNegativeIsEmpty`) that `MongoPipelineFactory.NormalizePagingStages` turns into an always-false `$match` and strips; it is part of
+      lookup identity, so the two never share an alias.
     - **`let c = <single-result subquery>` plus `c.Member` reads** is rewritten before nav-expansion (`LetSingleResultMemberRewriter`, EF11) to one
       member-selecting single-result subquery per read, all sharing one keyed lookup. Only a `let` whose every use is a member read; an `OrDefault`
       terminal needs a nullable member (a missing element's value-type member would read `default`, where EF reads null).
