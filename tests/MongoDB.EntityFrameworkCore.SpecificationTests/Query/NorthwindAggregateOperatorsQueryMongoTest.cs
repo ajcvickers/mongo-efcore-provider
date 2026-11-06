@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -94,14 +94,23 @@ Orders.{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 
 
     public override async Task MinBy_no_data_subquery_reference_type(bool async)
     {
-        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
-        await AssertTranslationFailed(() => base.MinBy_no_data_subquery_reference_type(async));
+        await base.MinBy_no_data_subquery_reference_type(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task MinBy_no_data_subquery_value_type(bool async)
     {
-        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
-        await AssertTranslationFailed(() => base.MinBy_no_data_subquery_value_type(async));
+        // MinBy over an empty value-type sequence throws in LINQ (Enumerable.MinBy, and the First it becomes); so does the provider.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => base.MinBy_no_data_subquery_value_type(async));
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task MaxBy_no_data_value_type(bool async)
@@ -146,14 +155,23 @@ Orders.{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : -1 } }, { "$limit" :
 
     public override async Task MaxBy_no_data_subquery_reference_type(bool async)
     {
-        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
-        await AssertTranslationFailed(() => base.MaxBy_no_data_subquery_reference_type(async));
+        await base.MaxBy_no_data_subquery_reference_type(async);
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : -1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task MaxBy_no_data_subquery_value_type(bool async)
     {
-        // Fails: MinBy/MaxBy over DefaultIfEmpty and empty subqueries are not translated. https://github.com/ajcvickers/mongo-efcore-provider/issues/14
-        await AssertTranslationFailed(() => base.MaxBy_no_data_subquery_value_type(async));
+        // MaxBy over an empty value-type sequence throws in LINQ (Enumerable.MaxBy, and the First it becomes); so does the provider.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => base.MaxBy_no_data_subquery_value_type(async));
+
+        AssertMql(
+            """
+Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$match" : { "_id" : -1 } }, { "$sort" : { "_id" : -1 } }, { "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "_lookup_Order_CustomerID__id_f1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task MinBy_with_coalesce(bool async)

@@ -355,6 +355,20 @@ public class NativeCorrelatedReducerLeafTests
     // Every decline also asserts nothing was staged (no leaf, lookup or projection), catching a recognizer that
     // half-registers before declining.
 
+    /// <summary>
+    /// The correlated reducer declines the shape: it stages no reducer leaf and no reducer lookup. The projection itself may still be
+    /// accepted, as an element leaf over a keyed lookup (the functional tests pin its results).
+    /// </summary>
+    private static void AssertReducerDeclined(Func<IQueryable<Animal>, IQueryable> buildQuery)
+        => AssertReducerDeclined(BindAnimals(buildQuery));
+
+    private static void AssertReducerDeclined((bool Accepted, MongoQueryExpression Query) bound)
+    {
+        Assert.Empty(bound.Query.CorrelatedReducerLeaves);
+        Assert.DoesNotContain(
+            bound.Query.GetPendingLookups(), l => l.PipelineKind == LookupPipelineKind.CorrelatedReducer);
+    }
+
     private static void AssertDeclined(Func<IQueryable<Animal>, IQueryable> buildQuery)
         => AssertDeclined(BindAnimals(buildQuery));
 
@@ -372,7 +386,7 @@ public class NativeCorrelatedReducerLeafTests
     {
         var threshold = 3;
 
-        AssertDeclined(q => q.Select(a => new
+        AssertReducerDeclined(q => q.Select(a => new
         {
             a.Id, M = a.IdentificationMethods.FirstOrDefault(m => m.Rank > threshold)!.Method
         }));
@@ -413,7 +427,7 @@ public class NativeCorrelatedReducerLeafTests
             a.Id, M = a.IdentificationMethods.FirstOrDefault(m => m.Rank > 3)!.Method
         }));
 
-        Assert.False(parameterized.Accepted);
+        Assert.Empty(parameterized.Query.CorrelatedReducerLeaves);
         Assert.True(constant.Accepted);
     }
 
@@ -423,7 +437,7 @@ public class NativeCorrelatedReducerLeafTests
     /// </summary>
     [Fact]
     public void First_over_nullable_typed_member_declines()
-        => AssertDeclined(q => q.Select(a => new { a.Id, M = a.IdentificationMethods.First().Method }));
+        => AssertReducerDeclined(q => q.Select(a => new { a.Id, M = a.IdentificationMethods.First().Method }));
 
     /// <summary>
     /// Control for <see cref="First_over_nullable_typed_member_declines"/>: <c>FirstOrDefault()</c> never throws
@@ -488,7 +502,7 @@ public class NativeCorrelatedReducerLeafTests
     /// </summary>
     [Fact]
     public void Bare_selector_body_declines()
-        => AssertDeclined(q => q.Select(a => a.IdentificationMethods.FirstOrDefault()!.Method));
+        => AssertReducerDeclined(q => q.Select(a => a.IdentificationMethods.FirstOrDefault()!.Method));
 
     /// <summary>
     /// A predicate referencing the outer animal: the sub-pipeline runs in the foreign collection's scope, and a
@@ -518,13 +532,19 @@ public class NativeCorrelatedReducerLeafTests
     /// the second would silently read the first's row. Declines the projection.
     /// </summary>
     [Fact]
-    public void Two_leaves_over_the_same_navigation_decline()
-        => AssertDeclined(q => q.Select(a => new
+    public void Only_the_first_of_two_leaves_over_the_same_navigation_is_a_reducer()
+    {
+        var bound = BindAnimals(q => q.Select(a => new
         {
             a.Id,
             First = a.IdentificationMethods.FirstOrDefault()!.Method,
             Best = a.IdentificationMethods.OrderByDescending(m => m.Rank).FirstOrDefault()!.Method
         }));
+
+        // The second would share the first's alias, so it is an element leaf over a keyed lookup of its own.
+        Assert.True(bound.Accepted);
+        Assert.Single(bound.Query.CorrelatedReducerLeaves);
+    }
 
     /// <summary>
     /// Reducer then <c>Count</c> over the same navigation: the reducer's unwound single-document lookup and the count's array
@@ -553,7 +573,7 @@ public class NativeCorrelatedReducerLeafTests
     /// </summary>
     [Fact]
     public void Count_leaf_then_reducer_leaf_over_the_same_navigation_decline()
-        => AssertDeclined(q => q.Select(a => new
+        => AssertReducerDeclined(q => q.Select(a => new
         {
             a.Id,
             N = a.IdentificationMethods.Count,
@@ -639,7 +659,7 @@ public class NativeCorrelatedReducerLeafTests
 
     [Fact]
     public void Chained_ThenBy_sort_key_declines()
-        => AssertDeclined(q => q.Select(a => new
+        => AssertReducerDeclined(q => q.Select(a => new
         {
             a.Id,
             M = a.IdentificationMethods.OrderBy(m => m.Rank).ThenBy(m => m.Method).FirstOrDefault()!.Method
@@ -647,7 +667,7 @@ public class NativeCorrelatedReducerLeafTests
 
     [Fact]
     public void Skip_inside_the_navigation_chain_declines()
-        => AssertDeclined(q => q.Select(a => new
+        => AssertReducerDeclined(q => q.Select(a => new
         {
             a.Id,
             M = a.IdentificationMethods.OrderBy(m => m.Rank).Skip(1).FirstOrDefault()!.Method

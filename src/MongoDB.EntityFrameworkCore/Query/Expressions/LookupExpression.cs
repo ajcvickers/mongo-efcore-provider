@@ -297,6 +297,12 @@ internal sealed class LookupExpression
     public MongoExpression? ElementSkip { get; init; }
 
     /// <summary>
+    /// Whether <see cref="ElementSkip"/> is an <c>ElementAtOrDefault</c> index, where a negative value selects nothing (the default) rather than
+    /// failing as a negative <c>Skip</c> does. Two lookups that differ here are not the same lookup.
+    /// </summary>
+    public bool ElementSkipNegativeIsEmpty { get; set; }
+
+    /// <summary>
     /// Whether two element limits or skips are the same: equal constants, or the same query parameter (by name, never by value: the value is
     /// per execution, so two parameters are two arrays).
     /// </summary>

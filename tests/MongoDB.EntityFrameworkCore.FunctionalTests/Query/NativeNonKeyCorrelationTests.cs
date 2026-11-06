@@ -111,8 +111,8 @@ public class NativeNonKeyCorrelationTests(TemporaryDatabaseFixture database)
     /// </summary>
     public static TheoryData<string> DecliningShapes =>
     [
-        "SelectMany", "SelectManyReversed", "SelectManyConjunct", "FirstOrDefault", "Nested",
-        "NullableSelectMany", "NullableFirstOrDefault", "NoteGuardFirstOrDefault",
+        "SelectMany", "SelectManyReversed", "SelectManyConjunct", "Nested",
+        "NullableSelectMany", "NoteGuardFirstOrDefault",
         "NoteGuardWhereCount"
     ];
 
@@ -160,6 +160,21 @@ public class NativeNonKeyCorrelationTests(TemporaryDatabaseFixture database)
         using var db = CreateContext(MongoQueryMode.DriverLinq);
         var ex = Assert.Throws<InvalidOperationException>(() => Run(db, shape, key: false));
         Assert.Contains(MainFailureMessage(shape), ex.Message);
+    }
+
+    /// <summary>
+    /// A scalar <c>FirstOrDefault</c> correlated on a non-key outer member is not the navigation (the correlated reducer declines it), but it
+    /// is a keyed array lookup on exactly the properties the predicate compares, so it is answered, and answered by the compared properties:
+    /// the result differs from the key-bound one (<c>1:10, 2:20, 3:0</c>).
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly)]
+    [InlineData(MongoQueryMode.Native)]
+    public void Non_key_scalar_FirstOrDefault_is_answered_by_the_compared_properties(MongoQueryMode mode)
+    {
+        using var db = CreateContext(mode);
+        Assert.Equal(["1:20", "2:0", "3:10"], Run(db, "FirstOrDefault", key: false));
+        Assert.Equal(["1:20", "2:0", "3:10"], Run(db, "NullableFirstOrDefault", key: false));
     }
 
     [Theory]

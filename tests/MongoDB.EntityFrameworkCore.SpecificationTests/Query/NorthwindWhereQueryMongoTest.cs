@@ -1,4 +1,4 @@
-/* Copyright 2023-present MongoDB Inc.
+﻿/* Copyright 2023-present MongoDB Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1480,10 +1480,12 @@ Customers.{ "$match" : { "$expr" : { "$eq" : [{ "$concat" : [{ "$ifNull" : [{ "$
 
     public override async Task Where_Queryable_ToList_Count(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Where_Queryable_ToList_Count(async));
+        await base.Where_Queryable_ToList_Count(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Customers.{ "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Order_CustomerID__id" } }, { "$match" : { "_lookup_Orders.0" : { "$exists" : false } } }, { "$project" : { "_lookup_Order_CustomerID__id" : "$_lookup_Order_CustomerID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Where_Queryable_ToList_Contains(bool async)
@@ -1528,10 +1530,12 @@ Customers.{ "$match" : { "$expr" : { "$eq" : [{ "$concat" : [{ "$ifNull" : [{ "$
 
     public override async Task Where_Queryable_ToList_Count_member(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Where_Queryable_ToList_Count_member(async));
+        await base.Where_Queryable_ToList_Count_member(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Customers.{ "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Order_CustomerID__id" } }, { "$match" : { "_lookup_Orders.0" : { "$exists" : false } } }, { "$project" : { "_lookup_Order_CustomerID__id" : "$_lookup_Order_CustomerID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Where_Queryable_ToArray_Length_member(bool async)
@@ -1544,10 +1548,12 @@ Customers.{ "$match" : { "$expr" : { "$eq" : [{ "$concat" : [{ "$ifNull" : [{ "$
 
     public override async Task Where_collection_navigation_ToList_Count(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Where_collection_navigation_ToList_Count(async));
+        await base.Where_collection_navigation_ToList_Count(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Orders.{ "$match" : { "_id" : { "$lt" : 10300 } } }, { "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetails" } }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }, { "$match" : { "_lookup_OrderDetails.3" : { "$exists" : true }, "_lookup_OrderDetails.4" : { "$exists" : false } } }, { "$project" : { "_lookup_OrderDetail__id_OrderID__id" : "$_lookup_OrderDetail__id_OrderID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Where_collection_navigation_ToList_Contains(bool async)
@@ -1592,10 +1598,12 @@ Customers.{ "$match" : { "$expr" : { "$eq" : [{ "$concat" : [{ "$ifNull" : [{ "$
 
     public override async Task Where_collection_navigation_ToList_Count_member(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Where_collection_navigation_ToList_Count_member(async));
+        await base.Where_collection_navigation_ToList_Count_member(async);
 
-        AssertMql();
+        AssertMql(
+"""
+Orders.{ "$match" : { "_id" : { "$lt" : 10300 } } }, { "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetails" } }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }, { "$match" : { "_lookup_OrderDetails.2" : { "$exists" : true }, "_lookup_OrderDetails.3" : { "$exists" : false } } }, { "$project" : { "_lookup_OrderDetail__id_OrderID__id" : "$_lookup_OrderDetail__id_OrderID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Where_collection_navigation_ToArray_Length_member(bool async)

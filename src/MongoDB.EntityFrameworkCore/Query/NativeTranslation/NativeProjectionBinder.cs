@@ -348,6 +348,13 @@ internal static class NativeProjectionBinder
                 return false;
             }
 
+            // An element leaf was staged under the provisional alias; the read side finds it by the alias the projection is committed under.
+            for (var i = 0; i < _staged.ElementLeaves.Count; i++)
+            {
+                if (_staged.ElementLeaves[i].Alias == provisionalAlias)
+                    _staged.ElementLeaves[i] = (_staged.ElementLeaves[i].Lookup, derivedAlias);
+            }
+
             // Nothing is _staged before the single bare leaf, so the alias is always fresh. isOwnedNavEntityLeaf is discarded: TryTranslateLeaf only produces it on the wrapped arm's path.
             if (!TryStageLeaf(derivedAlias, bareLeaf, bareLikeExpr, bareThrowsOnNull, bareIsArrayLeaf))
             {
@@ -1169,8 +1176,7 @@ internal static class NativeProjectionBinder
         // `c.Orders.Where(..).OrderBy(..).ToList()`, `c.Orders.OrderBy(..).FirstOrDefault()`, or the same off a GroupJoin group. The
         // array is a keyed lookup whose sub-pipeline filters, sorts and limits it; the read side materializes the entities from it
         // (MongoProjectionBindingExpressionVisitor.TryBindReferencedElementLeaf). Wrapped bodies only: it reads by member alias.
-        if (allowWholeRootEntityLeaf
-            && TryTranslateReferencedElementLeaf(
+        if (TryTranslateReferencedElementLeaf(
                 mongoQ, outerParameter, leafExpression, alias, staged,
                 out var elementArrayRef))
         {
@@ -2231,7 +2237,8 @@ internal static class NativeProjectionBinder
         MongoExpression? elementLimit = null,
         MongoExpression? elementSkip = null,
         IReadOnlyList<LookupOuterCondition>? outerConditions = null,
-        IReadOnlyList<LookupExpression>? nestedLookups = null)
+        IReadOnlyList<LookupExpression>? nestedLookups = null,
+        bool negativeSkipIsEmpty = false)
     {
         keyedLookup = null;
         elementSort ??= [];
@@ -2272,6 +2279,7 @@ internal static class NativeProjectionBinder
             var same = existing.FirstOrDefault(
                 l => SameFilters(l.ElementFilters, filters) && l.ElementSort.SequenceEqual(elementSort) && LookupExpression.SameElementCount(l.ElementLimit, elementLimit)
                      && LookupExpression.SameElementCount(l.ElementSkip, elementSkip)
+                     && l.ElementSkipNegativeIsEmpty == negativeSkipIsEmpty
                      && LookupExpression.SameOuterConditions(l.OuterConditions, outerConditions)
                      && LookupExpression.SameNestedLookups(l.ElementNestedLookups, nestedLookups));
             aliasSuffix = same is not null
@@ -2281,6 +2289,7 @@ internal static class NativeProjectionBinder
 
         var keyed = NativeCorrelationMatcher.BuildCorrelatedArrayLookup(
             targetEntityType, keyParts, filters, filterPredicate, aliasSuffix, elementSort, elementLimit, elementSkip, outerConditions, nestedLookups);
+        keyed.ElementSkipNegativeIsEmpty = negativeSkipIsEmpty;
         if (!NativeCorrelationMatcher.TryStageNativeCollectionLookup(mongoQ, keyed, staged.Lookups, out keyedLookup))
             return false;
 
@@ -2383,16 +2392,18 @@ internal static class NativeProjectionBinder
                 return false;
             }
 
-            sort.Add((keyField.ElementName, ascending ? 1 : -1));
+            // Last is the first element of the reversed ordering.
+            sort.Add((keyField.ElementName, ascending != shape.ReversesSort ? 1 : -1));
         }
 
-        var limit = shape.IsFirst ? new MongoConstantExpression(1, forSerialization: null) : TranslateElementCount(shape.Take);
-        var skip = TranslateElementCount(shape.Skip);
-        if ((shape.Take is not null && !shape.IsFirst && limit is null)
-            || (shape.Skip is not null && skip is null)
+        var limit = TranslateElementLimit(shape);
+        var skip = TranslateElementSkip(shape);
+        if ((shape.IsList && shape.Take is not null && limit is null)
+            || ((shape.Skip ?? shape.ElementIndex) is not null && skip is null)
             || !TryStageKeyedArrayLookup(
                 mongoQ, outerParameter, target, keyParts, shape.Filters.Concat(conditions.Element).ToList(),
-                staged, out var keyedLookup, sort, limit, skip, outerConditions))
+                staged, out var keyedLookup, sort, limit, skip, outerConditions,
+                negativeSkipIsEmpty: shape.Terminal == ElementTerminal.ElementAtOrDefault))
         {
             return false;
         }
@@ -2424,6 +2435,22 @@ internal static class NativeProjectionBinder
 
         return true;
     }
+
+    /// <summary>
+    /// How many elements the keyed lookup keeps: a list's <c>Take</c> (all when none), one for <c>First</c>/<c>Last</c>/<c>ElementAt</c>, and two
+    /// for <c>Single</c>, so the shaper's own <c>Single</c> sees a second match and throws as LINQ does.
+    /// </summary>
+    internal static MongoExpression? TranslateElementLimit(ReferencedElementShape shape)
+        => shape.Terminal switch
+        {
+            ElementTerminal.ToList => TranslateElementCount(shape.Take),
+            ElementTerminal.Single or ElementTerminal.SingleOrDefault => new MongoConstantExpression(2, forSerialization: null),
+            _ => new MongoConstantExpression(1, forSerialization: null)
+        };
+
+    /// <summary>How many elements the keyed lookup skips: the <c>Skip</c> count, or the <c>ElementAt</c> index.</summary>
+    internal static MongoExpression? TranslateElementSkip(ReferencedElementShape shape)
+        => TranslateElementCount(shape.Skip ?? shape.ElementIndex);
 
     internal static MongoExpression? TranslateElementCount(Expression? count)
         => count is null ? null : NativeQueryParameter.TranslateConstantOrParameter(count, forSerialization: null);

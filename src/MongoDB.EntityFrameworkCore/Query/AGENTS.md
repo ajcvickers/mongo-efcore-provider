@@ -183,6 +183,24 @@ Scope, joins, grouping:
     `MongoExpression`s rendered through the placeholder table, so the value is read per execution); a parameter's value is checked at
     `Build` (zero is an empty array, a negative count throws), see Paging below. Each distinct (filters, sort, skip, limit) gets its own
     `_fN` alias; parameters are told apart by name (`LookupExpression.SameElementCount`), never by value.
+    - **The terminal is explicit** (`ElementTerminal`): `ToList`, `First`/`FirstOrDefault`, `Single`/`SingleOrDefault`, `Last`/`LastOrDefault`,
+      `ElementAt`/`ElementAtOrDefault`, optionally under a scalar `Select` (applied to the materialized entities, as for a list). The lookup keeps what
+      the terminal needs and the shaper runs the real LINQ operator over it, so empty and ambiguous groups throw as LINQ does: one element for
+      `First`/`Last`/`ElementAt`, **two for `Single`** (a second match must be visible to throw), the `Skip` count or the `ElementAt` index as the lookup
+      skip, and `Last` as the first element of the REVERSED ordering (`ReferencedElementShape.ReversesSort`; it needs an ordering and declines with a
+      `Skip` ahead of it). Limit and skip come from one place, `NativeProjectionBinder.TranslateElementLimit/Skip`, so the emit and read sides cannot
+      disagree. `ElementAt` with a `Skip` in the chain declines.
+    - **Bare bodies are admitted** (`Select(c => c.Orders.OrderBy(..).FirstOrDefault())`). The emit side stages the leaf under the provisional bare alias and
+      `TryBindAsBareProjection` remaps it to the derived alias; the read side resolves a null member name through the bare-body alias override.
+    - **Known gap (#32): a scalar selector runs on the materialized, and under `TrackAll` tracked, entity**, so an unsaved change to an already tracked row
+      is returned instead of the stored value. The `ToList` + `Select` form had it already. The fix is to read a direct scalar member from the element
+      document in both materialization paths, not to materialize the entity.
+    - **`ElementAtOrDefault` of a negative index selects nothing** where `ElementAt` and `Skip` throw: the `$skip` stage carries a marker
+      (`LookupExpression.ElementSkipNegativeIsEmpty`) that `MongoPipelineFactory.NormalizePagingStages` turns into an always-false `$match` and strips; it is part of
+      lookup identity, so the two never share an alias.
+    - **`let c = <single-result subquery>` plus `c.Member` reads** is rewritten before nav-expansion (`LetSingleResultMemberRewriter`, EF11) to one
+      member-selecting single-result subquery per read, all sharing one keyed lookup. Only a `let` whose every use is a member read; an `OrDefault`
+      terminal needs a nullable member (a missing element's value-type member would read `default`, where EF reads null).
     - The read side finds the lookup by the member's alias in `LookupExpression.ElementLeafAliases` (written at the binder's commit),
       never by re-deriving it (`TryBindReferencedElementLeaf`, native route only). The shaper is a `CollectionShaperExpression` with NO
       navigation over an `ArrayAliasProjectionExpression`: the list is assigned plainly and never fixed up into the principal's own

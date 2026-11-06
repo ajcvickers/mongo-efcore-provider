@@ -556,7 +556,13 @@ internal sealed class MongoPipelineFactory
         }
 
         if (lookup.ElementSkip is { } skip)
-            stages.Add(new BsonDocument("$skip", MongoValueRenderer.RenderValue(skip, placeholders)));
+        {
+            var skipStage = new BsonDocument("$skip", MongoValueRenderer.RenderValue(skip, placeholders));
+            if (lookup.ElementSkipNegativeIsEmpty)
+                skipStage.Add(NegativeSkipIsEmptyMarker, true);
+
+            stages.Add(skipStage);
+        }
 
         if (lookup.ElementLimit is { } limit)
             stages.Add(new BsonDocument("$limit", MongoValueRenderer.RenderValue(limit, placeholders)));
@@ -814,6 +820,9 @@ internal sealed class MongoPipelineFactory
     /// (<c>MongoEFToLinqTranslatingExpressionVisitor.TryRewriteZeroTake</c>). Negative <c>$limit</c> or
     /// <c>$skip</c> throws <see cref="ArgumentOutOfRangeException"/> client-side.
     /// </summary>
+    // Marks a $skip that is an ElementAtOrDefault index; NormalizePagingStages removes it, so it never reaches the server.
+    private const string NegativeSkipIsEmptyMarker = "__negativeSkipIsEmpty";
+
     private static void NormalizePagingStages(BsonDocument[] pipeline)
     {
         for (var i = 0; i < pipeline.Length; i++)
@@ -836,6 +845,18 @@ internal sealed class MongoPipelineFactory
             else if (stage.TryGetValue("$skip", out var skipValue))
             {
                 var skip = skipValue.ToInt64();
+
+                // ElementAtOrDefault of a negative index is the default, not an error: select nothing.
+                if (stage.Contains(NegativeSkipIsEmptyMarker))
+                {
+                    stage.Remove(NegativeSkipIsEmptyMarker);
+                    if (skip < 0)
+                    {
+                        pipeline[i] = new BsonDocument("$match", MongoQueryLanguageRenderer.AlwaysFalseFilter());
+                        continue;
+                    }
+                }
+
                 if (skip < 0)
                     throw new ArgumentOutOfRangeException("count",
                         $"Skip must be non-negative; got {skip}.");
