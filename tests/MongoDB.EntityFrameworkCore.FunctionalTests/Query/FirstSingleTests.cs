@@ -92,6 +92,58 @@ public class FirstSingleTests(ReadOnlySampleGuidesFixture database)
         Assert.Null(result);
     }
 
+#if EF11
+    [Fact]
+    public void MinBy_after_DefaultIfEmpty_on_non_empty_source_returns_the_minimum()
+    {
+        var result = _db.Planets.Select(p => p.orderFromSun).DefaultIfEmpty().MinBy(o => o);
+        Assert.Equal(_db.Planets.Min(p => p.orderFromSun), result);
+    }
+
+    [Fact]
+    public void MaxBy_after_DefaultIfEmpty_on_non_empty_source_returns_the_maximum()
+    {
+        var result = _db.Planets.Select(p => p.orderFromSun).DefaultIfEmpty().MaxBy(o => o);
+        Assert.Equal(_db.Planets.Max(p => p.orderFromSun), result);
+    }
+
+    [Fact]
+    public void MinBy_after_DefaultIfEmpty_on_empty_value_type_source_returns_default()
+    {
+        var result = _db.Planets.Where(p => p.orderFromSun > 1000).Select(p => p.orderFromSun).DefaultIfEmpty().MinBy(o => o);
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public void MaxBy_after_DefaultIfEmpty_on_empty_value_type_source_returns_default()
+    {
+        var result = _db.Planets.Where(p => p.orderFromSun > 1000).Select(p => p.orderFromSun).DefaultIfEmpty().MaxBy(o => o);
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public void MinBy_after_DefaultIfEmpty_on_empty_entity_source_returns_null()
+    {
+        var result = _db.Planets.Where(p => p.orderFromSun > 1000).DefaultIfEmpty().MinBy(p => p.name);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void MinBy_after_DefaultIfEmpty_on_non_empty_entity_source_returns_the_entity()
+    {
+        var result = _db.Planets.DefaultIfEmpty().MinBy(p => p.name);
+        Assert.NotNull(result);
+        Assert.Equal(_db.Planets.OrderBy(p => p.name).First().name, result.name);
+    }
+
+    [Fact]
+    public void First_after_DefaultIfEmpty_and_ordering_on_empty_source_returns_default()
+    {
+        var result = _db.Planets.Where(p => p.orderFromSun > 1000).DefaultIfEmpty().OrderBy(p => p.name).ThenBy(p => p.orderFromSun).First();
+        Assert.Null(result);
+    }
+#endif
+
     [Fact]
     public void First_predicate()
     {
