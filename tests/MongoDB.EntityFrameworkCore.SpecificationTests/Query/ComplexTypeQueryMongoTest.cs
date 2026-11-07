@@ -67,13 +67,13 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
     public override async Task Nullable_complex_type_with_discriminator_and_shadow_property()
     {
         // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_and_shadow_property());
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_and_shadow_property(), typeof(Exception));
     }
 
     public override async Task Optional_complex_type_with_discriminator()
     {
         // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Optional_complex_type_with_discriminator());
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Optional_complex_type_with_discriminator(), typeof(Exception));
     }
 
     public override async Task Can_update_entity_with_index_on_complex_type_property()
@@ -85,13 +85,13 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
     public override async Task Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip()
     {
         // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip());
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip(), typeof(Exception));
     }
 
     public override async Task Non_optional_complex_type_with_all_nullable_properties()
     {
         // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Non_optional_complex_type_with_all_nullable_properties());
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Non_optional_complex_type_with_all_nullable_properties(), typeof(Exception));
     }
 
     public override async Task Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
@@ -103,7 +103,7 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
     public override async Task Nullable_complex_type_with_discriminator_set_to_null()
     {
         // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_set_to_null());
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_set_to_null(), typeof(Exception));
     }
 
     public override async Task Can_save_batch_swapping_alternate_key_values_on_complex_type_property()
@@ -194,8 +194,8 @@ CustomerGroup.{ "$lookup" : { "from" : "Customer", "localField" : "RequiredCusto
         }
 
 #if EF8 || EF9
-        // Fails: Projection through an optional navigation reads wrong data on EF8/EF9 #35
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_complex_type_via_optional_navigation(async));
+        // Fails: Projection through an optional navigation throws NullReferenceException on EF8/EF9 #41
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_complex_type_via_optional_navigation(async), typeof(NullReferenceException));
 #else
         await base.Project_complex_type_via_optional_navigation(async);
 
@@ -520,8 +520,8 @@ ValuedCustomerGroup.{ "$lookup" : { "from" : "ValuedCustomer", "localField" : "R
         }
 
 #if EF8 || EF9
-        // Fails: Projection through an optional navigation reads wrong data on EF8/EF9 #35
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_struct_complex_type_via_optional_navigation(async));
+        // Fails: Projection through an optional navigation throws NullReferenceException on EF8/EF9 #41
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_struct_complex_type_via_optional_navigation(async), typeof(NullReferenceException));
 #else
         await base.Project_struct_complex_type_via_optional_navigation(async);
 
@@ -557,8 +557,10 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
     public override async Task Project_nullable_struct_complex_type_via_optional_navigation(bool async)
     {
 #if EF10 || EF11
-        // Fails: Not supported yet #35
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_nullable_struct_complex_type_via_optional_navigation(async));
+        // Fails: Driver-LINQ fallback returns different rows (NativeOnly refuses) #41
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_nullable_struct_complex_type_via_optional_navigation(async),
+            // Native serves different rows (a wrong answer); NativeOnly refuses cleanly.
+            MongoSpecTestHelpers.IsNativeOnly ? null : typeof(global::Xunit.Sdk.TrueException));
 #else
         await base.Project_nullable_struct_complex_type_via_optional_navigation(async);
 
@@ -937,7 +939,7 @@ Customer.{ "$match" : { "ShippingAddress.Country.Code" : "DE" } }
     {
 #if EF8 || EF9
         // Fails: Not supported yet #35
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_null(async));
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_null(async), typeof(InvalidOperationException), "Query returned no results");
 #else
         await base.Complex_type_equals_null(async);
 

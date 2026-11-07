@@ -89,17 +89,41 @@ internal static class MongoSpecTestHelpers
     }
 
     /// <summary>
-    /// Asserts that a spec test with a known, ticketed gap (tagged with a <c>// Fails:</c> comment) still fails. Unlike
-    /// <see cref="AssertNativeTranslationFailedAsync"/> it accepts any exception, because the gap is not always a translation
-    /// failure (a refusal, a model-building limit, an unsupported query shape). When the gap is closed the test throws
-    /// nothing, this assertion fails, and the override should be replaced by the plain base call and its MQL baseline.
+    /// Asserts that a spec test with a known, ticketed gap (tagged with a <c>// Fails:</c> comment) still fails, and fails as a
+    /// <em>refusal</em>: a provider/EF <see cref="InvalidOperationException"/>, <see cref="NotSupportedException"/>,
+    /// <see cref="NativeTranslationNotSupportedException"/> or driver <see cref="ExpressionNotSupportedException"/>. xUnit assertion
+    /// failures (wrong data) and <see cref="NullReferenceException"/> are not refusals and are rejected, so a gap that starts
+    /// returning wrong rows is noticed. A gap that really is wrong data or a crash passes <paramref name="expectedType"/> (exact
+    /// type) so that is stated at the site; <paramref name="messageContains"/> optionally pins the message. When the gap is
+    /// closed the test throws nothing, this assertion fails, and the override should be replaced by the plain base call and its
+    /// MQL baseline.
     /// </summary>
-    internal static async Task AssertKnownGapAsync(Func<Task> test)
-        => await Assert.ThrowsAnyAsync<Exception>(test);
+    internal static async Task AssertKnownGapAsync(Func<Task> test, Type? expectedType = null, string? messageContains = null)
+        => CheckKnownGap(await Assert.ThrowsAnyAsync<Exception>(test), expectedType, messageContains);
 
     /// <summary>Synchronous counterpart of <see cref="AssertKnownGapAsync"/> (model-building tests).</summary>
-    internal static void AssertKnownGap(Action test)
-        => Assert.ThrowsAny<Exception>(test);
+    internal static void AssertKnownGap(Action test, Type? expectedType = null, string? messageContains = null)
+        => CheckKnownGap(Assert.ThrowsAny<Exception>(test), expectedType, messageContains);
+
+    private static void CheckKnownGap(Exception exception, Type? expectedType, string? messageContains)
+    {
+        var accepted = expectedType is null
+            ? exception is InvalidOperationException or NotSupportedException or NativeTranslationNotSupportedException
+                or ExpressionNotSupportedException
+            : expectedType == typeof(Exception) || exception.GetType() == expectedType;
+        if (!accepted)
+        {
+            throw new XunitException(
+                $"Expected the known gap to fail as {expectedType?.ToString() ?? "a refusal"} but it threw "
+                + $"{exception.GetType()}: {exception.Message}");
+        }
+
+        if (messageContains is not null && !exception.Message.Contains(messageContains, StringComparison.Ordinal))
+        {
+            throw new XunitException(
+                $"The known gap threw {exception.GetType()} but its message does not contain '{messageContains}': {exception.Message}");
+        }
+    }
 
     /// <summary>
     /// Synchronous counterpart of <see cref="AssertNativeTranslationFailedAsync"/>, for the handful of

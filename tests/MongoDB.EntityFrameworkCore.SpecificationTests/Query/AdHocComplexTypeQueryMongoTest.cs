@@ -161,8 +161,8 @@ EntityType.{ "$limit" : 2 }
     public override async Task Nullable_complex_type_with_discriminator_set_to_null()
     {
 #if EF10
-        // Fails: Not supported yet #35
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_set_to_null());
+        // Fails: Optional complex property with a discriminator set to null reads back non-null #41
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_set_to_null(), typeof(global::Xunit.Sdk.NullException));
 #else
         await base.Nullable_complex_type_with_discriminator_set_to_null();
     

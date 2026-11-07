@@ -71,6 +71,25 @@ public static class ComplexCollectionClrTypeValidationTests
         _ = db.Model;
     }
 
+    // Kills the mutant that stops ValidateComplexCollectionClrTypes recursing into complex properties and elements.
+    [Fact]
+    public static void Unconstructible_collection_nested_in_a_complex_property_is_refused()
+    {
+        using var db = SingleEntityDbContext.Create<RoNestedHolder>(mb =>
+            mb.Entity<RoNestedHolder>().ComplexProperty(h => h.Box, b => b.ComplexCollection(x => x.Items)));
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains("collection types without a public parameterless constructor", ex.Message);
+    }
+
+    [Fact]
+    public static void Unconstructible_collection_nested_in_a_complex_collection_element_is_refused()
+    {
+        using var db = SingleEntityDbContext.Create<RoNestedCollectionHolder>(mb =>
+            mb.Entity<RoNestedCollectionHolder>().ComplexCollection(h => h.Boxes, b => b.ComplexCollection(x => x.Items)));
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains("collection types without a public parameterless constructor", ex.Message);
+    }
+
     // EF's own refusal comes first for types that are not IList<T> (unchanged, not the provider's).
     [Theory]
     [InlineData(typeof(ICollection<Tag>))]
@@ -119,7 +138,10 @@ public static class ComplexCollectionClrTypeValidationTests
     public class TagList : List<Tag>;
     public class Holder<TC> where TC : class { public int _id { get; set; } public TC Items { get; set; } = null!; }
     public class Box { public string Name { get; set; } = ""; public Tag[] Items { get; set; } = []; }
-    public class NestedHolder { public int _id { get; set; } public Box Box { get; set; } = null!; }
+    public class RoBox { public string Name { get; set; } = ""; public ReadOnlyCollection<Tag> Items { get; set; } = null!; }
+    public class RoNestedHolder { public int _id { get; set; } public RoBox Box { get; set; } = null!; }
+    public class RoNestedCollectionHolder { public int _id { get; set; } public List<RoBox> Boxes { get; set; } = []; }
+    public class NestedHolder {public int _id { get; set; } public Box Box { get; set; } = null!; }
     public class NestedCollectionHolder { public int _id { get; set; } public List<Box> Boxes { get; set; } = []; }
     public class PrimitiveArrayHolder { public int _id { get; set; } public string[] Names { get; set; } = []; }
 }
