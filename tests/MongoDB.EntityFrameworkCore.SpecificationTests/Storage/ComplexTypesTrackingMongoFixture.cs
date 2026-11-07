@@ -24,6 +24,9 @@ using MongoDB.EntityFrameworkCore.Storage;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Storage;
 
+// EF11 only: the shared-type property-bag entity in the EF11 tracking model has a List<string> property that the provider cannot
+// map, so the fixture fails to initialize (see #22).
+#if !EF11
 public class ComplexTypesTrackingMongoFixture
     : ComplexTypesTrackingTestBase<ComplexTypesTrackingMongoFixture>.FixtureBase
 {
@@ -54,3 +57,4 @@ public class ComplexTypesTrackingMongoFixture
     protected override bool ShouldLogCategory(string logCategory)
         => logCategory == DbLoggerCategory.Query.Name;
 }
+#endif

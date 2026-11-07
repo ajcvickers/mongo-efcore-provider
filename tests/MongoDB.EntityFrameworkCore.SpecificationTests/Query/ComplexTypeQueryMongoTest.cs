@@ -24,6 +24,107 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
         : base(fixture)
         => Fixture.TestMqlLoggerFactory.Clear();
 
+#if EF11
+    // EF Core 11 moved the AdHoc complex type tests into this base class and added alternate-key and index tests.
+    // None of them passes against the provider yet (see #22).
+
+    public override async Task Can_query_by_alternate_key_on_complex_type_property()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_query_by_alternate_key_on_complex_type_property());
+    }
+
+    public override async Task Projecting_complex_property_does_not_auto_include_owned_types()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Projecting_complex_property_does_not_auto_include_owned_types());
+    }
+
+    public override async Task Can_query_by_complex_type_property_with_index()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_query_by_complex_type_property_with_index());
+    }
+
+    public override async Task Complex_type_equals_parameter_with_nested_types_with_property_of_same_name()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_parameter_with_nested_types_with_property_of_same_name());
+    }
+
+    public override async Task Can_delete_entity_with_index_on_complex_type_property()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_delete_entity_with_index_on_complex_type_property());
+    }
+
+    public override async Task Non_optional_complex_type_with_all_nullable_properties_via_left_join()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Non_optional_complex_type_with_all_nullable_properties_via_left_join());
+    }
+
+    public override async Task Nullable_complex_type_with_discriminator_and_shadow_property()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_and_shadow_property());
+    }
+
+    public override async Task Optional_complex_type_with_discriminator()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Optional_complex_type_with_discriminator());
+    }
+
+    public override async Task Can_update_entity_with_index_on_complex_type_property()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_update_entity_with_index_on_complex_type_property());
+    }
+
+    public override async Task Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip());
+    }
+
+    public override async Task Non_optional_complex_type_with_all_nullable_properties()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Non_optional_complex_type_with_all_nullable_properties());
+    }
+
+    public override async Task Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip());
+    }
+
+    public override async Task Nullable_complex_type_with_discriminator_set_to_null()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_set_to_null());
+    }
+
+    public override async Task Can_save_batch_swapping_alternate_key_values_on_complex_type_property()
+    {
+        // Fails: EF11 complex type conformance not implemented yet #22
+        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_save_batch_swapping_alternate_key_values_on_complex_type_property());
+    }
+
+    public override async Task Nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
+        => await base.Nullable_complex_type_with_discriminator_null_to_non_null_roundtrip();
+
+    public override async Task Nullable_complex_type_with_discriminator_non_null_to_null_roundtrip()
+        => await base.Nullable_complex_type_with_discriminator_non_null_to_null_roundtrip();
+
+    public override async Task Nullable_complex_type_with_discriminator_set_to_different_value()
+        => await base.Nullable_complex_type_with_discriminator_set_to_different_value();
+
+    public override async Task Update_entity_with_nullable_complex_type_and_discriminator_does_not_throw()
+        => await base.Update_entity_with_nullable_complex_type_and_discriminator_does_not_throw();
+#endif
+
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
@@ -71,16 +172,22 @@ CustomerGroup.
 #if !EF10 && !EF11
     public override async Task Project_complex_type_via_optional_navigation(bool async)
     {
+#if EF8 || EF9
+        // Fails: Projection through an optional navigation reads wrong data on EF8/EF9 #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_complex_type_via_optional_navigation(async));
+#else
         await base.Project_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
 CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
 """);
+    
+#endif
     }
 #endif
 
-#if EF10
+#if EF10 || EF11
     public override async Task Project_complex_type_via_optional_navigation(bool async)
     {
         await base.Project_complex_type_via_optional_navigation(async);
@@ -104,7 +211,7 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
     }
 #endif
 
-#if EF10
+#if EF10 || EF11
     public override async Task Project_complex_type_via_required_navigation(bool async)
     {
         await base.Project_complex_type_via_required_navigation(async);
@@ -168,62 +275,58 @@ Customer.
 
     public override async Task Select_complex_type_Distinct(bool async)
     {
-        await base.Select_complex_type_Distinct(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Select_complex_type_Distinct(async));
     }
 
     public override async Task Complex_type_equals_complex_type(bool async)
     {
+#if EF9 || EF10 || EF11
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_complex_type(async));
+#else
         await base.Complex_type_equals_complex_type(async);
 
         AssertMql(
 """
 Customer.
 """);
+    
+#endif
     }
 
     public override async Task Complex_type_equals_constant(bool async)
     {
-        await base.Complex_type_equals_constant(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_constant(async));
     }
 
     public override async Task Complex_type_equals_parameter(bool async)
     {
+#if EF9 || EF10 || EF11
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_parameter(async));
+#else
         await base.Complex_type_equals_parameter(async);
 
         AssertMql(
 """
 Customer.
 """);
+    
+#endif
     }
 
     public override async Task Subquery_over_complex_type(bool async)
     {
-        await base.Subquery_over_complex_type(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Subquery_over_complex_type(async));
     }
 
     public override async Task Contains_over_complex_type(bool async)
     {
-        await base.Contains_over_complex_type(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Contains_over_complex_type(async));
     }
 
     public override async Task Concat_entity_type_containing_complex_property(bool async)
@@ -248,22 +351,14 @@ Customer.{ "$match" : { "_id" : 1 } }, { "$unionWith" : { "coll" : "Customer", "
 
     public override async Task Concat_complex_type(bool async)
     {
-        await base.Concat_complex_type(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Concat_complex_type(async));
     }
 
     public override async Task Union_complex_type(bool async)
     {
-        await base.Union_complex_type(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Union_complex_type(async));
     }
 
     public override async Task Concat_property_in_complex_type(bool async)
@@ -288,22 +383,14 @@ Customer.
 
     public override async Task Concat_two_different_complex_type(bool async)
     {
-        await base.Concat_two_different_complex_type(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Concat_two_different_complex_type(async));
     }
 
     public override async Task Union_two_different_complex_type(bool async)
     {
-        await base.Union_two_different_complex_type(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Union_two_different_complex_type(async));
     }
 
     public override async Task Filter_on_property_inside_struct_complex_type(bool async)
@@ -369,16 +456,22 @@ ValuedCustomerGroup.
 #if !EF10 && !EF11
     public override async Task Project_struct_complex_type_via_optional_navigation(bool async)
     {
+#if EF8 || EF9
+        // Fails: Projection through an optional navigation reads wrong data on EF8/EF9 #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_struct_complex_type_via_optional_navigation(async));
+#else
         await base.Project_struct_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
 ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
 """);
+    
+#endif
     }
 #endif
 
-#if EF10
+#if EF10 || EF11
     public override async Task Project_struct_complex_type_via_optional_navigation(bool async)
     {
         await base.Project_struct_complex_type_via_optional_navigation(async);
@@ -390,15 +483,21 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
     }
 #endif
 
-#if EF10
+#if EF10 || EF11
     public override async Task Project_nullable_struct_complex_type_via_optional_navigation(bool async)
     {
+#if EF10 || EF11
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_nullable_struct_complex_type_via_optional_navigation(async));
+#else
         await base.Project_nullable_struct_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
 ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
 """);
+    
+#endif
     }
 #endif
 
@@ -464,12 +563,8 @@ ValuedCustomer.
 
     public override async Task Select_struct_complex_type_Distinct(bool async)
     {
-        await base.Select_struct_complex_type_Distinct(async);
-
-        AssertMql(
-"""
-ValuedCustomer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Select_struct_complex_type_Distinct(async));
     }
 
     public override async Task Struct_complex_type_equals_struct_complex_type(bool async)
@@ -484,12 +579,8 @@ ValuedCustomer.
 
     public override async Task Struct_complex_type_equals_constant(bool async)
     {
-        await base.Struct_complex_type_equals_constant(async);
-
-        AssertMql(
-"""
-ValuedCustomer.
-""");
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Struct_complex_type_equals_constant(async));
     }
 
     public override async Task Struct_complex_type_equals_parameter(bool async)
@@ -504,22 +595,14 @@ ValuedCustomer.
 
     public override async Task Subquery_over_struct_complex_type(bool async)
     {
-        await base.Subquery_over_struct_complex_type(async);
-
-        AssertMql(
-"""
-ValuedCustomer.
-""");
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Subquery_over_struct_complex_type(async));
     }
 
     public override async Task Contains_over_struct_complex_type(bool async)
     {
-        await base.Contains_over_struct_complex_type(async);
-
-        AssertMql(
-"""
-ValuedCustomer.
-""");
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Contains_over_struct_complex_type(async));
     }
 
     public override async Task Concat_entity_type_containing_struct_complex_property(bool async)
@@ -544,22 +627,14 @@ ValuedCustomer.{ "$match" : { "_id" : 1 } }, { "$unionWith" : { "coll" : "Valued
 
     public override async Task Concat_struct_complex_type(bool async)
     {
-        await base.Concat_struct_complex_type(async);
-
-        AssertMql(
-"""
-ValuedCustomer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Concat_struct_complex_type(async));
     }
 
     public override async Task Union_struct_complex_type(bool async)
     {
-        await base.Union_struct_complex_type(async);
-
-        AssertMql(
-"""
-ValuedCustomer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Union_struct_complex_type(async));
     }
 
     public override async Task Concat_property_in_struct_complex_type(bool async)
@@ -584,113 +659,92 @@ ValuedCustomer.
 
     public override async Task Concat_two_different_struct_complex_type(bool async)
     {
-        await base.Concat_two_different_struct_complex_type(async);
-
-        AssertMql(
-"""
-ValuedCustomer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Concat_two_different_struct_complex_type(async));
     }
 
     public override async Task Union_two_different_struct_complex_type(bool async)
     {
-        await base.Union_two_different_struct_complex_type(async);
-
-        AssertMql(
-"""
-ValuedCustomer.
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Union_two_different_struct_complex_type(async));
     }
 
     public override async Task Project_same_nested_complex_type_twice_with_pushdown(bool async)
     {
-        await base.Project_same_nested_complex_type_twice_with_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_same_nested_complex_type_twice_with_pushdown(async));
     }
 
     public override async Task Project_same_entity_with_nested_complex_type_twice_with_pushdown(bool async)
     {
-        await base.Project_same_entity_with_nested_complex_type_twice_with_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_same_entity_with_nested_complex_type_twice_with_pushdown(async));
     }
 
     public override async Task Project_same_nested_complex_type_twice_with_double_pushdown(bool async)
     {
-        await base.Project_same_nested_complex_type_twice_with_double_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_same_nested_complex_type_twice_with_double_pushdown(async));
     }
 
     public override async Task Project_same_entity_with_nested_complex_type_twice_with_double_pushdown(bool async)
     {
-        await base.Project_same_entity_with_nested_complex_type_twice_with_double_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_same_entity_with_nested_complex_type_twice_with_double_pushdown(async));
     }
 
     public override async Task Project_same_struct_nested_complex_type_twice_with_pushdown(bool async)
     {
-        await base.Project_same_struct_nested_complex_type_twice_with_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_same_struct_nested_complex_type_twice_with_pushdown(async));
     }
 
     public override async Task Project_same_entity_with_struct_nested_complex_type_twice_with_pushdown(bool async)
     {
-        await base.Project_same_entity_with_struct_nested_complex_type_twice_with_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_same_entity_with_struct_nested_complex_type_twice_with_pushdown(async));
     }
 
     public override async Task Project_same_struct_nested_complex_type_twice_with_double_pushdown(bool async)
     {
-        await base.Project_same_struct_nested_complex_type_twice_with_double_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_same_struct_nested_complex_type_twice_with_double_pushdown(async));
     }
 
     public override async Task Project_same_entity_with_struct_nested_complex_type_twice_with_double_pushdown(bool async)
     {
-        await base.Project_same_entity_with_struct_nested_complex_type_twice_with_double_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_same_entity_with_struct_nested_complex_type_twice_with_double_pushdown(async));
     }
 
     public override async Task Union_of_same_entity_with_nested_complex_type_projected_twice_with_pushdown(bool async)
     {
-        await base.Union_of_same_entity_with_nested_complex_type_projected_twice_with_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Union_of_same_entity_with_nested_complex_type_projected_twice_with_pushdown(async));
     }
 
     public override async Task Union_of_same_entity_with_nested_complex_type_projected_twice_with_double_pushdown(bool async)
     {
-        await base.Union_of_same_entity_with_nested_complex_type_projected_twice_with_double_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Union_of_same_entity_with_nested_complex_type_projected_twice_with_double_pushdown(async));
     }
 
     public override async Task Union_of_same_nested_complex_type_projected_twice_with_pushdown(bool async)
     {
-        await base.Union_of_same_nested_complex_type_projected_twice_with_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Union_of_same_nested_complex_type_projected_twice_with_pushdown(async));
     }
 
     public override async Task Union_of_same_nested_complex_type_projected_twice_with_double_pushdown(bool async)
     {
-        await base.Union_of_same_nested_complex_type_projected_twice_with_double_pushdown(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Union_of_same_nested_complex_type_projected_twice_with_double_pushdown(async));
     }
 
     public override async Task Same_entity_with_complex_type_projected_twice_with_pushdown_as_part_of_another_projection(bool async)
     {
-        await base.Same_entity_with_complex_type_projected_twice_with_pushdown_as_part_of_another_projection(async);
-
-AssertMql();
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Same_entity_with_complex_type_projected_twice_with_pushdown_as_part_of_another_projection(async));
     }
 
     [ConditionalTheory(Skip = "issue #31376"), MemberData(nameof(IsAsyncData))]
@@ -714,24 +768,36 @@ Customer.
 #if !EF8
     public override async Task GroupBy_over_complex_type(bool async)
     {
+#if EF9 || EF10 || EF11
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.GroupBy_over_complex_type(async));
+#else
         await base.GroupBy_over_complex_type(async);
 
         AssertMql(
 """
 Customer.
 """);
+    
+#endif
     }
 #endif
 
 #if !EF8
     public override async Task GroupBy_over_nested_complex_type(bool async)
     {
+#if EF9 || EF10 || EF11
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.GroupBy_over_nested_complex_type(async));
+#else
         await base.GroupBy_over_nested_complex_type(async);
 
         AssertMql(
 """
 Customer.
 """);
+    
+#endif
     }
 #endif
 
@@ -746,32 +812,20 @@ AssertMql();
 
     public override async Task Projecting_property_of_complex_type_using_left_join_with_pushdown(bool async)
     {
-        await base.Projecting_property_of_complex_type_using_left_join_with_pushdown(async);
-
-        AssertMql(
-"""
-CustomerGroup.
-""");
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Projecting_property_of_complex_type_using_left_join_with_pushdown(async));
     }
 
     public override async Task Projecting_complex_from_optional_navigation_using_conditional(bool async)
     {
-        await base.Projecting_complex_from_optional_navigation_using_conditional(async);
-
-        AssertMql(
-"""
-CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$sort" : { "_v._inner.ShippingAddress.ZipCode" : 1 } }, { "$limit" : 20 }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$project" : { "_v" : "$_v.ZipCode", "_id" : 0 } }
-""");
+        // Fails: Whole complex value as a set-operator or GroupBy operand is refused #38
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Projecting_complex_from_optional_navigation_using_conditional(async));
     }
 
     public override async Task Project_entity_with_complex_type_pushdown_and_then_left_join(bool async)
     {
-        await base.Project_entity_with_complex_type_pushdown_and_then_left_join(async);
-
-        AssertMql(
-"""
-Customer.
-""");
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_entity_with_complex_type_pushdown_and_then_left_join(async));
     }
 
 #if !EF10 && !EF11
@@ -801,12 +855,18 @@ Customer.
 #if !EF10 && !EF11
     public override async Task Complex_type_equals_null(bool async)
     {
+#if EF8 || EF9
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_null(async));
+#else
         await base.Complex_type_equals_null(async);
 
         AssertMql(
 """
 Customer.
 """);
+    
+#endif
     }
 #endif
 

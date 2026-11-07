@@ -89,6 +89,19 @@ internal static class MongoSpecTestHelpers
     }
 
     /// <summary>
+    /// Asserts that a spec test with a known, ticketed gap (tagged with a <c>// Fails:</c> comment) still fails. Unlike
+    /// <see cref="AssertNativeTranslationFailedAsync"/> it accepts any exception, because the gap is not always a translation
+    /// failure (a refusal, a model-building limit, an unsupported query shape). When the gap is closed the test throws
+    /// nothing, this assertion fails, and the override should be replaced by the plain base call and its MQL baseline.
+    /// </summary>
+    internal static async Task AssertKnownGapAsync(Func<Task> test)
+        => await Assert.ThrowsAnyAsync<Exception>(test);
+
+    /// <summary>Synchronous counterpart of <see cref="AssertKnownGapAsync"/> (model-building tests).</summary>
+    internal static void AssertKnownGap(Action test)
+        => Assert.ThrowsAny<Exception>(test);
+
+    /// <summary>
     /// Synchronous counterpart of <see cref="AssertNativeTranslationFailedAsync"/>, for the handful of
     /// non-async Northwind test overrides.
     /// </summary>

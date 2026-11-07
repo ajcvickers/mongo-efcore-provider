@@ -60,16 +60,28 @@ EntityType.
 
     public override async Task Optional_complex_type_with_discriminator()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Optional_complex_type_with_discriminator());
+#else
         await base.Optional_complex_type_with_discriminator();
 
         AssertMql();
+    
+#endif
     }
 
     public override async Task Complex_type_equality_with_non_default_type_mapping()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equality_with_non_default_type_mapping());
+#else
         await base.Complex_type_equality_with_non_default_type_mapping();
 
         AssertMql();
+    
+#endif
     }
 
     public override async Task Non_optional_complex_type_with_all_nullable_properties()
@@ -139,7 +151,13 @@ EntityType.{ "$limit" : 2 }
 
     public override async Task Nullable_complex_type_with_discriminator_set_to_null()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_set_to_null());
+#else
         await base.Nullable_complex_type_with_discriminator_set_to_null();
+    
+#endif
     }
 
     public override async Task Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()

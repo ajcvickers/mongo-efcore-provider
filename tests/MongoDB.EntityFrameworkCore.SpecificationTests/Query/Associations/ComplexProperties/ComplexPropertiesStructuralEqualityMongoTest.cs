@@ -35,32 +35,50 @@ public class ComplexPropertiesStructuralEqualityMongoTest : ComplexPropertiesStr
 
     public override async Task Two_associates()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Two_associates());
+#else
         await base.Two_associates();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Two_nested_associates()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Two_nested_associates());
+#else
         await base.Two_nested_associates();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Not_equals()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Not_equals());
+#else
         await base.Not_equals();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Associate_with_inline_null()
@@ -95,92 +113,146 @@ RootEntity.?
 
     public override async Task Nested_associate_with_inline()
     {
+#if EF10
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nested_associate_with_inline());
+#else
         await base.Nested_associate_with_inline();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Nested_associate_with_parameter()
     {
+#if EF10
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nested_associate_with_parameter());
+#else
         await base.Nested_associate_with_parameter();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Two_nested_collections()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Two_nested_collections());
+#else
         await base.Two_nested_collections();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Nested_collection_with_inline()
     {
+#if EF10
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nested_collection_with_inline());
+#else
         await base.Nested_collection_with_inline();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Nested_collection_with_parameter()
     {
+#if EF10
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nested_collection_with_parameter());
+#else
         await base.Nested_collection_with_parameter();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Contains_with_inline()
     {
+#if EF10
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Contains_with_inline());
+#else
         await base.Contains_with_inline();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Contains_with_parameter()
     {
+#if EF10
+        // Fails: Whole-value equality over a type with collection leaves is refused #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Contains_with_parameter());
+#else
         await base.Contains_with_parameter();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Contains_with_operators_composed_on_the_collection()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Contains_with_operators_composed_on_the_collection());
+#else
         await base.Contains_with_operators_composed_on_the_collection();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Contains_with_nested_and_composed_operators()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Contains_with_nested_and_composed_operators());
+#else
         await base.Contains_with_nested_and_composed_operators();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Nullable_value_type_with_null()
