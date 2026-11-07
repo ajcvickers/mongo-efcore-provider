@@ -196,6 +196,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         => mongo.Select.Route == NativeRoute.Projection
            && mongo.Select.Projection.Count > 0
            && !mongo.Select.HasArrayProjectionLeaf
+           // A stored complex subdocument is not the CLR value the combine would dedup/compare.
+           && !mongo.Select.HasComplexValueProjectionLeaf
            // The raw case-mapping receiver would be what the combine dedups/compares.
            && !mongo.Select.HasClientCaseMappingProjectionLeaf
            // A client-evaluated leaf is never projected: the combine would dedup without it, and source1's shaper

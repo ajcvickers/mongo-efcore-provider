@@ -764,23 +764,18 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// </summary>
     private static string GetSortField(MethodCallExpression orderByCall, IEntityType entityType)
     {
-        var name = orderByCall.Arguments[1].UnwrapLambdaFromQuote().Body.TryGetSimplePropertyName();
-        if (name == null)
+        // The key selector is the second argument: e.g., o => o.OrderID, or through owned/complex hops o => o.Ship.City.
+        // The whole chain is resolved (StructuralPath): resolving the leaf's simple name would sort by the root's own
+        // same-named property (`City` for `o.Ship.City`). Anything else (not a mapped property: `o.Label.Length`, a
+        // computed key) has no element to sort on; a raw member name would $sort on an absent field, which MongoDB treats
+        // as all-equal (arbitrary order), so fail loudly.
+        if (!NativeTranslation.StructuralPath.TryResolveSelectorLeaf(
+                orderByCall.Arguments[1].UnwrapLambdaFromQuote(), entityType, out _, out var path))
         {
-            // Not a simple property access: fail loudly rather than silently sorting by "_id".
             throw new InvalidOperationException(CoreStrings.TranslationFailed(orderByCall.Print()));
         }
 
-        var property = entityType.FindProperty(name);
-        if (property == null)
-        {
-            // Not a mapped property of the target (`o.Label.Length`, or a member reached through an embedded document where
-            // only the outermost name survives): a raw-name $sort would hit a field absent from the documents, which
-            // MongoDB treats as all-equal (arbitrary order). Fail loudly.
-            throw new InvalidOperationException(CoreStrings.TranslationFailed(orderByCall.Print()));
-        }
-
-        return Microsoft.EntityFrameworkCore.MongoPropertyExtensions.GetElementName(property);
+        return path;
     }
 
     /// <summary>

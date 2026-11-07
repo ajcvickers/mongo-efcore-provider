@@ -369,7 +369,7 @@ internal sealed partial class MongoExpressionTranslator
     /// <remarks>
     /// Must stay pure: <see cref="TranslateComparison"/> can call it twice per query. Name-based matching is safe
     /// against a mapped scalar named <c>Count</c> because every match is gated on
-    /// <see cref="TryResolveOwnedCollectionPath"/>.
+    /// <see cref="TryResolveEmbeddedCollectionPath"/>.
     /// </remarks>
     internal static bool TryMatchCountExpression(
         Expression node,
@@ -430,7 +430,8 @@ internal sealed partial class MongoExpressionTranslator
     }
 
     /// <summary>
-    /// Builds the translator for an owned-collection element predicate: single-scope when uncorrelated, two-scope
+    /// Builds the translator for an embedded-collection element predicate over <paramref name="elementType"/> (an owned
+    /// element's entity type or a complex collection's complex type): single-scope when uncorrelated, two-scope
     /// (<paramref name="isCorrelated"/>) when its sole free parameter is this translator's own <see cref="SelfParam"/>
     /// or, on a two-scope translator, its outer parameter. Any other correlation declines.
     /// </summary>
@@ -439,7 +440,7 @@ internal sealed partial class MongoExpressionTranslator
     /// member sharing a name with an element member would silently retarget to the element.
     /// </remarks>
     private bool TryCreateElementPredicateTranslator(
-        LambdaExpression predicate, IEntityType elementType,
+        LambdaExpression predicate, ITypeBase elementType,
         [NotNullWhen(true)] out MongoExpressionTranslator? translator, out bool isCorrelated)
     {
         translator = null;
@@ -451,9 +452,11 @@ internal sealed partial class MongoExpressionTranslator
         }
 
         // EF-446: on a two-scope translator the root is the established outer parameter (MongoOuterFieldExpression
-        // resolves at document root at any depth); a correlation to an intermediate scope still declines.
+        // resolves at document root at any depth); a correlation to an intermediate scope still declines. A single-scope
+        // root must be this translator's own ENTITY scope: a correlation from inside a complex element scope has no outer
+        // entity to resolve against (and its SelfParam is null there anyway); declines.
         var rootParam = SelfParam ?? _outerParam;
-        var rootEntityType = SelfParam is not null ? _entityType : _outerEntityType;
+        var rootEntityType = SelfParam is not null ? _scopeType as IEntityType : _outerEntityType;
         if (rootParam is null || rootEntityType is null || freeParam is null || !ReferenceEquals(freeParam, rootParam))
             return false;
 
