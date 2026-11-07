@@ -1258,6 +1258,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
         await base.Where_on_multilevel_reference_in_subquery_with_outer_projection(async);
     }
 
+#if !EF11
     public override async Task Join_condition_optimizations_applied_correctly_when_anonymous_type_with_single_property(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
@@ -1269,6 +1270,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.Join_condition_optimizations_applied_correctly_when_anonymous_type_with_multiple_properties(async), "Expression not supported");
     }
+#endif
 
 #if EF10
     public override async Task Nested_group_join_with_take(bool async)
@@ -3285,7 +3287,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
             MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
         }
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);

@@ -203,7 +203,7 @@ public class QueryFilterFuncletizationMongoTest : QueryFilterFuncletizationTestB
             MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
         }
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);

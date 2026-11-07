@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+#if !EF11
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.TestUtilities;
@@ -22,7 +24,7 @@ namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
 public class NonSharedPrimitiveCollectionsQueryMongoTest : NonSharedPrimitiveCollectionsQueryTestBase
 {
-#if EF10
+#if EF10 || EF11
     public NonSharedPrimitiveCollectionsQueryMongoTest(NonSharedFixture fixture)
         : base(fixture)
     {
@@ -193,7 +195,7 @@ public class NonSharedPrimitiveCollectionsQueryMongoTest : NonSharedPrimitiveCol
 
     protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("NSPrimColl");
 
-    public override async Task InitializeAsync()
+    public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
         _testStoreFactory = new MongoTestStoreFactory(server);
@@ -201,3 +203,5 @@ public class NonSharedPrimitiveCollectionsQueryMongoTest : NonSharedPrimitiveCol
         await base.InitializeAsync();
     }
 }
+
+#endif

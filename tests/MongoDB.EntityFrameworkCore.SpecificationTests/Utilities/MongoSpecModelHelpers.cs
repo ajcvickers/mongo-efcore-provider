@@ -87,7 +87,7 @@ public static class MongoSpecModelHelpers
         {
             foreach (var index in entityType.GetDeclaredIndexes())
             {
-                if (index.IsUnique && index.Properties.Any(p => p.IsNullable))
+                if (index.IsUnique && index.Properties.Any(p => p is IReadOnlyProperty { IsNullable: true }))
                 {
                     ((IMutableIndex)index).IsUnique = false;
                 }

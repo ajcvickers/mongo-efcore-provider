@@ -2382,12 +2382,20 @@ public class JsonTypesMongoTest
 #if !EF8
     private ITestStoreFactory? _testStoreFactory;
 
+#if EF11
+    protected override ITestStoreFactory NonSharedTestStoreFactory
+#else
     protected override ITestStoreFactory TestStoreFactory
+#endif
         => _testStoreFactory!;
 
+#if EF11
+    protected override string NonSharedStoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("JsonTypes");
+#else
     protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("JsonTypes");
+#endif
 
-    public override async Task InitializeAsync()
+    public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
         _testStoreFactory = new MongoTestStoreFactory(server);

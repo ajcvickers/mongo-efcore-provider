@@ -26,7 +26,7 @@ public sealed class InitFailureGuard
 {
     private Exception? _failure;
 
-    public async Task RunAsync(Func<Task> initialize)
+    public async LifetimeTask RunAsync(Func<LifetimeTask> initialize)
     {
         try
         {

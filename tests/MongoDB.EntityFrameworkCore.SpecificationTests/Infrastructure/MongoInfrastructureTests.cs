@@ -90,7 +90,7 @@ public class SeedingMongoTest : SeedingTestBase
 }
 
 public class SharedTypeQueryMongoTest
-#if EF10
+#if EF10 || EF11
     (NonSharedFixture fixture) : SharedTypeQueryTestBase(fixture)
 #else
     : SharedTypeQueryTestBase
@@ -98,10 +98,18 @@ public class SharedTypeQueryMongoTest
 {
     private ITestStoreFactory? _testStoreFactory;
 
+#if EF11
+    protected override ITestStoreFactory NonSharedTestStoreFactory
+#else
     protected override ITestStoreFactory TestStoreFactory
+#endif
         => _testStoreFactory!;
 
+#if EF11
+    protected override string NonSharedStoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("SharedTypeQuery");
+#else
     protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("SharedTypeQuery");
+#endif
 
     // Fails: Subqueries across DbSets in a query filter are not supported EF-X001
     public override async Task Can_use_shared_type_entity_type_in_query_filter(bool async)
@@ -110,7 +118,7 @@ public class SharedTypeQueryMongoTest
             (await Assert.ThrowsAsync<InvalidOperationException>(
                 () => base.Can_use_shared_type_entity_type_in_query_filter(async))).Message);
 
-    public override async Task InitializeAsync()
+    public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
         _testStoreFactory = new MongoTestStoreFactory(server);

@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-#if EF10
+#if !EF8 && !EF9
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;

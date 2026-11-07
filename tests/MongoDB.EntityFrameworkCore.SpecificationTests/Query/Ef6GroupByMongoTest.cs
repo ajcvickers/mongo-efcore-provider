@@ -399,7 +399,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
             MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
         }
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);

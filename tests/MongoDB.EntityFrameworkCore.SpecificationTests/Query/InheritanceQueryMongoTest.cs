@@ -16,6 +16,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
+#if EF11
+using Microsoft.EntityFrameworkCore.Query.Inheritance;
+#endif
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 
@@ -126,11 +129,13 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await SpecFails.ThrowsAsync(() => base.Can_query_all_plants(async), "Document element is missing for required");
     }
 
+#if !EF11
     public override async Task Filter_on_property_inside_complex_type_on_derived_type(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.Filter_on_property_inside_complex_type_on_derived_type(async), "Expression not supported");
     }
+#endif
 
     public override async Task Can_filter_all_animals(bool async)
     {
@@ -354,7 +359,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
             MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
         }
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);

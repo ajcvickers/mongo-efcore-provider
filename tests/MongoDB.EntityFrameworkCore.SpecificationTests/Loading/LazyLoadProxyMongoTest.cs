@@ -357,6 +357,7 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Lazy_loading_finds_correct_entity_type_with_multiple_queries_using_Count()
         => base.Lazy_loading_finds_correct_entity_type_with_multiple_queries_using_Count();
 
+#if !EF11
 #if !EF10
 #if !EF10
     // Fails: Lazy-load/Single query over a type hierarchy returns more than one element EF-X206
@@ -365,6 +366,7 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
 #else
     public override void Lazy_loading_shares_service__property_on_derived_types()
         => base.Lazy_loading_shares_service__property_on_derived_types();
+#endif
 #endif
 #endif
 
@@ -401,7 +403,7 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer);

@@ -2123,7 +2123,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
             => base.AddOptions(builder)
                 .ConfigureWarnings(w => w.Ignore(CoreEventId.MappedPropertyIgnoredWarning));
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);

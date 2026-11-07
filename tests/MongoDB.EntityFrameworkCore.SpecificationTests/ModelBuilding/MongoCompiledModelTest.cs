@@ -24,7 +24,7 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.ModelBuilding;
 
 public class MongoCompiledModelTest
-#if EF10
+#if EF10 || EF11
     (NonSharedFixture fixture) : CompiledModelTestBase(fixture)
 #else
     : CompiledModelTestBase
@@ -35,12 +35,20 @@ public class MongoCompiledModelTest
     protected override TestHelpers TestHelpers
         => MongoTestHelpers.Instance;
 
+#if EF11
+    protected override ITestStoreFactory NonSharedTestStoreFactory
+#else
     protected override ITestStoreFactory TestStoreFactory
+#endif
         => _testStoreFactory!;
 
+#if EF11
+    protected override string NonSharedStoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("CompiledModel");
+#else
     protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("CompiledModel");
+#endif
 
-    public override async Task InitializeAsync()
+    public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
         _testStoreFactory = new MongoTestStoreFactory(server);

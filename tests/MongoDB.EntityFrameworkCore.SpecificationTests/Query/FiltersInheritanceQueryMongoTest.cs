@@ -16,6 +16,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
+#if EF11
+using Microsoft.EntityFrameworkCore.Query.Inheritance;
+#endif
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 
@@ -107,7 +110,7 @@ public class FiltersInheritanceQueryMongoTest : FiltersInheritanceQueryTestBase<
             MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
         }
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);

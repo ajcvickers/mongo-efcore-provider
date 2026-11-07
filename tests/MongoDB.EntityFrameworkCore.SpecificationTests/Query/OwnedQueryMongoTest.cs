@@ -781,7 +781,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
             });
         }
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);

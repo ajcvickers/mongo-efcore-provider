@@ -55,7 +55,7 @@ public class SaveChangesInterceptionMongoTest(SaveChangesInterceptionMongoTest.I
         protected override bool ShouldSubscribeToDiagnosticListener
             => false;
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);
@@ -84,7 +84,7 @@ public class QueryExpressionInterceptionMongoTest(QueryExpressionInterceptionMon
         protected override bool ShouldSubscribeToDiagnosticListener
             => false;
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);
@@ -124,7 +124,7 @@ public class SingletonInterceptorsMongoTest(SingletonInterceptorsMongoTest.Singl
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);
@@ -163,7 +163,7 @@ public class MaterializationInterceptionMongoTest(MaterializationInterceptionMon
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);
@@ -185,7 +185,7 @@ public class MaterializationInterceptionMongoTest(MaterializationInterceptionMon
 }
 #else
 public class SingletonInterceptorsMongoTest
-#if EF10
+#if EF10 || EF11
     (NonSharedFixture fixture) : SingletonInterceptorsTestBase<SingletonInterceptorsMongoTest.MongoLibraryContext>(fixture)
 #else
     : SingletonInterceptorsTestBase<SingletonInterceptorsMongoTest.MongoLibraryContext>
@@ -193,12 +193,20 @@ public class SingletonInterceptorsMongoTest
 {
     private ITestStoreFactory? _testStoreFactory;
 
+#if EF11
+    protected override ITestStoreFactory NonSharedTestStoreFactory
+#else
     protected override ITestStoreFactory TestStoreFactory
+#endif
         => _testStoreFactory!;
 
+#if EF11
+    protected override string NonSharedStoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("SingletonInterceptors");
+#else
     protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("SingletonInterceptors");
+#endif
 
-    public override async Task InitializeAsync()
+    public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
         _testStoreFactory = new MongoTestStoreFactory(server);
@@ -221,7 +229,7 @@ public class SingletonInterceptorsMongoTest
 }
 
 public class MaterializationInterceptionMongoTest
-#if EF10
+#if EF10 || EF11
     (NonSharedFixture fixture) : MaterializationInterceptionTestBase<MaterializationInterceptionMongoTest.MongoLibraryContext>(fixture)
 #else
     : MaterializationInterceptionTestBase<MaterializationInterceptionMongoTest.MongoLibraryContext>
@@ -229,12 +237,20 @@ public class MaterializationInterceptionMongoTest
 {
     private ITestStoreFactory? _testStoreFactory;
 
+#if EF11
+    protected override ITestStoreFactory NonSharedTestStoreFactory
+#else
     protected override ITestStoreFactory TestStoreFactory
+#endif
         => _testStoreFactory!;
 
+#if EF11
+    protected override string NonSharedStoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("MaterializationInterception");
+#else
     protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("MaterializationInterception");
+#endif
 
-    public override async Task InitializeAsync()
+    public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
         _testStoreFactory = new MongoTestStoreFactory(server);
@@ -276,7 +292,7 @@ public class ConcurrencyDetectorEnabledMongoTest(ConcurrencyDetectorEnabledMongo
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);
@@ -297,7 +313,7 @@ public class ConcurrencyDetectorDisabledMongoTest(ConcurrencyDetectorDisabledMon
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server);

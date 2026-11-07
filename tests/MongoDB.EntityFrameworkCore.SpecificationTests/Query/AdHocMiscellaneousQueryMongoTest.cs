@@ -25,13 +25,17 @@ namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
 public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
 {
-#if EF10
+#if EF10 || EF11
     public AdHocMiscellaneousQueryMongoTest(NonSharedFixture fixture)
         : base(fixture)
     {
         // The class-level fixture would reuse the first test's (already seeded) test store for every test;
         // give each test its own uniquely named database instead.
+#if EF11
+        NonSharedFixture = null;
+#else
         Fixture = null;
+#endif
     }
 
 #endif
@@ -285,12 +289,20 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
 
     private ITestStoreFactory? _testStoreFactory;
 
+#if EF11
+    protected override ITestStoreFactory NonSharedTestStoreFactory
+#else
     protected override ITestStoreFactory TestStoreFactory
+#endif
         => _testStoreFactory!;
 
+#if EF11
+    protected override string NonSharedStoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("AdHocMisc");
+#else
     protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("AdHocMisc");
+#endif
 
-    public override async Task InitializeAsync()
+    public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
         _testStoreFactory = new MongoTestStoreFactory(server);

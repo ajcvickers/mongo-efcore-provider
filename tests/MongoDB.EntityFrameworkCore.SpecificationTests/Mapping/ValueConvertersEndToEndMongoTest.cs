@@ -47,7 +47,7 @@ public class ValueConvertersEndToEndMongoTest(ValueConvertersEndToEndMongoTest.V
 
         public TestServer TestServer { get; private set; }
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer);

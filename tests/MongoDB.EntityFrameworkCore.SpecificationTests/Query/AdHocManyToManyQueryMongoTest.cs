@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-#if !EF8
+#if !EF8 && !EF11
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -25,7 +25,7 @@ namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
 public class AdHocManyToManyQueryMongoTest : AdHocManyToManyQueryTestBase
 {
-#if EF10
+#if EF10 || EF11
     public AdHocManyToManyQueryMongoTest(NonSharedFixture fixture)
         : base(fixture)
     {
@@ -58,7 +58,7 @@ public class AdHocManyToManyQueryMongoTest : AdHocManyToManyQueryTestBase
 
     protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("AdHocM2M");
 
-    public override async Task InitializeAsync()
+    public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
         _testStoreFactory = new MongoTestStoreFactory(server);

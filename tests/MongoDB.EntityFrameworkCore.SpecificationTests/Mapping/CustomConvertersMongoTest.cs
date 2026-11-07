@@ -384,8 +384,13 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
 #endif
 
     // Fails: Value-converter behavior differs from the provider-agnostic expectation (not triaged) EF-X315
+#if EF11
+    public override Task Optional_owned_with_converter_reading_non_nullable_column()
+        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Optional_owned_with_converter_reading_non_nullable_column(), "Assert.Throws() Failure: No exception was thrown");
+#else
     public override void Optional_owned_with_converter_reading_non_nullable_column()
         => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Optional_owned_with_converter_reading_non_nullable_column(), "Assert.Throws() Failure: No exception was thrown");
+#endif
 
 #if EF10 || EF9
     // Fails: Value-converter behavior differs from the provider-agnostic expectation (not triaged) EF-X315
@@ -508,7 +513,7 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
 
         public TestServer TestServer { get; private set; }
 
-        public override async Task InitializeAsync()
+        public override async LifetimeTask InitializeAsync()
         {
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer);
