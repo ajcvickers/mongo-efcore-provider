@@ -187,11 +187,12 @@ public static class MongoEventId
         => new((int)id, DbLoggerCategory.Model.Name + "." + id);
 
     /// <summary>
-    /// A <see cref="ColumnAttribute"/> with a type name was found on the property of a type mapped to MongoDB.
+    /// A <see cref="ColumnAttribute"/> with a type name was found on the property or complex property of a type mapped to MongoDB.
     /// </summary>
     /// <remarks>
     ///     <para>This event is in the <see cref="DbLoggerCategory.Model" /> category.</para>
-    ///     <para>This event uses the <see cref="PropertyEventData" /> payload when used with a <see cref="DiagnosticSource" />.</para>
+    ///     <para>This event uses the <see cref="PropertyEventData" /> payload (the <see cref="ComplexPropertyEventData" />
+    ///     payload for a complex property) when used with a <see cref="DiagnosticSource" />.</para>
     /// </remarks>
     public static readonly EventId ColumnAttributeWithTypeUsed = MakeModelId(Id.ColumnAttributeWithTypeUsed);
 

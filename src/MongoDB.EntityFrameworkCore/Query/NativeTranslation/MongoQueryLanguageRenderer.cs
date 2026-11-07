@@ -51,6 +51,7 @@ internal sealed class MongoQueryLanguageRenderer
             MongoUnaryExpression unary => RenderUnary(unary, placeholders),
             MongoFieldExpression field => RenderBareField(field, placeholders),
             MongoLookupNullCheckExpression lookupNullCheck => RenderLookupNullCheck(lookupNullCheck),
+            MongoElementNullCheckExpression elementNullCheck => RenderElementNullCheck(elementNullCheck),
             MongoNumericTypeBracketExpression bracket => RenderNumericTypeBracket(bracket),
             MongoInExpression inExpr => RenderIn(inExpr, placeholders),
             MongoFieldPresenceExpression presence when IsQueryDialectPresence(presence) => RenderFieldPresence(presence),
@@ -166,6 +167,15 @@ internal sealed class MongoQueryLanguageRenderer
         => node.IsNotNull
             ? new BsonDocument(node.LookupAlias, new BsonDocument("$ne", BsonNull.Value))
             : new BsonDocument(node.LookupAlias, BsonNull.Value);
+
+    /// <summary>
+    /// <c>{ path: null }</c> / <c>{ path: { $ne: null } }</c>: null and missing alike, as C# reads them; the two forms
+    /// partition every document. See <see cref="MongoElementNullCheckExpression"/>.
+    /// </summary>
+    private static BsonDocument RenderElementNullCheck(MongoElementNullCheckExpression node)
+        => node.IsNotNull
+            ? new BsonDocument(node.Path, new BsonDocument("$ne", BsonNull.Value))
+            : new BsonDocument(node.Path, BsonNull.Value);
 
     private static BsonDocument RenderNumericTypeBracket(MongoNumericTypeBracketExpression bracket)
         => new BsonDocument(bracket.Field.ElementName, new BsonDocument("$type", "number"));
@@ -383,6 +393,10 @@ internal sealed class MongoQueryLanguageRenderer
             MongoCompositeKeyInExpression { Values: MongoConstantExpression or MongoParameterExpression } => true,
             // Only produced beside an $expr sibling (so its AndAlso answers false), but true on its own merits.
             MongoNumericTypeBracketExpression => true,
+            // { path: null } / { path: { $ne: null } }; legal inside $elemMatch.
+            MongoElementNullCheckExpression => true,
+            // The current element of an aggregation element scope: no query-dialect form ($elemMatch can't see it).
+            MongoCurrentElementNullCheckExpression => false,
             // No query-dialect form; listed explicitly so a new node type is a conscious choice.
             MongoConvertExpression => false,
             MongoConditionalExpression => false,

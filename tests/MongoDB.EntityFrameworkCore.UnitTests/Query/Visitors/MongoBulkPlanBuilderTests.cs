@@ -23,6 +23,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Infrastructure;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.Visitors;
 using MongoDB.EntityFrameworkCore.Serializers;
@@ -74,7 +75,7 @@ public class MongoBulkPlanBuilderTests
                 strategy)
             : new MongoNonQueryExpression(source, strategy);
 
-        return MongoBulkPlanBuilder.Create(entityType, new BsonSerializerFactory(), nonQuery);
+        return MongoBulkPlanBuilder.Create(entityType, new BsonSerializerFactory(), nonQuery, MongoQueryMode.Native);
     }
 
     [Fact]

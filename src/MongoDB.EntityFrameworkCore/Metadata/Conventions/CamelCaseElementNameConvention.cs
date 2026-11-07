@@ -15,6 +15,7 @@
 
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 
@@ -23,7 +24,7 @@ namespace MongoDB.EntityFrameworkCore.Metadata.Conventions;
 /// <summary>
 /// A convention that configures the element name for entity properties by using a camel-case naming convention.
 /// </summary>
-public sealed class CamelCaseElementNameConvention : IPropertyAddedConvention, INavigationAddedConvention
+public sealed class CamelCaseElementNameConvention : IPropertyAddedConvention, INavigationAddedConvention, IComplexPropertyAddedConvention
 {
     /// <summary>
     /// For every property that is added to the model set the element name to be the camel case
@@ -53,4 +54,20 @@ public sealed class CamelCaseElementNameConvention : IPropertyAddedConvention, I
         var name = navigationBuilder.Metadata.Name.ToCamelCase(CultureInfo.CurrentCulture);
         navigationBuilder.Metadata.TargetEntityType.SetAnnotation(MongoAnnotationNames.ElementName, name);
     }
+
+    /// <summary>
+    /// For every complex property that is added to the model set the element name to be the camel case
+    /// version of the property name with symbols being removed and considered word separators.
+    /// An element name already set with a higher configuration source (a data annotation or explicit configuration) is
+    /// left alone.
+    /// </summary>
+    /// <param name="propertyBuilder">The builder for the complex property.</param>
+    /// <param name="context">Additional information associated with convention execution.</param>
+    public void ProcessComplexPropertyAdded(
+        IConventionComplexPropertyBuilder propertyBuilder,
+        IConventionContext<IConventionComplexPropertyBuilder> context)
+        // Through the builder at convention priority, as the scalar path's HasElementName is: it does nothing when the name
+        // was configured with a higher source.
+        => propertyBuilder.HasAnnotation(
+            MongoAnnotationNames.ElementName, propertyBuilder.Metadata.Name.ToCamelCase(CultureInfo.CurrentCulture));
 }

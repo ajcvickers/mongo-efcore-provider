@@ -18,6 +18,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
+using MongoDB.EntityFrameworkCore.Extensions;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
@@ -49,9 +50,10 @@ internal static class MongoBulkPlanBuilder
 {
     /// <summary>Builds the plan for a bulk delete or update: filter, update and target-id queries are translated at execution time; only the definitions cross to the executor.</summary>
     internal static MongoBulkPlan Create(
-        IReadOnlyEntityType entityType, BsonSerializerFactory bsonSerializerFactory, MongoNonQueryExpression nonQuery)
+        IReadOnlyEntityType entityType, BsonSerializerFactory bsonSerializerFactory, MongoNonQueryExpression nonQuery,
+        MongoQueryMode mode)
         => (MongoBulkPlan)InvokeUnwrapped(
-            CreateBulkPlanMethodInfo.MakeGenericMethod(entityType.ClrType), [entityType, bsonSerializerFactory, nonQuery])!;
+            CreateBulkPlanMethodInfo.MakeGenericMethod(entityType.ClrType), [entityType, bsonSerializerFactory, nonQuery, mode])!;
 
     // MethodInfo.Invoke wraps whatever the target throws in TargetInvocationException, whose message ("Exception has been thrown by the
     // target of an invocation") hides the real failure (e.g. the driver's "Expression not supported: ..."). Rethrow the original.
@@ -73,7 +75,8 @@ internal static class MongoBulkPlanBuilder
     private static MongoBulkPlan CreateBulkPlan<TSource>(
         IReadOnlyEntityType entityType,
         BsonSerializerFactory bsonSerializerFactory,
-        MongoNonQueryExpression nonQuery)
+        MongoNonQueryExpression nonQuery,
+        MongoQueryMode mode)
     {
         var isUpdate = nonQuery.Kind == MongoNonQueryExpression.OperationKind.Update;
         var isTwoPhase = nonQuery.Strategy == MongoNonQueryExpression.BulkStrategy.TwoPhase;
@@ -85,14 +88,48 @@ internal static class MongoBulkPlanBuilder
             CollectionName = nonQuery.SourceQuery.CollectionExpression.CollectionName,
             BuildFilter = isTwoPhase
                 ? null
-                : qc => TranslateBulkOrThrow(nonQuery, () => BuildFilter<TSource>(qc, entityType, bsonSerializerFactory, nonQuery)),
+                : qc => TranslateBulkOrThrow(nonQuery, () =>
+                {
+                    ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
+                    return BuildFilter<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
+                }),
+            // BuildUpdate needs no check of its own: the executor always calls BuildFilter (single command) or
+            // BuildTargetIdQuery (two-phase) first, and that check covers the setter values too.
             BuildUpdate = isUpdate
                 ? qc => TranslateBulkOrThrow(nonQuery, () => BuildUpdate<TSource>(qc, entityType, bsonSerializerFactory, nonQuery))
                 : null,
             BuildTargetIdQuery = isTwoPhase
-                ? qc => BuildIdDocumentQuery<TSource>(qc, entityType, bsonSerializerFactory, nonQuery)
+                ? qc =>
+                {
+                    TranslateBulkOrThrow(nonQuery, () =>
+                    {
+                        ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
+                        return true;
+                    });
+                    return BuildIdDocumentQuery<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
+                }
                 : null,
         };
+    }
+
+    /// <summary>
+    /// A bulk filter and its <c>SetProperty</c> values always run on the driver-LINQ bridge, so a read of a complex
+    /// collection's element that the driver evaluates differently from a query (R17) is refused before any document is
+    /// written (the strict allow-list of <c>ComplexElementNullGuardRefusal</c>). Runs in <c>BuildFilter</c> and
+    /// <c>BuildTargetIdQuery</c>, one of which <c>MongoBulkOperationExecutor</c> calls before anything else for every plan
+    /// (and before <c>BuildUpdate</c>), with this execution's parameter values. A no-op on EF9 (no complex collections) and
+    /// under explicit <see cref="MongoQueryMode.DriverLinq"/>.
+    /// </summary>
+    private static void ThrowIfBulkMisreadsNullElements(
+        QueryContext queryContext, IReadOnlyEntityType entityType, MongoNonQueryExpression nonQuery, MongoQueryMode mode)
+    {
+#if !EF8 && !EF9
+        ComplexElementNullGuardRefusal.ThrowIfBulkMisreadsNullElements(
+            // The source chain without the ExecuteUpdate/ExecuteDelete marker (whose property-selector lambdas are targets,
+            // checked by BuildSetter, not reads), and each setter value.
+            [MongoNonQueryExpression.UnwrapBulkOperator(nonQuery.SourceQuery.CapturedExpression), .. nonQuery.Setters.Select(s => s.ValueExpression)],
+            (IModel)entityType.Model, mode, name => queryContext.Parameters[name]);
+#endif
     }
 
     // Bulk filter/update are translated at execution time. A shape that slipped past compile-time validation makes the driver throw a raw
@@ -107,7 +144,7 @@ internal static class MongoBulkPlanBuilder
         catch (Exception exception) when (exception is not InvalidOperationException)
         {
             throw NonQueryTranslationFailed(
-                nonQuery.SourceQuery.CapturedExpression?.Print(), exception.Message, exception);
+                ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression), exception.Message, exception);
         }
     }
 
@@ -125,7 +162,7 @@ internal static class MongoBulkPlanBuilder
         if (entityType.FindPrimaryKey() == null)
         {
             throw NonQueryTranslationFailed(
-                nonQuery.SourceQuery.CapturedExpression?.Print(),
+                ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression),
                 "the entity must have a primary key to use ordering, paging, or Distinct in a bulk delete or update.");
         }
     }
@@ -221,7 +258,7 @@ internal static class MongoBulkPlanBuilder
             var setDoc = new BsonDocument();
             foreach (var setter in setters)
             {
-                setDoc[setter.Property.GetElementName()] = SerializeConstant(queryContext, setter);
+                setDoc[setter.StoredPath] = SerializeConstant(queryContext, setter);
             }
 
             return new BsonDocumentUpdateDefinition<BsonDocument>(new BsonDocument("$set", setDoc));
@@ -235,14 +272,14 @@ internal static class MongoBulkPlanBuilder
         {
             if (setter.IsSelfReferencing)
             {
-                setStageDoc[setter.Property.GetElementName()] = RenderSelfReferencingValue<TSource>(
+                setStageDoc[setter.StoredPath] = RenderSelfReferencingValue<TSource>(
                     queryContext, bsonSerializerFactory, entityParameter, efSerializer, setter);
             }
             else
             {
                 // Inside an aggregation stage a '$'-prefixed string is a field path/variable and a document can be
                 // an operator expression, so constant values must be wrapped in $literal to be stored as data.
-                setStageDoc[setter.Property.GetElementName()] =
+                setStageDoc[setter.StoredPath] =
                     new BsonDocument("$literal", SerializeConstant(queryContext, setter));
             }
         }
@@ -260,7 +297,22 @@ internal static class MongoBulkPlanBuilder
     private static BsonValue SerializeConstant(QueryContext queryContext, MongoNonQueryExpression.Setter setter)
     {
         var value = EvaluateToConstant(queryContext, setter.ValueExpression);
-        var serializationInfo = BsonSerializerFactory.GetPropertySerializationInfo(setter.Property);
+        if (setter.Property is IComplexProperty complexProperty)
+        {
+            // A null REQUIRED complex property or collection would be stored, then fail every read ("... is null for required
+            // complex property ..."); SaveChanges rejects the same value (EF), so this does too, before any write.
+            if (value is null && !complexProperty.IsOptional())
+            {
+                throw new InvalidOperationException(
+                    $"ExecuteUpdate cannot set the required complex property '{complexProperty.DeclaringType.DisplayName()}."
+                    + $"{complexProperty.Name}' to null. No document was modified.");
+            }
+
+            // A whole complex value: the stored form SaveChanges writes (same writer), or BSON null for an optional one.
+            return ComplexValueWriter.SerializeDetachedComplexValue(complexProperty, value);
+        }
+
+        var serializationInfo = BsonSerializerFactory.GetPropertySerializationInfo((IReadOnlyProperty)setter.Property);
         return serializationInfo.SerializeValue(value);
     }
 

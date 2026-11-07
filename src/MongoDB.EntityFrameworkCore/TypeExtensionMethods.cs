@@ -38,6 +38,17 @@ internal static class TypeExtensions
            ?? type.TryGetItemType(typeof(IAsyncEnumerable<>));
 
     /// <summary>
+    /// Whether a <see cref="List{T}"/> of the collection's item type can be stored in a variable of
+    /// <paramref name="collectionType"/>: the condition under which the driver-LINQ bridge coalesces a null/missing complex
+    /// collection to an empty list (and so the one predicate both the bridge and the bulk allow-list use).
+    /// </summary>
+    public static bool IsNormalizableToEmptyList(this Type collectionType, [NotNullWhen(true)] out Type? itemType)
+    {
+        itemType = collectionType.TryGetItemType();
+        return itemType is not null && collectionType.IsAssignableFrom(typeof(List<>).MakeGenericType(itemType));
+    }
+
+    /// <summary>
     /// Determine the generic item type of a given type.
     /// </summary>
     /// <param name="type">The <see cref="Type"/> being examined.</param>
