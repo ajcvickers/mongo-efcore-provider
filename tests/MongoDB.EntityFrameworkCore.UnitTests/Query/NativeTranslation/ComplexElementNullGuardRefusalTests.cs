@@ -315,7 +315,7 @@ public class ComplexElementNullGuardRefusalTests
         // Normalised by the bridge (a List<T> is assignable): List<T>, IList<T> (and IEnumerable<T>/ICollection<T>/
         // IReadOnlyList<T>, which EF10 rejects for complex collections at model/serializer level: measured). Not normalised:
         // ObservableCollection<T>, Collection<T>, a List<T> subclass (any concrete type a List<T> doesn't fit). T[] is not
-        // normalised either, but the model refuses a T[] complex collection outright (EF cannot read or save it).
+        // normalised either (the provider reads one, but EF cannot snapshot it, so no List<T> fits).
         Assert.Null(ComplexElementNullGuardRefusal.FindForBulk(
             [(Expression<Func<IQueryable<ListHolder>, IQueryable<ListHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
             HolderModel<ListHolder>(mb => mb.Entity<ListHolder>().ComplexCollection(h => h.Items))));
@@ -323,8 +323,10 @@ public class ComplexElementNullGuardRefusalTests
             [(Expression<Func<IQueryable<IListHolder>, IQueryable<IListHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
             HolderModel<IListHolder>(mb => mb.Entity<IListHolder>().ComplexCollection(h => h.Items))));
 
-        var array = Assert.Throws<NotSupportedException>(() => HolderModel<ArrayHolder>(mb => mb.Entity<ArrayHolder>().ComplexCollection(h => h.Items)));
-        Assert.Contains("is a complex collection of CLR type 'Tag[]'", array.Message);
+        var array = ComplexElementNullGuardRefusal.FindForBulk(
+            [(Expression<Func<IQueryable<ArrayHolder>, IQueryable<ArrayHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],
+            HolderModel<ArrayHolder>(mb => mb.Entity<ArrayHolder>().ComplexCollection(h => h.Items)));
+        Assert.Contains("whose CLR type cannot hold a List<T>", array!.Value.Shape);
 
         var subclass = ComplexElementNullGuardRefusal.FindForBulk(
             [(Expression<Func<IQueryable<SubclassHolder>, IQueryable<SubclassHolder>>>)(q => q.Where(h => h.Items.Any(i => i.Label == "l")))],

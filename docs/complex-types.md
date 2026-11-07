@@ -77,7 +77,8 @@ Measured end to end (save, read, replace, in-place change, an element predicate 
 | `List<T>`, `IList<T>` | yes | yes | yes | yes |
 | `ObservableCollection<T>`, `Collection<T>` | yes | yes | yes | refused (the bulk path cannot read a null array as empty for these types) |
 | a class deriving from `List<T>` | yes | yes | native yes; `DriverLinq` fails with an exception | refused (same reason) |
-| `T[]`, `ReadOnlyCollection<T>`, other types without a public parameterless constructor | rejected by the provider's model validation (EF Core accepts them but cannot read or save them) | | | |
+| `T[]` | read (queries with `AsNoTracking`, projections); EF Core cannot snapshot an array, so `SaveChanges` and tracking queries fail inside EF Core ("Collection was of a fixed size"); bulk operators over it are refused | | | |
+| `ReadOnlyCollection<T>`, other types without a public parameterless constructor | rejected by the provider's model validation (EF Core accepts them but cannot read or save them) | | | |
 | `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `IEnumerable<T>`, `HashSet<T>` | rejected by EF Core (does not implement `IList<T>`) | | | |
 
 EF10 also rejects collections of struct complex types ("complex value type collections are not supported").
@@ -112,7 +113,7 @@ The model validator rejects, with an `InvalidOperationException` or `NotSupporte
   `[BsonDictionaryOptions]` on a member; `[BsonDiscriminator]`, `[BsonKnownTypes]`, `[BsonNoId]`, `[BsonSerializer]`,
   `[BsonMemberMapAttributeUsage]` on the class; `[BsonConstructor]`, `[BsonFactoryMethod]`), at any depth, with the same
   `NotSupportedException` as for entity and owned types;
-- a complex collection whose CLR type EF Core cannot read or save (`T[]`, `ReadOnlyCollection<T>`; see the table above).
+- a complex collection whose CLR type EF Core cannot read or save (`ReadOnlyCollection<T>`, a type without a public parameterless constructor; see the table above).
 
 ## Stored shape
 

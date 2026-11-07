@@ -1339,18 +1339,25 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
             Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("$anyElementTrue's argument must be an array"));
     }
 
-    // A T[] complex collection is accepted by EF but cannot be read or saved (ComplexCollectionClrTypeTests): the model
-    // refuses it in every mode, before any query runs.
+    // A T[] complex collection is read by the provider (EF cannot snapshot one, so SaveChanges and tracking queries fail inside
+    // EF Core itself: "Collection was of a fixed size"; use AsNoTracking), and its quantifiers translate natively like a List<T>'s.
     [Fact]
-    public void Array_typed_collection_is_refused_by_the_model_in_every_mode()
+    public void Array_typed_collection_is_read_without_tracking_and_its_quantifiers_are_native()
     {
-        var collection = database.CreateCollection<ArrayCrate>(Unique(nameof(Array_typed_collection_is_refused_by_the_model_in_every_mode)));
-        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
+        var collection = database.CreateCollection<ArrayCrate>(Unique(nameof(Array_typed_collection_is_read_without_tracking_and_its_quantifiers_are_native)));
+        static void Configure(ModelBuilder mb) => mb.Entity<ArrayCrate>().ComplexCollection(c => c.Items);
+        Raw(collection).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "has" }, { "Items", new BsonArray { new BsonDocument("Label", "l"), new BsonDocument("Label", "m") } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "other" }, { "Items", new BsonArray { new BsonDocument("Label", "z") } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "empty" }, { "Items", new BsonArray() } }
+        ]);
+
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native })
         {
-            var ex = Assert.Throws<NotSupportedException>(() =>
-                Run(collection, mode, mb => mb.Entity<ArrayCrate>().ComplexCollection(c => c.Items),
-                    q => q.Where(c => c.Items.Any(i => i.Label == "l")).Select(c => c.Name)));
-            Assert.Contains("is a complex collection of CLR type 'Tag[]'", ex.Message);
+            Assert.Equal(["has"], Run(collection, mode, Configure, q => q.AsNoTracking().Where(c => c.Items.Any(i => i.Label == "l")).Select(c => c.Name).ToList()));
+            var whole = Run(collection, mode, Configure, q => q.AsNoTracking().OrderBy(c => c.Name).ToList().Select(c => c.Name + ":" + c.Items.Length + ":" + string.Join(",", c.Items.Select(i => i.Label))).ToList());
+            Assert.Equal(["empty:0:", "has:2:l,m", "other:1:z"], whole);
         }
     }
 
