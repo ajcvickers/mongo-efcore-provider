@@ -51,7 +51,7 @@ public class MongoModelBuilderGenericTest : MongoModelBuilderTest
         {
 #if EF9 || EF10 || EF11
             // Fails: Complex property annotation message differs #35
-            global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGap(() => base.Can_set_complex_property_annotation());
+            global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGap(() => base.Can_set_complex_property_annotation(), typeof(global::Xunit.Sdk.EqualException));
 #else
             base.Can_set_complex_property_annotation();
         
@@ -335,7 +335,7 @@ public class MongoModelBuilderGenericTest : MongoModelBuilderTest
         {
 #if EF10 || EF11
             // Fails: Complex property annotation message differs #35
-            global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGap(() => base.Can_set_complex_property_annotation());
+            global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGap(() => base.Can_set_complex_property_annotation(), typeof(global::Xunit.Sdk.EqualException));
 #else
             base.Can_set_complex_property_annotation();
         

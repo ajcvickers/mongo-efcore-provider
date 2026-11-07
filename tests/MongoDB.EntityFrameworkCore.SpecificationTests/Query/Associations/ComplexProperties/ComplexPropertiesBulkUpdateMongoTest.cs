@@ -121,8 +121,8 @@ RootEntity.?
     public override async Task Update_property_on_projected_associate_with_OrderBy_Skip()
     {
 #if EF10
-        // Fails: Not supported yet #35
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_property_on_projected_associate_with_OrderBy_Skip());
+        // Fails: Bulk update after OrderBy/Skip over a projected associate affects too many rows #41
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_property_on_projected_associate_with_OrderBy_Skip(), typeof(global::Xunit.Sdk.EqualException));
 #else
         await base.Update_property_on_projected_associate_with_OrderBy_Skip();
 
