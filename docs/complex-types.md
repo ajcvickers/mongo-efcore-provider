@@ -261,6 +261,11 @@ These are pinned in the provider's tests; the native path answers as C# does.
 - Projecting a complex-value equality (`new { Same = c.Home == other }`, `Select(c => c.Home == c.Work)`) always answers
   `false`.
 - `c.Opt == null ? ... : ...` in a projection treats a missing optional complex value as present.
+- A required complex value or collection projected THROUGH an optional complex property (`Select(r => r.Optional!.Nested)`)
+  reads `null` when the optional parent is null or missing, as EF's null propagation expects. The projection reads only the
+  nested element, so it cannot tell a missing parent from a present parent whose required child is missing: for a
+  malformed document such as `{Optional: {}}` the projection reads `null` (a required collection too, not empty) where a
+  whole-entity read throws.
 - `Any(i => i.Pos == null)`/`Count(i => i.Pos == null)` miss a missing complex value inside an owned collection.
 - Predicates over `null` complex collection elements (see above).
 - `collection == null` also matches an array that contains a `null` element (see above).
