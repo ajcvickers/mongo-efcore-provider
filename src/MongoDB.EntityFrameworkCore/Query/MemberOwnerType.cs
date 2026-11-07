@@ -26,7 +26,7 @@ namespace MongoDB.EntityFrameworkCore.Query;
 /// member; an upcast or a nullable widening resolves against the operand's (more specific) type, as stripping did before.
 /// </summary>
 /// <remarks>
-/// The one resolver for every walker that looks a member up by its receiver's CLR type (the R20/R25 scanner and the bulk
+/// The one resolver for every walker that looks a member up by its receiver's CLR type (the null-element refusal scanner and the bulk
 /// allow-list in <c>ComplexElementNullGuardRefusal</c>, the bridge's EF-337 stored-ordering walkers): stripping the cast
 /// looked a derived member up on the base type, found nothing, and let a wrong shape through. Two unrelated types (an
 /// interface cast) keep the innermost operand's type, the stripping behaviour.

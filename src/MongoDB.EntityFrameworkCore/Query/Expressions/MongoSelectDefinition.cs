@@ -806,7 +806,7 @@ internal sealed class MongoSelectDefinition
     /// <c>MongoQueryableMethodTranslatingExpressionVisitor.RecordComplexValueShaperLeaf</c> after every <c>TranslateSelect</c>
     /// arm. <c>ThrowIfComplexValueOperand</c> then refuses EVERY later operator except the projected-value-free ones (Take,
     /// Skip, predicate-less First/Single/Last(OrDefault)/Count/LongCount/Any) with <see cref="System.NotSupportedException"/>
-    /// (ruling R7): no path, native or driver-LINQ, answers it correctly. Complex types are new, so nothing released changes.
+    /// because no path, native or driver-LINQ, answers it correctly. Complex types are new, so nothing released changes.
     /// </summary>
     internal bool HasComplexValueShaperLeaf { get; set; }
 

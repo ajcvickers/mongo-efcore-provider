@@ -531,8 +531,8 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
               ?? type;
 
     /// <summary>
-    /// Ruling R20: a declined query whose complex-collection element predicate needs a null guard the driver doesn't
-    /// apply is refused under <see cref="MongoQueryMode.Native"/> rather than served wrong (R17 reads a null element's
+    /// A declined query whose complex-collection element predicate needs a null guard the driver doesn't
+    /// apply is refused under <see cref="MongoQueryMode.Native"/> rather than served wrong (the native path reads a null element's
     /// members as null; the driver reads them as MISSING, below every value). Called at every point where the gate commits
     /// to the fallback; a no-op under explicit <see cref="MongoQueryMode.DriverLinq"/> and on EF8/EF9 (no complex
     /// collections). See <c>ComplexElementNullGuardRefusal</c> (an EF10-only type).

@@ -240,7 +240,7 @@ internal sealed partial class MongoExpressionTranslator
                         return false;
                     // The DateTimeOffset property backs the value; it carries no DateTimeKind, so the kind-aware read-back
                     // (NativeDateTimeKindReadBack) classifies it as kind-free rather than untraceable.
-                    // Carries the field's NullSafe (a complex element scope, R17): a null element's value reads null, and
+                    // Carries the field's NullSafe (a complex element scope): a null element's value reads null, and
                     // MayBeNull then guards a relational comparison over it.
                     result = new MongoElementRefExpression(
                         utcField.ElementName + ".DateTime", typeof(DateTime), nullSafe: utcField.NullSafe, valueProperty: utcField.Property);
@@ -1240,7 +1240,7 @@ internal sealed partial class MongoExpressionTranslator
     /// negated <c>$elemMatch</c> over the complement) would answer true over <c>[X, null]</c> and
     /// <c>Any(a =&gt; a.City != "X")</c> false: silently wrong rows. Every aggregation scope (<c>$map</c>, and the
     /// <c>$filter</c> of <c>Count(pred)</c>) sees a null element as an element whose members are all MISSING; the
-    /// translator reads each member <see cref="MongoFieldExpression.NullSafe"/> (<see cref="ScopeField"/>, ruling R17) so
+    /// translator reads each member <see cref="MongoFieldExpression.NullSafe"/> (<see cref="ScopeField"/>) so
     /// it answers as null (<c>$ifNull</c>, the relational null guard), and quantifiers and filtered counts agree with each
     /// other and with C#. Driver-LINQ keeps the raw MISSING semantics in that scope and answers such rows differently
     /// (pinned per mode). An owned collection keeps <c>$elemMatch</c> (index-usable): EF never stores a null owned
@@ -1250,9 +1250,9 @@ internal sealed partial class MongoExpressionTranslator
         => StructuralPath.IsComplexElementScope(elementType);
 
     /// <summary>
-    /// A field read in this translator's scope. Inside a complex collection's element scope (ruling R17) every leaf is
+    /// A field read in this translator's scope. Inside a complex collection's element scope every leaf is
     /// <see cref="MongoFieldExpression.NullSafe"/>: a NULL element (EF10 writes them) reads each member as null, as C# and
-    /// EF's null propagation do (R14), so `== null`/`!= null` are $ifNull-normalized and a relational comparison gets the
+    /// EF's null propagation do, so `== null`/`!= null` are $ifNull-normalized and a relational comparison gets the
     /// null guard (MayBeNull). Owned element scopes and the document root are unchanged (<paramref name="nullSafe"/> only).
     /// </summary>
     private MongoFieldExpression ScopeField(IProperty property, string path, bool nullSafe = false)
@@ -1261,8 +1261,8 @@ internal sealed partial class MongoExpressionTranslator
     /// <summary>
     /// A field of the OUTER (root) row read inside an element scope. Inside a COMPLEX collection's element scope it is
     /// <see cref="MongoOuterFieldExpression.NullSafe"/> when it may be absent (a nullable property, or one under an optional
-    /// owned/complex ancestor): the element's leaves read a null element's members as null (R17), so the outer value must
-    /// read MISSING as null too (R14), or <c>a.Street == p.Opt!.Text</c> compares null with MISSING. Owned element scopes
+    /// owned/complex ancestor): the element's leaves read a null element's members as null, so the outer value must
+    /// read MISSING as null too, or <c>a.Street == p.Opt!.Text</c> compares null with MISSING. Owned element scopes
     /// and required outer values are unchanged.
     /// </summary>
     private MongoOuterFieldExpression OuterField(IProperty property, string path, Expression member)
@@ -1280,7 +1280,7 @@ internal sealed partial class MongoExpressionTranslator
 
     /// <summary>
     /// A field used as a compared VALUE in this scope. Inside a complex collection's element scope a non-nullable,
-    /// default-serialized <see cref="bool"/> leaf of a null element reads <see langword="false"/> (ruling R19, the
+    /// default-serialized <see cref="bool"/> leaf of a null element reads <see langword="false"/> (the
     /// provider's bool null-as-false read rule), so `== false`, `!= true`, `== p` and leaf-to-leaf comparisons agree with
     /// `!x`: <c>{ $ifNull: [ "$$e.Flag", false ] }</c>. Every other field (and every field outside a complex element scope)
     /// is returned unchanged; a converted bool keeps null semantics (its stored form isn't a bool to default to).
@@ -1572,11 +1572,11 @@ internal sealed partial class MongoExpressionTranslator
         }
 
         // A leaf under an OPTIONAL complex parent is MISSING when the parent is null/absent, where C# reads it as null
-        // (ruling R14), and $expr's $eq/$ne and relational operators don't equate MISSING with null: `p.Opt!.Text ==
+        // and $expr's $eq/$ne and relational operators don't equate MISSING with null: `p.Opt!.Text ==
         // p.Main.Text` missed the both-null row. When either side crosses an optional complex hop, both bare field
         // operands read null-normalized (so the other side's MISSING compares as null too), and MayBeNull gives a
         // relational comparison its null guard. Single-scope (root) translators only: element scopes have their own rules
-        // (R17 element leaves, OuterField for the correlated row; owned element scopes byte-identical). Owned ancestors are
+        // (null-safe element leaves, OuterField for the correlated row; owned element scopes byte-identical). Owned ancestors are
         // unchanged (pre-existing in every mode). A no-op for any comparison with no optional complex hop on either side.
         if (_outerParam is null && _innerPrefix is null
             && (CrossesOptionalComplexHop(left) || CrossesOptionalComplexHop(right)))

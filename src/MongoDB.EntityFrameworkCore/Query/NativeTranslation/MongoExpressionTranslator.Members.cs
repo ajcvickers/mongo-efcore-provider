@@ -530,7 +530,7 @@ internal sealed partial class MongoExpressionTranslator
         path = null;
         complexProperty = null;
         // Inside a complex collection's element scope the element itself may be null (EF10 stores null elements), and an
-        // absent element reads every value below it as absent: an ancestor that can be absent (ruling R14).
+        // absent element reads every value below it as absent: an ancestor that can be absent.
         mayBeAbsent = StructuralPath.IsComplexElementScope(_scopeType);
 
         node = Unwrap(node);
@@ -591,7 +591,7 @@ internal sealed partial class MongoExpressionTranslator
 
     /// <summary>
     /// Whether the member chain <paramref name="node"/> crosses an OPTIONAL complex property (EF10) on its way to its leaf,
-    /// so the leaf is MISSING whenever that ancestor is null/absent (ruling R14). Owned hops are not counted.
+    /// so the leaf is MISSING whenever that ancestor is null/absent. Owned hops are not counted.
     /// </summary>
     private bool CrossesOptionalComplexHop(Expression node)
         => CrossesOptionalHop(node, includeOwned: false);
@@ -668,7 +668,7 @@ internal sealed partial class MongoExpressionTranslator
 
         // An owned COLLECTION (`p.Children == null`) compares the STORED array (missing equals null; empty is not null),
         // not the materialized one, which normalizes missing/null to []. Owned collections only: a COMPLEX collection's null
-        // check declines (ruling R25: the stored state is not the answer for it).
+        // check declines (the stored state is not the answer for it).
         var collectionSource = node is MaterializeCollectionNavigationExpression materialized ? materialized.Subquery : node;
         if (TryResolveEmbeddedCollectionPath(UnwrapAsQueryable(collectionSource), out var collectionPath, out var collectionElementType, out var collectionIsOuter)
             && collectionElementType is IEntityType

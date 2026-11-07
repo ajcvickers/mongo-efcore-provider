@@ -1367,7 +1367,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         // The value's OWN bound expression, never the registration under its projection member: the arguments of a
         // member-less construction or a method call (`new P(c.Home, c.Work)`, `Tuple.Create(c.Home, c.Work)`) all
         // register under one shared member, whose registration is only the LAST argument's, so every complex argument
-        // read the last one's value (W|W; spec known limitation 29). Elsewhere the registration is this same expression.
+        // read the last one's value (W|W). Elsewhere the registration is this same expression.
         var bound = complexValue.Source;
         if (bound.RemoveConvert().TryGetMemberOrEFProperty(out var receiver, out var name)
             && TryResolveFieldAccessSource(receiver) is { EntityType: { } owner, DocumentExpression: { } ownerDocument }
@@ -1468,7 +1468,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             // "_outer" under driver join fields). Decided by the binding, not the CLR type: in a join over the root's own
             // hierarchy the joined side may have the same (derived) type. The same holds for the root's OWN type: in a join
             // (a same-type reference navigation `p.Referrer!.Badge`, the inner side of a self-join) a shaper of the root's
-            // CLR type may be the joined row, so outside the root's binding it reads the joined document (exception (h)).
+            // CLR type may be the joined row, so outside the root's binding it reads the joined document.
             if ((shaperEntityType == _rootEntityType && (!_queryExpression.IsJoinQuery || IsRootProjectionShaper(shaper)))
                 || IsRootProjectionShaper(shaper) && _rootEntityType.IsAssignableFrom(shaperEntityType))
             {

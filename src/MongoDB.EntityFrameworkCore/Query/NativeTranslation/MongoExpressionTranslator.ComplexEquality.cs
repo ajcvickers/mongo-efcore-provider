@@ -37,7 +37,7 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// <b>Member-wise, never whole-document.</b> Two complex values are equal when every mapped member is: a conjunction of
 /// leaf equalities, recursing into nested complex properties. Matching the stored subdocument by example would depend on
 /// element order, unmapped elements and the representation of absent leaves, so it is never emitted; the complex
-/// serializer refuses it too (<c>ComplexTypeSerializer.Serialize</c>, ruling R1).
+/// serializer refuses it too (<c>ComplexTypeSerializer.Serialize</c>).
 /// </para>
 /// <para>
 /// <b>Null semantics are C#'s.</b> A stored element that is BSON null and one that is MISSING both read as null, so they
@@ -344,7 +344,7 @@ internal sealed partial class MongoExpressionTranslator
     /// <param name="path">The field path the value is stored at.</param>
     /// <param name="comparand">What the value is compared with.</param>
     /// <param name="mayBeAbsent">
-    /// The value can be absent: it, or any owned/complex ancestor on its path, is optional (ruling R14). An absent value
+    /// The value can be absent: it, or any owned/complex ancestor on its path, is optional. An absent value
     /// reads null, as do its members (null propagation), so it equals null and never an instance, whatever the instance's
     /// members are; its element is then null or MISSING, which <see cref="EqualityPair.IsNull"/> tests.
     /// </param>
@@ -439,7 +439,7 @@ internal sealed partial class MongoExpressionTranslator
     {
         EqualityPair? result = null;
 
-        // Two stored values must map the same members (ruling R15): walking only one side's members would make the answer
+        // Two stored values must map the same members: walking only one side's members would make the answer
         // depend on operand order (`c.Home == c.Work` comparing fewer members than `c.Work == c.Home`).
         if (comparand is ComplexComparand.Stored storedSide && !MapsSameMembers(complexType, storedSide.Property.ComplexType))
             return null;
@@ -505,7 +505,7 @@ internal sealed partial class MongoExpressionTranslator
         var leafPath = JoinPath(path, element);
         // NullSafe so a missing and a null member compare alike in every dialect, as the null check does: the query
         // dialect's `{ f: null }` already does; inside a $filter/$map element scope, where a bare field's `$eq` against
-        // null is deliberately not $ifNull-normalized, this keeps member-wise equality and `== null` consistent (R16).
+        // null is deliberately not $ifNull-normalized, this keeps member-wise equality and `== null` consistent.
         var field = new MongoFieldExpression(leaf, leafPath, nullSafe: true);
 
         switch (comparand)
@@ -564,7 +564,7 @@ internal sealed partial class MongoExpressionTranslator
         }
     }
 
-    // The same mapped leaves and nested complex properties, by name, on both types (ruling R15).
+    // The same mapped leaves and nested complex properties, by name, on both types.
     private static bool MapsSameMembers(IComplexType left, IComplexType right)
     {
         static HashSet<string> Names(IComplexType type)

@@ -357,8 +357,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
 
     /// <summary>
     /// Refuses, in every query mode, a value-reading operator (<c>Distinct</c>, a set operation, <c>GroupBy</c>, a later
-    /// <c>Select</c>, ...) over a source whose shaper reads a whole complex value (<see cref="MongoSelectDefinition.HasComplexValueShaperLeaf"/>;
-    /// ruling R7). No path answers it correctly: natively the operator would dedupe/combine the STORED subdocuments, and
+    /// <c>Select</c>, ...) over a source whose shaper reads a whole complex value (<see cref="MongoSelectDefinition.HasComplexValueShaperLeaf"/>).
+    /// No path answers it correctly: natively the operator would dedupe/combine the STORED subdocuments, and
     /// the driver-LINQ push-down can't read a complex value back (<c>ComplexTypeSerializer</c> can't deserialize; the
     /// shaper would see a missing element and read null/empty for an optional property or a collection). Paging and
     /// predicate-less cardinality/count terminals don't read the values (<see cref="IsProjectedValueFreeOperator"/>).
@@ -372,7 +372,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
         }
     }
 
-    // The single R7 message, shared by every refusal site.
+    // The single complex-value-operand message, shared by every refusal site.
     private static NotSupportedException ComplexValueOperandRefusal(string operatorName)
         => new(
             $"A projected whole complex value cannot be the operand of '{operatorName}': the MongoDB provider "
@@ -380,7 +380,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
             + "the operator after 'AsEnumerable()'.");
 
     /// <summary>
-    /// Refuses (ruling R8, every mode) a GroupBy whose source projection or key selector reads a whole complex value
+    /// Refuses (in every mode) a GroupBy whose source projection or key selector reads a whole complex value
     /// (<c>GroupBy(c =&gt; c.Address)</c>, an anonymous key holding one, a projected complex value upstream). A complex
     /// LEAF key (<c>GroupBy(c =&gt; c.Address.City)</c>) is a scalar and is unaffected. Selectors are checked with the
     /// source shaper substituted for their parameter, through the same predicate the projection binder uses
@@ -552,7 +552,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
         // Every arm below returns its shaper through here, so the complex-value refusal flag is set from ONE predicate
         // whichever arm built the shaper (generic fold, positional-ctor, join scope, GroupBy, SelectMany, ...).
         // A post-group Select reading a whole complex value of the group's elements (`g.Select(x => x.Address)`,
-        // `g.First().Address`): refused like a complex grouping key (ruling R8).
+        // `g.First().Address`): refused like a complex grouping key.
         if (source.ShaperExpression is GroupByShaperExpression)
         {
             ThrowIfGroupByOverComplexValue(source, selector);

@@ -41,7 +41,7 @@ internal sealed class MongoOuterFieldExpression : MongoExpression
     /// When <see langword="true"/>, the aggregation renderer wraps this field in <c>$ifNull</c> against <c>null</c>, as
     /// <see cref="MongoFieldExpression.NullSafe"/>. Set only inside a COMPLEX collection's element scope for an outer value
     /// that may be absent (a nullable property, or one under an optional owned/complex ancestor): the element's own leaves
-    /// read a null element's members as null there (ruling R17), and the outer value must read MISSING as null too (R14),
+    /// read a null element's members as null there, and the outer value must read MISSING as null too,
     /// or <c>a.Street == p.Opt!.Text</c> compares null with MISSING. Owned element scopes never set it.
     /// </summary>
     public bool NullSafe { get; }
