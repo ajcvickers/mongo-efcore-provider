@@ -287,8 +287,8 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         {
             var ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.Rep, c => c.Rank)));
-            Assert.Contains("Self-referencing ExecuteUpdate on property 'Rep'", ex.Message);
-            Assert.Contains("BsonRepresentation", ex.Message);
+            Assert.Contains("Self-referencing ExecuteUpdate on property 'Rep'", ex.FullMessage());
+            Assert.Contains("BsonRepresentation", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -339,8 +339,8 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         {
             var ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Shipping.Code, c => c.Rank)));
-            Assert.Contains("Self-referencing ExecuteUpdate on property 'Code'", ex.Message);
-            Assert.Contains("value converter", ex.Message);
+            Assert.Contains("Self-referencing ExecuteUpdate on property 'Code'", ex.FullMessage());
+            Assert.Contains("value converter", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -394,8 +394,8 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         {
             var ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing, (BAddr)null!)));
-            Assert.Contains("cannot set the required complex property", ex.Message);
-            Assert.Contains("Billing' to null. No document was modified.", ex.Message);
+            Assert.Contains("cannot set the required complex property", ex.FullMessage());
+            Assert.Contains("Billing' to null. No document was modified.", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -412,9 +412,9 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         {
             var ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing, c => c.Shipping)));
-            Assert.Contains("could not be translated", ex.Message);
-            Assert.Contains("cannot set the complex property", ex.Message);
-            Assert.Contains("from a value that reads the entity being updated", ex.Message);
+            Assert.Contains("could not be translated", ex.FullMessage());
+            Assert.Contains("cannot set the complex property", ex.FullMessage());
+            Assert.Contains("from a value that reads the entity being updated", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -502,13 +502,13 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         using (var db = store.Context())
         {
             var captured = Assert.Throws<InvalidOperationException>(() => db.Entities.Where(c => c.Billing == other).ExecuteDelete());
-            Assert.Contains("could not be translated", captured.Message);
+            Assert.Contains("could not be translated", captured.FullMessage());
             Assert.IsType<NotSupportedException>(captured.InnerException);
             Assert.Contains("as a whole value is not supported", captured.InnerException!.Message);
 
             var stored = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.Where(c => c.Billing == c.Shipping).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 0)));
-            Assert.Contains("could not be translated", stored.Message);
+            Assert.Contains("could not be translated", stored.FullMessage());
             Assert.Contains("serialized differently", stored.InnerException!.Message);
         }
 
@@ -572,8 +572,8 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
                 "self-referencing-whole-then-leaf" => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing, value).SetProperty(c => c.Billing.Street, c => c.Name)),
                 _ => throw new ArgumentOutOfRangeException(nameof(shape))
             });
-            Assert.Contains("one is stored inside the other", ex.Message);
-            Assert.Contains(shape == "nested-whole-then-leaf" ? "'Pin.Lat'" : "'bill'", ex.Message);
+            Assert.Contains("one is stored inside the other", ex.FullMessage());
+            Assert.Contains(shape == "nested-whole-then-leaf" ? "'Pin.Lat'" : "'bill'", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -605,22 +605,22 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
             // A method call in the selector is not a member chain: the existing "not a mapped scalar property" refusal.
             var ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.City.Trim(), "x")));
-            Assert.Contains("Only mapped root scalar properties can be updated", ex.Message);
+            Assert.Contains("Only mapped root scalar properties can be updated", ex.FullMessage());
 
             // The setter target is printed as its shape: an inlined literal is replaced by `?`.
             ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.City.Substring(0, 3) + "secret-suffix", "x")));
-            Assert.DoesNotContain("secret-suffix", ex.Message);
-            Assert.Contains(".Billing.City.Substring(?, ?) + ?", ex.Message);
+            Assert.DoesNotContain("secret-suffix", ex.FullMessage(skipEfWrapper: true));
+            Assert.Contains(".Billing.City.Substring(?, ?) + ?", ex.FullMessage());
 
             // The OUTER message (the captured query) redacts a FILTER literal and a SIBLING setter's literal too (RED at
             // 5547cfa2: both printed), and keeps the shape and the remedy.
             ex = Assert.Throws<InvalidOperationException>(() => db.Entities.Where(c => c.Name == "hunter2-literal")
                 .ExecuteUpdate(s => s.SetProperty(c => c.Name, c => c.Name + "secret-suffix").SetProperty(c => c.Billing.City.Trim(), "x")));
-            Assert.DoesNotContain("hunter2-literal", ex.Message);
-            Assert.DoesNotContain("secret-suffix", ex.Message);
-            Assert.Contains("Only mapped root scalar properties can be updated", ex.Message);
-            Assert.Contains(".Name == ?", ex.Message);
+            Assert.DoesNotContain("hunter2-literal", ex.FullMessage(skipEfWrapper: true));
+            Assert.DoesNotContain("secret-suffix", ex.FullMessage(skipEfWrapper: true));
+            Assert.Contains("Only mapped root scalar properties can be updated", ex.FullMessage());
+            Assert.Contains(".Name == ?", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -700,12 +700,12 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         using (var db = store.Context())
         {
             var ex = Assert.Throws<InvalidOperationException>(() => db.Entities.ExecuteUpdate(s => s.SetProperty(h => h.Opt!.City, "Y")));
-            Assert.Contains("could not be translated", ex.Message);
-            Assert.Contains("is an optional complex property", ex.Message);
+            Assert.Contains("could not be translated", ex.FullMessage());
+            Assert.Contains("is an optional complex property", ex.FullMessage());
 
             var selfReferencing = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.Where(h => h.Opt != null).ExecuteUpdate(s => s.SetProperty(h => h.Opt!.Zip, h => h.Rank)));
-            Assert.Contains("is an optional complex property", selfReferencing.Message);
+            Assert.Contains("is an optional complex property", selfReferencing.FullMessage());
         }
 
         Assert.Equal(OptionalSeedState, store.Stored());

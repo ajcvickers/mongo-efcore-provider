@@ -40,6 +40,30 @@ internal static class ExtensionMethods
     public static short NextInt16(this Random random)
         => (short)random.Next(1, short.MaxValue);
 
+    /// <summary>
+    /// The message plus those of the inner exceptions. EF Core 11 reports a bulk translation failure's details as the inner
+    /// exception rather than in the message, and wraps the provider's exception in one of its own that prints the unredacted
+    /// expression ("see inner exception"). A test asserting that literals are redacted passes <paramref name="skipEfWrapper"/>
+    /// so that, on EF11, the EF-owned outer message is left out and only what the provider produced is read.
+    /// </summary>
+    public static string FullMessage(this Exception exception, bool skipEfWrapper = false)
+    {
+        _ = skipEfWrapper;
+        var messages = new List<string>();
+#if EF11
+        if (skipEfWrapper && exception.InnerException != null && exception.Message.Contains("see inner exception", StringComparison.Ordinal))
+        {
+            exception = exception.InnerException;
+        }
+#endif
+        for (var current = exception; current != null; current = current.InnerException)
+        {
+            messages.Add(current.Message);
+        }
+
+        return string.Join(" ", messages);
+    }
+
     public static void WriteTestDocs<T>(this IMongoCollection<T> collection, IEnumerable<T> docs)
         => collection.BulkWrite(docs.Select(p => new InsertOneModel<T>(p)));
 

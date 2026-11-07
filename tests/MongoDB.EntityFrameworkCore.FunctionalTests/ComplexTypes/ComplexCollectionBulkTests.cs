@@ -245,11 +245,11 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     private static void AssertRefused(Func<int> operation, string shape)
     {
         var ex = Assert.Throws<InvalidOperationException>(() => operation());
-        Assert.Contains("could not be translated", ex.Message);
+        Assert.Contains("could not be translated", ex.FullMessage());
         var refusal = Assert.IsType<NativeTranslationNotSupportedException>(ex.InnerException);
-        Assert.Contains(Refusal, refusal.Message);
-        Assert.Contains(shape, refusal.Message);
-        Assert.Contains("No document was modified", refusal.Message);
+        Assert.Contains(Refusal, refusal.FullMessage());
+        Assert.Contains(shape, refusal.FullMessage());
+        Assert.Contains("No document was modified", refusal.FullMessage());
     }
 
     // ── A. The data-loss shapes: refused (measured RED at 6740680c: the bulk operation deleted/updated the rows in the
@@ -266,25 +266,25 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
             var ex = Assert.Throws<InvalidOperationException>(
                 () => db.Entities.Where(r => r.Stops.Any(s => s.Note!.StartsWith("hunter2-secret") || s.Floor < 1)).ExecuteDelete());
             var refusal = Assert.IsType<NativeTranslationNotSupportedException>(ex.InnerException);
-            Assert.DoesNotContain("hunter2-secret", refusal.Message);
-            Assert.Contains(".Note.StartsWith(?)", refusal.Message);
-            Assert.Contains(".Floor < ?", refusal.Message);
-            Assert.Contains("Route.Stops", refusal.Message);
+            Assert.DoesNotContain("hunter2-secret", refusal.FullMessage(skipEfWrapper: true));
+            Assert.Contains(".Note.StartsWith(?)", refusal.FullMessage());
+            Assert.Contains(".Floor < ?", refusal.FullMessage());
+            Assert.Contains("Route.Stops", refusal.FullMessage());
             // The OUTER message prints the captured query too: its literals are redacted as well (RED at 5547cfa2: the
             // outer message held "hunter2-secret"), and the shape and remedy stay.
-            Assert.DoesNotContain("hunter2-secret", ex.Message);
-            Assert.Contains(".Note.StartsWith(?)", ex.Message);
-            Assert.Contains("MongoQueryMode.DriverLinq", ex.Message);
+            Assert.DoesNotContain("hunter2-secret", ex.FullMessage(skipEfWrapper: true));
+            Assert.Contains(".Note.StartsWith(?)", ex.FullMessage());
+            Assert.Contains("MongoQueryMode.DriverLinq", ex.FullMessage());
 
             // A literal in the filter's root predicate and in a SIBLING setter value.
             ex = Assert.Throws<InvalidOperationException>(() => db.Entities
                 .Where(r => r.Name != "hunter2-literal" && r.Stops.Any(s => s.Floor < 1))
                 .ExecuteUpdate(s => s.SetProperty(r => r.Name, r => r.Name + "secret-suffix")));
             Assert.IsType<NativeTranslationNotSupportedException>(ex.InnerException);
-            Assert.DoesNotContain("hunter2-literal", ex.Message);
-            Assert.DoesNotContain("secret-suffix", ex.Message);
-            Assert.Contains("ExecuteUpdate", ex.Message);
-            Assert.Contains(".Floor < ?", ex.Message);
+            Assert.DoesNotContain("hunter2-literal", ex.FullMessage(skipEfWrapper: true));
+            Assert.DoesNotContain("secret-suffix", ex.FullMessage(skipEfWrapper: true));
+            Assert.Contains("ExecuteUpdate", ex.FullMessage());
+            Assert.Contains(".Floor < ?", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -582,10 +582,10 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         using (var db = store.Context(MongoQueryMode.Native))
         {
             var refusal = Assert.IsType<NativeTranslationNotSupportedException>(Record.Exception(() => query(db).ToList()));
-            Assert.Contains(CollectionNullCheckRefusal, refusal.Message);
-            Assert.Contains($"'{collection}'", refusal.Message);
-            Assert.Contains("'!c.Collection.Any()'", refusal.Message);
-            Assert.Contains("MongoQueryMode.DriverLinq", refusal.Message);
+            Assert.Contains(CollectionNullCheckRefusal, refusal.FullMessage());
+            Assert.Contains($"'{collection}'", refusal.FullMessage());
+            Assert.Contains("'!c.Collection.Any()'", refusal.FullMessage());
+            Assert.Contains("MongoQueryMode.DriverLinq", refusal.FullMessage());
         }
 
         using (var db = store.Context(MongoQueryMode.DriverLinq))
@@ -647,7 +647,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         using (var db = store.Context())
         {
             var ex = Assert.Throws<InvalidOperationException>(() => db.Entities.ExecuteUpdate(s => s.SetProperty(r => r.Stops, (List<Stop>)null!)));
-            Assert.Contains("cannot set the required complex property", ex.Message);
+            Assert.Contains("cannot set the required complex property", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -661,9 +661,9 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         using (var db = store.Context())
         {
             var indexed = Assert.Throws<InvalidOperationException>(() => db.Entities.ExecuteUpdate(s => s.SetProperty(r => r.Stops[0].City, "x")));
-            Assert.Contains("could not be translated", indexed.Message);
+            Assert.Contains("could not be translated", indexed.FullMessage());
             var first = Assert.Throws<InvalidOperationException>(() => db.Entities.ExecuteUpdate(s => s.SetProperty(r => r.Stops.First().City, "x")));
-            Assert.Contains("could not be translated", first.Message);
+            Assert.Contains("could not be translated", first.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -676,7 +676,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         using (var db = store.Context())
         {
             var ex = Assert.Throws<InvalidOperationException>(() => db.Entities.ExecuteUpdate(s => s.SetProperty(r => r.Detours, r => r.Stops)));
-            Assert.Contains("from a value that reads the entity being updated", ex.Message);
+            Assert.Contains("from a value that reads the entity being updated", ex.FullMessage());
         }
 
         store.AssertUnchanged();
@@ -742,9 +742,9 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         {
             // C#: the shop's only tag is null, so `Label != null` is false: the sale must not be deleted.
             var ex = Assert.Throws<InvalidOperationException>(() => db.Sales.Where(s => s.Shop.Tags.Any(t => t.Label != null)).ExecuteDelete());
-            Assert.Contains("could not be translated", ex.Message);
+            Assert.Contains("could not be translated", ex.FullMessage());
             ex = Assert.Throws<InvalidOperationException>(() => db.Sales.Where(s => s.Shop.Tags.Any(t => t.Label == "x")).ExecuteUpdate(u => u.SetProperty(x => x.Amount, 0)));
-            Assert.Contains("could not be translated", ex.Message);
+            Assert.Contains("could not be translated", ex.FullMessage());
         }
 
         Assert.Equal(sale.ToJson(), rawSales.Find(FilterDefinition<BsonDocument>.Empty).Single().ToJson());
@@ -828,7 +828,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         using (db)
         {
             var ex = Assert.Throws<NotSupportedException>(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)));
-            Assert.Contains("is a complex collection of CLR type 'Tag[]'", ex.Message);
+            Assert.Contains("is a complex collection of CLR type 'Tag[]'", ex.FullMessage());
         }
 
         AssertSeedUnchanged(raw, seed);
