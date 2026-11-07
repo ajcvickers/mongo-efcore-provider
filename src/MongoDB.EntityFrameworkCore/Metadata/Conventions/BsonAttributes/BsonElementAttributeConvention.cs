@@ -30,7 +30,8 @@ namespace MongoDB.EntityFrameworkCore.Metadata.Conventions.BsonAttributes;
 /// </summary>
 public sealed class BsonElementAttributeConvention :
     PropertyAttributeConventionBase<BsonElementAttribute>,
-    INavigationAddedConvention
+    INavigationAddedConvention,
+    IComplexPropertyAddedConvention
 {
     /// <summary>
     /// Creates a <see cref="BsonElementAttributeConvention" />.
@@ -77,6 +78,32 @@ public sealed class BsonElementAttributeConvention :
         if (!string.IsNullOrWhiteSpace(attribute?.ElementName) && meta.TargetEntityType.IsOwned())
         {
             meta.TargetEntityType.SetContainingElementName(attribute.ElementName, fromDataAnnotation: true);
+        }
+    }
+
+    /// <summary>
+    /// For every complex property added to the model that has a <see cref="BsonElementAttribute"/>
+    /// use the specified name as an annotation to configure the element name used in the BSON documents.
+    /// </summary>
+    /// <param name="propertyBuilder">The builder for the complex property.</param>
+    /// <param name="context">Additional information associated with convention execution.</param>
+    /// <remarks>
+    /// Overrides (rather than hides) EF's <see cref="PropertyAttributeConventionBase{TAttribute}"/> implementation, whose
+    /// attribute hook does not run for this convention's complex properties.
+    /// </remarks>
+    public override void ProcessComplexPropertyAdded(
+        IConventionComplexPropertyBuilder propertyBuilder,
+        IConventionContext<IConventionComplexPropertyBuilder> context)
+    {
+        var meta = propertyBuilder.Metadata;
+        var member = meta.PropertyInfo ?? (MemberInfo?)meta.FieldInfo;
+        var attribute = member?.GetCustomAttributes().OfType<BsonElementAttribute>().FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(attribute?.ElementName))
+        {
+            // Through the builder, as the scalar path's HasElementName is: a name configured with a higher source
+            // (explicit configuration) is kept, e.g. when EF lifts the complex property from a derived type to its base.
+            propertyBuilder.HasAnnotation(MongoAnnotationNames.ElementName, attribute.ElementName, fromDataAnnotation: true);
         }
     }
 }

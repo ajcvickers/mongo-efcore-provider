@@ -31,6 +31,7 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using MongoDB.Driver.Linq;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Infrastructure;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -100,7 +101,8 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
 
         // The plan closes over compile-time constants and is embedded in the compiled query; its delegates translate at
         // runtime and MongoBulkOperationExecutor (Storage) runs the writes.
-        var plan = MongoBulkPlanBuilder.Create(entityType, _bsonSerializerFactory, nonQueryExpression);
+        var plan = MongoBulkPlanBuilder.Create(
+            entityType, _bsonSerializerFactory, nonQueryExpression, ((MongoQueryCompilationContext)QueryCompilationContext).QueryMode);
 
         var executor = QueryCompilationContext.IsAsync
             ? MongoBulkExecuteAsyncMethodInfo
@@ -272,6 +274,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         {
             ThrowIfNativeOnlyForbidsFallback(queryMode, "Query groups without a supported aggregate projection");
             ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+            ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, queryMode);
         }
 
         VerifyNoClientConstant(shapedQueryExpression.ShaperExpression);
@@ -371,6 +374,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         // a coverage failure under NativeOnly.
         ThrowIfNativeOnlyForbidsFallback(queryMode, "Query projects a non-entity result");
         ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+        ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, queryMode);
 
         // HasStringSequenceProjectionLeaf restores what ProjectionAnalyzer.CanPushDown can no longer see: the native string-sequence leaf
         // erases the Enumerable.* call from the shaper, and without this the driver throws ("unable to determine which serializer to use").
@@ -527,6 +531,21 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
               ?? type;
 
     /// <summary>
+    /// A declined query whose complex-collection element predicate needs a null guard the driver doesn't
+    /// apply is refused under <see cref="MongoQueryMode.Native"/> rather than served wrong (the native path reads a null element's
+    /// members as null; the driver reads them as MISSING, below every value). Called at every point where the gate commits
+    /// to the fallback; a no-op under explicit <see cref="MongoQueryMode.DriverLinq"/> and on EF8/EF9 (no complex
+    /// collections). See <c>ComplexElementNullGuardRefusal</c> (an EF10-only type).
+    /// </summary>
+    private static void ThrowIfDriverLinqMisreadsNullElements(MongoQueryExpression mongoQueryExpression, MongoQueryMode mode)
+    {
+#if !EF8 && !EF9
+        ComplexElementNullGuardRefusal.ThrowIfDriverLinqMisreadsNullElements(
+            mongoQueryExpression.CapturedExpression, mongoQueryExpression.CollectionExpression.EntityType.Model, mode);
+#endif
+    }
+
+    /// <summary>
     /// Throws when the captured chain, about to run on driver-LINQ, is a grouped query holding a case mapping
     /// (<c>ToUpper</c>/<c>ToLower</c>, incl. Invariant) in the <c>GroupBy</c>'s key/element/result selector, in an
     /// operator composed after it, or in any lambda of an ungrouped source it groups or combines with (either side of a
@@ -657,6 +676,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         if (nativeFactory == null)
         {
             ThrowIfDriverLinqCaseMapsGroupedResult(mongoQueryExpression.CapturedExpression);
+            ThrowIfDriverLinqMisreadsNullElements(mongoQueryExpression, mode);
         }
 
         // Late-fallback strip: the driver renders the pushed-down Select with its own aliases, which disagree with the alias-addressed shaper
@@ -684,6 +704,9 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
 #else
         var injectedBody = InjectStructuralTypeMaterializers(shaperBody);
 #endif
+        // EF builds each complex property inline, reading its leaves as columns of the entity's value buffer; both
+        // shapers below instead materialize it from its own stored element (ComplexTypeMaterializationBuilder).
+        injectedBody = ComplexTypeMaterializationBuilder.MarkComplexPropertyAssignments(injectedBody);
 
         var standAloneStateManager = QueryCompilationContext.QueryTrackingBehavior ==
                                      QueryTrackingBehavior.NoTrackingWithIdentityResolution;

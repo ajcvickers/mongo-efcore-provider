@@ -237,9 +237,14 @@ internal static class NativeProjectionBinder
                 var alias = DeriveWrappedLeafAlias(_mongoQ, _selector.Parameters[0], memberValue, memberName);
                 if (!TryTranslateLeaf(_mongoQ, _translator, _selector.Parameters[0], memberValue, alias, _staged, out var leaf, out var isArrayLeaf, out var isOwnedNavEntityLeaf, out var throwsOnNull, allowWholeRootEntityLeaf: true))
                     return false;
+                // An owned-reference argument (`new Pair(x.Home, x.Work)`) can't be read by the index-based positional shaper:
+                // the driver reads the argument through the entity serializer, which does not deserialize. Decline, so the
+                // late fallback reads it off the whole document like any other owned entity argument.
+                if (isOwnedNavEntityLeaf)
+                    return false;
                 if (!TryStageLeaf(alias, leaf, memberValue, throwsOnNull, isArrayLeaf, isOwnedNavEntityLeaf))
                     return false;
-                if (alias != memberName || isOwnedNavEntityLeaf)
+                if (alias != memberName)
                     _namedAliasOverrides.Add((memberName, alias));
             }
 
@@ -575,11 +580,13 @@ internal static class NativeProjectionBinder
                 _mongoQ.Select.HasPositionalCtorProjectionShaper = true;
             if (_hasClientEvaluatedLeaf)
                 _mongoQ.Select.HasClientEvaluatedProjectionLeaf = true;
+            // A whole complex value is read by the shaper from its stored form; flag it so no later server operator reads that form.
+            if (_projections.Exists(p => p.Expression is MongoElementRefExpression { ComplexValue: not null }))
+                _mongoQ.Select.HasComplexValueProjectionLeaf = true;
             foreach (var clientConditionalMember in _clientConditionalMembers)
                 _mongoQ.Select.AddClientConditionalMember(clientConditionalMember);
             foreach (var clientConditionalReadAlias in _clientConditionalReadAliases)
                 _mongoQ.Select.AddClientConditionalRead(clientConditionalReadAlias);
-
         }
     }
 
@@ -1092,6 +1099,17 @@ internal static class NativeProjectionBinder
             return true;
         }
 
+        // Whole complex value — `c.Address`, `c.Address.Location`, `EF.Property<A>(c, "Address")`, a complex collection —
+        // projected as its stored subdocument/array and materialized by the shaper (ComplexTypeMaterializationBuilder),
+        // never through a serializer. Bare or wrapped. The read side binds the same leaves
+        // (MongoProjectionBindingExpressionVisitor.ResolveComplexValueProperty); the projection is flagged
+        // (HasComplexValueProjectionLeaf) so no later server operator reads the stored form.
+        if (translator.TryTranslateComplexValue(leafExpression, out var complexValuePath, out var complexValueProperty))
+        {
+            result = new MongoElementRefExpression(complexValuePath, complexValueProperty.ClrType, complexValue: complexValueProperty);
+            return true;
+        }
+
         // Constructed sub-entity leaf (`new { Book = new Book { Id = e.Id, ... } }`) emitted as a nested sub-document; wrapped bodies only (a construction that is the selector body is an ordinary wrapped projection).
         if (allowWholeRootEntityLeaf
             && TryGetDocumentConstructionLeaf(translator, leafExpression, out var construction))
@@ -1379,8 +1397,17 @@ internal static class NativeProjectionBinder
         MongoQueryExpression mongoQ, Expression body, IReadOnlyList<(string MemberName, Expression Value)> members,
         ParameterExpression outerParameter)
         => !members.Any(m => ClassifyClientWholeEntityOperand(mongoQ, m.Value.RemoveConvert(), outerParameter)
-                             == ClientWholeEntityOperand.WholeEntity)
+                             == ClientWholeEntityOperand.WholeEntity
+                             // A whole complex value is not a scalar: the index-based positional shaper would read it
+                             // through a driver class map (wrong element names, FormatException on unmapped elements)
+                             // instead of ComplexTypeMaterializationBuilder.
+                             || IsWholeComplexValue(mongoQ, m.Value, outerParameter))
            && !IsClientOnlyWholeEntityExpression(mongoQ, body, outerParameter);
+
+    // Whether `value` reads a whole complex value of the selector's entity (MongoExpressionTranslator.TryTranslateComplexValue).
+    private static bool IsWholeComplexValue(MongoQueryExpression mongoQ, Expression value, ParameterExpression outerParameter)
+        => new MongoExpressionTranslator(mongoQ.CollectionExpression.EntityType, outerParameter)
+            .TryTranslateComplexValue(UnwrapContainerElementBoxing(value), out _, out _);
 
     /// <summary>
     /// Strips the boxing <c>Convert</c>-to-<see cref="object"/> layers a container adds around an element (<c>new object[] { x.I }</c>), so the element is translated and read as its operand (own type and
@@ -2051,8 +2078,9 @@ internal static class NativeProjectionBinder
 
             // Gate 1c4: string predicates, Length/IndexOf, comparisons, logical and/or/not, rendered as operator documents; CanRender because a predicate node can hold shapes the aggregation dialect declines.
             case MongoRegexExpression or MongoStringLengthExpression or MongoStringIndexOfExpression
-                    or MongoBinaryExpression or MongoUnaryExpression
-                when (leaf is not (MongoBinaryExpression or MongoUnaryExpression) || IsProjectablePredicate(leaf))
+                    or MongoBinaryExpression or MongoUnaryExpression or MongoElementNullCheckExpression
+                when (leaf is not (MongoBinaryExpression or MongoUnaryExpression or MongoElementNullCheckExpression)
+                      || IsProjectablePredicate(leaf))
                      && IsArrayFreeComputedSubtree(leaf) && MongoAggregationExpressionRenderer.CanRender(leaf):
                 break;
 
@@ -2062,6 +2090,22 @@ internal static class NativeProjectionBinder
 
             // Gate 1e: constant/parameter. No subtree, and RenderProject $literal-wraps it.
             case MongoConstantExpression or MongoParameterExpression:
+                break;
+
+            // Gate 1g: a whole complex value at a dotted path (`c.Address.Location`, `b.Home.Spot`), read back from `_v` by
+            // the shaper (ComplexTypeMaterializationBuilder) exactly as gate 1f reads a dotted scalar.
+            case MongoElementRefExpression { ComplexValue: not null } complexValue when complexValue.Path.Contains('.'):
+                break;
+
+            // Gate 1f: a stored field at a dotted path (an owned-reference or complex-property hop: `b.Home.City`,
+            // `c.Address.Location.Lat`; a composite-key component `_id.A`). TryDeriveDocumentPathAlias declines it (a
+            // dotted alias is read back as a literal key but rendered nested), but `_v` is exactly the driver's own bare
+            // alias, so an un-stripped fallback push-down writes the element the shaper reads. The shaper resolves the
+            // leaf to its IProperty (TryResolveFieldAccess walks the hops), so D-F10 and the serializer apply. A
+            // non-default-serialized dotted leaf is excluded here as well as by TryTranslateLeaf (order-independent): the
+            // `_v` read must not depend on which arm declined a converter first.
+            case MongoFieldExpression field
+                when field.ElementName.Contains('.') && StoredSerialization.HasDefaultKeySerialization(field.Property):
                 break;
 
             default:
@@ -2091,6 +2135,8 @@ internal static class NativeProjectionBinder
             MongoBinaryExpression { Operator: MongoBinaryOperator.AndAlso or MongoBinaryOperator.OrElse } logical
                 => IsProjectablePredicateOperand(logical.Left) && IsProjectablePredicateOperand(logical.Right),
             MongoUnaryExpression { Operator: MongoUnaryOperator.Not } not => IsProjectablePredicateOperand(not.Operand),
+            // A complex value's null check: $ifNull-normalized, so it answers null and missing alike.
+            MongoElementNullCheckExpression => true,
             _ => false
         };
 
@@ -2159,6 +2205,8 @@ internal static class NativeProjectionBinder
             MongoElementRefExpression => true,
             MongoFieldExpression or MongoConstantExpression or MongoParameterExpression => true,
             MongoNumericTypeBracketExpression => true,
+            // A null/missing test of a stored element (a complex value): a plain path read.
+            MongoElementNullCheckExpression => true,
             _ => false
         };
 

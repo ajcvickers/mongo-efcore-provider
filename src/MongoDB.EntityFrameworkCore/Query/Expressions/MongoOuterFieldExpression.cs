@@ -30,11 +30,21 @@ namespace MongoDB.EntityFrameworkCore.Query.Expressions;
 /// </remarks>
 internal sealed class MongoOuterFieldExpression : MongoExpression
 {
-    public MongoOuterFieldExpression(IProperty property, string elementName)
+    public MongoOuterFieldExpression(IProperty property, string elementName, bool nullSafe = false)
     {
         Property = property;
         ElementName = elementName;
+        NullSafe = nullSafe;
     }
+
+    /// <summary>
+    /// When <see langword="true"/>, the aggregation renderer wraps this field in <c>$ifNull</c> against <c>null</c>, as
+    /// <see cref="MongoFieldExpression.NullSafe"/>. Set only inside a COMPLEX collection's element scope for an outer value
+    /// that may be absent (a nullable property, or one under an optional owned/complex ancestor): the element's own leaves
+    /// read a null element's members as null there, and the outer value must read MISSING as null too,
+    /// or <c>a.Street == p.Opt!.Text</c> compares null with MISSING. Owned element scopes never set it.
+    /// </summary>
+    public bool NullSafe { get; }
 
     /// <summary>The EF Core property metadata for this field.</summary>
     public new IProperty Property { get; }

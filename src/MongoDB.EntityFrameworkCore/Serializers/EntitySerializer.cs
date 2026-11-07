@@ -102,6 +102,16 @@ internal class EntitySerializer<TValue> :
             return true;
         }
 
+        // Complex properties after scalar properties and before navigations. EF keeps member names unique across
+        // all three kinds on a type, so the order decides cost, not outcome. This also covers owned entity types,
+        // whose serializer is this one, so a complex property on an owned type resolves inside its subdocument.
+        var complexProperty = _entityType.FindComplexProperty(memberName);
+        if (complexProperty != null)
+        {
+            serializationInfo = _bsonSerializerFactory.GetComplexPropertySerializationInfo(complexProperty);
+            return true;
+        }
+
         var navigation = _entityType.FindNavigation(memberName);
         if (navigation != null)
         {

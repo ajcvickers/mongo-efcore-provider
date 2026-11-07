@@ -101,9 +101,10 @@ internal sealed partial class MongoExpressionTranslator
             type = null;
             path = "";
 
-            if (ElementParam is not null && ReferenceEquals(node, ElementParam) && _entityType.IsOwned())
+            if (ElementParam is not null && ReferenceEquals(node, ElementParam)
+                && _scopeType is IEntityType ownedScope && ownedScope.IsOwned())
             {
-                type = _entityType;
+                type = ownedScope;
                 return true;
             }
 
@@ -144,7 +145,7 @@ internal sealed partial class MongoExpressionTranslator
             return false;
         }
 
-        if (!TryResolveOwnedCollectionPath(Unwrap(UnwrapAsQueryable(source)), out var arrayPath, out var elementType, out var isOuter)
+        if (!TryResolveEmbeddedCollectionPath(Unwrap(UnwrapAsQueryable(source)), out var arrayPath, out var elementType, out var isOuter)
             || isOuter)
         {
             return false;
