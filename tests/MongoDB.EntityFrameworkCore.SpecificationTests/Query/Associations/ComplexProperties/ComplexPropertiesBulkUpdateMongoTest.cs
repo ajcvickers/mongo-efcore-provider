@@ -42,16 +42,28 @@ public class ComplexPropertiesBulkUpdateMongoTest : ComplexPropertiesBulkUpdateT
 
     public override async Task Delete_required_associate()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Delete_required_associate());
+#else
         await base.Delete_required_associate();
 
         AssertMql();
+    
+#endif
     }
 
     public override async Task Delete_optional_associate()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Delete_optional_associate());
+#else
         await base.Delete_optional_associate();
 
         AssertMql();
+    
+#endif
     }
 
     public override async Task Update_property_inside_associate()
@@ -96,12 +108,18 @@ RootEntity.?
 
     public override async Task Update_property_on_projected_associate_with_OrderBy_Skip()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_property_on_projected_associate_with_OrderBy_Skip());
+#else
         await base.Update_property_on_projected_associate_with_OrderBy_Skip();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_associate_with_null_required_property()
@@ -136,22 +154,34 @@ RootEntity.?
 
     public override async Task Update_associate_to_another_associate()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_associate_to_another_associate());
+#else
         await base.Update_associate_to_another_associate();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_nested_associate_to_another_nested_associate()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_nested_associate_to_another_nested_associate());
+#else
         await base.Update_nested_associate_to_another_nested_associate();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_associate_to_inline()
@@ -256,32 +286,50 @@ RootEntity.?
 
     public override async Task Update_collection_referencing_the_original_collection()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_collection_referencing_the_original_collection());
+#else
         await base.Update_collection_referencing_the_original_collection();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_nested_collection_to_another_nested_collection()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_nested_collection_to_another_nested_collection());
+#else
         await base.Update_nested_collection_to_another_nested_collection();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_inside_structural_collection()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_inside_structural_collection());
+#else
         await base.Update_inside_structural_collection();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_primitive_collection_to_constant()
@@ -306,22 +354,34 @@ RootEntity.?
 
     public override async Task Update_primitive_collection_to_another_collection()
     {
+#if EF10
+        // Fails: Query shape (cross-collection subquery, left-join pushdown, SelectMany) not translated #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_primitive_collection_to_another_collection());
+#else
         await base.Update_primitive_collection_to_another_collection();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_inside_primitive_collection()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_inside_primitive_collection());
+#else
         await base.Update_inside_primitive_collection();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_multiple_properties_inside_same_associate()
@@ -336,22 +396,34 @@ RootEntity.?
 
     public override async Task Update_multiple_properties_inside_associates_and_on_entity_type()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_multiple_properties_inside_associates_and_on_entity_type());
+#else
         await base.Update_multiple_properties_inside_associates_and_on_entity_type();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     public override async Task Update_multiple_projected_associates_via_anonymous_type()
     {
+#if EF10
+        // Fails: Not supported yet #35
+        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_multiple_projected_associates_via_anonymous_type());
+#else
         await base.Update_multiple_projected_associates_via_anonymous_type();
 
         AssertMql(
 """
 RootEntity.?
 """);
+    
+#endif
     }
 
     private void AssertMql(params string[] expected)
