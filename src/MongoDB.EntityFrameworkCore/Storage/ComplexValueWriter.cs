@@ -140,6 +140,10 @@ internal static class ComplexValueWriter
     /// </exception>
     internal static BsonValue SerializeDetachedComplexValue(IComplexProperty complexProperty, object? value)
     {
+        // SaveChanges gets EF's own check that required members are non-null; a bulk update has no change tracker, so a value
+        // with a null required member would be stored and then fail every read of the document. Refused before any write.
+        ThrowIfRequiredMemberIsNull(complexProperty, value, complexProperty.Name);
+
         var document = new BsonDocument();
         using (var writer = new BsonDocumentWriter(document))
         {
@@ -149,6 +153,71 @@ internal static class ComplexValueWriter
         }
 
         return document[0];
+    }
+
+    /// <summary>
+    /// Throws when <paramref name="value"/> (a value for <paramref name="complexProperty"/>) holds a null in a required
+    /// member at any depth: a required scalar, a required nested complex property, or the same inside a collection element.
+    /// A null optional complex property or a null collection element is allowed, as for SaveChanges.
+    /// </summary>
+    private static void ThrowIfRequiredMemberIsNull(IComplexProperty complexProperty, object? value, string path)
+    {
+        if (value is null)
+        {
+            // A null for the property itself is the caller's concern (optional: BSON null; required: refused by the setter).
+            return;
+        }
+
+        if (complexProperty.IsEmbeddedCollection())
+        {
+            var index = 0;
+            foreach (var element in (IEnumerable)value)
+            {
+                if (element is not null)
+                {
+                    ThrowIfRequiredMemberIsNull(complexProperty.ComplexType, element, $"{path}[{index}]");
+                }
+
+                index++;
+            }
+
+            return;
+        }
+
+        ThrowIfRequiredMemberIsNull(complexProperty.ComplexType, value, path);
+    }
+
+    private static void ThrowIfRequiredMemberIsNull(IComplexType complexType, object instance, string path)
+    {
+        foreach (var property in complexType.GetProperties().Where(p => !p.IsShadowProperty() && !p.IsNullable))
+        {
+            if (property.GetGetter().GetClrValue(instance) is null)
+            {
+                throw new InvalidOperationException(
+                    $"ExecuteUpdate cannot set the complex property '{path}' because its required member "
+                    + $"'{complexType.DisplayName()}.{property.Name}' is null: the stored document would no longer be readable. "
+                    + "No document was modified.");
+            }
+        }
+
+        foreach (var nested in complexType.GetComplexProperties())
+        {
+            var nestedValue = nested.GetGetter().GetClrValue(instance);
+            if (nestedValue is null)
+            {
+                if (!nested.IsOptional())
+                {
+                    throw new InvalidOperationException(
+                        $"ExecuteUpdate cannot set the complex property '{path}' because its required complex member "
+                        + $"'{complexType.DisplayName()}.{nested.Name}' is null: the stored document would no longer be readable. "
+                        + "No document was modified.");
+                }
+
+                continue;
+            }
+
+            ThrowIfRequiredMemberIsNull(nested, nestedValue, $"{path}.{nested.Name}");
+        }
     }
 
     private static void WriteComplexValue(IBsonWriter writer, IUpdateEntry? entry, IComplexProperty complexProperty, object? value)
