@@ -29,7 +29,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
 /// <summary>
 /// A member read through a DOWNCAST of a TPH root (<c>((Derived)b).Detours</c>, <c>(a as Cat)!.Vet.Code</c>) must be
-/// resolved against the CAST type, never the operand's (base) type: the walkers that key the R20/R25 refusal net, the bulk
+/// resolved against the CAST type, never the operand's (base) type: the walkers that key the null-element and collection-null refusal scanner, the bulk
 /// allow-list and the EF-337 stored-ordering refusal stripped the cast and looked the member up on the base type, found
 /// nothing, and let the driver serve (or write) wrong rows. One shared resolver (<c>MemberOwnerType</c>) now decides the
 /// owner type for all three. Every row is hand-written.
@@ -189,7 +189,7 @@ public partial class ComplexTypeDowncastTests(TemporaryDatabaseFixture database)
 #endif
 
 #if !EF8 && !EF9
-    // ── R20/R25 refusal net and the bulk allow-list through a downcast (complex collections: EF10) ────────────────
+    // ── Refusal scanner and the bulk allow-list through a downcast (complex collections: EF10) ────────────────
 
     public class Stop
     {
@@ -289,7 +289,7 @@ public partial class ComplexTypeDowncastTests(TemporaryDatabaseFixture database)
     public void Derived_collection_compared_with_null_through_a_downcast_is_refused()
     {
         // RED (5547cfa2): Native served the driver's [b, d-nullarr, d-nullelem] (C#: [b, d-nullarr]: Detours == null is true
-        // only for a null array and for a row that is not a Derived); the OfType spelling was already refused (R25).
+        // only for a null array and for a row that is not a Derived); the OfType spelling was already refused.
         Refused(Fleet(q => Names(q.Where(x => ((Derived)x).Detours == null))), ["b", "d-nullarr", "d-nullelem"], CollectionNullRefusal);
         Refused(Fleet(q => Names(q.Where(x => (x as Derived)!.Detours == null))), ["b", "d-nullarr", "d-nullelem"], CollectionNullRefusal);
         // A nested downcast (through object) resolves to the outermost cast type too.
@@ -365,7 +365,7 @@ public partial class ComplexTypeDowncastTests(TemporaryDatabaseFixture database)
     public void Bulk_update_with_an_allowed_element_predicate_through_a_downcast()
     {
         // An allow-listed atom (`== non-null`) over a REQUIRED derived collection is admitted: d-full's Oslo matches; the null
-        // element's City is missing on the server, not equal to "Oslo" (R17's `null == "Oslo"` is false too).
+        // element's City is missing on the server, not equal to "Oslo" (C#'s `null == "Oslo"` is false too).
         var seed = FleetSeed();
         var collection = Collection(nameof(Bulk_update_with_an_allowed_element_predicate_through_a_downcast), seed);
         using (var db = new FleetContext(Options<FleetContext>(MongoQueryMode.Native), collection))

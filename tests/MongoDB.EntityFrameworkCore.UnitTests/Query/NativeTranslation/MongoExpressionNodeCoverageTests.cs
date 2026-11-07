@@ -107,8 +107,8 @@ public class MongoExpressionNodeCoverageTests
     /// <summary>
     /// One representative instance per concrete node type — the simplest legal one, since the harness checks arm
     /// coverage, not value space. With <paramref name="nullSafeOperands"/> every field and element reference is
-    /// <c>NullSafe</c> (a complex element scope's read, ruling R17) and the coalesce fallback is a field, so
-    /// <c>ComplexElementNullGuardRefusalTests</c> can find the structural <c>MayBeNull</c> arms (R18) by comparing the two
+    /// <c>NullSafe</c> (a complex element scope's read) and the coalesce fallback is a field, so
+    /// <c>ComplexElementNullGuardRefusalTests</c> can find the structural <c>MayBeNull</c> arms by comparing the two
     /// sample sets.
     /// </summary>
     internal static Dictionary<Type, MongoExpression> BuildSamples(bool valueConverted = false, bool nullSafeOperands = false)
@@ -349,7 +349,7 @@ public class MongoExpressionNodeCoverageTests
     }
 
     /// <summary>
-    /// Ruling R18: <see cref="MongoAggregationExpressionRenderer.MayBeNull"/> is structural for the nodes that take their CLR
+    /// <see cref="MongoAggregationExpressionRenderer.MayBeNull"/> is structural for the nodes that take their CLR
     /// type from one operand but are null when an operand that feeds them is (a null complex element's NullSafe leaf); the
     /// CLR-type check stays as the fallback, so the same nodes over non-NullSafe operands are judged exactly as before.
     /// </summary>

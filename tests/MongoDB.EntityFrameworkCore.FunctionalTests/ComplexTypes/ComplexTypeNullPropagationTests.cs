@@ -29,7 +29,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 #nullable enable
 
 /// <summary>
-/// Null propagation (ruling R14: an absent parent reads its children as null; R17: a null element reads its members as
+/// Null propagation (an absent parent reads its children as null; a null element reads its members as
 /// null) where the native path compared a MISSING value raw against a null-normalized one: (a) a correlated ROOT field
 /// read inside a complex element scope, (b) a <c>CompareTo</c>/<c>string.Compare</c> folded to a query-dialect range that
 /// never matches null/missing, (c) a leaf-to-leaf comparison through an optional parent. Every answer is hand-written
@@ -211,9 +211,9 @@ public class ComplexTypeNullPropagationTests(TemporaryDatabaseFixture database) 
         Serves(People(q => q.Where(p => p.Addresses.Count(a => a.Street != p.Opt!.Text) == 1)), ["n2", "n4"], ["n1", "n2", "n4"]);
         // Nested All: n1's X has a Unit whose Code null equals the absent Opt's Text; n2's X has X.
         Serves(People(q => q.Where(p => p.Addresses.All(a => a.Units.All(u => u.Code != p.Opt!.Text)))), ["n3", "n4"], ["n1", "n3", "n4"]);
-        // An element-leaf Select chain's Contains goes to the fallback (R21 limit), whose rows are C#'s here.
+        // An element-leaf Select chain's Contains goes to the fallback (a known limit of the refusal scanner), whose rows are C#'s here.
         Declines(People(q => q.Where(p => p.Addresses.Select(a => a.Street).Contains(p.Opt!.Text))), "n1", "n4");
-        // A local list holding the outer value is refused in Native (R20: a membership test of a member value).
+        // A local list holding the outer value is refused in Native (a membership test of a member value).
         Refused(People(q => q.Where(p => p.Addresses.Any(a => new[] { p.Opt!.Text, "zz" }.Contains(a.Street)))), ["n1"],
             "a membership test of a member value in a local collection");
         // A required parent's nullable leaf: n1's null element reads City null, and n1's Main.Text is null (unchanged MQL).
@@ -226,7 +226,7 @@ public class ComplexTypeNullPropagationTests(TemporaryDatabaseFixture database) 
         // Complex element scope: the outer leaf is $ifNull'd like the element leaf.
         Assert.Contains("""{ "$eq" : [{ "$ifNull" : ["$$e.Street", null] }, { "$ifNull" : ["$Opt.Text", null] }] }""",
             Pipeline(q => q.Where(p => p.Addresses.Any(a => a.Street == p.Opt!.Text))));
-        // OWNED element scope: byte-identical to 5547cfa2 (owner ruling: no $ifNull in owned element scopes).
+        // OWNED element scope: byte-identical to 5547cfa2 (no $ifNull in owned element scopes).
         Assert.Contains("""{ "$eq" : ["$$e.Title", "$Opt.Text"] }""",
             Pipeline(q => q.Where(p => p.Posts.Any(c => c.Title == p.Opt!.Text))));
     }
@@ -234,7 +234,7 @@ public class ComplexTypeNullPropagationTests(TemporaryDatabaseFixture database) 
     [Fact]
     public void Owned_element_scope_rows_are_unchanged()
         // Control: n2's Post X equals Opt.Text X. n1's Post (Title null) vs its absent Opt: the owned scope keeps the raw
-        // compare (owner ruling), so it does not match (C# would answer true); unchanged by this fix.
+        // compare, so it does not match (C# would answer true); unchanged by this fix.
         => Serves(People(q => q.Where(p => p.Posts.Any(c => c.Title == p.Opt!.Text))), ["n2"], ["n2"]);
 
     // ── (b) CompareTo / string.Compare folds ─────────────────────────────────────────────────────────────────────

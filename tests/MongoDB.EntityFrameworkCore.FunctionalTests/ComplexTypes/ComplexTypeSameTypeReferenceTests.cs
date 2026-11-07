@@ -79,7 +79,7 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
                 b.HasOne(p => p.Referrer).WithMany(p => p.Referrals).HasForeignKey(p => p.ReferrerId);
                 b.ComplexProperty(p => p.Badge);
                 b.ComplexProperty(p => p.Desk);
-                // EF8/EF9 send complex projections of an entity with an owned navigation to the fallback (ruling R24), so the
+                // EF8/EF9 send complex projections of an entity with an owned navigation to the fallback, so the
                 // owned Card is mapped only for the tests that read it.
                 if (withOwned)
                 {
@@ -231,7 +231,7 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
     public void Self_join_mixed_projection_of_the_whole_outer_entity_and_inner_leaves()
     {
         // The flipped pin (ComplexTypeDerivedShaperJoinTests.Explicit_self_join_mixed_projection_of_inner_members_reads_the_inner_document)
-        // with an OWNED inner leaf and a root-scalar inner leaf too (exception (h)). RED (5547cfa2): `Dev|B-dev ; Guest|B-guest`.
+        // with an OWNED inner leaf and a root-scalar inner leaf too. RED (5547cfa2): `Dev|B-dev ; Guest|B-guest`.
         var run = Seed(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
             .OrderBy(x => x.p.Name).Select(x => new { x.p, x.e.Badge.Code }).ToList().Select(x => x.p.Name + "|" + x.Code)]);
         Declines(NoTracking(run), "Dev|B-boss", "Guest|B-boss");
@@ -242,7 +242,7 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
         Native(NoTracking(Seed(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
             .OrderBy(x => x.p.Name).Select(x => new { x.p, x.e.Name }).ToList().Select(x => x.p.Name + "|" + x.Name)])),
             "Dev|Boss", "Guest|Boss");
-        // NON-complex (exception (h)): at 5547cfa2 this answered `Dev|Dev|c-dev ; Guest|Guest|c-guest`.
+        // NON-complex: at 5547cfa2 this answered `Dev|Dev|c-dev ; Guest|Guest|c-guest`.
         Declines(NoTracking(SeedOwned(db => [.. db.People.Join(db.People, p => p.ReferrerId, e => (ObjectId?)e.Id, (p, e) => new { p, e })
             .OrderBy(x => x.p.Name).Select(x => new { x.p, E = x.e.Name, x.e.Card.Tag }).ToList().Select(x => x.p.Name + "|" + x.E + "|" + x.Tag)])),
             "Dev|Boss|c-boss", "Guest|Boss|c-boss");
@@ -254,7 +254,7 @@ public class ComplexTypeSameTypeReferenceTests(TemporaryDatabaseFixture database
     public void Root_scalar_of_a_same_type_reference_beside_the_whole_root_entity()
     {
         // The mixed reader's `_inner` arm (`shaper.StructuralType == _rootEntityType` declines it) and the field-access arm
-        // agree: the referrer's Name and Badge leaf are read off the joined document. NON-complex `R` (exception (h)): at
+        // agree: the referrer's Name and Badge leaf are read off the joined document. NON-complex `R`: at
         // 5547cfa2 `new { p, R = p.Referrer!.Name }` answered the outer Name (`Dev|Dev ; Guest|Guest`).
         Declines(NoTracking(Seed(db => [.. Referred(db).Select(p => new { p, R = p.Referrer!.Name, C = p.Referrer.Badge.Code }).ToList()
             .Select(x => $"{x.p.Name}|{x.p.Badge.Code}|{x.R}|{x.C}")])), "Dev|B-dev|Boss|B-boss", "Guest|B-guest|Boss|B-boss");

@@ -28,7 +28,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// sentence in docs/complex-types.md). A ONE-argument constructor or record of a whole complex value, and a member-init
 /// DTO, are served in every mode (including a value stored under renamed members). A construction with MORE than one
 /// argument whose arguments are all whole complex values declines natively and the fallback serves it (each argument read
-/// from its own element; it used to read every argument from the last one, spec known limitation 29); one that mixes a
+/// from its own element; it used to read every argument from the last one); one that mixes a
 /// whole complex value with a scalar declines natively and the fallback refuses it loudly. More shapes:
 /// <see cref="ComplexValueSameTypeArgumentTests"/>.
 /// </summary>
@@ -142,7 +142,7 @@ public class ComplexValueConstructorProjectionTests(TemporaryDatabaseFixture dat
         };
     }
 
-    // Was a silent wrong read (spec known limitation 29, resolved): two whole complex values of the same CLR type, stored
+    // Was a silent wrong read (resolved): two whole complex values of the same CLR type, stored
     // alike, as constructor arguments read EVERY argument from the LAST one (W|W). Each is now read from its own element,
     // like the owned control below.
     [Fact]

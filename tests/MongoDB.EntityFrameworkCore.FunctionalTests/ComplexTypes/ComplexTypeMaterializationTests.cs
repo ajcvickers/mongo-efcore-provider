@@ -346,7 +346,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
             Assert.True(
                 outcome.StartsWith($"{mode}: NotSupportedException: ")
                 && outcome.Contains($"cannot be the operand of '{operatorName}'"),
-                $"{mode}: expected the R7 NotSupportedException for '{operatorName}', got: {outcome}");
+                $"{mode}: expected the whole-value NotSupportedException for '{operatorName}', got: {outcome}");
         }
     }
 
@@ -392,7 +392,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
     public void Operators_over_a_construction_holding_a_complex_value_are_refused_in_every_mode(string construction, string op)
     {
         // Every construction arm of the projection binder (positional ctor, record, member-init, anonymous, nested) must
-        // set the refusal flag (fix round 2: the positional-ctor arm used to bypass it and fall back unguarded).
+        // set the refusal flag (the positional-ctor arm used to bypass it and fall back unguarded).
         var collection = SeedCustomers(nameof(Operators_over_a_construction_holding_a_complex_value_are_refused_in_every_mode) + construction + op);
         AssertRefusedInEveryMode(m => Customers(collection, m, q => construction switch
         {
@@ -462,18 +462,18 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         Assert.True(expected != null && expected.All(e => outcome.Contains(e)), $"{shape}: {outcome}");
     }
 
-    // Per-shape fragments every mode's outcome must contain, measured (fix round 2): EF folds All/Max(selector) over the
+    // Per-shape fragments every mode's outcome must contain, measured: EF folds All/Max(selector) over the
     // source (correct rows); Cast is folded away so Distinct is refused. GroupBy shapes: GroupBy_over_a_whole_complex_value….
     private static readonly Dictionary<string, string[]> ExpectedOtherOperatorOutcomes = new()
     {
-        ["contains"] = R7("Contains"),
-        ["cast_distinct"] = R7("Distinct"),
-        ["distinct_count"] = R7("Distinct"),
+        ["contains"] = WholeValueOperatorRefusal("Contains"),
+        ["cast_distinct"] = WholeValueOperatorRefusal("Distinct"),
+        ["distinct_count"] = WholeValueOperatorRefusal("Distinct"),
         ["all"] = ["NativeOnly: rows [True]", "Native: rows [True]", "DriverLinq: rows [True]"],
         ["max_selector"] = ["NativeOnly: rows [5]", "Native: rows [5]", "DriverLinq: rows [5]"],
     };
 
-    private static string[] R7(string op)
+    private static string[] WholeValueOperatorRefusal(string op)
         => [.. new[] { "NativeOnly", "Native", "DriverLinq" }.Select(m => $"{m}: NotSupportedException: A projected whole complex value cannot be the operand of '{op}'")];
 
     [Theory]
@@ -483,7 +483,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         // A projected complex value is its STORED subdocument, not the CLR value, and no path reads it back correctly as an
         // operand: the native pipeline would dedupe/combine stored forms, and the driver-LINQ push-down can't deserialize a
         // complex value at all (ComplexTypeSerializer). So a value-reading operator over it is refused with a clear message
-        // in every mode (ruling R7), never answered from the reader's missing-element rule.
+        // in every mode, never answered from the reader's missing-element rule.
         var collection = SeedCustomers(nameof(Operators_that_read_a_projected_complex_value_are_refused_in_every_mode) + shape);
         var (query, op) = shape switch
         {
@@ -511,10 +511,10 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
     [MemberData(nameof(GroupByOverComplexValueShapes))]
     public void GroupBy_over_a_whole_complex_value_is_refused_in_every_mode(string shape)
     {
-        // Ruling R8: a whole complex value taking part in a grouping (the key, a key part, or read off the grouped elements in
-        // the result) is refused with the R7 message naming GroupBy in every mode. Before, these reached EF's
+        // A whole complex value taking part in a grouping (the key, a key part, or read off the grouped elements in
+        // the result) is refused with the whole-value message naming GroupBy in every mode. Before, these reached EF's
         // ConstantVerifyingExpressionVisitor over an unbound GroupByShaperExpression ("Calling
-        // 'ShapedQueryExpression.VisitChildren' is not allowed"; stack in the fix round 3 report).
+        // 'ShapedQueryExpression.VisitChildren' is not allowed"; stack not recorded).
         var collection = SeedCustomers(nameof(GroupBy_over_a_whole_complex_value_is_refused_in_every_mode) + shape);
         AssertRefusedInEveryMode(m => Customers(collection, m, q => shape switch
         {
@@ -606,7 +606,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
             Customers(collection, MongoQueryMode.Native, q => q.Where(c => c.Address.City.StartsWith(prefix)).ToList().Select(Fmt)));
     }
 
-    // ── Entity beside complex leaves (Task 9's interim pins), client-evaluated leaves ─────────────────────────
+    // ── Entity beside complex leaves (interim pins), client-evaluated leaves ─────────────────────────
 
     [Fact]
     public void Entity_beside_a_complex_leaf_in_member_and_EF_Property_spellings()
@@ -634,7 +634,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
     public void Client_evaluated_leaf_reads_the_stored_element_name_not_the_CLR_name()
     {
         // HasElementName model with a DECOY: the CLR-named element `Address` holds a different City. A complex leaf under a
-        // client method is read by the mixed shaper off the whole document (Task 9 mutation MG: the read side's segment is
+        // client method is read by the mixed shaper off the whole document (the read side's segment is
         // the complex property's element name, not its CLR name).
         var collection = database.CreateCollection<MCustomer>(Unique(nameof(Client_evaluated_leaf_reads_the_stored_element_name_not_the_CLR_name)));
         Raw(collection).InsertMany(
@@ -1282,7 +1282,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         }, ["S1|c|1,2"]);
     }
 
-    // ── Tracking: load by query, then mutate (closes the Task 5/6 deferred items) ─────────────────────────────
+    // ── Tracking: load by query, then mutate (deferred items) ─────────────────────────────
 
     [Fact]
     public void Query_loaded_entity_leaf_change_is_detected_and_saved_as_a_whole_subdocument()
@@ -1491,7 +1491,7 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         };
 
         // optional_record: a positional ctor with a complex argument declines natively (IsScalarPositionalConstruction), so
-        // the operator meets the same R7 refusal in every mode.
+        // the operator meets the same whole-value refusal in every mode.
         AssertRefusedInEveryMode(run, op);
     }
 

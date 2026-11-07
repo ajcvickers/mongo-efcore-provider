@@ -29,7 +29,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 #nullable enable
 
 /// <summary>
-/// Robustness of complex types (Task 15) on the tracking, model-caching, compiled-query and SaveChanges side: tracking
+/// Robustness of complex types on the tracking, model-caching, compiled-query and SaveChanges side: tracking
 /// behaviours, shared value instances, two models with different element names in one process, concurrency over the
 /// new caches, re-executed cached queries with different captured values, and SaveChanges edge cases.
 /// </summary>
@@ -494,7 +494,7 @@ public class ComplexTypeRobustnessUpdateTests(TemporaryDatabaseFixture database)
                 }
 
                 // A captured complex comparand (member-wise equality parameter) re-evaluated per execution. Native only:
-                // driver-LINQ refuses a whole complex value comparison (R1); the leaf filter below goes through the
+                // driver-LINQ refuses a whole complex value comparison; the leaf filter below goes through the
                 // serializer caches instead.
                 if (mode != MongoQueryMode.DriverLinq)
                 {
@@ -645,7 +645,7 @@ public class ComplexTypeRobustnessUpdateTests(TemporaryDatabaseFixture database)
         var collection = SeedPeople();
 
         // Context 1 loads; context 2 changes a sibling leaf and saves; context 1 then changes another leaf of the same
-        // complex property and saves: whole-subdocument rewrite (ruling R5) is last-writer-wins, documented.
+        // complex property and saves: whole-subdocument rewrite is last-writer-wins, documented.
         using var first = Context(collection, ConfigurePerson);
         var stale = first.Entities.Single(p => p.Name == "a");
 
@@ -709,7 +709,7 @@ public class ComplexTypeRobustnessUpdateTests(TemporaryDatabaseFixture database)
         }
     }
 
-    // ── Part 2(b), Task 11 minor: a composite-key component as a filtered-Include sort key ───────────────────────
+    // ── A composite-key component as a filtered-Include sort key ───────────────────────
 
     public class Owner
     {

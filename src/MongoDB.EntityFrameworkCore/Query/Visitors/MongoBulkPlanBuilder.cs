@@ -304,8 +304,7 @@ internal static class MongoBulkPlanBuilder
             if (value is null && !complexProperty.IsOptional())
             {
                 throw new InvalidOperationException(
-                    $"ExecuteUpdate cannot set the required complex property '{complexProperty.DeclaringType.DisplayName()}."
-                    + $"{complexProperty.Name}' to null. No document was modified.");
+                    ComplexTypeRefusals.BulkSetRequiredComplexToNull(complexProperty.DeclaringType.DisplayName(), complexProperty.Name));
             }
 
             // A whole complex value: the stored form SaveChanges writes (same writer), or BSON null for an optional one.

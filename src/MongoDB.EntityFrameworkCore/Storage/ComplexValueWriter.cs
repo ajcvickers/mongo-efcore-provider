@@ -23,6 +23,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Query;
 using MongoDB.EntityFrameworkCore.Serializers;
 
 namespace MongoDB.EntityFrameworkCore.Storage;
@@ -194,9 +195,7 @@ internal static class ComplexValueWriter
             if (property.GetGetter().GetClrValue(instance) is null)
             {
                 throw new InvalidOperationException(
-                    $"ExecuteUpdate cannot set the complex property '{path}' because its required member "
-                    + $"'{complexType.DisplayName()}.{property.Name}' is null: the stored document would no longer be readable. "
-                    + "No document was modified.");
+                    ComplexTypeRefusals.BulkSetComplexRequiredMemberNull(path, $"{complexType.DisplayName()}.{property.Name}"));
             }
         }
 
@@ -208,9 +207,7 @@ internal static class ComplexValueWriter
                 if (!nested.IsOptional())
                 {
                     throw new InvalidOperationException(
-                        $"ExecuteUpdate cannot set the complex property '{path}' because its required complex member "
-                        + $"'{complexType.DisplayName()}.{nested.Name}' is null: the stored document would no longer be readable. "
-                        + "No document was modified.");
+                        ComplexTypeRefusals.BulkSetComplexRequiredComplexMemberNull(path, $"{complexType.DisplayName()}.{nested.Name}"));
                 }
 
                 continue;
@@ -289,8 +286,7 @@ internal static class ComplexValueWriter
             : entry is not null
                 ? entry.GetCurrentValue(member)
                 : throw new NotSupportedException(
-                  $"The complex type '{member.DeclaringType.DisplayName()}' has the shadow property '{member.Name}', which a value "
-                  + "outside the change tracker does not carry, so it cannot be written by ExecuteUpdate.");
+                  ComplexTypeRefusals.BulkSetComplexShadowProperty(member.DeclaringType.DisplayName(), member.Name));
 
     /// <summary>
     /// Whether EF reports a change anywhere inside <paramref name="complexProperty"/> on <paramref name="entry"/>:

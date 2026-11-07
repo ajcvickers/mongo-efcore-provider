@@ -23,7 +23,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
 /// <summary>
 /// <c>ElementAt</c>, <c>ElementAtOrDefault</c> and <c>DefaultIfEmpty</c> read no projected VALUE, but after a projected whole
-/// complex value they stay refused with the R7 message in every mode (documented as not supported): none of them has a native
+/// complex value they stay refused with the whole-value message in every mode (documented as not supported): none of them has a native
 /// translation even for a scalar projection (measured: <c>Select(c =&gt; c.Name).ElementAt(1)</c> runs only on driver-LINQ,
 /// <c>ElementAtOrDefault</c> fails there, <c>DefaultIfEmpty</c> is untranslatable), and the driver-LINQ fallback cannot read
 /// a complex value back, so admitting them would only trade the clear refusal for a less clear failure. Never wrong rows.

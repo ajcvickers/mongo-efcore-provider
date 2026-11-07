@@ -130,7 +130,7 @@ public class NativeProjectionBinderContainerTests
             classify));
     }
 
-    // All-row-independent: Task 4's client-evaluated leaf (only the constant sentinel is projected), not `_ctorArg<N>`.
+    // All-row-independent: the client-evaluated leaf (only the constant sentinel is projected), not `_ctorArg<N>`.
     [Fact]
     public void Row_independent_container_is_the_client_evaluated_leaf_not_a_positional_container()
     {

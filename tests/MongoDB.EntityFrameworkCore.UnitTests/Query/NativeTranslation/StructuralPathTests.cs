@@ -567,7 +567,7 @@ public static class StructuralPathTests
         Assert.Equal("Owned", Assert.IsType<MongoElementRefExpression>(binary.Left).Path);
 
         // A complex-property null check is not an entity-typed operand (no owned-navigation $$ROOT/element-ref path): it
-        // is the complex value's own null-or-missing test, `{ Address: null }` (Task 12).
+        // is the complex value's own null-or-missing test, `{ Address: null }`.
         Assert.True(translator.TryTranslate(Predicate<TranslatorNullCheckHolder>(e => e.Address == null), out var complex));
         var nullCheck = Assert.IsType<MongoElementNullCheckExpression>(complex);
         Assert.Equal("Address", nullCheck.Path);

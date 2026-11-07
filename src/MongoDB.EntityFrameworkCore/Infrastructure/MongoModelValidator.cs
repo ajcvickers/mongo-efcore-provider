@@ -27,6 +27,7 @@ using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.EntityFrameworkCore.Diagnostics;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Metadata;
+using MongoDB.EntityFrameworkCore.Query;
 using MongoDB.EntityFrameworkCore.Storage;
 
 namespace MongoDB.EntityFrameworkCore.Infrastructure;
@@ -240,11 +241,7 @@ public class MongoModelValidator : ModelValidator
             var concurrencyToken = complexProperty.ComplexType.GetDeclaredProperties().FirstOrDefault(p => p.IsConcurrencyToken);
             if (concurrencyToken != null)
             {
-                throw new NotSupportedException(
-                    MemberOnType(concurrencyToken) +
-                    " is configured as a concurrency token or row version, but it belongs to a complex type." +
-                    " Concurrency tokens are only supported on the document-root entity, where they" +
-                    " guard the whole document including its complex properties.");
+                throw new NotSupportedException(ComplexTypeRefusals.ConcurrencyTokenInComplexType(MemberOnType(concurrencyToken)));
             }
 
             ValidateNoConcurrencyTokensInsideComplexTypes(complexProperty.ComplexType);
@@ -313,10 +310,7 @@ public class MongoModelValidator : ModelValidator
                 && !clrType.IsInterface && (clrType.IsAbstract || clrType.GetConstructor(Type.EmptyTypes) == null))
             {
                 throw new NotSupportedException(
-                    MemberOnType(complexProperty) + $" is a complex collection of CLR type '{clrType.ShortDisplayName()}', which"
-                    + " EF Core cannot materialize or save: collection types without a public parameterless"
-                    + " constructor are not supported. Declare it as List<T>, IList<T>, an array, or another mutable"
-                    + " collection type with a public parameterless constructor.");
+                    ComplexTypeRefusals.ComplexCollectionClrTypeNotMaterializable(MemberOnType(complexProperty), clrType.ShortDisplayName()));
             }
 
             ValidateComplexCollectionClrTypes(complexProperty.ComplexType);
@@ -482,12 +476,7 @@ public class MongoModelValidator : ModelValidator
         if (!EncryptionAnnotationNames.Any(name => member.FindAnnotation(name) != null)) return;
 
         throw new InvalidOperationException(
-            MemberOnType(member)
-            + (member is IComplexProperty ? $" (complex type '{complexType.DisplayName()}')" : "")
-            + " is configured for encryption."
-            + " Encryption (Queryable Encryption or client-side field level encryption) is not supported for complex"
-            + " properties or for properties inside complex types; map the value as a property of an entity type"
-            + " or an owned entity type to encrypt it.");
+            ComplexTypeRefusals.EncryptionInComplexType(MemberOnType(member), member is IComplexProperty, complexType.DisplayName()));
     }
 
     /// <summary>
@@ -730,9 +719,7 @@ public class MongoModelValidator : ModelValidator
                 // skip it. A complex property is always written, so an empty name would store an element named "".
                 if (member is IComplexProperty)
                 {
-                    throw new InvalidOperationException(MemberOnType(member)
-                        + " may not map to an empty or whitespace element name. A complex property is always stored; map it"
-                        + " to a non-empty BSON element name.");
+                    throw new InvalidOperationException(ComplexTypeRefusals.EmptyComplexElementName(MemberOnType(member)));
                 }
 
                 continue;

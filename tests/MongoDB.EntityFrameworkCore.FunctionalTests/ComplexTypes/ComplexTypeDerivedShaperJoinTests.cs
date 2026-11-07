@@ -151,8 +151,7 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
         // Was `..._is_a_known_pre_existing_wrong_read` (pinned with Assert.NotEqual): a same-type self-join whose mixed
         // projection holds the whole outer entity beside an inner-side hop leaf read the leaf off the OUTER document (at
         // 5547cfa2 shape 0 answered `Dev|B-dev ; Guest|B-guest` in Native and DriverLinq; reproduced at 040cecdf with an
-        // OWNED Badge). The read side recognised the root shaper by CLR type; it is now structural (owner-approved exception
-        // (h)), so the inner side reads the joined document. Hand-written answers.
+        // OWNED Badge). The read side recognised the root shaper by CLR type; it is now structural, so the inner side reads the joined document. Hand-written answers.
         var collection = Seed(nameof(Explicit_self_join_mixed_projection_of_inner_members_reads_the_inner_document));
         IEnumerable<string> Run(PeopleContext db, int shape)
         {
@@ -174,7 +173,7 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
     public void Explicit_join_to_an_OfType_set_is_not_served()
     {
         // PRE-EXISTING (not caused by this slice): a Join whose inner source is OfType<TDerived>() is neither native nor
-        // expressible by the driver ("Expression not supported"). Jira candidate (proposed to the owner, not filed): support
+        // expressible by the driver ("Expression not supported"). Jira candidate (not filed): support
         // a discriminator-narrowed join inner. Pinned so it never returns rows unnoticed.
         var collection = Seed(nameof(Explicit_join_to_an_OfType_set_is_not_served));
         foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq })
@@ -205,7 +204,7 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
             ["Dev|2|B-dev|Boss"], NotNativeAny, Serves, Serves);
     }
 
-    // ── The same reverse-direction shape with NO complex properties in the model (ruling R9) ─────────────────────
+    // ── The same reverse-direction shape with NO complex properties in the model ─────────────────────
 
     public class PlainPerson
     {
@@ -251,9 +250,9 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
     [Fact]
     public void Derived_outer_root_in_a_join_without_complex_properties()
     {
-        // Ruling R9: the structural root-shaper fix also corrects this NON-complex mixed projection (`x.e` the derived
+        // The structural root-shaper fix also corrects this NON-complex mixed projection (`x.e` the derived
         // outer root, `e.Name` the OUTER name, `R` the referrer's): at 040cecdf it answered `Dev|Boss|Boss` (the outer Name
-        // read off the joined referrer document; observed, see the fix round 3 report). Hand-written answer.
+        // read off the joined referrer document; observed). Hand-written answer.
         var collection = Seed(nameof(Derived_outer_root_in_a_join_without_complex_properties));
         foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
         {
@@ -268,7 +267,7 @@ public class ComplexTypeDerivedShaperJoinTests(TemporaryDatabaseFixture database
                 .Select(e => new { e, e.Name, R = e.Referrer!.Name }).ToList().Select(x => $"{x.e.Name}|{x.Name}|{x.R}")));
     }
 
-    // ── The same shape with the referrer typed as the hierarchy's BASE type (api-stability review, exception (c)) ───
+    // ── The same shape with the referrer typed as the hierarchy's BASE type ───
 
     public class StaffBase
     {

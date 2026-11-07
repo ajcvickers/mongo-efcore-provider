@@ -303,7 +303,7 @@ internal static class CompositionAssert
         => PerMode(run, expected, NotNative, Serves, Serves);
 
     /// <summary>
-    /// A refusal (ruling R20): NativeOnly declines, Native refuses with a <see cref="NativeTranslationNotSupportedException"/>
+    /// A refusal (null-element scanner): NativeOnly declines, Native refuses with a <see cref="NativeTranslationNotSupportedException"/>
     /// whose message contains every one of <paramref name="nativeMessageFragments"/> (instead of falling back to wrong rows),
     /// and explicit DriverLinq runs the driver, pinned to its measured <paramref name="driverRows"/>.
     /// </summary>

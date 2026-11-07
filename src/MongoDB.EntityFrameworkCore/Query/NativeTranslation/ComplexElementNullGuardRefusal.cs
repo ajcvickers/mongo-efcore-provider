@@ -69,22 +69,11 @@ internal static class ComplexElementNullGuardRefusal
         if (found.Shape == CollectionNullCheckShape)
         {
             throw new NativeTranslationNotSupportedException(
-                $"The query is not natively translatable and would run on driver-LINQ, which evaluates a comparison of the "
-                + $"complex collection '{found.Collection}' with null incorrectly: its null filter also matches an array that "
-                + "contains a null element (and a missing or null array of a required collection, which reads as empty), so the "
-                + "fallback would return wrong rows. To test for a null or empty collection use '!c.Collection.Any()' or "
-                + "'c.Collection.Count == 0', which are translated natively; to tell null from empty, project the collection "
-                + "and test it on the client, or use MongoQueryMode.DriverLinq to opt in to the driver-LINQ execution of this "
-                + "query.");
+                ComplexTypeRefusals.CollectionComparedWithNullOnDriverLinq(found.Collection));
         }
 
         throw new NativeTranslationNotSupportedException(
-            $"The query is not natively translatable and would run on driver-LINQ, which evaluates {found.Shape} over an "
-            + $"element of the complex collection '{found.Collection}' incorrectly when the element is null (the members of "
-            + "a null element are missing, which the server orders below every value and does not equate with null), so "
-            + "the fallback would return wrong rows. Rewrite the element predicate to a natively translatable form, "
-            + "project the values you need and evaluate the condition on the client, or use MongoQueryMode.DriverLinq to "
-            + "opt in to the driver-LINQ execution of this query.");
+            ComplexTypeRefusals.NullElementOnDriverLinq(found.Shape, found.Collection));
     }
 
     /// <summary>
@@ -134,14 +123,7 @@ internal static class ComplexElementNullGuardRefusal
         }
 
         throw new NativeTranslationNotSupportedException(
-            $"ExecuteUpdate and ExecuteDelete run their filter and SetProperty values on driver-LINQ, which evaluates {found.Shape} "
-            + $"over an element of the complex collection '{found.Collection}' differently from a query when the element is null "
-            + "(the members of a null element are missing, which the server orders below every value and does not equate with "
-            + "null) or when the collection is null, so the operation could update or delete rows the same query does not "
-            + "return. No document was modified. Inside a complex collection's element predicate a bulk operation supports "
-            + "'==' and '!=' between a member and a non-null value, a bool member and its negation, a non-nullable local "
-            + "list's Contains of a member, and '&&', '||' and '!' over those; select the keys with a query and update or "
-            + "delete by key, or use MongoQueryMode.DriverLinq to opt in to the driver-LINQ evaluation.");
+            ComplexTypeRefusals.BulkMisreadsNullElements(found.Shape, found.Collection));
     }
 
     /// <summary>The strict (bulk) scan of <see cref="ThrowIfBulkMisreadsNullElements"/>. Exposed for unit tests.</summary>
@@ -261,7 +243,7 @@ internal static class ComplexElementNullGuardRefusal
                 // element's lambda was already bound by its operator.
                 if (strict && !_scopes.ContainsKey(parameter) && ComplexElementClrTypes.Contains(parameter.Type))
                 {
-                    Found = ($"a lambda over complex collection elements ('{ExpressionShapePrinter.Print(node)}') that the bulk check cannot bind to its collection",
+                    Found = (ComplexTypeRefusals.BulkUnboundElementLambdaShape(ExpressionShapePrinter.Print(node)),
                         parameter.Type.Name);
                     return node;
                 }
@@ -599,7 +581,7 @@ internal static class ComplexElementNullGuardRefusal
         {
             if (collections.Count == 0 || collections.Any(c => c.IsOptional()))
             {
-                Found = ($"'{node.Method.Name}' over an optional complex collection", collectionName);
+                Found = (ComplexTypeRefusals.BulkOperatorOverOptionalCollectionShape(node.Method.Name), collectionName);
                 return false;
             }
 
@@ -608,8 +590,7 @@ internal static class ComplexElementNullGuardRefusal
             // `$anyElementTrue`/`$size` over a null array errors MID-OPERATION, after earlier documents were written.
             if (collections.Any(c => !c.ClrType.IsNormalizableToEmptyList(out _)))
             {
-                Found = ($"'{node.Method.Name}' over a complex collection whose CLR type cannot hold a List<T> (declare it as List<T> "
-                    + "or IList<T> so a null or missing array reads as empty)", collectionName);
+                Found = (ComplexTypeRefusals.BulkOperatorOverNonListCollectionShape(node.Method.Name), collectionName);
                 return false;
             }
 
@@ -617,7 +598,7 @@ internal static class ComplexElementNullGuardRefusal
                 or nameof(Enumerable.LongCount) or nameof(Enumerable.Where) or nameof(Enumerable.Skip) or nameof(Enumerable.Take)
                 or nameof(Queryable.AsQueryable) or nameof(Enumerable.ToList) or nameof(Enumerable.ToArray)))
             {
-                Found = ($"the operator '{node.Method.Name}'", collectionName);
+                Found = (ComplexTypeRefusals.BulkOperatorNotAllowedShape(node.Method.Name), collectionName);
                 return false;
             }
 

@@ -30,6 +30,7 @@ using MongoDB.Bson.Serialization.Options;
 using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Metadata;
+using MongoDB.EntityFrameworkCore.Query;
 
 namespace MongoDB.EntityFrameworkCore.Serializers;
 
@@ -110,7 +111,7 @@ public sealed class BsonSerializerFactory
             }
 
             var itemType = type.TryGetItemType(typeof(IEnumerable<>))
-                           ?? throw new NotSupportedException($"Unsupported complex collection type '{type.ShortDisplayName()}'.");
+                           ?? throw new NotSupportedException(ComplexTypeRefusals.UnsupportedComplexCollectionType(type.ShortDisplayName()));
             return GetCollectionSerializer(type, WrapNullable(itemType, elementSerializer));
         }
 

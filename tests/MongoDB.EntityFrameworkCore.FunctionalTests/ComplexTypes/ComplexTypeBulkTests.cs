@@ -304,7 +304,7 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
     [Fact]
     public void Self_referencing_setter_on_a_represented_ROOT_scalar_writes_the_computed_type_PRE_EXISTING()
     {
-        // Characterization (pre-existing at 6740680c and before this task; unchanged; Jira candidate 18): a root scalar
+        // Characterization (pre-existing at 6740680c and before this task; unchanged; Jira candidate): a root scalar
         // stored with BsonRepresentation(String) receives the computed value in its own BSON type (int 3, not "3"). Only the
         // complex-leaf case is refused above, so root behaviour is untouched.
         var collection = database.CreateCollection<RepRoot>(nameof(Self_referencing_setter_on_a_represented_ROOT_scalar_writes_the_computed_type_PRE_EXISTING) + Guid.NewGuid().ToString("N")[..6]);
@@ -422,9 +422,9 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
     [Fact]
     public void SetProperty_on_a_whole_complex_property_from_another_is_refused()
     {
-        // Decline ruling: copying the STORED subdocument would carry the source property's element names / converters /
+        // Decline reason: copying the STORED subdocument would carry the source property's element names / converters /
         // representations (Shipping stores City as "City" and Code as a string; Billing expects "town" and an int), and the
-        // driver cannot render a whole complex value (R1). Refused at translation, before any write.
+        // driver cannot render a whole complex value. Refused at translation, before any write.
         var store = Seed();
         using (var db = store.Context())
         {
@@ -513,7 +513,7 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
     [Fact]
     public void Whole_complex_value_equality_filters_are_refused_and_touch_nothing()
     {
-        // Ruling R1: member-wise complex equality is native-only; the bridge's complex serializer refuses it. The bulk path
+        // Member-wise complex equality is native-only; the bridge's complex serializer refuses it. The bulk path
         // surfaces EF's canonical "could not be translated" with the serializer's NotSupportedException inside.
         var store = Seed();
         var other = new BAddr { City = "X", Street = "b-st", Code = 1, Rep = 10, Location = new GeoPoint { Lat = 1.5 } };

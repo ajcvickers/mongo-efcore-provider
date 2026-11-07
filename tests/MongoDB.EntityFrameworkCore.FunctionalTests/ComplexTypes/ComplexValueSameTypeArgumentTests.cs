@@ -26,7 +26,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 #nullable enable
 
 /// <summary>
-/// Several whole complex values of the SAME CLR type, stored alike, in one projection (spec known limitation 29): every
+/// Several whole complex values of the SAME CLR type, stored alike, in one projection: every
 /// construction shape (positional constructor, record, member-init DTO, anonymous type, tuple), over required, optional
 /// (EF10) and struct complex values, through a same-type reference navigation and a join, with the owned analogue as the
 /// control. Every row differs from the others in every leaf, so a swap or a duplication is visible. Every answer is

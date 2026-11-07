@@ -31,8 +31,8 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 /// A relational comparison at the ROOT over a date-add, a coalesce or a conditional whose only non-field operand is a
 /// CAPTURED NON-NULLABLE value (<c>x.Date.AddDays(days)</c>, <c>x.Amount ?? fallback</c>, <c>x.Flag ? x.Rank : other</c>)
 /// renders no relational null guard: a captured <c>int</c>/<c>double</c> is never null, so the operand can't be. The
-/// expected MQL is the base's (<c>f5027aa7</c>, before ruling R18 made these nodes structural), byte for byte; only
-/// null-operand shapes (pinned in <see cref="NativeRootNullPropagatingOperandGuardTests"/>, spec exception (e)) changed.
+/// expected MQL is the base's (<c>f5027aa7</c>, before these nodes became structural), byte for byte; only
+/// null-operand shapes (pinned in <see cref="NativeRootNullPropagatingOperandGuardTests"/>) changed.
 /// </summary>
 [XUnitCollection("QueryTests")]
 public class NativeRootCapturedParameterOperandMqlTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
@@ -93,7 +93,7 @@ public class NativeRootCapturedParameterOperandMqlTests(TemporaryDatabaseFixture
 
         Assert.Equal(["a", "b", "c"], rows);
         // The base guarded this one too (the coalesce takes its CLR type from the parameter fallback, which the CLR-type
-        // check judges nullable), so the conjunct below is the base's, not R18's: unchanged either way.
+        // check judges nullable), so the conjunct below is the base's, not the structural rule's: unchanged either way.
         Assert.Equal(
             """.aggregate([{ "$match" : { "$expr" : { "$and" : [{ "$gt" : [{ "$ifNull" : ["$Amount", { "$literal" : 0.5 }] }, null] }, { "$lt" : [{ "$ifNull" : ["$Amount", { "$literal" : 0.5 }] }, { "$literal" : 2.0 }] }] } } }, { "$project" : { "Name" : "$Name", "_id" : 0 } }])""",
             mql);

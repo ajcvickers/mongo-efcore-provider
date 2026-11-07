@@ -115,9 +115,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                     || earlier.StartsWith(path + ".", StringComparison.Ordinal))
                 {
                     AddTranslationErrorDetails(
-                        $"ExecuteUpdate cannot set both '{earlier}' and '{path}' of '{mongoQueryExpression.CollectionExpression.EntityType.DisplayName()}': "
-                        + "one is stored inside the other, and MongoDB rejects an update that sets both. Set either the whole value "
-                        + "or its members, not both.");
+                        ComplexTypeRefusals.BulkSetterPathsOverlap(
+                            earlier, path, mongoQueryExpression.CollectionExpression.EntityType.DisplayName()));
                     throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
                         ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
                 }
@@ -175,9 +174,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         if (property == null)
         {
             AddTranslationErrorDetails(
-                "Only mapped root scalar properties can be updated by a bulk update, and, through complex properties, their scalar "
-                + $"properties and whole complex properties. The setter target '{ExpressionShapePrinter.Print(propertySelector.Body)}' is not a mapped scalar "
-                + $"property of '{entityType.DisplayName()}'.");
+                ComplexTypeRefusals.BulkSetterTargetNotMapped(ExpressionShapePrinter.Print(propertySelector.Body), entityType.DisplayName()));
             throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
                 ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
         }
@@ -212,9 +209,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         if (isSelfReferencing && complexElementPath is not null && property is IProperty representedLeaf
             && representedLeaf.GetBsonRepresentation() is not null)
         {
-            AddTranslationErrorDetails(
-                $"Self-referencing ExecuteUpdate on property '{property.Name}' is not supported because it is stored with a "
-                + "BsonRepresentation, which the computed value would not be written in.");
+            AddTranslationErrorDetails(ComplexTypeRefusals.BulkSelfReferencingBsonRepresentationLeaf(property.Name));
             throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
                 ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
         }
@@ -225,9 +220,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         if (isSelfReferencing && property is IComplexProperty selfReferencedComplex)
         {
             AddTranslationErrorDetails(
-                $"ExecuteUpdate cannot set the complex property '{selfReferencedComplex.DeclaringType.DisplayName()}.{selfReferencedComplex.Name}' "
-                + "from a value that reads the entity being updated. Set its scalar properties individually "
-                + "(SetProperty(e => e.Complex.Member, e => ...)), or set it to a value computed on the client.");
+                ComplexTypeRefusals.BulkSelfReferencingComplexValue(
+                    $"{selfReferencedComplex.DeclaringType.DisplayName()}.{selfReferencedComplex.Name}"));
             throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
                 ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
         }
@@ -290,9 +284,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             if (hop.IsOptional())
             {
                 AddTranslationErrorDetails(
-                    $"ExecuteUpdate cannot set '{ExpressionShapePrinter.Print(propertySelector.Body)}' because '{hop.DeclaringType.DisplayName()}.{hop.Name}' is an "
-                    + "optional complex property, which may be null in a stored document: the server cannot set a member of a null "
-                    + "value. Set the whole optional complex property instead (SetProperty(e => e.Optional, value)).");
+                    ComplexTypeRefusals.BulkSetUnderOptionalComplexHop(
+                        ExpressionShapePrinter.Print(propertySelector.Body), $"{hop.DeclaringType.DisplayName()}.{hop.Name}"));
                 throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
                     ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
             }

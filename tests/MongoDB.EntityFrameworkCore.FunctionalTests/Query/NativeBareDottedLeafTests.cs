@@ -210,7 +210,7 @@ public class NativeBareDottedLeafTests(TemporaryDatabaseFixture database) : ICla
         NativeModeAssert.NativeAndExpected(m => RunBlogs(collection, m, run), [.. expected]);
     }
 
-    // ── Missing owned parent (closes Task 9's deferred minor) ──────────────────────────────────────────────────
+    // ── Missing owned parent (deferred minor) ──────────────────────────────────────────────────
 
     // Row "a" has Home, row "m" has none (an optional owned reference, absent from the stored document).
     private IMongoCollection<Blog> SeedWithMissingHome(string name)

@@ -28,14 +28,14 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 
 /// <summary>
-/// ROOT (entity scope, no complex collection) pins of ruling R18: <c>MayBeNull</c> is structural for a date-add, a
+/// ROOT (entity scope, no complex collection) pins of the structural <c>MayBeNull</c> rule: <c>MayBeNull</c> is structural for a date-add, a
 /// conditional and a coalesce, so a relational comparison over one of them whose operand may be null gets the same
 /// null guard (<c>$gt: [operand, null]</c>) as every other relational comparison, and rows whose operand is null no
-/// longer match <c>&lt;</c>/<c>&lt;=</c>. An owner-visible root behaviour change (spec exception (e), ruling R22).
+/// longer match <c>&lt;</c>/<c>&lt;=</c>. A root behaviour change.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Measured at the base before R18 (<c>b4ddcf95</c>) and at HEAD on the same seed; driver-LINQ is main's path. Rows: v (every
+/// Measured at the base before the structural rule (<c>b4ddcf95</c>) and at HEAD on the same seed; driver-LINQ is main's path. Rows: v (every
 /// value present), h (high values; <c>A</c> null, <c>B</c> 7), n (every nullable null), f (as n, <c>Flag</c> false), m (every
 /// nullable MISSING). The rows that changed are exactly those whose operand evaluates to null (n, f, m); the change
 /// removes them from <c>&lt;</c>, matching what the already-guarded shapes (a nullable-typed date-add, a conditional with a
@@ -102,7 +102,7 @@ public class NativeRootNullPropagatingOperandGuardTests(TemporaryDatabaseFixture
     /// <summary>
     /// Native modes serve <paramref name="expected"/> (the guarded answer); driver-LINQ (main's path) is pinned to its own
     /// measured rows, which include the null-operand rows. <paramref name="baseRows"/> documents what native answered at
-    /// b4ddcf95, before R18 (a comment-level record made assertable: it must differ from <paramref name="expected"/> exactly by
+    /// b4ddcf95, before the structural rule (a comment-level record made assertable: it must differ from <paramref name="expected"/> exactly by
     /// null-operand rows).
     /// </summary>
     private static void Guarded(Func<MongoQueryMode, List<string>> run, string[] expected, string[] driverRows, string[] baseRows)
@@ -122,10 +122,10 @@ public class NativeRootNullPropagatingOperandGuardTests(TemporaryDatabaseFixture
     [Fact]
     public void Date_add_over_a_null_operand_at_the_root_gets_the_relational_guard()
     {
-        // Already guarded at the base (the date-add's CLR type is DateTime?): unchanged by R18; the driver includes n, f, m.
+        // Already guarded at the base (the date-add's CLR type is DateTime?): unchanged by the structural rule; the driver includes n, f, m.
         Guarded(Readings(x => x.NullableDate!.Value.AddDays(1) < Cutoff), ["v"], ["f", "m", "n", "v"], ["v"]);
         Guarded(Readings(x => x.NullableDate!.Value.AddDays(1) <= Cutoff), ["v"], ["f", "m", "n", "v"], ["v"]);
-        // CHANGED by R18: a non-nullable start date with a nullable AMOUNT. Base native [f, m, n, v]; now [v]; the driver [f, m, n, v].
+        // CHANGED by the structural rule: a non-nullable start date with a nullable AMOUNT. Base native [f, m, n, v]; now [v]; the driver [f, m, n, v].
         Guarded(Readings(x => x.Date.AddDays(x.Amount!.Value) < Cutoff), ["v"], ["f", "m", "n", "v"], ["f", "m", "n", "v"]);
         // CHANGED: the amount is a conditional whose false branch is nullable (f takes it). Base [f, h, m, n, v]; now [h, m, n, v].
         Guarded(Readings(x => x.Date.AddDays(x.Flag ? 1 : x.Amount!.Value) < Cutoff), ["h", "m", "n", "v"], ["f", "h", "m", "n", "v"], ["f", "h", "m", "n", "v"]);
@@ -141,11 +141,11 @@ public class NativeRootNullPropagatingOperandGuardTests(TemporaryDatabaseFixture
     {
         // Already guarded at the base when the TRUE branch is the nullable read (`.Value` is peeled, so the branch stays int?-typed
         // and the conditional takes its type): v takes Score 2; f takes the constant/Rank; h takes 7; n and m take a null Score.
-        // Unchanged by R18; the driver includes m and n.
+        // Unchanged by the structural rule; the driver includes m and n.
         Guarded(Readings(x => (x.Flag ? x.Score!.Value : 0) < 5), ["f", "v"], ["f", "m", "n", "v"], ["f", "v"]);
         Guarded(Readings(x => (x.Flag ? x.Score!.Value : x.Rank) < 5), ["f", "v"], ["f", "m", "n", "v"], ["f", "v"]);
         Guarded(Readings(x => (x.Flag ? x.Score : 0) < 5), ["f", "v"], ["f", "m", "n", "v"], ["f", "v"]);
-        // CHANGED by R18: the FALSE branch is the nullable read (only f takes it, with a null Score). Base [f, h, m, n, v]; now
+        // CHANGED by the structural rule: the FALSE branch is the nullable read (only f takes it, with a null Score). Base [f, h, m, n, v]; now
         // [h, m, n, v] (h, m, n, v take the constant 0 / Rank 2). The driver includes f.
         Guarded(Readings(x => (x.Flag ? 0 : x.Score!.Value) < 5), ["h", "m", "n", "v"], ["f", "h", "m", "n", "v"], ["f", "h", "m", "n", "v"]);
         Guarded(Readings(x => (x.Flag ? x.Rank : x.Score!.Value) < 5), ["h", "m", "n", "v"], ["f", "h", "m", "n", "v"], ["f", "h", "m", "n", "v"]);
@@ -157,7 +157,7 @@ public class NativeRootNullPropagatingOperandGuardTests(TemporaryDatabaseFixture
         // Already guarded at the base (`A ?? B` is int?-typed): unchanged; the driver includes f, m, n.
         Guarded(Readings(x => (x.A ?? x.B) < 5), ["v"], ["f", "m", "n", "v"], ["v"]);
         Guarded(Readings(x => (x.A ?? x.B!.Value) < 5), ["v"], ["f", "m", "n", "v"], ["v"]);
-        // CHANGED by R18: the fallback is a null-guarded `Length` over a nullable string (int-typed; null when Label is null).
+        // CHANGED by the structural rule: the fallback is a null-guarded `Length` over a nullable string (int-typed; null when Label is null).
         // Base native [f, m, n, v]; now [v]. The driver's $strLenCP over a null/missing string is a server error (loud).
         PerMode(Readings(x => (x.A ?? x.Label!.Length) < 5), ["v"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("$strLenCP requires a string argument"));
         // CHANGED: the fallback is a conditional with a nullable false branch. Base [f, h, m, n, v]; now [h, m, n, v].
