@@ -33,7 +33,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Design;
 #nullable enable
 
 /// <summary>
-/// Design-time smoke test for complex types (Task 15): the compiled-model generator runs over a model with nested,
+/// Design-time smoke test for complex types: the compiled-model generator runs over a model with nested,
 /// struct and renamed complex properties (and, on EF10, a complex collection), the generated code carries each
 /// element-name annotation, and the generated model compiled in memory reads and writes the same stored shape as the
 /// runtime-built model.

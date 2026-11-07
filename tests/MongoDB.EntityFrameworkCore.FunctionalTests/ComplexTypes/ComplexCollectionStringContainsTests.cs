@@ -32,7 +32,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// allow-list took it for a "non-nullable list's Contains" (a <see cref="string"/> is an <c>IEnumerable&lt;char&gt;</c> of a
 /// value type), so a bulk update ran on the server as <c>$indexOfCP</c> over a null element's MISSING City, which errors
 /// mid-operation (documents before the failing one already written). It is now refused before any write, and the query
-/// net (R20) does not take it for a local-collection membership test either. Every row is hand-written.
+/// net (the null-element refusal scanner) does not take it for a local-collection membership test either. Every row is hand-written.
 /// </summary>
 [XUnitCollection("UpdateTests")]
 public class ComplexCollectionStringContainsTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>

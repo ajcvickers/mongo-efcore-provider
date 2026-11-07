@@ -164,7 +164,7 @@ internal static class ComplexTypeMaterializationBuilder
             Expression.New(
                 InvalidOperationExceptionConstructor,
                 Expression.Constant(
-                    $"Document element '{complexProperty.GetElementName()}' is {(isNull ? "null" : "missing")} for required complex property '{DisplayName(complexProperty)}'.")),
+                    ComplexTypeRefusals.RequiredComplexElementMissing(complexProperty.GetElementName(), isNull, DisplayName(complexProperty)))),
             clrType);
     }
 
@@ -177,8 +177,7 @@ internal static class ComplexTypeMaterializationBuilder
     private static Expression CreateCollection(IComplexProperty complexProperty, Expression array)
     {
 #if EF8 || EF9
-        throw new InvalidOperationException(
-            $"Complex collection '{DisplayName(complexProperty)}' can't be materialized: complex collections need EF Core 10.");
+        throw new InvalidOperationException(ComplexTypeRefusals.ComplexCollectionNeedsEF10(DisplayName(complexProperty)));
 #else
         var elementType = complexProperty.ComplexType.ClrType;
         var element = Expression.Parameter(typeof(BsonValue), "element");
@@ -207,7 +206,7 @@ internal static class ComplexTypeMaterializationBuilder
     {
         var binding = complexType.ConstructorBinding
                       ?? throw new InvalidOperationException(
-                          $"Complex type '{complexType.DisplayName()}' has no constructor binding, so it can't be materialized.");
+                          ComplexTypeRefusals.ComplexTypeHasNoConstructorBinding(complexType.DisplayName()));
 
         var documentVariable = Expression.Variable(typeof(BsonDocument), "complexDocument");
         var instance = Expression.Variable(complexType.ClrType, "complexInstance");
@@ -286,7 +285,8 @@ internal static class ComplexTypeMaterializationBuilder
 
     private static Exception WrongBsonType(IReadOnlyComplexProperty complexProperty, BsonValue value)
         => new FormatException(
-            $"Cannot deserialize complex {(complexProperty.IsCollection ? "collection" : "property")} '{complexProperty.DeclaringType.DisplayName()}.{complexProperty.Name}' from BsonType '{value.BsonType}'.");
+            ComplexTypeRefusals.WrongBsonType(
+                complexProperty.IsCollection, $"{complexProperty.DeclaringType.DisplayName()}.{complexProperty.Name}", value.BsonType.ToString()));
 
 #if !EF8 && !EF9
     private static readonly MethodInfo PopulateCollectionMethod =
@@ -312,7 +312,10 @@ internal static class ComplexTypeMaterializationBuilder
         if (accessor!.Create() is not ICollection<TElement> collection)
         {
             throw new InvalidOperationException(
-                $"Complex collection '{complexProperty.DeclaringType.DisplayName()}.{complexProperty.Name}' is typed as '{typeof(TCollection).ShortDisplayName()}', which does not implement '{typeof(ICollection<TElement>).ShortDisplayName()}'.");
+                ComplexTypeRefusals.ComplexCollectionNotICollection(
+                    $"{complexProperty.DeclaringType.DisplayName()}.{complexProperty.Name}",
+                    typeof(TCollection).ShortDisplayName(),
+                    typeof(ICollection<TElement>).ShortDisplayName()));
         }
 
         foreach (var element in array)

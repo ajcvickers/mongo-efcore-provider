@@ -28,7 +28,7 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 namespace MongoDB.EntityFrameworkCore.UnitTests.Query.NativeTranslation;
 
 /// <summary>
-/// Ruling R20 scanner: which captured chains name a null-guard-requiring shape inside a COMPLEX collection's element scope
+/// Null-element refusal scanner: which captured chains name a null-guard-requiring shape inside a COMPLEX collection's element scope
 /// (refused on the Native-mode fallback), and which don't (owned elements, root predicates, guard-free predicates).
 /// </summary>
 public class ComplexElementNullGuardRefusalTests
@@ -94,17 +94,17 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["nested count compared with an element member", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) > s.Floor))), "a relational comparison"];
         // The guard-requiring shape sits INSIDE the nested lambda; the outer Finder visits its body.
         yield return ["relational inside a nested element lambda", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.Floor < s.Floor) >= 1))), "a relational comparison"];
-        // R25: the collection itself compared with null (the driver's `{Stops: null}` also matches `[null]`).
+        // The collection itself compared with null (the driver's `{Stops: null}` also matches `[null]`).
         yield return ["collection == null", Query(q => q.Where(r => r.Stops == null)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
         yield return ["null != collection", Query(q => q.Where(r => null != r.Stops)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
         yield return ["collection null check in a projection", Scalar(q => q.Select(r => r.Stops == null ? 0 : 1)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
     }
 
-    // ── KEEP IN STEP: the renderer's structural MayBeNull arms (R18) and the R20 scanner's deny-list ──────────────────────
+    // ── KEEP IN STEP: the renderer's structural MayBeNull arms and the null-element scanner's deny-list ──────────────────────
     //
-    // Inside a complex element scope a leaf is NullSafe (R17); a node whose MayBeNull is STRUCTURAL (true because an operand
+    // Inside a complex element scope a leaf is NullSafe; a node whose MayBeNull is STRUCTURAL (true because an operand
     // is NullSafe, not because of its CLR type) makes a relational comparison over it take the native null guard, which the
-    // driver-LINQ fallback does not apply. The R20 scanner must therefore refuse a relational comparison over every such
+    // driver-LINQ fallback does not apply. The null-element scanner must therefore refuse a relational comparison over every such
     // node when the query falls back. The arms are DISCOVERED (MongoExpressionNodeCoverageTests' per-node samples, plain vs
     // NullSafe operands, so a new node type is covered once it is sampled); the table pairs each with a LINQ element
     // predicate that lowers to it and the scanner kind that refuses it. A new structural arm fails the first test until it
@@ -167,7 +167,7 @@ public class ComplexElementNullGuardRefusalTests
         foreach (var (arm, (captured, shape)) in StructuralMayBeNullArms)
         {
             var found = ComplexElementNullGuardRefusal.Find(captured, Model);
-            Assert.True(found is not null, $"The R20 scanner does not refuse the {arm} example; it must (KEEP IN STEP with MayBeNull).");
+            Assert.True(found is not null, $"The null-element scanner does not refuse the {arm} example; it must (KEEP IN STEP with MayBeNull).");
             Assert.Equal(shape, found!.Value.Shape);
         }
     }
@@ -185,7 +185,7 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["string operator", Query(q => q.Where(r => r.Stops.Any(s => s.City.StartsWith("O"))))];
         yield return ["Length == constant (a null-propagating operator, no guard needed)", Query(q => q.Where(r => r.Stops.Any(s => s.Note!.Length == 2)))];
         yield return ["bare Any", Query(q => q.Where(r => r.Stops.Any()))];
-        yield return ["OWNED collection == null (R25 keys complex collections only)", Query(q => q.Where(r => r.Owned == null))];
+        yield return ["OWNED collection == null (only complex collections are keyed)", Query(q => q.Where(r => r.Owned == null))];
         yield return ["root scalar == null", Query(q => q.Where(r => r.Name == null))];
         yield return ["Count comparison at the root", Query(q => q.Where(r => r.Stops.Count > 1))];
         yield return ["indexer, no element lambda", Query(q => q.Where(r => r.Stops[0].City == "Oslo"))];
@@ -254,7 +254,7 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["== null", Query(q => q.Where(r => r.Stops.Any(s => s.Note == null))), "the element predicate"];
         yield return ["HasValue", Query(q => q.Where(r => r.Stops.Any(s => s.Zip.HasValue))), "the element predicate"];
         yield return ["bool == false", Query(q => q.Where(r => r.Stops.Any(s => s.Verified == false))), "the element predicate"];
-        yield return ["bool != false (R19: a null element reads false; the driver's $ne is true)", Query(q => q.Where(r => r.Stops.Any(s => s.Verified != false))), "the element predicate"];
+        yield return ["bool != false (a null element reads false; the driver's $ne is true)", Query(q => q.Where(r => r.Stops.Any(s => s.Verified != false))), "the element predicate"];
         yield return ["list with null", Query(q => q.Where(r => r.Stops.Any(s => new int?[] { null }.Contains(s.Zip)))), "the element predicate"];
         yield return ["member vs member", Query(q => q.Where(r => r.Stops.Any(s => s.City == s.Note))), "the element predicate"];
         yield return ["member vs root member", Query(q => q.Where(r => r.Stops.Any(s => s.City == r.Name))), "the element predicate"];
@@ -264,7 +264,7 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["Max", Query(q => q.Where(r => r.Stops.Max(s => s.Floor) > 1)), "the operator 'Max'"];
         yield return ["OrderBy", Query(q => q.Where(r => r.Stops.OrderBy(s => s.Floor).Any())), "the operator 'OrderBy'"];
         yield return ["collection read outside an operator", Query(q => q.Where(r => r.Stops != null)), "a read of the collection"];
-        // The EF.Property spelling of the same read reaches the method-call arm, not the member arm (Task 15: without this
+        // The EF.Property spelling of the same read reaches the method-call arm, not the member arm (without this
         // row the method-call arm's check survived mutation).
         yield return ["EF.Property collection read outside an operator",
             Query(q => q.Where(r => EF.Property<List<Stop>>(r, nameof(Route.Stops)) != null)), "a read of the collection"];

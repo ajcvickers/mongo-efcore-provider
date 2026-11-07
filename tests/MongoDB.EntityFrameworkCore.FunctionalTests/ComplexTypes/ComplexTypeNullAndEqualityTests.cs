@@ -37,7 +37,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// (<c>c.Opt == null</c> matches both; a nullable leaf equals a null member either way); <c>{}</c> is a present value.
 /// </para>
 /// <para>
-/// Driver-LINQ cannot compare a whole complex value (the complex serializer refuses it, ruling R1; two stored values are
+/// Driver-LINQ cannot compare a whole complex value (the complex serializer refuses it; two stored values are
 /// "serialized differently"), so wherever the native path now serves an instance comparison, <c>DriverLinq</c> is pinned
 /// to that refusal. Documents are seeded as raw BSON so null, missing, reordered and extra elements can be expressed.
 /// </para>
@@ -45,7 +45,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 [XUnitCollection("QueryTests")]
 public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
 {
-    // The complex serializer's whole-value refusal (ruling R1) and the driver's refusal of two stored complex values.
+    // The complex serializer's whole-value refusal and the driver's refusal of two stored complex values.
     private const string WholeValueRefusedMessage = "as a whole value is not supported";
     private static readonly Outcome WholeValueRefused = Throws<NotSupportedException>(WholeValueRefusedMessage);
     private const string SerializedDifferentlyMessage = "serialized differently";
@@ -181,8 +181,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         Assert.Equal(["ann:False", "bob:False", "cid:False", "dee:False"], run(MongoQueryMode.DriverLinq));
         // Driver-LINQ materializes both values client-side and compares them by C# reference equality, as for `other`
         // above: always False (known wrong, explicit DriverLinq only). It used to throw "Document element is missing ..."
-        // because both operands shared one projection member and Work was read through Home's registration (the spec
-        // known limitation 29 mechanism); each operand now reads its own element.
+        // because both operands shared one projection member and Work was read through Home's registration (the same-type shared-member mechanism); each operand now reads its own element.
         var sameRun = Eq(q => q.OrderBy(c => c.Name).Select(c => c.Home == c.Work).ToList().Select(x => x.ToString()));
         Assert.Equal(["True", "True", "False", "False"], sameRun(MongoQueryMode.NativeOnly));
         Assert.Equal(["True", "True", "False", "False"], sameRun(MongoQueryMode.Native));
@@ -413,7 +412,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     public void Shadow_leaf_declines_against_an_instance_but_not_against_null()
     {
         // EF8/EF9 allow a shadow leaf on a complex type (EF10 rejects it). A captured instance has no value for it, so a
-        // member-wise comparison can't be built: it declines and the fallback refuses (R1). Against null no leaf is read.
+        // member-wise comparison can't be built: it declines and the fallback refuses. Against null no leaf is read.
         var collection = database.CreateCollection<ShadowHolder>(Unique(nameof(Shadow_leaf_declines_against_an_instance_but_not_against_null)));
         Raw(collection).InsertOne(new BsonDocument
         {
@@ -601,7 +600,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     public static TheoryData<string> OptionalNullShapeNames => [.. OptionalNullShapes.Keys];
 
     /// <summary>
-    /// The carry-forward requirement (Task 7 review): null and missing answer alike, <c>{}</c> is present, in all three
+    /// The carry-forward requirement: null and missing answer alike, <c>{}</c> is present, in all three
     /// modes (find-filter <c>{ Opt: null }</c> on the driver path, the same query dialect natively).
     /// </summary>
     [Theory]
@@ -674,7 +673,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     public void Required_value_under_an_absent_optional_complex_parent_is_not_equal_to_an_all_null_instance()
     {
         // Opt.Req is required, but Opt is optional: an absent Opt reads Req (and its members) as null.
-        // c-empty's Opt is present but its required Req is missing: the compared path is absent, so not equal (R14).
+        // c-empty's Opt is present but its required Req is missing: the compared path is absent, so not equal.
         PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req == new InnerBits { Text = null, Num = null }))), ["e-rome", "f-oslo", "g-lima"],
             Serves, Serves, WholeValueRefused);
         PerMode(Opt(q => Names(q.Where(c => c.Opt!.Req != new InnerBits { Text = null, Num = null }))), ["a-missing", "b-null", "c-empty", "d-paris"],
@@ -701,7 +700,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     [Fact]
     public void Present_empty_value_against_a_comparand_with_a_null_required_leaf()
     {
-        // `{}` is a present Opt whose required members are all MISSING (materializing it throws, Task 10). Member-wise its
+        // `{}` is a present Opt whose required members are all MISSING (materializing it throws). Member-wise its
         // required nested values (Geo, Req) are absent under an optional ancestor, so it never equals an instance: no row.
         var nullCity = new OptAddress { City = null!, Zip = null, Geo = new GeoPoint(), Inner = null, Req = new InnerBits() };
         PerMode(Opt(q => Names(q.Where(c => c.Opt == nullCity))), [], Serves, Serves, WholeValueRefused);
@@ -780,7 +779,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     public void Optional_intermediate_reaches_grandchildren_on_either_side()
     {
         // L and R are required; Mid is optional; Mid.Deep is required. A present Mid whose Deep is MISSING reads Deep as null
-        // (Deep has an optional ancestor, R14). m1: L.Mid {Deep:{}} vs R.Mid {} → Deep value vs Deep null: not equal.
+        // (Deep has an optional ancestor). m1: L.Mid {Deep:{}} vs R.Mid {} → Deep value vs Deep null: not equal.
         // m2: both Mid {} → equal. m3: both Mid {Deep:{N:1}} → equal. m4: L.Mid missing, R.Mid {} → null vs value: not equal.
         var collection = database.CreateCollection<OuterHolder>(Unique(nameof(Optional_intermediate_reaches_grandchildren_on_either_side)));
         BsonDocument Box(BsonValue? mid)
@@ -871,7 +870,6 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     public void ExecuteDelete_and_ExecuteUpdate_filtered_on_an_optional_null_check()
     {
         // Bulk operations run on the driver-LINQ bridge, whose find filter `{ Opt: null }` matches null and missing alike.
-        // Full bulk coverage is Task 14.
         var deleteCollection = SeedOpt(nameof(ExecuteDelete_and_ExecuteUpdate_filtered_on_an_optional_null_check) + "d");
         using (var db = Context(deleteCollection, MongoQueryMode.Native, ConfigureOpt))
         {
@@ -890,7 +888,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         Assert.Equal(["a-missing", "b-null", "c-empty!", "d-paris!", "e-rome!", "f-oslo!", "g-lima!"],
             Raw(updateCollection).Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => d["Name"].AsString).Order(StringComparer.Ordinal));
 
-        // A NON-null comparand: the bridge can't compare a whole complex value (the serializer refuses, ruling R1); the
+        // A NON-null comparand: the bridge can't compare a whole complex value (the serializer refuses); the
         // bulk path reports it as EF's canonical "could not be translated" error, not the raw NotSupportedException.
         var other = ParisAddress;
         using (var db = Context(updateCollection, MongoQueryMode.Native, ConfigureOpt))
@@ -905,7 +903,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     }
 #endif
 
-    // ── Fix round 1: optional ancestors, symmetric stored pairs, element scope, misc ───────────────────────────────
+    // ── Optional ancestors, symmetric stored pairs, element scope, misc ───────────────────────────────
 
     // C1 (any version): a REQUIRED complex value under an OPTIONAL OWNED reference. An absent owner reads its members as
     // null, so `c.Owned.Note == new Note()` (every member null) is FALSE for it and `!=` is TRUE.
@@ -987,7 +985,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         PerMode(Notes(q => Names(q.Where(c => c.Owned!.Note != c.Other!.Note))), ["o-value"], Serves, Serves, SerializedDifferently);
     }
 
-    // I1: Home ignores Scratch, Work maps it; both operand orders must answer alike.
+    // Home ignores Scratch, Work maps it; both operand orders must answer alike.
     public class ScratchAddr
     {
         public string City { get; set; } = null!;
@@ -1023,7 +1021,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
             [], NotNative, SerializedDifferently, SerializedDifferently);
     }
 
-    // R15, nested-complex half: Home ignores a NESTED COMPLEX property (Geo), Work maps it. Both operand orders must
+    // Nested-complex half: Home ignores a NESTED COMPLEX property (Geo), Work maps it. Both operand orders must
     // decline natively (MapsSameMembers compares nested complex properties as well as leaves).
     public class GeoScratch
     {
@@ -1065,7 +1063,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
             [], NotNative, SerializedDifferently, SerializedDifferently);
     }
 
-    // I2: complex values inside owned-collection elements ($elemMatch, $filter/$map scopes).
+    // Complex values inside owned-collection elements ($elemMatch, $filter/$map scopes).
     [System.ComponentModel.DataAnnotations.Schema.ComplexType]
     public class Pos
     {
@@ -1120,9 +1118,9 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     [Fact]
     public void Complex_equality_inside_an_owned_SelectMany_inner_filter_declines_and_leaves_are_prefixed()
     {
-        // Reachability of MongoFieldPrefixRewriter's NullSafe carry (Task 13 round 3): an owned SelectMany inner filter
+        // Reachability of MongoFieldPrefixRewriter's NullSafe carry: an owned SelectMany inner filter
         // holding a whole complex-value equality declines natively (the SelectMany inner translator doesn't admit it), and
-        // the fallback refuses the whole value (R1); so no NullSafe member-wise leaf reaches the prefix rewriter today. The
+        // the fallback refuses the whole value; so no NullSafe member-wise leaf reaches the prefix rewriter today. The
         // rewriter carries NullSafe anyway (defensive; owned fields are never NullSafe, so owned output is unchanged).
         PerMode(Items(q => q.SelectMany(h => h.Items.Where(i => i.Pos == new Pos { Zip = null, Tag = null }), (h, i) => h.Name).ToList()
                 .Order(StringComparer.Ordinal)), [], NotNative, WholeValueRefused, WholeValueRefused);
@@ -1145,7 +1143,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         PerMode(Items(q => Names(q.Where(h => h.Items.Any(i => i.Pos == new Pos { Zip = null, Tag = null })))), ["h-empty", "h-missing", "h-null"],
             Serves, Serves, WholeValueRefused);
         // A captured class comparand carries a per-execution `{ $expr: <is-null parameter> }` branch, which is illegal in
-        // $elemMatch: it declines and the fallback refuses (R1).
+        // $elemMatch: it declines and the fallback refuses.
         PerMode(Items(q => Names(q.Where(h => h.Items.Any(i => i.Pos == blank)))), [], NotNative, WholeValueRefused, WholeValueRefused);
         // $filter scope (filtered Count).
         // Driver-LINQ's $filter `$eq: ["$$e.Pos", null]` misses the MISSING Pos (pinned observed value).
@@ -1158,17 +1156,17 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         PerMode(Items(q => q.OrderBy(h => h.Name).Select(h => h.Items.Count(i => i.Pos == new Pos { Zip = null, Tag = null })).ToList()
             .Select(x => x.ToString())), ["1", "1", "1", "0"], Serves, Serves, WholeValueRefused);
 
-        // PRE-EXISTING, OWNER-RULED characterization (not a regression of this slice): a bare scalar leaf compared with null
+        // PRE-EXISTING, characterization (not a regression of this slice): a bare scalar leaf compared with null
         // inside a $filter scope renders `$eq: ["$$e.Pos.Zip", null]` without $ifNull (RenderBinary: missing-vs-null stays
         // distinguished in element scopes, pinned by NativeOwnedCollectionFilteredCountTests), so a MISSING Zip is not null
-        // there, while C# (and the two complex predicates above) answer [1, 1, 1, 0]. Breaks loudly if that ruling changes.
+        // there, while C# (and the two complex predicates above) answer [1, 1, 1, 0]. Breaks loudly if that rule changes.
         var leafCount = Items(q => q.OrderBy(h => h.Name).Select(h => h.Items.Count(i => i.Pos.Zip == null)).ToList().Select(x => x.ToString()));
         Assert.Equal(LeafCountObserved, leafCount(MongoQueryMode.NativeOnly));
         Assert.Equal(LeafCountObserved, leafCount(MongoQueryMode.Native));
         Assert.Equal(LeafCountObserved, leafCount(MongoQueryMode.DriverLinq));
     }
 
-    // The same in every mode (the owner-ruled element-scope leaf rule), so one array.
+    // The same in every mode (the element-scope leaf rule), so one array.
     private static readonly string[] LeafCountObserved = ["0", "0", "0", "0"];
 
     [Fact]
@@ -1184,7 +1182,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
     {
         // All(pred) $matches the complement of pred, and only a query-dialect predicate has one (MongoExpressionNegator). A
         // captured comparand's per-execution null branch is `{ $expr: <bool parameter> }`, so All over it declines and the
-        // fallback refuses (R1); a constant comparand is pure query dialect and stays native.
+        // fallback refuses; a constant comparand is pure query dialect and stays native.
         var other = AnnAddress;
         PerMode(Eq(q => [q.All(c => c.Home == other).ToString()]), [], NotNative, WholeValueRefused, WholeValueRefused);
         PerMode(Eq(q => [q.All(c => c.Home == new EqAddress { City = "Paris", Zip = 7, Geo = new GeoPoint { Lat = 1, Lon = 2 }, Grade = Grade.High })
@@ -1212,10 +1210,10 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
             ["ann"], NotNative, WholeValueRefused, WholeValueRefused);
     }
 
-    // ── Fix round 2: stored-pair symmetry matrix (each side keeps its own presence flag) ─────────────────────────
+    // ── Stored-pair symmetry matrix (each side keeps its own presence flag) ─────────────────────────
 
     // Slot states, seeded as raw BSON: M missing, N BSON null, L {City:"x"} (Inner missing), E {} , F {City:"x", Inner:{N:1}},
-    // F2 {City:"x", Inner:{}}. Interpretation (C# null propagation, ruling R14): a slot with no optional ancestor is never
+    // F2 {City:"x", Inner:{}}. Interpretation (C# null propagation): a slot with no optional ancestor is never
     // absent (missing/null reads members null, Inner too); an optional slot that is missing/null is null, and its Inner,
     // missing, is null. Rows (A,B required | O,P optional):
     //   r1 M,E | M,N   r2 L,F2 | L,F2   r3 F,F | F,F   r4 E,L | E,E   r5 F2,L | F2,N   r6 L,N | F2,L   r7 N,M | N,E

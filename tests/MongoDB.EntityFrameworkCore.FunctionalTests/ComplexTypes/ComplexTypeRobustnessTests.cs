@@ -28,7 +28,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 #nullable enable
 
 /// <summary>
-/// Robustness of complex types (Task 15): deep nesting, unusual element names, malformed stored BSON, one CLR type at
+/// Robustness of complex types deep nesting, unusual element names, malformed stored BSON, one CLR type at
 /// several paths, BSON attributes, and the leaf type matrix. Every query runs in all three modes against a hand-written
 /// answer; stored shapes are asserted on the raw BSON.
 /// </summary>
@@ -247,7 +247,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
             Assert.Equal(1, db.SaveChanges());
         }
 
-        // Ruling R5: the whole top-level complex value is rewritten, never a dotted partial $set.
+        // The whole top-level complex value is rewritten, never a dotted partial $set.
         var set = capture.SingleSet();
         Assert.Equal(["_id", "o"], set.Names.ToArray());
         Assert.Equal("omega", set["o"]["Two"]["Three"]["Four"]["Five"]["Six"]["lf"].AsString);
@@ -785,7 +785,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
 
         // EF8/EF9 wrap the root of an entity with an owned navigation in an auto-include, which the native complex-hop
         // walk does not peel: projections of complex leaves/values DECLINE there (the fallback serves the right rows).
-        // EF10 has no such wrapper. Native gap (Task 16 item), never rows.
+        // EF10 has no such wrapper. Native gap, never rows.
         PerMode(m => Query(collection, ConfigureShipper, m, q => q.OrderBy(s => s.Name)
                 .Select(s => new { B = s.Billing.City, S = s.Shipping.City, P = s.Previous.Code, D = s.Depot.Spot.City }).ToList()
                 .Select(x => $"{x.B}/{x.S}/{x.P}/{x.D}")),
@@ -797,7 +797,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         // Member-wise equality between two paths of the same CLR type with different element names: native compares
         // member by member through each path's own names (b's Shipping and Previous are both B1 but differ in Code;
         // a third row below makes them equal); the driver refuses the stored pair (its serializers differ) and the
-        // complex serializer refuses an instance comparand (ruling R1).
+        // complex serializer refuses an instance comparand.
         PerMode(m => Query(collection, ConfigureShipper, m, q => q.Where(s => s.Shipping == s.Previous).Select(s => s.Name)), [],
             Serves, Serves, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"));
         PerMode(m => Query(collection, ConfigureShipper, m, q => q.Where(s => s.Billing != s.Previous).OrderBy(s => s.Name).Select(s => s.Name)), ["a", "b"],
@@ -821,7 +821,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
     private static readonly Outcome OwnedIncludeNativeOnly = Serves;
     private static readonly Outcome OwnedIncludeWholeValueFallback = Serves;
 #endif
-    // The fallback cannot read a whole complex value back (the complex serializer does not deserialize; ruling R1/R7
+    // The fallback cannot read a whole complex value back (the complex serializer does not deserialize
     // family): loud, never rows.
     private const string OwnedIncludeWholeValueFallbackMessage = "property of class <>f__AnonymousType";
 
@@ -1469,7 +1469,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
     public void Collection_typed_leaves_make_member_wise_equality_decline()
     {
         // The compared value holds byte[]/List/array/Dictionary leaves: declined natively (a stored array/document is not
-        // compared element-wise); the fallback refuses (ruling R1). Loud in every mode, never rows.
+        // compared element-wise); the fallback refuses. Loud in every mode, never rows.
         var collection = SeedTyped();
         var value = Leaves(true);
         PerMode(m => Query(collection, ConfigureTyped, m, q => q.Where(r => r.Leaves == value).Select(r => r.Name)), [],
@@ -1573,7 +1573,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         PerMode(m => Query(collection, Configure, m, q => q.Where(h => h.Left.B == h.Right.B).OrderBy(h => h.Name).Select(h => h.Name)),
             ["diff", "same"], NotNative, Throws<NotSupportedException>("which are stored differently"), Throws<NotSupportedException>("which are stored differently"));
 
-        // Whole values: B is not stored alike on both sides, so member-wise equality declines (ruling: stored-alike).
+        // Whole values: B is not stored alike on both sides, so member-wise equality declines (stored-alike rule).
         PerMode(m => Query(collection, Configure, m, q => q.Where(h => h.Left == h.Right).Select(h => h.Name)), ["same"],
             NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("because the two arguments are serialized differently"));
 
@@ -1585,7 +1585,7 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
             Serves, Serves, Throws<NotSupportedException>("as a whole value is not supported"));
     }
 
-    // ── Part 2(a): the projection binder never turns an untranslatable leaf into default(T) ──────────────────────
+    // ── The projection binder never turns an untranslatable leaf into default(T) ──────────────────────
 
     public struct AGeo
     {

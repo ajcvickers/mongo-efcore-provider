@@ -697,7 +697,7 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
     public static readonly Dictionary<string, (Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<string>> Run, string[] Expected)>
         OptionalParentShapes = new()
         {
-            // `string.Compare(c.Address!.City, "c") < 0` moved to ComplexTypeNullPropagationTests (item 3b of the fix wave): C#
+            // `string.Compare(c.Address!.City, "c") < 0` moved to ComplexTypeNullPropagationTests : C#
             // orders the absent parent's null City first (Missing and Null match), and the native path no longer folds a
             // relational compare under an optional complex parent to {Address.City: {$lt: "c"}}; driver-LINQ answers [A].
             ["compare_gt"] = (q => q.Where(c => string.Compare(c.Address!.City, "c") > 0).OrderBy(c => c.Name).Select(c => c.Name), ["D"]),
@@ -741,7 +741,7 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
     {
         // `EF.Property<double>(c.Address!.Location, "Lat")` has no native field resolution (the member-hop receiver under
         // EF.Property is not a chain TryResolveOwnedFieldPath accepts); it declines and the fallback reads default for the
-        // missing/null parent. Task 10 decided to keep it declining (the decline is clean and the fallback right, and the
+        // missing/null parent. It is deliberately kept declining (the decline is clean and the fallback right, and the
         // member spelling `c.Address!.Location.Lat` is native); widening the emit-side resolver is a follow-up.
         var collection = SeedOptional(nameof(Optional_parent_EF_Property_leaf_over_a_member_hop_declines_cleanly));
         Assert.Equal(["A:1", "D:3", "Missing:0", "Null:0"], NativeModeAssert.DeclinesCleanly(m => Optional(collection, m,
@@ -765,7 +765,7 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
     [Fact]
     public void Entity_beside_an_EF_Property_complex_leaf()
     {
-        // S2 (Task 9): with complex properties materialized (Task 10) the entity beside the leaf reads correctly in every
+        // With complex properties materialized the entity beside the leaf reads correctly in every
         // mode, in both spellings; it must never return null rows. The whole-entity matrix is in ComplexTypeMaterializationTests.
         var collection = SeedRich();
         NativeModeAssert.NativeAndExpected(m => Rich(collection, m, q => q.OrderBy(c => c.Name)

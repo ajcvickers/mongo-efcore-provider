@@ -1312,7 +1312,7 @@ public class MongoAggregationExpressionRendererTests
         Assert.False(MongoAggregationExpressionRenderer.MayBeNull(new MongoSizeExpression("Posts", typeof(int))));
     }
 
-    // R18 judges the operands of a date-add, coalesce and conditional structurally, but a captured NON-nullable value
+    // MayBeNull judges the operands of a date-add, coalesce and conditional structurally, but a captured NON-nullable value
     // (`x.Date.AddDays(days)`, `x.Flag ? x.Rank : other`) is never null, so the node is not "may be null" at the root;
     // a nullable or untyped parameter and a NullSafe (complex element) leaf still are.
     [Fact]

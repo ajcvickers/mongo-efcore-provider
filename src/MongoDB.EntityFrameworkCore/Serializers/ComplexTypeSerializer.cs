@@ -18,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using MongoDB.Bson.Serialization;
 using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Query;
 
 namespace MongoDB.EntityFrameworkCore.Serializers;
 
@@ -60,10 +61,7 @@ internal class ComplexTypeSerializer<TValue> :
 
     /// <inheritdoc />
     public TValue Deserialize(BsonDeserializationContext context, BsonDeserializationArgs args)
-        => throw new NotSupportedException(
-            $"Reading complex type '{_complexType.DisplayName()}' through the driver's serializer is not supported: a complex value is "
-            + "materialized by the provider's shaper. Project the complex type's properties you need instead, or apply the operation "
-            + "after 'AsEnumerable()'.");
+        => throw new NotSupportedException(ComplexTypeRefusals.DriverCannotReadComplexType(_complexType.DisplayName()));
 
     /// <inheritdoc />
     object? IBsonSerializer.Deserialize(BsonDeserializationContext context, BsonDeserializationArgs args)
@@ -80,8 +78,7 @@ internal class ComplexTypeSerializer<TValue> :
 
         // Matching a complex value by example could mismatch on unmapped fields or default values in stored
         // subdocuments, so whole-value comparison is not rendered through the serializer.
-        throw new NotSupportedException(
-            $"Comparing complex type '{_complexType.DisplayName()}' as a whole value is not supported. Compare its properties instead.");
+        throw new NotSupportedException(ComplexTypeRefusals.WholeValueComparisonNotSupported(_complexType.DisplayName()));
     }
 
     /// <inheritdoc />

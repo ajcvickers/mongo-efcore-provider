@@ -30,7 +30,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// </summary>
 /// <remarks>
 /// Each shape is pinned per mode against a hand-written answer (<see cref="CompositionAssert"/>). Whole complex values as
-/// operands of value-reading operators are refused (ruling R7) and pinned in <see cref="ComplexTypeMaterializationTests"/>;
+/// operands of value-reading operators are refused and pinned in <see cref="ComplexTypeMaterializationTests"/>;
 /// joins are in <see cref="ComplexTypeJoinCompositionTests"/>, hierarchies and owned/shared types in
 /// <see cref="ComplexTypeHierarchyCompositionTests"/>.
 /// </remarks>

@@ -555,7 +555,7 @@ public class ComplexTypeOptionalAndCollectionWriteTests(TemporaryDatabaseFixture
     [Fact]
     public void Scalar_update_on_entity_with_complex_collection_does_not_rewrite_array()
     {
-        // Replaces the Task 4 guard that rejected every update of an entity with a complex collection.
+        // Replaces the guard that rejected every update of an entity with a complex collection.
         using var capture = new CommandCapture(database);
         var collection = capture.Collection(database.CreateCollection<CustomerWithAddressList>());
         var customer = NewListCustomer();

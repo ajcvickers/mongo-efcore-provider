@@ -151,7 +151,7 @@ public class ComplexTypeCompiledQueryParameterTests(TemporaryDatabaseFixture dat
     {
         // RED (5547cfa2, EF8/EF9): NativeOnly [ann, bob] for `==` (the field compared with itself) and [] for `!=`. Now as on
         // EF10: native declines a whole value read off a query parameter, and the driver-LINQ fallback refuses a whole complex
-        // value comparison loudly (ruling R1), never wrong rows. Compare the members instead (the leaf tests below).
+        // value comparison loudly, never wrong rows. Compare the members instead (the leaf tests below).
         foreach (var query in new[] { ComplexEquality, ComplexNotEqual })
         {
             var collection = Seed(nameof(Whole_complex_value_equal_to_a_compiled_entity_parameters_value) + (query == ComplexEquality ? "eq" : "ne"));
@@ -181,7 +181,7 @@ public class ComplexTypeCompiledQueryParameterTests(TemporaryDatabaseFixture dat
 
     [Fact]
     public void Root_scalar_equal_to_a_compiled_entity_parameters_member()
-        // NON-complex (pre-existing at origin/EF-322c on EF8/EF9, exception (i)): [ann, bob] natively, now [] (no Name "x").
+        // NON-complex (pre-existing at origin/EF-322c on EF8/EF9): [ann, bob] natively, now [] (no Name "x").
         => Declines(Scalar, []);
 
     [Fact]

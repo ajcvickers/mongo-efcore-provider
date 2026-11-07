@@ -211,9 +211,9 @@ public static class ComplexEqualityTranslationTests
     [Fact]
     public static void Element_scope_leaves_are_null_safe_like_the_null_check()
     {
-        // Inside a $filter/$map element scope a bare `$eq` against null is not $ifNull-normalized (owner ruling), so the
+        // Inside a $filter/$map element scope a bare `$eq` against null is not $ifNull-normalized, so the
         // member-wise leaves carry NullSafe: `{ $eq: [{ $ifNull: ["$$e.Home.Zip", null] }, null] }`, consistent with the
-        // null check's `{ $ifNull: ["$$e.Home", null] }` (R16).
+        // null check's `{ $ifNull: ["$$e.Home", null] }`.
         var parameter = Expression.Parameter(typeof(Holder), "h");
         var body = Expression.Equal(
             Expression.Property(parameter, nameof(Holder.Home)),

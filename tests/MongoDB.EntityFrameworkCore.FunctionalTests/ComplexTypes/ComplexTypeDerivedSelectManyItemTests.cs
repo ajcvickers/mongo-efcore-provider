@@ -34,7 +34,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// Every seeded item value differs from its root row's, so a wrong-document read shows as a value difference.
 /// </summary>
 /// <remarks>
-/// Pinned outcome (fix round 4 of the complex-type slice): no shape returns wrong rows. The arm is unreachable for a
+/// Pinned outcome (complex-type slice): no shape returns wrong rows. The arm is unreachable for a
 /// served row: (1) an item type in the root's EF hierarchy needs a cross-collection REFERENCE collection navigation (an
 /// owned type never has a base type), and a reference unwind has no driver-LINQ oracle (the bridge throws "Unsupported
 /// cross-DbSet query" or "could not be translated"), so every non-native shape over it fails loudly; (2) the native path

@@ -33,9 +33,9 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// <summary>
 /// <c>ExecuteUpdate</c>/<c>ExecuteDelete</c> over complex COLLECTIONS. The filter and every <c>SetProperty</c> value run on
 /// the driver-LINQ bridge, which evaluates a NULL element's members as MISSING (ordered below every value, never equal to
-/// null) where a query reads them as null (ruling R17): a relational comparison over an element leaf selected and DELETED
-/// rows the query excludes (measured at 6740680c, see task-14-report). Bulk operations therefore admit only element
-/// predicates built from atoms the driver answers exactly as R17 (equality with a non-null value, a bare bool member, a
+/// null) where a query reads them as null: a relational comparison over an element leaf selected and DELETED
+/// rows the query excludes (measured at 6740680c). Bulk operations therefore admit only element
+/// predicates built from atoms the driver answers exactly as C# does (equality with a non-null value, a bare bool member, a
 /// non-nullable list's <c>Contains</c>, and <c>&amp;&amp;</c>/<c>||</c>/<c>!</c> over them) and refuse everything else before
 /// any document is written. Every row asserts the RAW stored documents and the affected count.
 /// </summary>
@@ -313,7 +313,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         // RED: `== null` deleted nothing; the query returns [r-emptyelem, r-mixed, r-null] (no data loss, wrong rows).
         Refused(r => r.Stops.Any(s => s.Zip == null), ["r-emptyelem", "r-mixed", "r-null"], "the element predicate");
         Refused(r => r.Stops.Any(s => s.Note == null), ["r-emptyelem", "r-mixed", "r-null"], "the element predicate");
-        // The query net's documented limits (R21) are refused here: other null-test spellings, a null parameter, a null
+        // The query net's documented limits are refused here: other null-test spellings, a null parameter, a null
         // root member as the comparand.
         Refused(r => r.Stops.Any(s => s.Zip.HasValue), ["r-full", "r-mixed"], "the element predicate");
         Refused(r => r.Stops.Any(s => s.Zip == none), ["r-emptyelem", "r-mixed", "r-null"], "the element predicate");
@@ -326,7 +326,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     {
         var no = false;
         var withNull = new int?[] { null, 7 };
-        // R19 reads a null element's bool as false; the driver's `$eq: [missing, false]` is false. RED: selected nothing.
+        // A null element's bool reads false; the driver's `$eq: [missing, false]` is false. RED: selected nothing.
         Refused(r => r.Stops.Any(s => s.Verified == false), ["r-emptyelem", "r-mixed", "r-null"], "the element predicate");
         Refused(r => r.Stops.Any(s => s.Verified == no), ["r-emptyelem", "r-mixed", "r-null"], "the element predicate");
         // `$in` of a missing value never matches null. RED: `!Contains` deleted [r-emptyelem, r-full, r-mixed, r-null].
@@ -349,7 +349,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     [Fact]
     public void Shapes_outside_the_allow_list_are_refused()
     {
-        // The R21 limit shapes of the query net, and every operator outside the allow-list: element-leaf Select chains,
+        // The limit shapes of the query net, and every operator outside the allow-list: element-leaf Select chains,
         // nested element lambdas, indexers/First/aggregates, string methods, nested collections inside an element.
         // (EF folds the Select into the predicate before the provider sees it: `Any(s => s.Floor < 1)`.)
         Refused(r => r.Stops.Select(s => s.Floor).Any(f => f < 1), [], "the element predicate");
@@ -374,7 +374,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
             AssertRefused(() => db.Entities.Where(r => r.Stops[0].Floor < 1).ExecuteDelete(), "the operator 'Select'");
             AssertRefused(() => db.Entities.Where(r => r.Stops.First().Floor < 1).ExecuteDelete(), "the operator 'Select'");
             AssertRefused(() => db.Entities.Where(r => r.Stops.Select(s => s.Verified).Contains(false)).ExecuteDelete(), "the operator 'Select'");
-            // The EF.Property spelling of a collection read outside an operator (Task 15: the method-call arm of the check).
+            // The EF.Property spelling of a collection read outside an operator (the method-call arm of the check).
             AssertRefused(() => db.Entities.Where(r => EF.Property<List<Stop>>(r, nameof(Route.Stops)) == null).ExecuteDelete(), "a read of the collection");
         }
 
@@ -485,7 +485,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     [Fact]
     public void Counts_quantifiers_and_null_or_missing_arrays()
     {
-        // A required collection that is null or missing reads EMPTY on both paths (the bridge's coalesce to [], Task 13).
+        // A required collection that is null or missing reads EMPTY on both paths (the bridge's coalesce to []).
         Supported(r => r.Stops.Any(), ["r-emptyelem", "r-full", "r-mixed", "r-null"]);
         Supported(r => !r.Stops.Any(), ["r-empty", "r-missing", "r-nullarr"]);
         Supported(r => r.Stops.Count == 0, ["r-empty", "r-missing", "r-nullarr"]);
@@ -499,7 +499,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     [Fact]
     public void Optional_collection_null_checks_are_refused()
     {
-        // Ruling R25. The driver renders `r.Detours == null` as `{Detours: null}`, which ALSO matches an array that CONTAINS
+        // The driver renders `r.Detours == null` as `{Detours: null}`, which ALSO matches an array that CONTAINS
         // a null element: r-null's Detours [null] is selected though it is a non-null collection. C#: the rows whose Detours
         // reads null (BSON null or missing): r-empty, r-emptyelem, r-missing, r-mixed, r-nullarr. The native path declines a
         // collection null check, so the default mode REFUSES rather than falling back to the driver's rows (measured RED
@@ -520,7 +520,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     [Fact]
     public void Collection_null_checks_are_refused_in_every_query_shape_the_native_path_declines()
     {
-        // Ruling R25, per shape (RED matrix in the final-fix-wave report). Every shape below is declined by the native path
+        // Per shape. Every shape below is declined by the native path
         // (NativeOnly throws), so the default mode would serve the DRIVER's rows, pinned under explicit DriverLinq as
         // known driver behaviour (the opt-in). C# answers in the comments.
         var store = Seed();
@@ -567,7 +567,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         => [.. query.AsNoTracking().Select(r => r.Name).ToList().Order(StringComparer.Ordinal)];
 
     /// <summary>
-    /// R25: the shape is declined natively (NativeOnly throws), refused under the default Native mode with a message naming
+    /// The shape is declined natively (NativeOnly throws), refused under the default Native mode with a message naming
     /// the collection and the remedies, and served by the driver under explicit DriverLinq (<paramref name="driverRows"/>,
     /// known driver behaviour).
     /// </summary>
@@ -604,7 +604,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         }
 
         // Hand-written: Oslo stops x10 + stops (a null element is not Oslo; null/missing arrays count 0). (The equivalent
-        // count projection is not translatable as a query: pre-existing, Task 13.)
+        // count projection is not translatable as a query: pre-existing.)
         Assert.Equal(["r-empty:0", "r-emptyelem:1", "r-full:11", "r-missing:0", "r-mixed:12", "r-null:1", "r-nullarr:0"],
             store.Stored().Select(d => $"{d["Name"]}:{d["Rank"]}").Order(StringComparer.Ordinal));
     }
@@ -681,7 +681,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
 
         store.AssertUnchanged();
     }
-    // ── Navigation root (a documented R21 limit of the query net) ───────────────────────────────────────────────────
+    // ── Navigation root (a documented limit of the query net) ───────────────────────────────────────────────────
 
     public class Shop
     {
@@ -721,7 +721,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
     [Fact]
     public void Element_predicates_through_a_navigation_are_refused()
     {
-        // The query net keys lambdas by root entity type, so `s.Shop.Tags.Any(...)` is a known R21 limit for queries. Bulk
+        // The query net keys lambdas by root entity type, so `s.Shop.Tags.Any(...)` is a known limit for queries. Bulk
         // refuses any lambda over complex elements it can't bind, and a cross-collection bulk source is refused anyway
         // (pre-existing: single-collection bulk only). Either way nothing is written.
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -749,7 +749,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
 
         Assert.Equal(sale.ToJson(), rawSales.Find(FilterDefinition<BsonDocument>.Empty).Single().ToJson());
     }
-    // ── Fix round 1: collection CLR types the bridge cannot normalise (I1) ───────────────────────────────────────────
+    // ── Collection CLR types the bridge cannot normalise ───────────────────────────────────────────
 
     public class Crate
     {
@@ -889,7 +889,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         Assert.Equal(["a-match:1", "c-match:1"], raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => $"{d["Name"]}:{d["Rank"]}").Order(StringComparer.Ordinal));
     }
 
-    // ── Fix round 1: model-level query filters (M2) ───────────────────────────────────────────────────────────────
+    // ── Model-level query filters ───────────────────────────────────────────────────────────────
 
     private SingleEntityDbContext<Route> FilteredContext(Store store, Expression<Func<Route, bool>> filter, MongoQueryMode mode = MongoQueryMode.Native)
         => SingleEntityDbContext.Create(
@@ -951,7 +951,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         Assert.Empty(ignored.Names());
     }
 
-    // ── Fix round 1: two-phase with an unsafe SETTER value (unverified check b) ───────────────────────────────────
+    // ── Two-phase with an unsafe SETTER value ───────────────────────────────────
 
     [Fact]
     public void A_two_phase_update_whose_setter_value_reads_elements_unsafely_writes_nothing()
@@ -970,7 +970,7 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         store.AssertUnchanged();
     }
 
-    // ── Fix round 1: a required collection under an OPTIONAL complex hop (M4) ─────────────────────────────────────
+    // ── A required collection under an OPTIONAL complex hop ─────────────────────────────────────
 
     public class Hop
     {

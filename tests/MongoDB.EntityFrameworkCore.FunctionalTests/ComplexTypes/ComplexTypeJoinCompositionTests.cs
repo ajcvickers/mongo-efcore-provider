@@ -242,7 +242,7 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
                 .OrderBy(x => x.Name).ThenBy(x => x.Rank).ToList().Select(x => $"{x.Name}|{x.Rank}")]),
             ["Ann|1", "Bob|5", "Cid|2", "Cid|3", "Hid|2", "Hid|3"], Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"), Throws<InvalidOperationException>("could not be translated"));
 
-    // ── Key guards: a hop key whose leaf NAME matches a property of the scope (mutation-discriminating rows) ─────
+    // ── Key guards: a hop key whose leaf NAME matches a property of the scope (rows chosen to catch a wrong key) ─────
 
     public class Delivery
     {
@@ -378,7 +378,7 @@ public class ComplexTypeJoinCompositionTests(TemporaryDatabaseFixture database) 
             "p1|Oslo", "p2|-");
 #endif
 
-    // ── Inner-side hop key on a NAVIGATION-backed join (fix round 1, I1) ─────────────────────────────────────────
+    // ── Inner-side hop key on a NAVIGATION-backed join ─────────────────────────────────────────
 
     public class AccountRef
     {

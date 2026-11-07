@@ -413,7 +413,7 @@ public class NativeMalformedAggregateAndDistinctTests(TemporaryDatabaseFixture d
     [Fact]
     public void Distinct_over_collection_typed_properties_reads_explicit_null_and_missing_alike()
     {
-        // Task 9 deferred pins: an EXPLICIT BSON null beside a MISSING element and a value, for byte[], List<string>,
+        // Deferred pins: an EXPLICIT BSON null beside a MISSING element and a value, for byte[], List<string>,
         // string[] and List<int> (the reference-typed marker covers every reference-typed key, not only string).
         var raw = database.MongoDatabase.GetCollection<BsonDocument>(
             TemporaryDatabaseFixtureBase.CreateCollectionName(nameof(Distinct_over_collection_typed_properties_reads_explicit_null_and_missing_alike))

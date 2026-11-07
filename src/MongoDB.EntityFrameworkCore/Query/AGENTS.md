@@ -458,6 +458,9 @@ Rendering (null/missing/dialect semantics):
   (`Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key)` becomes a leaf-key grouping over the entity; the
   `GroupBy(key, resultSelector)` overload) the outcome is the pre-existing one of its scalar analogue. Complex types are new
   in this slice, so none of this changes released behaviour.
+  The wording of every complex-type refusal (model validation, bulk setters, materialization, the whole-value operand and GroupBy
+  refusals, the null-element scanner and bulk allow-list, the serializers) lives in `ComplexTypeRefusals`; call sites pick the
+  exception type. Tests assert on the text, so edit it there, not inline.
   The query root's own shaper (bound to THIS query's empty projection member) resolves to the root document even when
   typed as a derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other
   derived shaper does only outside a join. This also corrected a pre-existing NON-complex wrong read (an intentional
@@ -504,7 +507,7 @@ Rendering (null/missing/dialect semantics):
   It is a BEST-EFFORT net for structurally keyable shapes, not a guarantee. The scanner RESTATES the node kinds
   that need the null-element guards (`ScopeField`/`MayBeNull`/`ScopeValue`) rather than calling those predicates (design debt): a
   new null-guard-requiring node kind must be added to both, and to the bulk allow-list's refusal side. Documented limits, pinned as
-  characterization in `ComplexCollectionNativeQueryTests.Known_limits_of_the_R20_refusal_net_...`: element predicates
+  characterization in `ComplexCollectionNativeQueryTests.Known_limits_of_the_null_element_refusal_scanner_...`: element predicates
   reached through a navigation/join root (`s.Store.Tags.Any(t => t.Rank < 1)`: lambda roots are keyed by
   `FindEntityTypes(param.Type)`, never a `TransparentIdentifier`); element-leaf `Select` chains
   (`Select(s => s.Verified).Contains(false)`; `Select` is opaque to the keying); null tests not spelled against a null

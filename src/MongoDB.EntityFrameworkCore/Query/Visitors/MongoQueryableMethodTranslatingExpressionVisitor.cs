@@ -374,10 +374,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
 
     // The single complex-value-operand message, shared by every refusal site.
     private static NotSupportedException ComplexValueOperandRefusal(string operatorName)
-        => new(
-            $"A projected whole complex value cannot be the operand of '{operatorName}': the MongoDB provider "
-            + "can't compare or combine complex values. Project the complex type's properties you need instead, or apply "
-            + "the operator after 'AsEnumerable()'.");
+        => new(ComplexTypeRefusals.WholeValueOperand(operatorName));
 
     /// <summary>
     /// Refuses (in every mode) a GroupBy whose source projection or key selector reads a whole complex value
@@ -1339,8 +1336,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
         {
             if (entityShaperExpression.StructuralType is not IEntityType entityType)
             {
-                throw new NotSupportedException($"Complex type '{entityShaperExpression.StructuralType.DisplayName()
-                }' not supported in MongoDB.");
+                throw new NotSupportedException(
+                    ComplexTypeRefusals.ComplexTypeOfTypeNotSupported(entityShaperExpression.StructuralType.DisplayName()));
             }
 
             if (entityType.ClrType == resultType) return source;
