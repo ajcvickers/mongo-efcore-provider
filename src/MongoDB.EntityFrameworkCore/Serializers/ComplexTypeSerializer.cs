@@ -60,7 +60,10 @@ internal class ComplexTypeSerializer<TValue> :
 
     /// <inheritdoc />
     public TValue Deserialize(BsonDeserializationContext context, BsonDeserializationArgs args)
-        => throw new NotImplementedException();
+        => throw new NotSupportedException(
+            $"Reading complex type '{_complexType.DisplayName()}' through the driver's serializer is not supported: a complex value is "
+            + "materialized by the provider's shaper. Project the complex type's properties you need instead, or apply the operation "
+            + "after 'AsEnumerable()'.");
 
     /// <inheritdoc />
     object? IBsonSerializer.Deserialize(BsonDeserializationContext context, BsonDeserializationArgs args)

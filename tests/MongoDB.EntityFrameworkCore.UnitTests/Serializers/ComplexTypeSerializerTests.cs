@@ -315,7 +315,7 @@ public static class ComplexTypeSerializerTests
 
         using var reader = new BsonDocumentReader(new BsonDocument("Street", "s"));
         var context = BsonDeserializationContext.CreateRoot(reader);
-        Assert.Throws<NotImplementedException>(() => complex.Serializer.Deserialize(context, new BsonDeserializationArgs()));
+        Assert.Throws<NotSupportedException>(() => complex.Serializer.Deserialize(context, new BsonDeserializationArgs()));
     }
 
     [Fact]
