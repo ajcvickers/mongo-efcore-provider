@@ -26,10 +26,10 @@ using MongoDB.EntityFrameworkCore.Infrastructure;
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 /// <summary>
-/// Ruling R20: a query the native path declines must not be served by the driver-LINQ fallback when, inside a complex
+/// A query the native path declines must not be served by the driver-LINQ fallback when, inside a complex
 /// collection's element scope, it holds a shape the driver evaluates wrongly over a NULL element (EF10 writes a null
 /// element as BSON null; in a <c>$map</c>/<c>$filter</c> scope its members are MISSING, which the driver's aggregation
-/// operators order below every value and never equate with null, where ruling R17 reads every member as null). Such a
+/// operators order below every value and never equate with null, where the native path reads every member as null). Such a
 /// query is refused at the compile-time gate under <see cref="MongoQueryMode.Native"/> instead of silently returning
 /// wrong rows; explicit <see cref="MongoQueryMode.DriverLinq"/> is the user's opt-in and runs the driver.
 /// </summary>
@@ -39,7 +39,7 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// <see cref="StructuralPath.TryResolveCollection"/> (by parameter identity, never member name) to an
 /// <see cref="IComplexType"/> element; the node kinds are those whose native rendering needs a null guard or a
 /// missing-safe equality (relational comparison, <c>==</c>/<c>!=</c> null, membership of an element value in a local
-/// collection, equality on a non-nullable <c>bool</c> member: R17/R18/R19). The data isn't consulted: the shape is refused
+/// collection, equality on a non-nullable <c>bool</c> member). The data isn't consulted: the shape is refused
 /// even over a collection that holds no null element today.
 /// </para>
 /// <para>
@@ -88,7 +88,7 @@ internal static class ComplexElementNullGuardRefusal
     }
 
     /// <summary>
-    /// The <see cref="Find"/> shape for a complex COLLECTION compared with <see langword="null"/> (ruling R25): the driver
+    /// The <see cref="Find"/> shape for a complex COLLECTION compared with <see langword="null"/>: the driver
     /// renders <c>r.Detours == null</c> as <c>{Detours: null}</c>, which also matches <c>[null]</c> (EF10 writes a null
     /// element as BSON null) and, for a required collection, a missing or null array (which reads as empty). The native
     /// path declines such a comparison, so under <see cref="MongoQueryMode.Native"/> the fallback would serve those rows.
@@ -112,10 +112,10 @@ internal static class ComplexElementNullGuardRefusal
     }
 
     /// <summary>
-    /// Bulk <c>ExecuteUpdate</c>/<c>ExecuteDelete</c> (task 14): the filter and every <c>SetProperty</c> value always run
-    /// on the driver-LINQ bridge, so a complex-element read the driver evaluates differently from ruling R17 would update
+    /// Bulk <c>ExecuteUpdate</c>/<c>ExecuteDelete</c>: the filter and every <c>SetProperty</c> value always run
+    /// on the driver-LINQ bridge, so a complex-element read the driver evaluates differently from the native null-element rule would update
     /// or DELETE rows the equivalent query excludes. Throws <see cref="NativeTranslationNotSupportedException"/> unless every
-    /// read of a complex collection's element in <paramref name="expressions"/> is one the driver provably answers like R17
+    /// read of a complex collection's element in <paramref name="expressions"/> is one the driver provably answers like the native path
     /// (the strict allow-list, <see cref="Finder"/>); a no-op under explicit <see cref="MongoQueryMode.DriverLinq"/>, where
     /// the matching query runs on the driver too.
     /// </summary>
@@ -206,12 +206,12 @@ internal static class ComplexElementNullGuardRefusal
 
     /// <summary>
     /// <para>
-    /// Non-strict (queries, R20): finds the deny-listed null-guard-requiring node kinds in keyed element scopes.
+    /// Non-strict (queries): finds the deny-listed null-guard-requiring node kinds in keyed element scopes.
     /// </para>
     /// <para>
     /// Strict (bulk): additionally, every read of a keyed complex element parameter must sit in an ALLOWED ATOM, a node the
-    /// driver evaluates over a null element exactly as R17 does: <c>member ==/!= v</c> with <c>v</c> non-null and element-free
-    /// (not over a bool member: R19 reads a null element's bool as false, the driver's <c>$eq</c> misses it); a bare
+    /// driver evaluates over a null element exactly as the native path does: <c>member ==/!= v</c> with <c>v</c> non-null and element-free
+    /// (not over a bool member: a null element's bool reads false natively, the driver's <c>$eq</c> misses it); a bare
     /// non-nullable bool member (a lambda body, an <c>&amp;&amp;</c>/<c>||</c> operand, a <c>!</c> operand); and
     /// <c>list.Contains(member)</c> over a local list whose item type can't hold null. Each atom gives the same truth value
     /// on both paths, so every <c>&amp;&amp;</c>/<c>||</c>/<c>!</c> combination of them does too. Any other read (a
@@ -219,7 +219,7 @@ internal static class ComplexElementNullGuardRefusal
     /// comparison with another member), an element-typed lambda parameter the keying can't bind (e.g. through a
     /// navigation), and an operator over an OPTIONAL complex collection (which the bridge doesn't normalize, so the server
     /// errors mid-operation on a null one) are refused. A positive list, so a shape nobody classified is refused rather
-    /// than served: the R21 limits of the query net don't apply to bulk.
+    /// than served: the documented limits of the query net don't apply to bulk.
     /// </para>
     /// </summary>
     private sealed class Finder(IModel model, bool strict, Func<string, object?>? parameterValue) : ExpressionVisitor
@@ -342,7 +342,7 @@ internal static class ComplexElementNullGuardRefusal
 
             // `list.Contains(s.Zip)` (Enumerable/Queryable, a List<T> instance method, or the C# 14 span lowering
             // MemoryExtensions.Contains(span, value[, comparer])): the needle is a MEMBER of the element. The element itself
-            // as the needle (`list.Contains(s)`) is Task 12's member-wise equality, owned elsewhere.
+            // as the needle (`list.Contains(s)`) is member-wise equality, owned elsewhere.
             // (Strict: the positive list in IsBulkSafePredicate decides instead, so a deny-listed node kind it admits, e.g.
             // a non-nullable list's Contains, isn't refused here.)
             if (!strict && _complexElementCollections.Count > 0 && node.Method.Name == nameof(Enumerable.Contains)
@@ -358,12 +358,12 @@ internal static class ComplexElementNullGuardRefusal
             return base.VisitMethodCall(node);
         }
 
-        // KEEP IN STEP with the renderer's structural MayBeNull arms (R18) and ScopeField/ScopeValue (R17/R19): a node kind
+        // KEEP IN STEP with the renderer's structural MayBeNull arms and ScopeField/ScopeValue: a node kind
         // that gets the native null guard in a complex element scope must be refused here on the fallback.
         // ComplexElementNullGuardRefusalTests pairs every discovered structural arm with an example this method refuses.
         protected override Expression VisitBinary(BinaryExpression node)
         {
-            // R25: a complex collection itself compared with null, keyed structurally by the same resolver as the element
+            // A complex collection itself compared with null, keyed structurally by the same resolver as the element
             // scopes (a member chain rooted on a bound parameter, through StructuralPath.TryResolveCollection; owned
             // collections are never in `collections`). Strict (bulk) mode refuses the read already: an unapproved
             // collection read.
@@ -418,7 +418,7 @@ internal static class ComplexElementNullGuardRefusal
         private static bool IsNullConstant(Expression expression)
             => expression.RemoveConvert()! is ConstantExpression { Value: null };
 
-        // `x.Flag == v`: a non-nullable bool member read rooted on a complex element parameter (R19).
+        // `x.Flag == v`: a non-nullable bool member read rooted on a complex element parameter.
         private ParameterExpression? FindBoolMemberRoot(Expression operand)
         {
             var stripped = operand.RemoveConvert()!;
@@ -626,7 +626,7 @@ internal static class ComplexElementNullGuardRefusal
         }
 
         // Whether `expression` (a lambda body over complex elements) is built only from atoms the driver evaluates over a
-        // null element (and a missing member) exactly as R17 does. Parts that read no complex element are left to the
+        // null element (and a missing member) exactly as the native path does. Parts that read no complex element are left to the
         // outer visit (which checks nested lambdas over other collections when it reaches them).
         private bool IsBulkSafePredicate(Expression expression)
         {
@@ -644,16 +644,16 @@ internal static class ComplexElementNullGuardRefusal
                     return IsBulkSafePredicate(not.Operand);
 
                 // `member == v` / `!= v`, v a non-null value: a null element's member is MISSING, `$eq` false and `$ne` true
-                // in every dialect the driver renders, which is R17's `null == v` / `null != v`. Not over a non-nullable bool
-                // (R19 reads it false, so `== false` is true there) unless v is true.
+                // in every dialect the driver renders, which is the native `null == v` / `null != v`. Not over a non-nullable bool
+                // (the native path reads it false, so `== false` is true there) unless v is true.
                 case BinaryExpression { NodeType: ExpressionType.Equal or ExpressionType.NotEqual } equality:
                     return (IsElementLeafRead(equality.Left, out var leftLeaf) && TryGetKnownValue(equality.Right, out var rightValue)
                                && IsSafeEqualityValue(leftLeaf, rightValue))
                            || (IsElementLeafRead(equality.Right, out var rightLeaf) && TryGetKnownValue(equality.Left, out var leftValue)
                                && IsSafeEqualityValue(rightLeaf, leftValue));
 
-                // `list.Contains(member)`: `$in` of a MISSING value is false, R17's `list.Contains(null)` for a list that
-                // can't hold null (a non-nullable item type, or a runtime value without null). Not over a bool member (R19).
+                // `list.Contains(member)`: `$in` of a MISSING value is false, the native `list.Contains(null)` for a list that
+                // can't hold null (a non-nullable item type, or a runtime value without null). Not over a bool member.
                 case MethodCallExpression { Method.Name: nameof(Enumerable.Contains) } contains
                     when TryGetContainsOperands(contains, out var sequence, out var value):
                     return IsElementLeafRead(value, out var needle)
@@ -663,7 +663,7 @@ internal static class ComplexElementNullGuardRefusal
                            && (sequence.Type.TryGetItemType() is { IsValueType: true } itemType && Nullable.GetUnderlyingType(itemType) is null
                                || !items.Cast<object?>().Any(i => i is null));
 
-                // A bare non-nullable, default-serialized bool member: the driver's truthiness of MISSING is false, R19's
+                // A bare non-nullable, default-serialized bool member: the driver's truthiness of MISSING is false, the native
                 // read of a null element's bool.
                 default:
                     return expression.Type == typeof(bool)

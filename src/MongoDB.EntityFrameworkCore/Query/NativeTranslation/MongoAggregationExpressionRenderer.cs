@@ -815,7 +815,7 @@ internal static class MongoAggregationExpressionRenderer
     // { $in: [needle, haystack] }; negation wraps in $not (the query dialect has $nin, this one doesn't).
     private static BsonValue RenderIn(MongoInExpression inExpr, PlaceholderTable placeholders, string? elementVariable)
     {
-        // Through Render, so a NullSafe field (a complex element scope, ruling R17) is $ifNull'd like every other read:
+        // Through Render, so a NullSafe field (a complex element scope) is $ifNull'd like every other read:
         // aggregation $in doesn't equate MISSING with a null list member. A plain field renders the same FieldRef.
         var needle = Render(inExpr.Field, placeholders, elementVariable);
         var haystack = new BsonDocument("$literal", MongoValueRenderer.RenderInValues(inExpr.Values, placeholders));
@@ -974,7 +974,7 @@ internal static class MongoAggregationExpressionRenderer
     /// <remarks>
     /// KEEP IN STEP: an arm that is STRUCTURAL (true over a <c>NullSafe</c> complex-element operand that its CLR type alone
     /// would not flag) makes the native path null-guard a relational comparison the driver-LINQ fallback does not, so the
-    /// R20 scanner (<c>ComplexElementNullGuardRefusal</c>) must refuse that shape. <c>ComplexElementNullGuardRefusalTests</c>
+    /// null-element refusal scanner (<c>ComplexElementNullGuardRefusal</c>) must refuse that shape. <c>ComplexElementNullGuardRefusalTests</c>
     /// discovers the structural arms and fails for one without a paired scanner example.
     /// </remarks>
     internal static bool MayBeNull(MongoExpression node)
@@ -989,7 +989,7 @@ internal static class MongoAggregationExpressionRenderer
                 => IsNullableClrType(arithmetic.Type) || MayBeNull(arithmetic.Left) || MayBeNull(arithmetic.Right),
             MongoConvertExpression convert => IsNullableClrType(convert.Type) || MayBeNull(convert.Operand),
             MongoDatePartExpression datePart => MayBeNull(datePart.Operand),
-            // Structural (ruling R18): these take their CLR type from one operand, but are null whenever the operands that
+            // Structural: these take their CLR type from one operand, but are null whenever the operands that
             // feed them are, e.g. a null complex element's NullSafe leaf. The type check stays as the fallback, so a node
             // over non-NullSafe operands (owned scopes, the root) is judged as before. Operands are judged by
             // MayBeNullOperand, so a captured non-nullable value (`x.Date.AddDays(days)`, `x.D ?? fallback`) is not
@@ -1004,7 +1004,7 @@ internal static class MongoAggregationExpressionRenderer
             MongoConditionalExpression conditional
                 => IsNullableClrType(conditional.Type) || MayBeNullOperand(conditional.IfTrue) || MayBeNullOperand(conditional.IfFalse),
             // The $dateAdd local reconstruction of a stored DateTimeOffset: null when its subdocument is absent, which a
-            // NullSafe operand (a complex element scope, R17) says it may be; otherwise judged by type as before.
+            // NullSafe operand (a complex element scope) says it may be; otherwise judged by type as before.
             MongoDateTimeOffsetLocalExpression local => local.Operand.NullSafe || IsNullableClrType(local.Type),
             MongoMathExpression math => IsNullableClrType(math.Type) || math.Operands.Any(MayBeNull),
             // Null-guarded or null-propagating over a possibly-null string (see NullPropagating).

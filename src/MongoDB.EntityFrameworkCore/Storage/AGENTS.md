@@ -39,7 +39,7 @@ Only Storage may call the driver client/collection/session types directly.
   `TranslateBulkOrThrow` maps failures to EF's canonical "could not be translated".
 - **Complex properties are written by `ComplexValueWriter`, beside (not inside) `WriteOwnedEntities`**
   (`WriteEntity` calls both). A change to any member at any depth rewrites the whole TOP-LEVEL complex property in `$set`
-  (ruling R5: last-writer-wins per complex property; per-member dotted `$set` is a deferred optimization); unchanged complex
+  (last-writer-wins per complex property; per-member dotted `$set` is a deferred optimization); unchanged complex
   properties are skipped, inserts write everything. Bulk setters serialize a client value through
   `SerializeDetachedComplexValue`, the same code path, so bulk and `SaveChanges` store the same shape. Concurrency tokens
   are read from the entity type's own properties only; the model validator rejects tokens inside complex types.

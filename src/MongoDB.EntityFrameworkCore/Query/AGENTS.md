@@ -44,15 +44,15 @@ Gate and fallback:
   pipeline that drops the operator.
 - **Bulk `ExecuteUpdate`/`ExecuteDelete` (EF9+) also uses the driver-LINQ bridge** (`MongoEFToLinqTranslatingExpressionVisitor`).
   Retiring the query fallback does not retire it. Its filter and `SetProperty` values ALWAYS run on the driver, so over a
-  complex collection's elements (EF10) it is guarded by a POSITIVE list, not R20's deny-list: every element read must be an
-  atom the driver answers like R17 (`member ==/!= v` with `v` non-null and not a `false` bool; a bare non-nullable, default-serialized bool member
+  complex collection's elements (EF10) it is guarded by a POSITIVE list, not the query net's deny-list: every element read must be an
+  atom the driver answers like the native null-element rule (`member ==/!= v` with `v` non-null and not a `false` bool; a bare non-nullable, default-serialized bool member
   and `!`; a list that can't hold null `.Contains(member)`; `&&`/`||`/`!` over those) under `Any`/`All`/`Count`/`LongCount`/
   `Where`/`Skip`/`Take` over a REQUIRED collection whose CLR type a `List<T>` fits (`IsNormalizableToEmptyList`, the bridge's own
   coalesce condition: `T[]`/`ObservableCollection<T>` are refused, as are unknown extension nodes); anything else (relational, null tests, `Select`, aggregates, an optional
   collection's operators or null check: the driver's `{p: null}` also matches `[null]`, an element lambda the keying can't
   bind) is refused before any write (`ComplexElementNullGuardRefusal.ThrowIfBulkMisreadsNullElements`, called in every bulk
   plan delegate with this execution's parameter values; explicit `DriverLinq` opts out). A wrong bulk filter deletes data,
-  so bulk takes the refusal cost where queries take R21's documented limits. Setters: a complex leaf through REQUIRED single
+  so bulk takes the refusal cost where queries take the net's documented limits. Setters: a complex leaf through REQUIRED single
   complex hops (dotted stored path, `StructuralPath`), a whole complex property/collection from a captured value (serialized by
   `ComplexValueWriter`, as SaveChanges writes it; a required one can't be null); refused: a leaf under an optional complex
   hop (the server's `$set` of a dotted path under a null parent errors mid-operation), a whole complex value read from the row,
@@ -405,7 +405,7 @@ Rendering (null/missing/dialect semantics):
 - **A binder that can't bind a selector node fails the translation, never `default(T)`**:
   `MongoProjectionBindingExpressionVisitor.TranslationFailed` (set where `MatchTypes` receives a null binding and substitutes
   a default stand-in; reset per `Translate`) makes `TranslateSelect` decline (NativeOnly throws, Native falls back). Silent null rows were the
-  bug class it closes (Task 9).
+  bug class it closes.
 - **A new `MongoExpression` node must be handled in every consumer switch** (both renderers, `IsQueryDialectRenderable`,
   `CanRender`, the negator, `MongoFieldPrefixRewriter`, projection-binder gates); `MongoExpressionNodeCoverageTests` fails
   for an unhandled node (complex types added `MongoElementNullCheckExpression` and `MongoCurrentElementNullCheckExpression`).
@@ -434,7 +434,7 @@ Rendering (null/missing/dialect semantics):
   a required collection missing/null reads empty; a wrong BSON type throws `FormatException`. The projected document is
   the STORED form and the driver can't read a complex value back, so EVERY value-reading operator over a projection that
   reads a whole complex value anywhere throws `NotSupportedException` ("... cannot be the operand of '<Op>' ...") in every
-  mode (ruling R7; `ThrowIfComplexValueOperand` in `VisitMethodCall`): Distinct (incl. `Distinct().Count()`), Union,
+  mode (`ThrowIfComplexValueOperand` in `VisitMethodCall`): Distinct (incl. `Distinct().Count()`), Union,
   Concat, Intersect, Except, Contains, Cast, Select/Where/OrderBy written after a paging operator, Min/Max/Sum/Average
   without a selector, Join, ElementAt, ElementAtOrDefault, DefaultIfEmpty, etc. Only `IsProjectedValueFreeOperator`
   passes: Take, Skip, predicate-less First/Single/Last(OrDefault), Count, LongCount, Any. ElementAt/ElementAtOrDefault/
@@ -452,20 +452,20 @@ Rendering (null/missing/dialect semantics):
   (`ComplexValueConstructorProjectionTests`, `ComplexValueSameTypeArgumentTests`). **A whole-document read of a complex
   value resolves from the node's own `ComplexValueProjectionExpression.Source`, never from the registration under its
   projection member**: a member-less construction's or method call's arguments share one member whose registration is
-  the last argument's, so `new P(x.Home, x.Work)` read `W|W` (spec known limitation 29, resolved).
+  the last argument's, so `new P(x.Home, x.Work)` read `W|W` (fixed).
   GroupBy in which a whole complex value takes part (key, key part, read off the grouped elements in a post-group Select:
-  `ThrowIfGroupByOverComplexValue`) is refused with the same message naming GroupBy (ruling R8). Where EF erases the value
+  `ThrowIfGroupByOverComplexValue`) is refused with the same message naming GroupBy. Where EF erases the value
   (`Select(c => c.Address).GroupBy(a => a.City).Select(g => g.Key)` becomes a leaf-key grouping over the entity; the
   `GroupBy(key, resultSelector)` overload) the outcome is the pre-existing one of its scalar analogue. Complex types are new
   in this slice, so none of this changes released behaviour.
   The query root's own shaper (bound to THIS query's empty projection member) resolves to the root document even when
   typed as a derived type after `OfType` and even in a join (`IsRootProjectionShaper`, by binding not CLR type); any other
-  derived shaper does only outside a join. This also corrected a pre-existing NON-complex wrong read (owner-approved
-  exception, ruling R9): `OfType<E>().Select(e => new { e, e.Name, R = e.Referrer!.Name })` read `e.Name` off the joined
+  derived shaper does only outside a join. This also corrected a pre-existing NON-complex wrong read (an intentional
+  behavior fix): `OfType<E>().Select(e => new { e, e.Name, R = e.Referrer!.Name })` read `e.Name` off the joined
   referrer at 040cecdf (`Dev|Boss|Boss`, and so did published 10.0.4), now `Dev|Dev|Boss`. A shaper of the root's OWN CLR
   type in a join is the root only through that binding (`!IsJoinQuery || IsRootProjectionShaper`): a same-type joined row
   (self-join inner side, same-type reference navigation, a BASE-typed referrer after `OfType`) projected beside the whole
-  outer entity reads the joined document (owner-approved exception (h); every released version read the outer document).
+  outer entity reads the joined document (an intentional behavior fix; every released version read the outer document).
   A bare-nav SelectMany's ITEM shaper
   (`BuildBareNavWrappedShaper`) is bound to the same empty member, so `IsRootProjectionShaper` is true for it too; this
   is harmless today because the arm is never reached for a served row (an item type in the root's EF hierarchy needs a
@@ -485,24 +485,24 @@ Rendering (null/missing/dialect semantics):
   type folds) are gated on `IsSelfParamTheEntity`, false in a complex scope. EF10 stores a null ELEMENT as BSON null, and
   `$elemMatch` never matches a non-document element, so a complex-collection quantifier always renders in an aggregation
   element scope (`$anyElementTrue`/`$allElementsTrue` over `$map`, `RequiresAggregationElementScope`); owned collections keep
-  `$elemMatch`. Ruling R17: a null complex element reads every leaf as null. Field reads in a complex element scope are
+  `$elemMatch`. A null complex element reads every leaf as null. Field reads in a complex element scope are
   `NullSafe` (`ScopeField`) and rendered through `Render(field)` (`$ifNull`), incl. `$in` needles and `UtcDateTime`; the
   DateTimeOffset `$dateAdd` reconstruction and the array inputs read raw paths, safe because they propagate null / are
   `$ifNull`'d to `[]`. `MayBeNull` is structural for the null-propagating nodes (NullSafe fields/refs, arithmetic, convert,
-  math, date part, DTO local, and per R18 date-add: start or amount; coalesce: both sides; conditional: either branch)
-  with the CLR-type check as fallback, so relational comparisons over them get the null guard. R18's operands are judged
+  math, date part, DTO local, and date-add: start or amount; coalesce: both sides; conditional: either branch)
+  with the CLR-type check as fallback, so relational comparisons over them get the null guard. Those operands are judged
   by `MayBeNullOperand` (a captured non-nullable parameter is never null), so root queries over captured values render
-  the base MQL. R19: a non-nullable,
+  the base MQL. A non-nullable,
   default-serialized bool leaf compared as a value reads `$ifNull: [f, false]` (`ScopeValue`), so `== false`/`!= true`/
   `== p` agree with `!a.Verified` (true for a null element; two-valued; no owned pin exists); a `bool?` keeps null semantics;
   owned element scopes keep the RenderBinary no-`$ifNull` rule (a missing owned leaf is malformed data, a null complex element
-  is EF-written). Driver-LINQ answers such rows differently (pinned per mode). Ruling R20: a query the native path
+  is EF-written). Driver-LINQ answers such rows differently (pinned per mode). A query the native path
   DECLINES whose complex-element predicate holds a null-guard-requiring shape (relational, `==`/`!=` null, local-list
   `Contains` of a member, non-nullable bool equality) is refused at the compile-time gate under `Native` instead of falling
   back to those wrong rows (`ComplexElementNullGuardRefusal`, called where the gate commits to the fallback; structural,
   so it refuses even over data with no null element; explicit `DriverLinq` runs the driver; owned scopes untouched).
-  It is a BEST-EFFORT net for structurally keyable shapes, not a guarantee (ruling R21). The scanner RESTATES the node kinds
-  that need R17-R19's guards (`ScopeField`/`MayBeNull`/`ScopeValue`) rather than calling those predicates (design debt): a
+  It is a BEST-EFFORT net for structurally keyable shapes, not a guarantee. The scanner RESTATES the node kinds
+  that need the null-element guards (`ScopeField`/`MayBeNull`/`ScopeValue`) rather than calling those predicates (design debt): a
   new null-guard-requiring node kind must be added to both, and to the bulk allow-list's refusal side. Documented limits, pinned as
   characterization in `ComplexCollectionNativeQueryTests.Known_limits_of_the_R20_refusal_net_...`: element predicates
   reached through a navigation/join root (`s.Store.Tags.Any(t => t.Rank < 1)`: lambda roots are keyed by
@@ -513,12 +513,12 @@ Rendering (null/missing/dialect semantics):
   at lambdas so `Count(s2 => s2.City == s.City) >= 1` isn't refused). Indexed overloads and `SelectMany` over a complex
   collection are refused by EF in every mode. In those limits the default mode serves the driver's rows. The structural
   cost: a keyed shape is refused even over clean data and even where the driver's rows would have been right
-  (`s.Tags.Count(...) >= 0`). Ruling R25: the same net refuses a complex COLLECTION itself compared with null
+  (`s.Tags.Count(...) >= 0`). The same net refuses a complex COLLECTION itself compared with null
   (`r.Detours == null`, `!=`, in a predicate, projection, ternary or sort key; keyed through the scanner's structural
   resolver, owned collections untouched): native declines it, and the driver's `{Detours: null}` also matches `[null]` (and,
   for a required collection, a missing/null array that reads empty). Remedies the message names: `!c.X.Any()`/`c.X.Count == 0`
   (native), or explicit `DriverLinq`.
-  `c.Lines.Contains(x)` / `Any(l => l == x)` is Task 12's member-wise equality with the element as the value
+  `c.Lines.Contains(x)` / `Any(l => l == x)` is member-wise equality with the element as the value
   (`MongoCurrentElementNullCheckExpression`, `$$e`), `!Contains` its exact `All` complement. The bridge coalesces a REQUIRED
   complex collection used as an operator source to `[]` (`TryRewriteRequiredComplexCollectionSource`; it reads empty, and
   the driver's `$size`/`$map` over null is a server error; it also serves bulk ExecuteUpdate/Delete); an optional one, or a

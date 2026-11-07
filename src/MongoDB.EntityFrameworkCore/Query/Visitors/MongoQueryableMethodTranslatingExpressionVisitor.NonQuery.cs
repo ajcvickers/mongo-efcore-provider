@@ -221,7 +221,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
 
         // A whole complex value computed from the row (`c.Billing = c.Shipping`) would copy the STORED subdocument, whose
         // element names, converters and representations belong to the source property, and the driver can't render a
-        // complex value (ruling R1): refused rather than written in the wrong stored form.
+        // complex value: refused rather than written in the wrong stored form.
         if (isSelfReferencing && property is IComplexProperty selfReferencedComplex)
         {
             AddTranslationErrorDetails(

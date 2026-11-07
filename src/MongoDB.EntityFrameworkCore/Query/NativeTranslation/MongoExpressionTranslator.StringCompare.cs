@@ -122,8 +122,8 @@ internal sealed partial class MongoExpressionTranslator
     // A relational fold renders as query-dialect { f: { $op: "c" } }, which never matches a null field; .NET orders
     // null first. So fold only when neither side can be null, and the receiver is default-serialized (a folded
     // relational comparison against a converted field would compare converted BSON values, not CLR strings). A
-    // non-nullable leaf can still read null: inside a complex collection's element scope (a null element, ruling R17) and
-    // under an optional complex parent (R14); a relational fold there keeps $cmp, which orders null/missing first as .NET
+    // non-nullable leaf can still read null: inside a complex collection's element scope (a null element) and
+    // under an optional complex parent; a relational fold there keeps $cmp, which orders null/missing first as .NET
     // does (`CompareTo(null, "X") == -1`). Equality folds are exact for null either way and stay.
     private bool IsFoldSafe(Expression a, Expression b, ExpressionType relOp)
         => TryResolveMember(Unwrap(a), out var property, out _, out var isOuter)

@@ -33,7 +33,7 @@ themselves live in Storage/ValueConversion.
 - **Complex type serializers (`ComplexTypeSerializer<T>`) are cached per `IReadOnlyComplexType`, not CLR type**: one
   CLR type used at two paths is two complex types with their own element names. They exist for member lookup
   (`TryGetMemberSerializationInfo`, so driver-LINQ and the native renderer agree on paths); `Serialize` writes null but
-  THROWS for a non-null value (ruling R1: never match a complex value by example) and `Deserialize` is not implemented.
+  THROWS for a non-null value (never match a complex value by example) and `Deserialize` is not implemented.
   Writing is `Storage/ComplexValueWriter`; reading is the Query materialization builder.
 - **Comparer signatures differ between EF8/EF9 and EF10** (`StringDictionaryComparer` has `#if` variants); new
   comparer work must compile on all three.

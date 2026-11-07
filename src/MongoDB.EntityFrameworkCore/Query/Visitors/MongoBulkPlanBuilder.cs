@@ -114,7 +114,7 @@ internal static class MongoBulkPlanBuilder
 
     /// <summary>
     /// A bulk filter and its <c>SetProperty</c> values always run on the driver-LINQ bridge, so a read of a complex
-    /// collection's element that the driver evaluates differently from a query (R17) is refused before any document is
+    /// collection's element that the driver evaluates differently from a query is refused before any document is
     /// written (the strict allow-list of <c>ComplexElementNullGuardRefusal</c>). Runs in <c>BuildFilter</c> and
     /// <c>BuildTargetIdQuery</c>, one of which <c>MongoBulkOperationExecutor</c> calls before anything else for every plan
     /// (and before <c>BuildUpdate</c>), with this execution's parameter values. A no-op on EF9 (no complex collections) and
