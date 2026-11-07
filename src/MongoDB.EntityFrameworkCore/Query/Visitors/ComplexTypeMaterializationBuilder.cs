@@ -82,7 +82,13 @@ internal static class ComplexTypeMaterializationBuilder
     /// <param name="storedElement">
     /// An expression of type <see cref="BsonValue"/>: the stored element, or <see langword="null"/> when it is missing.
     /// </param>
-    internal static Expression Build(IComplexProperty complexProperty, Expression storedElement)
+    /// <param name="absentIsNull">
+    /// The value is reached through an optional ancestor (an optional complex property or navigation): a missing or null
+    /// element then means the ancestor is absent, so it reads <see langword="null"/> (EF's null propagation,
+    /// <c>Select(r =&gt; r.Optional!.Nested)</c>) instead of throwing for a required property or reading a required
+    /// collection as empty.
+    /// </param>
+    internal static Expression Build(IComplexProperty complexProperty, Expression storedElement, bool absentIsNull = false)
     {
         var clrType = complexProperty.ClrType;
         var value = Expression.Variable(typeof(BsonValue), "complexValue");
@@ -100,10 +106,10 @@ internal static class ComplexTypeMaterializationBuilder
             Expression.Assign(value, storedElement),
             Expression.Condition(
                 Expression.Equal(value, Expression.Constant(null, typeof(BsonValue))),
-                Absent(complexProperty, isNull: false),
+                Absent(complexProperty, isNull: false, absentIsNull),
                 Expression.Condition(
                     Expression.Property(value, IsBsonNullProperty),
-                    Absent(complexProperty, isNull: true),
+                    Absent(complexProperty, isNull: true, absentIsNull),
                     present)));
     }
 
@@ -138,11 +144,11 @@ internal static class ComplexTypeMaterializationBuilder
         return marked;
     }
 
-    private static Expression Absent(IComplexProperty complexProperty, bool isNull)
+    private static Expression Absent(IComplexProperty complexProperty, bool isNull, bool absentIsNull = false)
     {
         var clrType = complexProperty.ClrType;
 
-        if (complexProperty.IsOptional())
+        if ((absentIsNull && !clrType.IsValueType) || complexProperty.IsOptional())
         {
             return Expression.Default(clrType);
         }
