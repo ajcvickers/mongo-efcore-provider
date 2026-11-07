@@ -309,14 +309,14 @@ public class MongoModelValidator : ModelValidator
         {
             var clrType = complexProperty.ClrType;
             if (complexProperty.IsEmbeddedCollection()
-                && (clrType.IsArray
-                    || (!clrType.IsInterface && (clrType.IsAbstract || clrType.GetConstructor(Type.EmptyTypes) == null))))
+                && !clrType.IsArray
+                && !clrType.IsInterface && (clrType.IsAbstract || clrType.GetConstructor(Type.EmptyTypes) == null))
             {
                 throw new NotSupportedException(
                     MemberOnType(complexProperty) + $" is a complex collection of CLR type '{clrType.ShortDisplayName()}', which"
-                    + " EF Core cannot materialize or save: arrays and collection types without a public parameterless"
-                    + " constructor are not supported. Declare it as List<T>, IList<T>, or another mutable collection type"
-                    + " with a public parameterless constructor.");
+                    + " EF Core cannot materialize or save: collection types without a public parameterless"
+                    + " constructor are not supported. Declare it as List<T>, IList<T>, an array, or another mutable"
+                    + " collection type with a public parameterless constructor.");
             }
 
             ValidateComplexCollectionClrTypes(complexProperty.ComplexType);

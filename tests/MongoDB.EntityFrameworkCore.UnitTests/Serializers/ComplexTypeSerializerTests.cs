@@ -241,13 +241,13 @@ public static class ComplexTypeSerializerTests
     }
 
     [Fact]
-    public static void Complex_array_collection_is_refused_by_the_model()
+    public static void Complex_array_collection_builds_in_the_model()
     {
         using var db = new TestContext<ArrayCollectionHolder>(mb =>
             mb.Entity<ArrayCollectionHolder>().ComplexCollection(e => e.Addresses));
 
-        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
-        Assert.Contains("is a complex collection of CLR type 'Addr[]'", ex.Message);
+        Assert.True(db.Model.FindEntityType(typeof(ArrayCollectionHolder))!
+            .FindComplexProperty(nameof(ArrayCollectionHolder.Addresses))!.IsCollection);
     }
 
     [Fact]

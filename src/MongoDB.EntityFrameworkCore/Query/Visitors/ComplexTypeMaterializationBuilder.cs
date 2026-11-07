@@ -188,7 +188,8 @@ internal static class ComplexTypeMaterializationBuilder
 
         return Expression.Call(
             PopulateCollectionMethod.MakeGenericMethod(complexProperty.ClrType, elementType),
-            Expression.Constant(complexProperty.GetCollectionAccessor(), typeof(IClrCollectionAccessor)),
+            // An array has no accessor to create it: PopulateCollection fills a List<T> and converts it.
+            Expression.Constant(complexProperty.ClrType.IsArray ? null : complexProperty.GetCollectionAccessor(), typeof(IClrCollectionAccessor)),
             Expression.Constant(complexProperty),
             array,
             Expression.Lambda(typeof(Func<,>).MakeGenericType(typeof(BsonValue), elementType), elementValue, element));
@@ -286,11 +287,23 @@ internal static class ComplexTypeMaterializationBuilder
         typeof(ComplexTypeMaterializationBuilder).GetMethod(nameof(PopulateCollection), BindingFlags.NonPublic | BindingFlags.Static)!;
 
     // The collection is created by the property's own accessor (List<T>, ObservableCollection<T>, an IList<T>
-    // property's List<T>), so every collection type EF accepts for a complex collection works.
+    // property's List<T>), so every collection type EF accepts for a complex collection works. An array property has
+    // no accessor: its elements are read into a List<T> and copied to an array.
     private static TCollection PopulateCollection<TCollection, TElement>(
-        IClrCollectionAccessor accessor, IReadOnlyComplexProperty complexProperty, BsonArray array, Func<BsonValue, TElement> materializeElement)
+        IClrCollectionAccessor? accessor, IReadOnlyComplexProperty complexProperty, BsonArray array, Func<BsonValue, TElement> materializeElement)
     {
-        if (accessor.Create() is not ICollection<TElement> collection)
+        if (typeof(TCollection).IsArray)
+        {
+            var elements = new List<TElement>(array.Count);
+            foreach (var element in array)
+            {
+                elements.Add(materializeElement(element));
+            }
+
+            return (TCollection)(object)elements.ToArray();
+        }
+
+        if (accessor!.Create() is not ICollection<TElement> collection)
         {
             throw new InvalidOperationException(
                 $"Complex collection '{complexProperty.DeclaringType.DisplayName()}.{complexProperty.Name}' is typed as '{typeof(TCollection).ShortDisplayName()}', which does not implement '{typeof(ICollection<TElement>).ShortDisplayName()}'.");

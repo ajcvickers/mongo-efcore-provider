@@ -819,16 +819,16 @@ public class ComplexCollectionBulkTests(TemporaryDatabaseFixture database) : ICl
         => Assert.Equal(seed.OrderBy(d => d["_id"]).Select(d => d.ToJson()),
             raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().OrderBy(d => d["_id"]).Select(d => d.ToJson()));
 
-    // A T[] complex collection never reaches the bulk allow-list: the model refuses it (EF cannot read or save it).
+    // A T[] complex collection is read and saved, but no List<T> fits it, so the bulk allow-list refuses its operators.
     [Fact]
-    public void An_array_typed_collection_is_refused_by_the_model_and_writes_nothing()
+    public void An_array_typed_collection_is_refused_by_the_allow_list_and_writes_nothing()
     {
-        var (raw, db, seed) = Crates<Crate>(nameof(An_array_typed_collection_is_refused_by_the_model_and_writes_nothing),
+        var (raw, db, seed) = Crates<Crate>(nameof(An_array_typed_collection_is_refused_by_the_allow_list_and_writes_nothing),
             mb => mb.Entity<Crate>().ComplexCollection(c => c.Items));
         using (db)
         {
-            var ex = Assert.Throws<NotSupportedException>(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)));
-            Assert.Contains("is a complex collection of CLR type 'Tag[]'", ex.FullMessage());
+            AssertRefused(() => db.Entities.Where(c => c.Items.Any(i => i.Label == "l")).ExecuteUpdate(s => s.SetProperty(c => c.Rank, 1)),
+                "whose CLR type cannot hold a List<T>");
         }
 
         AssertSeedUnchanged(raw, seed);

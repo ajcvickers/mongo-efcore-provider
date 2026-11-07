@@ -31,7 +31,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 /// replace, in-place mutation, an element quantifier in every query mode, and a bulk update. The source of the supported
 /// collection types table in docs/complex-types.md. EF itself rejects the types that do not implement <c>IList&lt;T&gt;</c>
 /// (<c>ICollection&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c>, <c>IEnumerable&lt;T&gt;</c>,
-/// <c>HashSet&lt;T&gt;</c>); the provider refuses <c>T[]</c> and <c>ReadOnlyCollection&lt;T&gt;</c>, which EF accepts but
+/// <c>HashSet&lt;T&gt;</c>); the provider refuses <c>ReadOnlyCollection&lt;T&gt;</c> (and reads, but cannot save, <c>T[]</c>), which EF accepts but
 /// cannot read or save (unit tests: ComplexCollectionClrTypeValidationTests).
 /// </summary>
 [XUnitCollection("QueryTests")]

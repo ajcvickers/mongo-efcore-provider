@@ -36,43 +36,39 @@ public static class ComplexCollectionClrTypeValidationTests
     public static void Usable_collection_types_build(Type collectionType)
         => Assert.Null(Run(nameof(Build), collectionType));
 
+    // An array builds (the provider reads one; EF cannot snapshot it, so tracking and SaveChanges fail inside EF Core).
+    [Fact]
+    public static void Array_typed_collection_builds()
+        => Assert.Null(Run(nameof(Build), typeof(Tag[])));
+
     [Theory]
-    [InlineData(typeof(Tag[]), "Tag[]")]
     [InlineData(typeof(ReadOnlyCollection<Tag>), "ReadOnlyCollection<Tag>")]
-    public static void Fixed_size_or_unconstructible_collection_types_are_refused(Type collectionType, string displayName)
+    public static void Unconstructible_collection_types_are_refused(Type collectionType, string displayName)
     {
         var ex = Run(nameof(Build), collectionType);
         Assert.IsType<NotSupportedException>(ex);
         Assert.Equal(
             $"Complex property 'Items' on entity type 'Holder<{displayName}>' is a complex collection of CLR type '{displayName}',"
-            + " which EF Core cannot materialize or save: arrays and collection types without a public parameterless constructor"
-            + " are not supported. Declare it as List<T>, IList<T>, or another mutable collection type with a public"
+            + " which EF Core cannot materialize or save: collection types without a public parameterless constructor"
+            + " are not supported. Declare it as List<T>, IList<T>, an array, or another mutable collection type with a public"
             + " parameterless constructor.",
             ex!.Message);
     }
 
     [Fact]
-    public static void Array_typed_collection_nested_in_a_complex_property_is_refused()
+    public static void Array_typed_collection_nested_in_a_complex_property_builds()
     {
-        var ex = Assert.Throws<NotSupportedException>(() =>
-        {
-            using var db = SingleEntityDbContext.Create<NestedHolder>(mb =>
-                mb.Entity<NestedHolder>().ComplexProperty(h => h.Box, b => b.ComplexCollection(x => x.Items)));
-            _ = db.Model;
-        });
-        Assert.StartsWith("Complex property 'Items' on complex type 'NestedHolder.Box#Box' is a complex collection of CLR type 'Tag[]'", ex.Message);
+        using var db = SingleEntityDbContext.Create<NestedHolder>(mb =>
+            mb.Entity<NestedHolder>().ComplexProperty(h => h.Box, b => b.ComplexCollection(x => x.Items)));
+        _ = db.Model;
     }
 
     [Fact]
-    public static void Array_typed_collection_nested_in_a_complex_collection_element_is_refused()
+    public static void Array_typed_collection_nested_in_a_complex_collection_element_builds()
     {
-        var ex = Assert.Throws<NotSupportedException>(() =>
-        {
-            using var db = SingleEntityDbContext.Create<NestedCollectionHolder>(mb =>
-                mb.Entity<NestedCollectionHolder>().ComplexCollection(h => h.Boxes, b => b.ComplexCollection(x => x.Items)));
-            _ = db.Model;
-        });
-        Assert.Contains("is a complex collection of CLR type 'Tag[]'", ex.Message);
+        using var db = SingleEntityDbContext.Create<NestedCollectionHolder>(mb =>
+            mb.Entity<NestedCollectionHolder>().ComplexCollection(h => h.Boxes, b => b.ComplexCollection(x => x.Items)));
+        _ = db.Model;
     }
 
     // EF's own refusal comes first for types that are not IList<T> (unchanged, not the provider's).

@@ -166,8 +166,8 @@ MongoDB 8, with a model `C { Id, Name, Home: Addr { City } }` and `ComplexProper
   `[BsonSerializer]`, `[BsonExtraElements]`, `[BsonGuidRepresentation]`, `[BsonTimeSpanOptions]`, `[BsonDictionaryOptions]`
   on a member; `[BsonDiscriminator]`, `[BsonKnownTypes]`, `[BsonNoId]`, `[BsonSerializer]`, `[BsonMemberMapAttributeUsage]`
   on the class; `[BsonConstructor]`, `[BsonFactoryMethod]`) throw `NotSupportedException` as they already did for owned
-  types; an empty or whitespace element name on a complex property; a `T[]` or `ReadOnlyCollection<T>` complex collection
-  (EF10; EF Core could not read or save it); and `[Column(TypeName = ...)]` on a complex property raises the
+  types; an empty or whitespace element name on a complex property; a `ReadOnlyCollection<T>` or other complex collection type without a
+  public parameterless constructor (EF10; EF Core could not read or save it); and `[Column(TypeName = ...)]` on a complex property raises the
   `ColumnAttributeWithTypeUsed` error, as on a property.
 
 Additive, not breaking: `ExecuteUpdate`/`ExecuteDelete` over complex properties (EF9+), native translation of complex-type
