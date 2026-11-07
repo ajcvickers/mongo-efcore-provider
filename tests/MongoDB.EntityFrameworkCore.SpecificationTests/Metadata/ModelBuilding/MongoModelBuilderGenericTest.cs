@@ -37,7 +37,9 @@ public class MongoModelBuilderGenericTest : MongoModelBuilderTest
             // Fails: Concurrency token inside a complex type is refused by model validation #34
             global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGap(() => base.Properties_can_set_row_version());
         }
+#endif
 
+#if EF11
         public override void Chained_primitive_collection_lambda_configures_nested_collection()
         {
             // Fails: Primitive collection property type not mappable by the provider #35

@@ -93,6 +93,13 @@ RootEntity.?
 
     public override async Task Associate_with_parameter_null()
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Associate_with_parameter_null());
+            return;
+        }
+
         await base.Associate_with_parameter_null();
 
         AssertMql(

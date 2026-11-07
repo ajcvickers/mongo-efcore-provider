@@ -73,6 +73,9 @@ public class ComplexPropertiesBulkUpdateMongoTest : ComplexPropertiesBulkUpdateT
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -81,6 +84,9 @@ RootEntity.?
         await base.Update_property_inside_associate_with_special_chars();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);
@@ -93,6 +99,9 @@ RootEntity.?
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -101,6 +110,9 @@ RootEntity.?
         await base.Update_property_on_projected_associate();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);
@@ -139,6 +151,9 @@ RootEntity.?
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -147,6 +162,9 @@ RootEntity.?
         await base.Update_nested_associate_to_parameter();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);
@@ -191,6 +209,9 @@ RootEntity.?
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -199,6 +220,9 @@ RootEntity.?
         await base.Update_associate_to_inline_with_lambda();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);
@@ -211,6 +235,9 @@ RootEntity.?
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -219,6 +246,9 @@ RootEntity.?
         await base.Update_associate_to_null();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);
@@ -231,6 +261,9 @@ RootEntity.?
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -239,6 +272,9 @@ RootEntity.?
         await base.Update_associate_to_null_parameter();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);
@@ -261,6 +297,9 @@ RootEntity.?
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -271,6 +310,9 @@ RootEntity.?
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -279,6 +321,9 @@ RootEntity.?
         await base.Update_nested_collection_to_inline_with_lambda();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);
@@ -339,6 +384,9 @@ RootEntity.?
         AssertMql(
 """
 RootEntity.?
+""",
+"""
+RootEntity.?
 """);
     }
 
@@ -347,6 +395,9 @@ RootEntity.?
         await base.Update_primitive_collection_to_parameter();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);
@@ -389,6 +440,9 @@ RootEntity.?
         await base.Update_multiple_properties_inside_same_associate();
 
         AssertMql(
+"""
+RootEntity.?
+""",
 """
 RootEntity.?
 """);

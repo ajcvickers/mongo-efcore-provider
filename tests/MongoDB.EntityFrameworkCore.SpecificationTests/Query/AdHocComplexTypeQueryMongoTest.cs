@@ -43,7 +43,7 @@ public class AdHocComplexTypeQueryMongoTest : AdHocComplexTypeQueryTestBase
 
         AssertMql(
 """
-EntityType.
+EntityType.{ "$match" : { "$or" : [{ "$and" : [{ "$expr" : false }, { "ComplexContainer" : null }] }, { "$and" : [{ "$expr" : true }, { "ComplexContainer.Id" : 1 }, { "$or" : [{ "$and" : [{ "$expr" : false }, { "ComplexContainer.Containee1" : null }] }, { "$and" : [{ "$expr" : true }, { "ComplexContainer.Containee1.Id" : 2 }] }] }, { "$or" : [{ "$and" : [{ "$expr" : false }, { "ComplexContainer.Containee2" : null }] }, { "$and" : [{ "$expr" : true }, { "ComplexContainer.Containee2.Id" : 3 }] }] }] }] } }, { "$limit" : 2 }
 """);
     }
 
@@ -54,7 +54,7 @@ EntityType.
 
         AssertMql(
 """
-EntityType.
+EntityType.{ "$project" : { "Complex" : "$Complex", "_id" : 0 } }
 """);
     }
 
@@ -121,6 +121,9 @@ EntityType.
         AssertMql(
 """
 EntityType.{ "$limit" : 2 }
+""",
+"""
+EntityType.{ "$limit" : 2 }
 """);
     }
 
@@ -131,6 +134,9 @@ EntityType.{ "$limit" : 2 }
         AssertMql(
 """
 EntityType.{ "$limit" : 2 }
+""",
+"""
+EntityType.{ "$limit" : 2 }
 """);
     }
 
@@ -139,6 +145,9 @@ EntityType.{ "$limit" : 2 }
         await base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip();
 
         AssertMql(
+"""
+EntityType.{ "$limit" : 2 }
+""",
 """
 EntityType.{ "$limit" : 2 }
 """);
@@ -165,6 +174,9 @@ EntityType.{ "$limit" : 2 }
         await base.Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip();
 
         AssertMql(
+"""
+EntityType.{ "$limit" : 2 }
+""",
 """
 EntityType.{ "$limit" : 2 }
 """);

@@ -151,6 +151,13 @@ RootEntity.?
 
     public override async Task Select_required_associate_via_optional_navigation(QueryTrackingBehavior queryTrackingBehavior)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Select_required_associate_via_optional_navigation(queryTrackingBehavior));
+            return;
+        }
+
         await base.Select_required_associate_via_optional_navigation(queryTrackingBehavior);
 
         AssertMql(
