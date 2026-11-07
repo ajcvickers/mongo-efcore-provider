@@ -402,6 +402,24 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
     }
 
     [Fact]
+    public void SetProperty_on_a_whole_complex_property_with_a_null_required_member_is_refused_and_writes_nothing()
+    {
+        // The value's own members are checked, not just the value: a null required City would be stored as BSON null and every
+        // later read of the document would throw. SaveChanges gets this check from EF; a bulk update has no change tracker.
+        var store = Seed();
+        using (var db = store.Context())
+        {
+            var ex = Assert.ThrowsAny<InvalidOperationException>(
+                () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing, new BAddr { City = null!, Code = 1 })));
+            Assert.Contains("cannot set the complex property 'Billing' because its required member '", ex.FullMessage());
+            Assert.Contains(".City' is null", ex.FullMessage());
+            Assert.Contains("No document was modified.", ex.FullMessage());
+        }
+
+        store.AssertUnchanged();
+    }
+
+    [Fact]
     public void SetProperty_on_a_whole_complex_property_from_another_is_refused()
     {
         // Decline ruling: copying the STORED subdocument would carry the source property's element names / converters /
