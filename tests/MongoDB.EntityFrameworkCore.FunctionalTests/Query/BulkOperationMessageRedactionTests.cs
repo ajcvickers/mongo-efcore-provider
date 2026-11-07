@@ -71,12 +71,12 @@ public class BulkOperationMessageRedactionTests(TemporaryDatabaseFixture databas
     private static void AssertRedacted(Func<int> operation, string detail)
     {
         var ex = Assert.ThrowsAny<InvalidOperationException>(() => operation());
-        Assert.Contains("could not be translated", ex.Message);
-        Assert.Contains(detail, ex.Message);
-        Assert.DoesNotContain("hunter2-literal", ex.Message);
-        Assert.DoesNotContain("secret-suffix", ex.Message);
+        Assert.Contains("could not be translated", ex.FullMessage());
+        Assert.Contains(detail, ex.FullMessage());
+        Assert.DoesNotContain("hunter2-literal", ex.FullMessage(skipEfWrapper: true));
+        Assert.DoesNotContain("secret-suffix", ex.FullMessage(skipEfWrapper: true));
         // The shape stays: the filter's member and the placeholder.
-        Assert.Contains("Secret == ?", ex.Message);
+        Assert.Contains("Secret == ?", ex.FullMessage());
     }
 
     [Fact]

@@ -427,11 +427,13 @@ public static class StructuralPathTests
     public static void Collection_variant_reaches_a_complex_collection_through_a_complex_hop()
     {
         var root = EntityType<CollectionInComplexHolder>(mb =>
-            mb.Entity<CollectionInComplexHolder>().ComplexProperty(e => e.Profile, p =>
-            {
-                p.HasPropertyAnnotation(MongoAnnotationNames.ElementName, "prof");
-                p.ComplexCollection(x => x.Addresses);
-            }));
+        {
+            var entity = mb.Entity<CollectionInComplexHolder>();
+            entity.ComplexProperty(e => e.Profile, p => p.ComplexCollection(x => x.Addresses));
+            // Set on the finished property: EF11's builder does not apply an annotation made inside the configure lambda.
+            entity.Metadata.FindComplexProperty(nameof(CollectionInComplexHolder.Profile))!
+                .SetAnnotation(MongoAnnotationNames.ElementName, "prof");
+        });
 
         Assert.True(StructuralPath.TryResolveCollection(root, ["Profile", "Addresses"], out var collection));
         Assert.Equal("prof.Addresses", collection.ArrayPath);
@@ -768,11 +770,21 @@ public static class StructuralPathTests
 #endif
 
     // Generic so each test gets its own context type (EF caches the model per context type).
+    private sealed class NoCacheKeyFactory : Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory
+    {
+        private static int _counter;
+
+        public object Create(DbContext context, bool designTime)
+            => Interlocked.Increment(ref _counter);
+    }
+
     class TestContext<TEntity>(Action<ModelBuilder> configure, bool camelCase) : DbContext where TEntity : class
     {
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
             => optionsBuilder
                 .UseMongoDB("mongodb://localhost:27017", "UnitTests")
+                // Tests configure the same entity type differently, so a model cached per context type would leak between them.
+                .ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, NoCacheKeyFactory>()
                 .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
 
         protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

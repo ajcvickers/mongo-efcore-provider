@@ -122,7 +122,7 @@ public class ComplexCollectionClrTypeTests(TemporaryDatabaseFixture database) : 
         else
         {
             var ex = Assert.ThrowsAny<Exception>(() => Query(MongoQueryMode.DriverLinq));
-            Assert.Contains("This operation is only valid on generic types", ex.Message);
+            Assert.Contains("This operation is only valid on generic types", ex.FullMessage());
         }
 
         using (var db = Ctx(MongoQueryMode.Native))
@@ -136,7 +136,7 @@ public class ComplexCollectionClrTypeTests(TemporaryDatabaseFixture database) : 
             {
                 var ex = Assert.Throws<InvalidOperationException>(() =>
                     db.Entities.Where(h => h.Items.Any(i => i.Label == "y")).ExecuteUpdate(s => s.SetProperty(h => h.Name, h => h.Name + "!")));
-                Assert.Contains(BulkRefused, ex.Message);
+                Assert.Contains(BulkRefused, ex.FullMessage());
                 Assert.Equal(["a", "b"], raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().Select(d => d["Name"].AsString).Order());
             }
         }

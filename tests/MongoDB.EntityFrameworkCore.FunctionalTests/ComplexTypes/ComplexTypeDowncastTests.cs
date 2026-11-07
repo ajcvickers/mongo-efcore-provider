@@ -178,10 +178,10 @@ public partial class ComplexTypeDowncastTests(TemporaryDatabaseFixture database)
         using (var db = new ZooContext(Options<ZooContext>(MongoQueryMode.Native), collection))
         {
             var ex = Assert.Throws<InvalidOperationException>(() => db.Animals.Where(a => a is Cat && ((Cat)a).Vet.Code < 5).ExecuteDelete());
-            Assert.Contains(StoredOrderingRefusalMessage, ex.Message);
+            Assert.Contains(StoredOrderingRefusalMessage, ex.FullMessage());
             ex = Assert.Throws<InvalidOperationException>(
                 () => db.Animals.Where(a => a is Cat && (a as Cat)!.Vet.Code < 5).ExecuteUpdate(s => s.SetProperty(a => a.Rank, 9)));
-            Assert.Contains(StoredOrderingRefusalMessage, ex.Message);
+            Assert.Contains(StoredOrderingRefusalMessage, ex.FullMessage());
         }
 
         AssertRawUnchanged(collection, seed);
@@ -328,9 +328,9 @@ public partial class ComplexTypeDowncastTests(TemporaryDatabaseFixture database)
     {
         var ex = Assert.Throws<InvalidOperationException>(() => operation());
         var refusal = Assert.IsType<NativeTranslationNotSupportedException>(ex.InnerException);
-        Assert.Contains(BulkRefusal, refusal.Message);
-        Assert.Contains(shape, refusal.Message);
-        Assert.Contains("No document was modified", refusal.Message);
+        Assert.Contains(BulkRefusal, refusal.FullMessage());
+        Assert.Contains(shape, refusal.FullMessage());
+        Assert.Contains("No document was modified", refusal.FullMessage());
     }
 
     [Fact]

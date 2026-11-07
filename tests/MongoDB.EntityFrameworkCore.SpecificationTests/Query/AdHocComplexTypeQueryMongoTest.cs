@@ -21,6 +21,8 @@ using MongoDB.EntityFrameworkCore.SpecificationTests.Utilities;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
+// EF Core 11 has no AdHocComplexTypeQueryTestBase in the Specification.Tests package yet (see #22).
+#if !EF11
 public class AdHocComplexTypeQueryMongoTest : AdHocComplexTypeQueryTestBase
 {
 #if EF10
@@ -175,3 +177,4 @@ EntityType.{ "$limit" : 2 }
         await base.InitializeAsync();
     }
 }
+#endif

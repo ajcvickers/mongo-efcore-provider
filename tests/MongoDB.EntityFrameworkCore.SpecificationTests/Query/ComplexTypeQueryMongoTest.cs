@@ -68,7 +68,7 @@ CustomerGroup.
 """);
     }
 
-#if !EF10
+#if !EF10 && !EF11
     public override async Task Project_complex_type_via_optional_navigation(bool async)
     {
         await base.Project_complex_type_via_optional_navigation(async);
@@ -92,7 +92,7 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
     }
 #endif
 
-#if !EF10
+#if !EF10 && !EF11
     public override async Task Project_complex_type_via_required_navigation(bool async)
     {
         await base.Project_complex_type_via_required_navigation(async);
@@ -366,7 +366,7 @@ ValuedCustomerGroup.
 """);
     }
 
-#if !EF10
+#if !EF10 && !EF11
     public override async Task Project_struct_complex_type_via_optional_navigation(bool async)
     {
         await base.Project_struct_complex_type_via_optional_navigation(async);
@@ -774,7 +774,7 @@ Customer.
 """);
     }
 
-#if !EF10
+#if !EF10 && !EF11
     public override async Task Filter_on_property_inside_complex_type(bool async)
     {
         await base.Filter_on_property_inside_complex_type(async);
@@ -786,7 +786,7 @@ Customer.
     }
 #endif
 
-#if !EF10
+#if !EF10 && !EF11
     public override async Task Filter_on_property_inside_nested_complex_type(bool async)
     {
         await base.Filter_on_property_inside_nested_complex_type(async);
@@ -798,7 +798,7 @@ Customer.
     }
 #endif
 
-#if !EF10
+#if !EF10 && !EF11
     public override async Task Complex_type_equals_null(bool async)
     {
         await base.Complex_type_equals_null(async);

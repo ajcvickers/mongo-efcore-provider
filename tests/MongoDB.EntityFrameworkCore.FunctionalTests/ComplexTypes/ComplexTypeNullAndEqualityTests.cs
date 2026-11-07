@@ -275,7 +275,7 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         using var driverDb = Context(collection, MongoQueryMode.DriverLinq, ConfigureEq);
         var captured = AnnAddress;
         var ex = Assert.Throws<NotSupportedException>(() => Names(driverDb.Entities.AsNoTracking().Where(c => c.Home == captured)).ToList());
-        Assert.Contains(WholeValueRefusedMessage, ex.Message);
+        Assert.Contains(WholeValueRefusedMessage, ex.FullMessage());
     }
 
     // ── Leaf kinds: converters, BsonRepresentation, Guid, DateTime, decimal, enum ──────────────────────────────────
@@ -896,8 +896,8 @@ public class ComplexTypeNullAndEqualityTests(TemporaryDatabaseFixture database) 
         using (var db = Context(updateCollection, MongoQueryMode.Native, ConfigureOpt))
         {
             var ex = Assert.Throws<InvalidOperationException>(() => db.Entities.Where(c => c.Opt == other).ExecuteDelete());
-            Assert.Contains("could not be translated", ex.Message);
-            Assert.Contains(WholeValueRefusedMessage, ex.Message);
+            Assert.Contains("could not be translated", ex.FullMessage());
+            Assert.Contains(WholeValueRefusedMessage, ex.FullMessage());
             Assert.IsType<NotSupportedException>(ex.InnerException);
         }
 
