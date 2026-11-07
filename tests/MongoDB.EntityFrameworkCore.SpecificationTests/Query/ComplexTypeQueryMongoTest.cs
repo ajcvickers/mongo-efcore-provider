@@ -135,7 +135,7 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
 
         AssertMql(
 """
-Customer.
+Customer.{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$match" : { "ShippingAddress.ZipCode" : 7728 } }
 """);
     }
 
@@ -145,33 +145,54 @@ Customer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$match" : { "ShippingAddress.Country.Code" : "DE" } }
 """);
     }
 
     public override async Task Filter_on_required_property_inside_required_complex_type_on_optional_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Filter_on_required_property_inside_required_complex_type_on_optional_navigation(async));
+            return;
+        }
+
         await base.Filter_on_required_property_inside_required_complex_type_on_optional_navigation(async);
 
         AssertMql(
 """
-CustomerGroup.
+CustomerGroup.{ "$lookup" : { "from" : "Customer", "localField" : "OptionalCustomerId", "foreignField" : "_id", "as" : "_lookup_OptionalCustomer" } }, { "$unwind" : { "path" : "$_lookup_OptionalCustomer", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OptionalCustomer" : { "$ifNull" : ["$_lookup_OptionalCustomer", null] } } }, { "$match" : { "_lookup_OptionalCustomer.ShippingAddress.ZipCode" : { "$ne" : 7728 } } }, { "$lookup" : { "from" : "Customer", "localField" : "RequiredCustomerId", "foreignField" : "_id", "as" : "_lookup_RequiredCustomer" } }, { "$unwind" : { "path" : "$_lookup_RequiredCustomer", "preserveNullAndEmptyArrays" : false } }
 """);
     }
 
     public override async Task Filter_on_required_property_inside_required_complex_type_on_required_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Filter_on_required_property_inside_required_complex_type_on_required_navigation(async));
+            return;
+        }
+
         await base.Filter_on_required_property_inside_required_complex_type_on_required_navigation(async);
 
         AssertMql(
 """
-CustomerGroup.
+CustomerGroup.{ "$lookup" : { "from" : "Customer", "localField" : "RequiredCustomerId", "foreignField" : "_id", "as" : "_lookup_RequiredCustomer" } }, { "$unwind" : { "path" : "$_lookup_RequiredCustomer", "preserveNullAndEmptyArrays" : false } }, { "$match" : { "_lookup_RequiredCustomer.ShippingAddress.ZipCode" : { "$ne" : 7728 } } }, { "$lookup" : { "from" : "Customer", "localField" : "OptionalCustomerId", "foreignField" : "_id", "as" : "_lookup_OptionalCustomer" } }, { "$unwind" : { "path" : "$_lookup_OptionalCustomer", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OptionalCustomer" : { "$ifNull" : ["$_lookup_OptionalCustomer", null] } } }
 """);
     }
 
 #if !EF10 && !EF11
     public override async Task Project_complex_type_via_optional_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_complex_type_via_optional_navigation(async));
+            return;
+        }
+
 #if EF8 || EF9
         // Fails: Projection through an optional navigation reads wrong data on EF8/EF9 #35
         await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_complex_type_via_optional_navigation(async));
@@ -190,11 +211,18 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
 #if EF10 || EF11
     public override async Task Project_complex_type_via_optional_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_complex_type_via_optional_navigation(async));
+            return;
+        }
+
         await base.Project_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
-CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
+CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
     }
 #endif
@@ -202,11 +230,18 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
 #if !EF10 && !EF11
     public override async Task Project_complex_type_via_required_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_complex_type_via_required_navigation(async));
+            return;
+        }
+
         await base.Project_complex_type_via_required_navigation(async);
 
         AssertMql(
 """
-CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.RequiredCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : "$Inner.ShippingAddress", "_id" : 0 } }
+CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.RequiredCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
     }
 #endif
@@ -214,11 +249,18 @@ CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" :
 #if EF10 || EF11
     public override async Task Project_complex_type_via_required_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_complex_type_via_required_navigation(async));
+            return;
+        }
+
         await base.Project_complex_type_via_required_navigation(async);
 
         AssertMql(
 """
-CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.RequiredCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : "$Inner.ShippingAddress", "_id" : 0 } }
+CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.RequiredCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
     }
 #endif
@@ -239,7 +281,7 @@ Customer.{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$group" : { "_id" : "$
 
         AssertMql(
 """
-Customer.
+Customer.{ "$project" : { "ShippingAddress" : "$ShippingAddress", "_id" : 0 } }
 """);
     }
 
@@ -249,7 +291,7 @@ Customer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$project" : { "_v" : "$ShippingAddress.Country", "_id" : 0 } }
 """);
     }
 
@@ -259,7 +301,7 @@ Customer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$project" : { "_v" : "$ShippingAddress.Country.FullName", "_id" : 0 } }
 """);
     }
 
@@ -269,7 +311,7 @@ Customer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$match" : { "ShippingAddress.ZipCode" : 7728 } }, { "$project" : { "ShippingAddress" : "$ShippingAddress", "_id" : 0 } }
 """);
     }
 
@@ -289,7 +331,7 @@ Customer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$match" : { "$and" : [{ "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.AddressLine1", null] }, { "$ifNull" : ["$BillingAddress.AddressLine1", null] }] } }, { "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.AddressLine2", null] }, { "$ifNull" : ["$BillingAddress.AddressLine2", null] }] } }, { "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.ZipCode", null] }, { "$ifNull" : ["$BillingAddress.ZipCode", null] }] } }, { "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.Country.Code", null] }, { "$ifNull" : ["$BillingAddress.Country.Code", null] }] } }, { "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.Country.FullName", null] }, { "$ifNull" : ["$BillingAddress.Country.FullName", null] }] } }] } }
 """);
     
 #endif
@@ -311,7 +353,7 @@ Customer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$match" : { "$or" : [{ "$and" : [{ "$expr" : false }, { "ShippingAddress" : null }] }, { "$and" : [{ "$expr" : true }, { "ShippingAddress.AddressLine1" : "804 S. Lakeshore Road", "ShippingAddress.AddressLine2" : null }, { "ShippingAddress.ZipCode" : 38654 }, { "$or" : [{ "$and" : [{ "$expr" : false }, { "ShippingAddress.Country" : null }] }, { "$and" : [{ "$expr" : true }, { "ShippingAddress.Country.Code" : "US", "ShippingAddress.Country.FullName" : "United States" }] }] }] }] } }
 """);
     
 #endif
@@ -367,7 +409,7 @@ Customer.{ "$match" : { "_id" : 1 } }, { "$unionWith" : { "coll" : "Customer", "
 
         AssertMql(
 """
-Customer.
+Customer.{ "$project" : { "_v" : "$ShippingAddress.AddressLine1", "_id" : 0 } }, { "$unionWith" : { "coll" : "Customer", "pipeline" : [{ "$project" : { "_v" : "$BillingAddress.AddressLine1", "_id" : 0 } }] } }
 """);
     }
 
@@ -377,7 +419,7 @@ Customer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$project" : { "_v" : "$ShippingAddress.AddressLine1", "_id" : 0 } }, { "$unionWith" : { "coll" : "Customer", "pipeline" : [{ "$project" : { "_v" : "$BillingAddress.AddressLine1", "_id" : 0 } }] } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }
 """);
     }
 
@@ -399,7 +441,7 @@ Customer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$match" : { "ShippingAddress.ZipCode" : 7728 } }
 """);
     }
 
@@ -409,7 +451,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$match" : { "ShippingAddress.Country.Code" : "DE" } }
 """);
     }
 
@@ -419,7 +461,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$match" : { "ShippingAddress.ZipCode" : 7728 } }
 """);
     }
 
@@ -429,33 +471,54 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$match" : { "ShippingAddress.Country.Code" : "DE" } }
 """);
     }
 
     public override async Task Filter_on_required_property_inside_required_struct_complex_type_on_optional_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Filter_on_required_property_inside_required_struct_complex_type_on_optional_navigation(async));
+            return;
+        }
+
         await base.Filter_on_required_property_inside_required_struct_complex_type_on_optional_navigation(async);
 
         AssertMql(
 """
-ValuedCustomerGroup.
+ValuedCustomerGroup.{ "$lookup" : { "from" : "ValuedCustomer", "localField" : "OptionalCustomerId", "foreignField" : "_id", "as" : "_lookup_OptionalCustomer" } }, { "$unwind" : { "path" : "$_lookup_OptionalCustomer", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OptionalCustomer" : { "$ifNull" : ["$_lookup_OptionalCustomer", null] } } }, { "$match" : { "_lookup_OptionalCustomer.ShippingAddress.ZipCode" : { "$ne" : 7728 } } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "RequiredCustomerId", "foreignField" : "_id", "as" : "_lookup_RequiredCustomer" } }, { "$unwind" : { "path" : "$_lookup_RequiredCustomer", "preserveNullAndEmptyArrays" : false } }
 """);
     }
 
     public override async Task Filter_on_required_property_inside_required_struct_complex_type_on_required_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Filter_on_required_property_inside_required_struct_complex_type_on_required_navigation(async));
+            return;
+        }
+
         await base.Filter_on_required_property_inside_required_struct_complex_type_on_required_navigation(async);
 
         AssertMql(
 """
-ValuedCustomerGroup.
+ValuedCustomerGroup.{ "$lookup" : { "from" : "ValuedCustomer", "localField" : "RequiredCustomerId", "foreignField" : "_id", "as" : "_lookup_RequiredCustomer" } }, { "$unwind" : { "path" : "$_lookup_RequiredCustomer", "preserveNullAndEmptyArrays" : false } }, { "$match" : { "_lookup_RequiredCustomer.ShippingAddress.ZipCode" : { "$ne" : 7728 } } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "OptionalCustomerId", "foreignField" : "_id", "as" : "_lookup_OptionalCustomer" } }, { "$unwind" : { "path" : "$_lookup_OptionalCustomer", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OptionalCustomer" : { "$ifNull" : ["$_lookup_OptionalCustomer", null] } } }
 """);
     }
 
 #if !EF10 && !EF11
     public override async Task Project_struct_complex_type_via_optional_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_struct_complex_type_via_optional_navigation(async));
+            return;
+        }
+
 #if EF8 || EF9
         // Fails: Projection through an optional navigation reads wrong data on EF8/EF9 #35
         await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_struct_complex_type_via_optional_navigation(async));
@@ -474,11 +537,18 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
 #if EF10 || EF11
     public override async Task Project_struct_complex_type_via_optional_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_struct_complex_type_via_optional_navigation(async));
+            return;
+        }
+
         await base.Project_struct_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
-ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
+ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
     }
 #endif
@@ -503,11 +573,18 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
 
     public override async Task Project_struct_complex_type_via_required_navigation(bool async)
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_struct_complex_type_via_required_navigation(async));
+            return;
+        }
+
         await base.Project_struct_complex_type_via_required_navigation(async);
 
         AssertMql(
 """
-ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.RequiredCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : "$Inner.ShippingAddress", "_id" : 0 } }
+ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.RequiredCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
     }
 
@@ -527,7 +604,7 @@ ValuedCustomer.{ "$sort" : { "_id" : 1 } }, { "$skip" : 1 }, { "$group" : { "_id
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$project" : { "ShippingAddress" : "$ShippingAddress", "_id" : 0 } }
 """);
     }
 
@@ -537,7 +614,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$project" : { "_v" : "$ShippingAddress.Country", "_id" : 0 } }
 """);
     }
 
@@ -547,7 +624,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$project" : { "_v" : "$ShippingAddress.Country.FullName", "_id" : 0 } }
 """);
     }
 
@@ -557,7 +634,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$match" : { "ShippingAddress.ZipCode" : 7728 } }, { "$project" : { "ShippingAddress" : "$ShippingAddress", "_id" : 0 } }
 """);
     }
 
@@ -573,7 +650,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$match" : { "$and" : [{ "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.AddressLine1", null] }, { "$ifNull" : ["$BillingAddress.AddressLine1", null] }] } }, { "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.AddressLine2", null] }, { "$ifNull" : ["$BillingAddress.AddressLine2", null] }] } }, { "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.ZipCode", null] }, { "$ifNull" : ["$BillingAddress.ZipCode", null] }] } }, { "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.Country.Code", null] }, { "$ifNull" : ["$BillingAddress.Country.Code", null] }] } }, { "$expr" : { "$eq" : [{ "$ifNull" : ["$ShippingAddress.Country.FullName", null] }, { "$ifNull" : ["$BillingAddress.Country.FullName", null] }] } }] } }
 """);
     }
 
@@ -589,7 +666,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$match" : { "$and" : [{ "ShippingAddress.AddressLine1" : "804 S. Lakeshore Road", "ShippingAddress.AddressLine2" : null }, { "ShippingAddress.ZipCode" : 38654 }, { "ShippingAddress.Country.Code" : "US", "ShippingAddress.Country.FullName" : "United States" }] } }
 """);
     }
 
@@ -643,7 +720,7 @@ ValuedCustomer.{ "$match" : { "_id" : 1 } }, { "$unionWith" : { "coll" : "Valued
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$project" : { "_v" : "$ShippingAddress.AddressLine1", "_id" : 0 } }, { "$unionWith" : { "coll" : "ValuedCustomer", "pipeline" : [{ "$project" : { "_v" : "$BillingAddress.AddressLine1", "_id" : 0 } }] } }
 """);
     }
 
@@ -653,7 +730,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-ValuedCustomer.
+ValuedCustomer.{ "$project" : { "_v" : "$ShippingAddress.AddressLine1", "_id" : 0 } }, { "$unionWith" : { "coll" : "ValuedCustomer", "pipeline" : [{ "$project" : { "_v" : "$BillingAddress.AddressLine1", "_id" : 0 } }] } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }
 """);
     }
 
@@ -760,7 +837,7 @@ ValuedCustomer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$group" : { "_id" : "$ShippingAddress.Country.Code", "Count" : { "$sum" : 1 } } }, { "$project" : { "Code" : "$_id", "Count" : "$Count", "_id" : 0 } }
 """);
     }
 #endif
@@ -806,7 +883,10 @@ Customer.
     {
         await base.Entity_with_complex_type_with_group_by_and_first(async);
 
-AssertMql();
+AssertMql(
+"""
+Customer.{ "$group" : { "_id" : "$_id", "_v" : { "$first" : "$$ROOT" } } }, { "$replaceRoot" : { "newRoot" : "$_v" } }
+""");
     }
 #endif
 
@@ -835,7 +915,7 @@ AssertMql();
 
         AssertMql(
 """
-Customer.
+Customer.{ "$match" : { "ShippingAddress.ZipCode" : 7728 } }
 """);
     }
 #endif
@@ -847,7 +927,7 @@ Customer.
 
         AssertMql(
 """
-Customer.
+Customer.{ "$match" : { "ShippingAddress.Country.Code" : "DE" } }
 """);
     }
 #endif

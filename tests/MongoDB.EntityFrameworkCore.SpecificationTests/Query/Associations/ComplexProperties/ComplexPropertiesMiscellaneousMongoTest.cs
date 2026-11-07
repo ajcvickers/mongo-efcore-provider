@@ -75,6 +75,13 @@ ValueRootEntity.?
 
     public override async Task Where_property_on_nullable_value_type_Value()
     {
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Where_property_on_nullable_value_type_Value());
+            return;
+        }
+
         await base.Where_property_on_nullable_value_type_Value();
 
         AssertMql(
