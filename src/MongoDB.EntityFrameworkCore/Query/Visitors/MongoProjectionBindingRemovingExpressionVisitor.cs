@@ -201,8 +201,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             // (and a driver-LINQ push-down of the same Select) holds it under the alias; a whole-document reader resolves
             // its natural path instead (ReadComplexValueElement).
             case ComplexValueProjectionExpression complexValue:
-                return ComplexTypeMaterializationBuilder.Build(complexValue.ComplexProperty, ReadComplexValueElement(complexValue))
-                    .ConvertIfRequired(complexValue.Type);
+                return BuildComplexValue(complexValue);
 
             // The alias holds the whole computed value (native $project, or a driver-LINQ push-down), so read it once
             // instead of re-applying the call. The mixed visitor overrides this to evaluate ClientExpression.
@@ -1285,6 +1284,69 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                 $"'{property.Name}' of type '{property.ClrType}'; the property's serializer " +
                 "may produce values that cannot be cast to the binding's outer type.");
         }
+    }
+
+    /// <summary>
+    /// Whether a projected complex value is reached through something that may be absent: an optional complex property
+    /// among its ancestors (EF10), or a navigation that is not a required dependent-side reference. The value is then
+    /// null when the ancestor is, as EF's null propagation expects, rather than "missing for a required property".
+    /// </summary>
+    private Expression BuildComplexValue(ComplexValueProjectionExpression complexValue)
+    {
+        var complexProperty = complexValue.ComplexProperty;
+        var element = ReadComplexValueElement(complexValue);
+        var (viaOptionalComplex, viaNavigation) = ClassifyOptionalAncestors(complexValue);
+        if (!viaOptionalComplex && !viaNavigation)
+        {
+            return ComplexTypeMaterializationBuilder.Build(complexProperty, element).ConvertIfRequired(complexValue.Type);
+        }
+
+        // Reached through something that may be absent: an absent ancestor reads null, as EF's null propagation expects,
+        // where the projected type can hold one (a class, or the Nullable<struct> EF lifts a struct to).
+        if (!complexValue.Type.IsValueType)
+        {
+            return ComplexTypeMaterializationBuilder.Build(complexProperty, element, absentIsNull: true).ConvertIfRequired(complexValue.Type);
+        }
+
+        // A struct: through an optional COMPLEX property it has no null to propagate unless the type is lifted, so a
+        // non-nullable struct keeps the strict read (throws when missing); through a navigation (a join side that did not
+        // match) EF reads the absent entity's value as the default struct.
+        var lifted = Nullable.GetUnderlyingType(complexValue.Type) == complexProperty.ClrType;
+        if (lifted || viaNavigation && complexValue.Type == complexProperty.ClrType)
+        {
+            var stored = Expression.Variable(typeof(BsonValue), "storedComplexValue");
+            return Expression.Block(
+                complexValue.Type,
+                [stored],
+                Expression.Assign(stored, element),
+                Expression.Condition(
+                    Expression.OrElse(
+                        Expression.Equal(stored, Expression.Constant(null, typeof(BsonValue))),
+                        Expression.Property(stored, nameof(BsonValue.IsBsonNull))),
+                    Expression.Default(complexValue.Type),
+                    ComplexTypeMaterializationBuilder.Build(complexProperty, stored).ConvertIfRequired(complexValue.Type)));
+        }
+
+        return ComplexTypeMaterializationBuilder.Build(complexProperty, element).ConvertIfRequired(complexValue.Type);
+    }
+
+    /// <summary>
+    /// Whether a projected complex value is reached through an optional complex property among its ancestors (EF10), or
+    /// through an entity that is not the query root (a navigation or join side, whose entity may not exist for the row).
+    /// </summary>
+    private (bool ViaOptionalComplex, bool ViaNavigation) ClassifyOptionalAncestors(ComplexValueProjectionExpression complexValue)
+    {
+        var viaOptionalComplex = false;
+        ITypeBase type = complexValue.ComplexProperty.DeclaringType;
+        while (type is IComplexType complexType)
+        {
+            viaOptionalComplex |= complexType.ComplexProperty.IsOptional();
+            type = complexType.ComplexProperty.DeclaringType;
+        }
+
+        var viaNavigation = type is IEntityType owner
+                            && !_rootEntityType.IsAssignableFrom(owner) && !owner.IsAssignableFrom(_rootEntityType);
+        return (viaOptionalComplex, viaNavigation);
     }
 
     /// <summary>

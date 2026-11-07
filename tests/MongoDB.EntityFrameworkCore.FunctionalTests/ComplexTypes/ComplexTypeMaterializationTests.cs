@@ -1525,6 +1525,59 @@ public class ComplexTypeMaterializationTests(TemporaryDatabaseFixture database) 
         }
     }
 
+#if !EF8 && !EF9
+    public class OptInner
+    {
+        public string Label { get; set; } = null!;
+    }
+
+    public class OptOuter
+    {
+        public int Count { get; set; }
+        public OptInner Inner { get; set; } = null!;
+        public List<OptInner> Items { get; set; } = [];
+    }
+
+    public class OptParent
+    {
+        public ObjectId Id { get; set; }
+        public string Name { get; set; } = null!;
+        public OptOuter? Outer { get; set; }
+    }
+
+    private static void ConfigureOptParent(ModelBuilder mb)
+        => mb.Entity<OptParent>().ComplexProperty(p => p.Outer, o =>
+        {
+            o.ComplexProperty(x => x.Inner);
+            o.ComplexCollection(x => x.Items);
+        });
+
+    [Fact]
+    public void Projecting_a_required_complex_value_or_collection_under_a_missing_optional_parent_reads_null()
+    {
+        // EF's null propagation: `p.Outer!.Inner` and `p.Outer!.Items` are null for a row whose optional Outer is null or
+        // missing (was: the value threw "missing for required complex property", the collection read empty).
+        var collection = database.CreateCollection<OptParent>(Unique(nameof(Projecting_a_required_complex_value_or_collection_under_a_missing_optional_parent_reads_null)));
+        Raw(collection).InsertMany(
+        [
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "present" }, { "Outer", new BsonDocument
+                { { "Count", 1 }, { "Inner", new BsonDocument("Label", "i") }, { "Items", new BsonArray { new BsonDocument("Label", "a") } } } } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "null" }, { "Outer", BsonNull.Value } },
+            new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "missing" } }
+        ]);
+
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native })
+        {
+            Assert.Equal(["<null>", "<null>", "i"],
+                Run(collection, mode, q => q.OrderBy(p => p.Name).Select(p => p.Outer!.Inner).ToList()
+                    .Select(i => i == null ? "<null>" : i.Label), ConfigureOptParent));
+            Assert.Equal(["<null>", "<null>", "a"],
+                Run(collection, mode, q => q.OrderBy(p => p.Name).Select(p => p.Outer!.Items).ToList()
+                    .Select(l => l == null ? "<null>" : string.Join(",", l.Select(x => x.Label))), ConfigureOptParent));
+        }
+    }
+#endif
+
     public class Line
     {
         public string Sku { get; set; } = null!;
