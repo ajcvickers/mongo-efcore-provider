@@ -121,7 +121,7 @@ RootEntity.?
     public override async Task Update_property_on_projected_associate_with_OrderBy_Skip()
     {
 #if EF10
-        // Fails: Bulk update after OrderBy/Skip over a projected associate affects too many rows #41
+        // Fails: EF expects 3 rows but its seed has 7 roots, so Skip(1) affects 6 (the provider's answer; ComplexTypeBulkTests pins it) #41
         await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Update_property_on_projected_associate_with_OrderBy_Skip(), typeof(global::Xunit.Sdk.EqualException));
 #else
         await base.Update_property_on_projected_associate_with_OrderBy_Skip();

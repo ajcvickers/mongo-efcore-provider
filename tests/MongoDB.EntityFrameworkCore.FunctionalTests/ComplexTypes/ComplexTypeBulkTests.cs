@@ -388,6 +388,28 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         store.AssertStored(null, ("b", d => d["Pin"] = Geo(-4, 4)));
     }
 
+#if !EF9
+    [Fact]
+    public void Update_of_a_projected_complex_value_with_OrderBy_and_Skip_changes_exactly_the_rows_after_the_skip()
+    {
+        // Select(c => c.Billing).OrderBy(b => b.City).Skip(1): the rows after the first by the ordering. (EF's spec test of this
+        // shape expects 3 rows of its 7 roots, which is inconsistent with its own data: the same update without Skip expects 7.)
+        var store = Seed();
+        var ordered = store.Seed.OrderBy(d => d["bill"]["town"].AsString, StringComparer.Ordinal).Select(d => d["Name"].AsString).ToList();
+        using (var db = store.Context())
+        {
+            var affected = db.Entities.Select(c => c.Billing).OrderBy(b => b.City).Skip(1)
+                .ExecuteUpdate(s => s.SetProperty(b => b.Street, "upd"));
+            Assert.Equal(store.Seed.Length - 1, affected);
+        }
+
+        var streets = store.Raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().ToDictionary(d => d["Name"].AsString, d => d["bill"]["Street"].AsString);
+        Assert.NotEqual("upd", streets[ordered[0]]);
+        Assert.All(ordered.Skip(1), name => Assert.Equal("upd", streets[name]));
+    }
+
+#endif
+
     [Fact]
     public void SetProperty_on_a_leaf_with_an_empty_element_name_is_refused_and_writes_nothing()
     {
