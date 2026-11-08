@@ -123,7 +123,7 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
             = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
 
         public SingleEntityDbContext<BCustomer> Context(MongoQueryMode mode = MongoQueryMode.Native)
-            => SingleEntityDbContext.Create(collection, Configure, null, b =>
+            => SingleEntityDbContext.Create(Collection, Configure, null, b =>
             {
                 b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
                 new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
