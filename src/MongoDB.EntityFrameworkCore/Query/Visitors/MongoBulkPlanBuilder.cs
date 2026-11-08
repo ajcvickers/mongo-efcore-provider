@@ -311,6 +311,13 @@ internal static class MongoBulkPlanBuilder
             return ComplexValueWriter.SerializeDetachedComplexValue(complexProperty, value);
         }
 
+        // A null for a REQUIRED member of a complex value is refused for the same reason (the leaf path of the whole-value
+        // check above). Root scalars keep their pre-existing behaviour.
+        if (value is null && setter.ElementPath is not null && setter.Property is IReadOnlyProperty { IsNullable: false })
+        {
+            throw new InvalidOperationException(ComplexTypeRefusals.BulkSetRequiredComplexLeafToNull(setter.ElementPath));
+        }
+
         var serializationInfo = BsonSerializerFactory.GetPropertySerializationInfo((IReadOnlyProperty)setter.Property);
         return serializationInfo.SerializeValue(value);
     }

@@ -1305,7 +1305,12 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         // where the projected type can hold one (a class, or the Nullable<struct> EF lifts a struct to).
         if (!complexValue.Type.IsValueType)
         {
-            return ComplexTypeMaterializationBuilder.Build(complexProperty, element, absentIsNull: true).ConvertIfRequired(complexValue.Type);
+            // A REQUIRED collection reached only through a navigation or join side (no optional complex ancestor) still reads
+            // empty when its element is missing: the entity is present (an inner join, a required reference) or nothing here can tell
+            // it from a present one whose member was added later, and that is ordinary data that reads empty on the root. Under an
+            // optional complex ancestor a missing collection means the ancestor is absent, which is null.
+            var absentIsNull = viaOptionalComplex || !complexProperty.IsCollection;
+            return ComplexTypeMaterializationBuilder.Build(complexProperty, element, absentIsNull).ConvertIfRequired(complexValue.Type);
         }
 
         // A struct: through an optional COMPLEX property it has no null to propagate unless the type is lifted, so a

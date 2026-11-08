@@ -84,6 +84,16 @@ internal static class ComplexTypeRefusals
            + "optional complex property, which may be null in a stored document: the server cannot set a member of a null "
            + "value. Set the whole optional complex property instead (SetProperty(e => e.Optional, value)).";
 
+    internal static string BulkSetRequiredComplexLeafToNull(string path)
+        => $"ExecuteUpdate cannot set the required member '{path}' of a complex property to null: the stored document "
+           + "would no longer be readable. No document was modified.";
+
+    internal static string BulkValueReadsThroughOptionalComplexHop(string valuePath, string hopName)
+        => $"ExecuteUpdate cannot compute a value from '{valuePath}' because '{hopName}' is an optional complex property, "
+           + "which may be null in a stored document: the computed value would be missing and would remove or null the "
+           + "target. Guard the read with a null-coalescing operator (for example (int?)e.Optional.Member ?? 0), or "
+           + "set the value from a constant.";
+
     internal static string BulkSelfReferencingBsonRepresentationLeaf(string propertyName)
         => $"Self-referencing ExecuteUpdate on property '{propertyName}' is not supported because it is stored with a "
            + "BsonRepresentation, which the computed value would not be written in.";
@@ -117,6 +127,12 @@ internal static class ComplexTypeRefusals
         => $"A projected whole complex value cannot be the operand of '{operatorName}': the MongoDB provider "
            + "can't compare or combine complex values. Project the complex type's properties you need instead, or apply "
            + "the operator after 'AsEnumerable()'.";
+
+    internal static string ConditionalBetweenWholeValues()
+        => "A conditional expression that chooses between two whole complex values (for example "
+           + "'e.Flag ? e.Home : e.Work') is not supported: the chosen value cannot be read back from the projected document. "
+           + "Project the complex type's properties you need instead, choose per property, or apply the conditional after "
+           + "'AsEnumerable()'.";
 
     internal static string ComplexTypeOfTypeNotSupported(string complexTypeName)
         => $"Complex type '{complexTypeName}' not supported in MongoDB.";

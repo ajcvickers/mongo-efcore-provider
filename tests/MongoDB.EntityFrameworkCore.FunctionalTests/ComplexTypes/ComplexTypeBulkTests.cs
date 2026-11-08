@@ -387,6 +387,32 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
     }
 
     [Fact]
+    public void SetProperty_on_a_required_leaf_of_a_complex_property_to_null_is_refused_and_writes_nothing()
+    {
+        // The leaf counterpart of the whole-value check: a null City would be stored as BSON null and every later read of the
+        // document would throw "Document element is null for required non-nullable property 'City'".
+        var store = Seed();
+        using (var db = store.Context())
+        {
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.City, (string)null!)));
+            Assert.Contains("cannot set the required member 'bill.town' of a complex property to null", ex.FullMessage());
+            Assert.Contains("No document was modified.", ex.FullMessage());
+        }
+
+        store.AssertUnchanged();
+
+        // An optional leaf may be set to null, and the result still reads back.
+        using (var db = store.Context())
+        {
+            Assert.Equal(3, db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.Street, (string?)null)));
+            Assert.All(db.Entities.AsNoTracking().ToList(), c => Assert.Null(c.Billing.Street));
+        }
+
+        Assert.All(store.Raw.Find(FilterDefinition<BsonDocument>.Empty).ToList(), d => Assert.True(d["bill"]["Street"].IsBsonNull));
+    }
+
+    [Fact]
     public void SetProperty_on_a_required_complex_property_to_null_is_refused_and_writes_nothing()
     {
         var store = Seed();
@@ -706,6 +732,35 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
 
     private static readonly string[] OptionalSeedState =
         ["o-empty:{ }", "o-missing:<missing>", "o-null:null", """o-value:{ "City" : "X", "Zip" : 5 }"""];
+
+    [Fact]
+    public void Setter_value_read_through_an_optional_complex_property_is_refused_unless_null_coalesced()
+    {
+        // In the pipeline $set a missing value REMOVES the target field and an arithmetic value stores BSON null into a
+        // non-nullable int, leaving documents that no read accepts. Unguarded reads are refused before any write.
+        var store = SeedOptional();
+        using (var db = store.Context())
+        {
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => db.Entities.ExecuteUpdate(s => s.SetProperty(h => h.Rank, h => h.Opt!.Zip!.Value + 1)));
+            Assert.Contains("is an optional complex property", ex.FullMessage());
+            Assert.Contains("null-coalescing", ex.FullMessage());
+        }
+
+        Assert.Equal(OptionalSeedState, store.Stored());
+        Assert.All(store.Raw.Find(FilterDefinition<BsonDocument>.Empty).ToList(), d => Assert.Equal(0, d["Rank"].AsInt32));
+
+        // A null-coalesced read supplies a value for a null, missing or empty parent, so it is served.
+        using (var db = store.Context())
+        {
+            Assert.Equal(4, db.Entities.ExecuteUpdate(s => s.SetProperty(h => h.Rank, h => (h.Opt!.Zip ?? 0) + 1)));
+        }
+
+        Assert.Equal(
+            new Dictionary<string, int> { ["o-empty"] = 1, ["o-missing"] = 1, ["o-null"] = 1, ["o-value"] = 6 },
+            store.Raw.Find(FilterDefinition<BsonDocument>.Empty).ToList().ToDictionary(d => d["Name"].AsString, d => d["Rank"].AsInt32));
+        Assert.Equal(OptionalSeedState, store.Stored());
+    }
 
     [Fact]
     public void SetProperty_on_a_leaf_under_an_optional_complex_property_is_refused_and_writes_nothing()
