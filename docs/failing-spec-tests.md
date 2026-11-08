@@ -13,15 +13,65 @@ comment. This document enumerates every ticket referenced by such comments
 together with a one-line description, plus a section listing failure modes
 that currently lack a ticket. Counts are sourced from `tests/MongoDB.EntityFrameworkCore.SpecificationTests/**/*.cs`.
 
-> **Counting basis — read before trusting a number in the `Count` column.** Where a row is restated it
-> means: the number of distinct overridden test methods carrying a `// Fails: … <ticket>` tag in
-> `tests/MongoDB.EntityFrameworkCore.SpecificationTests/**/*.cs` (a method split across `#if` arms counts
-> once). Counts were re-measured on the EF-322 branch under that rule (tags are attributed to the enclosing method); any residual drift is from methods whose tag sits in a shared helper. Older figures predated the rule and **did not reconcile with it**: measured at
-> `58e05a0`, EF-216 read 265 where the rule yields 217, EF-X020 read 168 against 171, EF-149 246 against
-> 292, and EF-X002's 46-against-45 discrepancy was recorded earlier and never explained. No rule tried
-> (raw tag lines, per-method, per-method-name, whole-`tests/`-tree) reproduces the older figures, so their
-> basis is unknown. Rows touched from 2026-08-03 onwards state the rule's figure; the rest are left as
-> they stand rather than silently re-derived.
+## Summary
+
+Regenerate every figure below (and the `Count` column in the tables) with
+`python tests/tools/count-spec-fails.py` (add `--by-file <ticket>` to see which files carry a ticket).
+
+| | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
+| --- | --- | --- |
+| `// Fails:` tag lines | 1,206 | 4,836 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,467 |
+| ... active in the EF8 build | 1,064 | 2,821 |
+| ... active in the EF9 build | 1,141 | 3,215 |
+| ... active in the EF10 build | 882 | 3,249 |
+| ... active in the EF11 build | not measured | 2,156 (not yet re-baselined: see below) |
+| Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 60 |
+
+Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
+EF9 20,060 passed / 80 skipped, EF10 19,700 passed / 84 skipped, no failures. EF11 is not yet re-baselined against `release`. These
+counts are xunit test cases (theory rows included), unlike the method counts in this file.
+
+The port was first written against `main` and then rebuilt on `release`. `release`'s native query pipeline already fixed a lot: about
+700 version-cases that asserted a failure on `main` now pass, and the tag count dropped from 4,261 to 3,467 methods as a result. The other direction
+matters more: a few tests that passed on `main` fail on `release`; see "Regressions on `release`" below.
+
+The spec port (#35) took 85 test bases off the ignore list. The jump in tags is the point of the exercise: the newly
+ported suites were never exercised before, so their failures were invisible. A tagged method asserts today's failure and
+stays green; it is a measure of the provider's gaps, not of broken tests. Methods that pass as the upstream base are not
+counted anywhere in this file. The bases still ignored are the complex type suites (separate work), the Associations suites,
+the Translations bases for Math, String, the Operators and Miscellaneous groups, `TypeTestBase`, the bulk-update suites for
+shapes the provider does not support, and the bases blocked by a concrete failure (`EF-X538`, `EF-X539`, `EF-X548`); the reason
+sits next to each entry in `MongoComplianceTest.cs`.
+
+Ten largest tickets (distinct overridden methods, all EF versions):
+
+| Ticket | Methods | Subject |
+| --- | --- | --- |
+| EF-X526 | 697 | 1,066 |
+| EF-X101 | 299 | 299 |
+| EF-X530 | 242 | 283 |
+| EF-216 | 217 | 340 |
+| EF-X102 | 203 | 203 |
+| EF-X527 | 192 | 198 |
+| EF-149 | 169 | 333 |
+| EF-X600 | 165 | Query translates natively but returns different data than the expected result (found when re-baselinin... |
+| EF-X001 | 133 | 156 |
+| EF-X316 | 121 | 121 |
+
+`EF-X526`, `EF-X527` and `EF-X530` are deliberately coarse buckets (the failure message was grouped by shape, not triaged
+individually); expect them to split once someone looks at the individual failures.
+
+> **Counting basis.** Every figure in the `Count` column is the number of distinct overridden test methods carrying a
+> `// Fails: ... <ticket>` tag in `tests/MongoDB.EntityFrameworkCore.SpecificationTests/**/*.cs`, computed by
+> `tests/tools/count-spec-fails.py`. A method split across `#if` arms counts once; a method that cites two tickets counts
+> once for each; a tag belongs to the method whose body encloses it, or to the next method when it sits between members. A
+> theory counts once however many data rows it has, so the numbers are methods, not xunit test cases (a ported
+> `Generic`/`NonGeneric` pair of classes shares one set of methods and so counts once per class). Tickets cited only in
+> prose, such as `post-EF-117`, are not counted. Earlier figures in this file used an unknown mixture of rules and have all
+> been replaced. A count of 0 means no test is tagged: either the bug is fixed (the row is kept for history), or the
+> ticket describes a workaround that the ported fixtures apply in their model (`EF-X201`, `X207`, `X211`, `X214`, `X215`,
+> `X304`) or a base that could not be ported (`EF-X538`, `X548`).
 
 > If you fix one of these bugs, search for the ticket id in the spec-tests
 > project — the corresponding overrides need to be updated (drop the
@@ -30,18 +80,37 @@ that currently lack a ticket. Counts are sourced from `tests/MongoDB.EntityFrame
 
 ---
 
+## Regressions on `release` (passed on `main`, fail on `release`)
+
+The spec port was first written against `main` (the upstream mirror). Re-baselining it against `release` (the fork's trunk, which has
+the native query pipeline) turned up tests that passed on `main` as a plain `base` call and now fail. They are asserted as today's
+failure, tagged `// Fails: REGRESSION vs main: ...`, so any change is noticed. Wrong data and broken common scenarios matter most.
+
+| Ticket | Test(s) | What changed | EF versions |
+| --- | --- | --- | --- |
+| EF-X700 | `InheritanceQuery`: `Can_query_all_animals`, `Can_use_is_kiwi_in_projection`, `Selecting_only_base_properties_on_derived_type` | Wrong data: the query returns 3 rows where 2 are expected | 8, 9, 10 |
+| EF-X703 | `CompositeKeyEndToEnd.Can_use_two_non_generated_integers_as_composite_key_end_to_end` | After `SaveChanges`, the composite-key row cannot be queried back ("Sequence contains no elements") | 8, 9, 10 |
+| EF-X702 | `DateTimeOffsetTranslations.TimeOfDay` | Wrong data: the time of day is truncated to whole milliseconds | 10 |
+| EF-X701 | `AdHocQueryFilters.Query_filter_with_context_accessor_with_constant` | `NullReferenceException` from a query filter that reads a context member | 9, 10 |
+| EF-X704 | `GuidTranslations.NewGuid` | Refused ("cannot be evaluated once per row on the server"); probably deliberate | 10 |
+| EF-X705 | `GearsOfWar`: `Group_by_with_aggregate_max_on_entity_type`, `Nav_rewrite_Distinct_with_convert`, `_anonymous`; `ComplexNavigationsSharedType`: one GroupJoin test | Only the exception type of an unsupported query changed (`FormatException` / `ArgumentException` instead of `InvalidOperationException`). `AGENTS.md` does not count this as a break | 8, 9, 10 |
+
+Changes that are *not* regressions: baseline-only MQL differences where the results are still correct (`$count` field name; the
+`Today`/`Now`/`UtcNow` tests no longer assert MQL because it embeds the current date), and tests that failed on `main` and now fail differently
+or pass. About 700 version-cases moved from "asserts a failure" to passing, including the `Find` discriminator bug (EF-X200).
+
 ## MongoDB EF Core provider tickets — `EF-NNN`
 
 | Ticket | Comment subject | Description | Count |
 | --- | --- | --- | --- |
 | [EF-117](https://jira.mongodb.org/browse/EF-117) | _(no remaining `// Fails:` tags)_ | Cross-collection **Include**/`ThenInclude` is now implemented for the tested shapes. The five tests formerly tagged here were re-investigated: `Outer_identifier_correctly_determined_when_doing_include_on_right_side_of_left_join` (tracking + no-tracking) now **passes**; `Collection_include_over_result_of_single_non_scalar` and `Do_not_erase_projection_mapping_when_adding_single_projection` actually fail on cross-`DbSet` subquery translation (re-tagged **EF-X001**); `Included_one_to_many_query_with_client_eval` fails on driver client-evaluation (re-tagged **EF-X003**); and Include on a keyless entity (incl. multi-level) is a genuine PK-less `$lookup` gap (re-tagged **EF-X019**). EF-117 no longer has any active `// Fails:` tags. (Join/GroupJoin/SelectMany/RightJoin/subquery failures formerly tagged here were re-categorized — see EF-X001/EF-216/EF-220/EF-X016/EF-X017/EF-X018.) | 0 |
-| [EF-149](https://jira.mongodb.org/browse/EF-149) | `GroupBy issue EF-149` | `GroupBy` translation is severely limited; most non-trivial group-by shapes fail to translate. | 131 |
+| [EF-149](https://jira.mongodb.org/browse/EF-149) | `GroupBy issue EF-149` | `GroupBy` translation is severely limited; most non-trivial group-by shapes fail to translate. | 169 |
 | [EF-153](https://jira.mongodb.org/browse/EF-153) | `TagWith EF-153` | `TagWith(...)` content is silently dropped — does not appear in the emitted MQL. | 8 |
-| [EF-164](https://jira.mongodb.org/browse/EF-164) | `Missing property values issue EF-164` / `Projections issue EF-164` | BSON documents that omit a required scalar (or required navigation) throw on materialization — `Project_root_with_missing_scalars`, `Project_root_entity_with_missing_required_navigation`, etc. | 3 |
-| [EF-202](https://jira.mongodb.org/browse/EF-202) | `Entity equality issue EF-202` | Comparing two entities (`entity1 == entity2` / `Contains(entity)`) is not lowered to a key-equality comparison. | 1 |
-| [EF-216](https://jira.mongodb.org/browse/EF-216) | `Cross-document navigation access issue EF-216` / `Navigations issue EF-216` | Navigations that cross collection boundaries cannot be translated; surfaces as `Unsupported cross-DbSet query between ...`. Documented at the helper `AssertNoMultiCollectionQuerySupport`. | 183 |
+| [EF-164](https://jira.mongodb.org/browse/EF-164) | `Missing property values issue EF-164` / `Projections issue EF-164` | BSON documents that omit a required scalar (or required navigation) throw on materialization — `Project_root_with_missing_scalars`, `Project_root_entity_with_missing_required_navigation`, etc. | 34 |
+| [EF-202](https://jira.mongodb.org/browse/EF-202) | `Entity equality issue EF-202` | Comparing two entities (`entity1 == entity2` / `Contains(entity)`) is not lowered to a key-equality comparison. | 3 |
+| [EF-216](https://jira.mongodb.org/browse/EF-216) | `Cross-document navigation access issue EF-216` / `Navigations issue EF-216` | Navigations that cross collection boundaries cannot be translated; surfaces as `Unsupported cross-DbSet query between ...`. Documented at the helper `AssertNoMultiCollectionQuerySupport`. | 217 |
 | [EF-217](https://jira.mongodb.org/browse/EF-217) | `Call ToString on DateTimeOffset EF-217` | `DateTimeOffset.ToString()` cannot be translated. | 1 |
-| [EF-220](https://jira.mongodb.org/browse/EF-220) | `Multiple query roots issue EF-220` | Queries that reference more than one `DbSet<>` (Cartesian product / cross-join) are not translatable. Includes `SelectMany` across DbSets and tautology-predicate cross-joins. | 63 |
+| [EF-220](https://jira.mongodb.org/browse/EF-220) | `Multiple query roots issue EF-220` | Queries that reference more than one `DbSet<>` (Cartesian product / cross-join) are not translatable. Includes `SelectMany` across DbSets and tautology-predicate cross-joins. | 64 |
 | [EF-221](https://jira.mongodb.org/browse/EF-221) | _(no remaining `// Fails:` tags)_ | `Equals` calls with genuinely mismatched, non-convertible simple types (e.g. `int?.Equals((ulong)x)`) are now folded to the correct constant result in `MongoEFToLinqTranslatingExpressionVisitor` instead of reaching the driver's `Equals` translator, which threw `InvalidCastException`. The four tests formerly tagged here now pass. | 0 |
 | [EF-222](https://jira.mongodb.org/browse/EF-222) | `translation of Like issue EF-222` | `EF.Functions.Like(...)` is not translated. | 5 |
 | [EF-227](https://jira.mongodb.org/browse/EF-227) | _(no remaining `// Fails:` tags)_ | **Resolved** — no `// Fails:` tags remain and the tests pass. Formerly: `Min` / `Max` over an empty nullable sequence does not produce the EF-expected `null`. | 0 |
@@ -71,7 +140,7 @@ that currently lack a ticket. Counts are sourced from `tests/MongoDB.EntityFrame
 | Ticket | Comment subject | Description | Count |
 | --- | --- | --- | --- |
 | [CSHARP-5296](https://jira.mongodb.org/browse/CSHARP-5296) | `DateTimeOffset issue CSHARP-5296` | Driver-level: component access (`.Year`, `.Hour`, etc.) on the static `DateTimeOffset.Now` / `UtcNow` is not translated by the LINQ provider. Members of a stored `DateTimeOffset` property are handled by the provider itself (EF-218). | 2 |
-| [CSHARP-5836](https://jira.mongodb.org/browse/CSHARP-5836) | `Reverse not supported CSHARP-5836` | Driver-level: `Queryable.Reverse()` is not implemented in the driver's LINQ provider. | 11 |
+| [CSHARP-5836](https://jira.mongodb.org/browse/CSHARP-5836) | `Reverse not supported CSHARP-5836` | Driver-level: `Queryable.Reverse()` is not implemented in the driver's LINQ provider. | 10 |
 
 ## Upstream EF Core tickets — `dotnet/efcore#NNNNN`
 
@@ -91,8 +160,8 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 
 | Temp ticket | Subject | Count |
 | --- | --- | --- |
-| EF-X001 | Sub-query selection across DbSets is not translated | 141 |
-| EF-X002 | Provider throws a different exception than the EF translation-failure message | 48 |
+| EF-X001 | Sub-query selection across DbSets is not translated | 133 |
+| EF-X002 | Provider throws a different exception than the EF translation-failure message | 29 |
 | EF-X003 | Driver-level feature gaps surfaced as test failures | 9 |
 | EF-X004 | ~~Float `Sum`/`Average` truncation (likely duplicate of EF-228)~~ — resolved, no remaining tags | 0 |
 | EF-X005 | BSON document missing nested required reference (AdHoc JSON) | 2 |
@@ -107,14 +176,170 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X014 | Server-side projection conflict with cast-to-nullable | 1 |
 | EF-X015 | Sub-second `DateTime` component translation (nanosecond/microsecond) | 1 |
 | EF-X023 | GroupJoin shapes not translated | 6 |
-| EF-X017 | Join shapes not translated | 4 |
+| EF-X017 | Join shapes not translated | 7 |
 | EF-X018 | RightJoin not supported | 5 |
 | EF-X019 | Include on keyless entity not supported (no primary key for $lookup join) | 2 |
-| EF-X020 | ~~Cross-collection Include/join/navigation not translated on EF8/EF9 (works on EF10)~~ — resolved, no remaining tags | 0 |
+| EF-X020 | ~~Cross-collection Include/join/navigation not translated on EF8/EF9 (works on EF10)~~ — resolved, no remaining tags | 2 |
 | EF-X021 | Filtered Include / query filter on cross-collection target not translated | 0 |
-| EF-X022 | Join/GroupJoin whose inner source is a filtered or ordered sub-query is rejected | 18 |
+| EF-X022 | Join/GroupJoin whose inner source is a filtered or ordered sub-query is rejected | 14 |
 | EF-X024 | `Where`/entity materialization over a flattened multi-join chain onto ambiguous same-navigation or navigation-less siblings is not translated | 2 |
 | EF-X016 | Bulk `ExecuteUpdate`/`ExecuteDelete` source restricted to a single collection scoped by `Where` | 42 |
+| EF-X400 | `DbUpdateConcurrencyException` is thrown without invoking `ISaveChangesInterceptor.ThrowingConcurrencyException` | 2 |
+| EF-X401 | Ambiguous foreign key discovery between a join/owned type and its owner (`Both relationships ... could use {'PostId'}`) | 4 |
+| EF-X402 | Projecting an owned collection navigation directly (`Select(e => e.OwnedCollection)`) is not translated | 1 |
+| EF-X403 | Entity types reachable only through a navigation are made owned, so ModelBuilder relationship tests see a different model (NRE in the base assertions) | 82 |
+| EF-X404 | Collection-typed properties (`List<T>`, `T[]`, `ObservableCollection<T>`) in ModelBuilder tests fail model validation as unmapped | 34 |
+| EF-X405 | Primary key must be mapped to `_id`: composite, shadow and field-backed keys are rejected in model validation | 18 |
+| EF-X406 | `HasData` on owned types fails seed validation (required key property has no value) | 1 |
+| EF-X407 | Owned type used from multiple navigations with different element names is rejected | 6 |
+| EF-X408 | EF convention/validation exceptions the base tests expect are not thrown | 4 |
+| EF-X409 | Many-to-many navigations (`[ForeignKey]` attribute shapes) cannot be determined | 2 |
+| EF-X410 | Multiple row-version (concurrency token) properties on one entity are rejected | 1 |
+| EF-X411 | Model metadata differs from the relational baseline (owned-type keys/names, `ValueGenerated`) | 12 |
+| EF-X412 | `CompiledModelTestBase`: properties of types with no Mongo mapping (`IPAddress`, ...) are discovered as owned entity types and fail to build | 3 |
+| EF-X300 | Value converter built from inline conversion expressions on a nullable property is not supported | 21 |
+| EF-X301 | Query comparing a converted property to a parameter/literal fails casting `ValueConverterSerializer` | 0 |
+| EF-X302 | `ValueConverterSerializer` / enum-conversion serializers lack `IHasRepresentationSerializer` | 1 |
+| EF-X303 | Query over converted property fails binding `ValueConverterSerializer` | 3 |
+| EF-X304 | No built-in integer key value generation (spec fixtures use a test-only generator) | 0 |
+| EF-X305 | Query comparing a struct-typed (value-converted) key does not translate | 0 |
+| EF-X306 | Inserting entities with value-converted keys raises a duplicate `_id` error | 35 |
+| EF-X307 | Model validation requires every key property to be mapped to `_id` | 6 |
+| EF-X308 | Relationship/navigation discovery differs (navigations become owned by convention) | 26 |
+| EF-X309 | `[Required]`/`[MaxLength]`/`[StringLength]` are not enforced by the store | 4 |
+| EF-X310 | `Single`/`First` over an empty result in the test body (not triaged) | 4 |
+| EF-X311 | Music store query fails with `InvalidOperationException` (not triaged) | 1 |
+| EF-X312 | `[Column(TypeName)]` is reported as an error by default | 5 |
+| EF-X314 | Driver LINQ translation rejects expression over converted property, indexer or subquery | 6 |
+| EF-X315 | Value-converter behavior differs from the provider-agnostic expectation (not triaged) | 7 |
+| EF-X316 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) | 121 |
+| EF-X317 | `NullReferenceException` in JSON type round-trip (not triaged) | 60 |
+| EF-X318 | Bad JSON value does not throw on materialization | 0 |
+| EF-X319 | Concurrency token on an owned entity is rejected (Serialization) | 2 |
+| EF-X320 | NetTopologySuite spatial types are not supported | 6 |
+| EF-X321 | `DateOnly`/`TimeOnly`/`TimeSpan`/`DateTimeOffset` members and methods are not translated by the driver | 54 |
+| EF-X322 | `byte[]` is not supported as an array in LINQ | 4 |
+| EF-X323 | Translated `byte[]` pipeline is rejected by the server | 2 |
+| EF-X324 | `byte[].Length` query returns no rows | 1 |
+| EF-X200 | `Find`/derived-type `Set<T>` over a type hierarchy does not filter by discriminator (a base-type document is materialized as the derived type) | 0 |
+| EF-X201 | Single-property primary key set by explicit `HasKey`/constructor binding is not mapped to element `_id` (model validation fails); ported fixtures work around it with a test convention | 0 |
+| EF-X202 | Explicit transaction cannot be shared by a second context (session disposed with the first context) | 10 |
+| EF-X203 | Property hiding (`new Id` on a derived type) conflicts in the BSON class map | 9 |
+| EF-X205 | `int` keys are not store-generated (upstream models expect identity-style keys); ported fixtures work around it with a counter generator | 1 |
+| EF-X206 | Lazy-load/`Single` query over a type hierarchy returns more than one element | 0 |
+| EF-X207 | Unique index over a nullable one-to-one foreign key collides on `null` in MongoDB; ported fixtures drop the uniqueness | 0 |
+| EF-X208 | `Include` of a many-to-many skip navigation is not supported | 21 |
+| EF-X209 | Many-to-many skip navigation `Load`/`Query` (`SelectMany` + `NotQuiteInclude`) not translated | 44 |
+| EF-X211 | Owned-collection ordinal keys are not generated for some owned shapes (duplicate `{Id: 0}` on `Add`); ported fixtures work around it with a counter generator | 0 |
+| EF-X212 | Reading a document with nested owned types reports a required element missing (`Document element is missing for required non-nullable property`) | 59 |
+| EF-X213 | A type reached only through a navigation is auto-owned, so `Set<T>()` for it is rejected | 14 |
+| EF-X214 | Concurrency token on an owned type is rejected by model validation (F1 test model); ported fixture drops them | 0 |
+| EF-X215 | `UseSeeding`/`UseAsyncSeeding` delegates are not run by `EnsureCreated`; ported fixture seeds explicitly | 0 |
+| EF-X216 | Materialization interception creates the base proxy type for derived-type documents (`DriverProxy` instead of `TestDriver`) | 1 |
+| EF-X217 | Keyless query type maps to its own (empty) collection; relational tests map it to a view/SQL query over another table | 1 |
+| EF-X101 | Entities added without an explicit key get `Id` 0 (no `int`/`long` key generation), so tracking/saving them collides on the same key | 299 |
+| EF-X102 | Relationship discovery between root entity types fails at model build (`Unable to determine the relationship represented by navigation`) | 203 |
+| EF-X103 | No value generator for `int`/`long`/enum/value-converted keys (`NotSupportedException` on `Add`) | 31 |
+| EF-X104 | Dependent key is null because the principal key (`string`/`Uri`/`Guid` wrapper) was not generated | 4 |
+| EF-X105 | Bulk write fails with a duplicate `_id` when saving entities that rely on default `int` keys | 32 |
+| EF-X106 | Unique index build fails on null/missing values (`createIndexes` duplicate `null`) | 5 |
+| EF-X107 | Entity types used by the test are missing from the model (`entity type '...' was not found`) | 8 |
+| EF-X108 | Store-generated/computed value and update semantics differ (no database defaults, computed columns or generated keys) | 8 |
+| EF-X110 | `Include` of a skip (many-to-many) navigation is not supported | 31 |
+| EF-X111 | Concurrency token on an owned-entity property is rejected at model validation | 43 |
+| EF-X112 | Many-to-many join entity is modelled as an owned type and cannot be saved or queried on its own | 4 |
+| EF-X113 | Indexer (shared-type entity) property access `get_Item(...)` is not translated by the driver | 2 |
+| EF-X114 | Partial update of a tracked entity reports a `DbUpdateConcurrencyException` | 1 |
+| EF-X115 | Concurrency exception message differs from the relational wording asserted by `UpdatesTestBase` | 4 |
+| EF-X500 | Primitive-collection projection/SelectMany/Union/Concat/ordering not translated | 10 |
+| EF-X501 | Inline List<T> collection (Min/Max/Contains/index) not translated or serialized | 6 |
+| EF-X502 | Single/SingleOrDefault over a primitive collection not translated | 2 |
+| EF-X503 | NullReferenceException for Contains of a null item | 1 |
+| EF-X504 | Contains over collection of structs with value converter not translated or serializer mismatch | 2 |
+| EF-X505 | Wrong result: collection index compared with nullable column | 1 |
+| EF-X506 | Server error: input to $map must be an array (enum collection cast) | 1 |
+| EF-X507 | EF8 only: inline empty-collection Count query returns no rows | 1 |
+| EF-X508 | Microsecond DateTime values are truncated to milliseconds so distinct elements collapse/duplicate | 1 |
+| EF-X509 | Query over a primitive collection with a custom converter returns no rows instead of failing as the base expects | 1 |
+| EF-X510 | byte[] element access / element collection: ByteArraySerializer is not an IBsonArraySerializer | 5 |
+| EF-X511 | EF8 only: array of arrays does not throw the expected InvalidOperationException | 1 |
+| EF-X512 | Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) | 21 |
+| EF-X513 | Owned-collection operators (SelectMany/GroupBy/equality/...) not translated | 28 |
+| EF-X514 | Owned indexer properties / owned-collection element expressions not supported by driver LINQ | 19 |
+| EF-X515 | Wrong results for owned-collection operators (ElementAt/Union/...) | 5 |
+| EF-X516 | Server aggregate error for owned-collection element access | 2 |
+| EF-X517 | Projecting an owned entity without its owner in a tracking query | 3 |
+| EF-X518 | Provider throws a different exception type than the base test expects | 2 |
+| EF-X519 | Hierarchy materialization fails: discriminator value does not match the requested type | 4 |
+| EF-X520 | ElementAt/indexer call is rebuilt with the wrong number of arguments | 4 |
+| EF-X521 | Left join on entity with owned navigations throws ArgumentNullException (key) | 1 |
+| EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 43 |
+| EF-X523 | Model validation rejects the relationship (owned/nested owned or ambiguous FK) | 2 |
+| EF-X524 | NullReferenceException for a query filter using a DbContext list parameter | 1 |
+| EF-X525 | EF8/EF9: filtered query with multiple filtered entities returns duplicate rows | 1 |
+| EF-X526 | Query shape (navigation/projection/set operation) not translated | 697 |
+| EF-X527 | Expression not supported by the driver LINQ translator | 192 |
+| EF-X528 | Server error executing the generated pipeline | 8 |
+| EF-X529 | NullReferenceException during query execution/materialization | 2 |
+| EF-X530 | Wrong results compared with the reference (client) evaluation | 242 |
+| EF-X531 | ArgumentNullException (null string/source argument) during translation or materialization | 16 |
+| EF-X532 | GroupBy over all columns builds an invalid materialization expression (QueryingEnumerable not assignable) | 9 |
+| EF-X533 | Manual left join / transparent identifier shape throws ArgumentException (LeftJoinResult / _inner / _outer) | 38 |
+| EF-X534 | Join key selector that is a sub-query: serializer cannot be created for MongoQuery | 7 |
+| EF-X535 | Skip/Take/Distinct between two cross-collection joins (Include/ThenInclude) not supported | 14 |
+| EF-X537 | Single/First over query results finds the wrong number of rows (duplicate or missing rows) | 5 |
+| EF-X539 | Many-to-many join entity type is configured as owned and cannot be queried as a DbSet | 1 |
+| EF-X540 | Result mismatch whose assertion failure surfaces as TypeLoadException (xunit.assert version skew), hiding the wrong-result cause | 3 |
+| EF-X541 | Average/aggregate over a navigation without selector throws 'Operation is not valid due to the current state of the object' | 3 |
+| EF-X542 | Enum flags bitwise/closure typed as a different type: ConvertIntegralTypeToEnumSerializer lacks IHasRepresentationSerializer | 2 |
+| EF-X543 | Property converted to nullable/other type in a projection: no coercion operator defined (int to string) | 1 |
+| EF-X544 | Model validation: an owned entity type used in multiple navigations is rejected | 4 |
+| EF-X545 | Model validation: cannot determine the relationship represented by a navigation | 4 |
+| EF-X546 | Filter on a nested DTO via an interface: serializer value type mismatch | 1 |
+| EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
+| EF-X538 | `InheritanceRelationshipsQueryTestBase<>` not ported: model validation fails in the fixture (dependent side of a 1:1 cannot be determined) | 0 |
+| EF-X548 | `JsonQueryTestBase<>` not ported: seeding the JSON model throws `OverflowException` | 0 |
+| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 165 |
+| EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
+| EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 5 |
+| EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 65 |
+| EF-X604 | `InvalidOperationException` from query execution or materialization | 46 |
+| EF-X605 | Other unexpected exception from query execution | 15 |
+| EF-X700 | **Regression vs `main`:** `InheritanceQuery` base-type queries return an extra row (3 instead of 2) | 3 |
+| EF-X701 | **Regression vs `main`:** a query filter that reads a context member throws `NullReferenceException` | 1 |
+| EF-X702 | **Regression vs `main`:** `DateTimeOffset.TimeOfDay` is truncated to whole milliseconds | 1 |
+| EF-X703 | **Regression vs `main`:** a row saved with a composite key of two non-generated integers cannot be queried back | 1 |
+| EF-X704 | **Regression vs `main` (probably deliberate):** `Guid.NewGuid()` in a query is refused (cannot be evaluated once per row) | 1 |
+| EF-X705 | **Regression vs `main` (exception type only):** an unsupported query now throws a different exception type | 4 |
+| EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
+
+### Shared root causes across the ported suites
+
+The porting agents filed one ticket per failure message, so one underlying gap often appears under several tickets. The
+grouping below is by symptom as each batch reported it; "same root cause" is a hypothesis until one of them is fixed.
+
+- **No integer key generation** (the provider generates no values for `int`/`long` keys, while the relational-style upstream
+  models expect identity columns): `EF-X101`, `EF-X103`, `EF-X105`, `EF-X205`, `EF-X211`, `EF-X304`, `EF-X522`. The ported
+  fixtures that are not about this gap work around it with `MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true)`
+  (a client-side generator); the tracking/graph suites (`EF-X101`) deliberately do not, so they keep asserting the gap.
+  `EF-X306` (duplicate `_id` for value-converted keys) may be the same default-key collision; not verified.
+- **Single-property keys must map to `_id`**: `EF-X201`, `EF-X307`, `EF-X405`, `EF-X547`. Upstream models name their keys freely.
+- **Navigations to non-root types become owned by convention**, so relationships between root entity types are not
+  discovered, `Set<T>()` is rejected, and many-to-many join entities are owned: `EF-X102`, `EF-X112`, `EF-X213`, `EF-X308`,
+  `EF-X401`, `EF-X403`, `EF-X409`, `EF-X523`, `EF-X538`, `EF-X539`, `EF-X544`, `EF-X545`. Whether this is the intended
+  embedding model or a gap needs a decision before it is ticketed as a bug.
+- **Derived types and the discriminator**: `EF-X200`, `EF-X206`, `EF-X216`, `EF-X519`, `EF-X537`. Basic hierarchy queries and
+  `Find` through a derived set fail; three batches hit it independently, so it is likely to matter for ordinary inheritance use.
+- **Concurrency**: tokens on owned types are rejected (`EF-X111`, `EF-X214`, `EF-X319`); the concurrency exception is thrown
+  without reaching interceptors (`EF-X400`) or reports a conflict for a partial update (`EF-X114`); message wording differs
+  (`EF-X115`).
+- **Many-to-many**: `Include` and `Load` of skip navigations (`EF-X110`, `EF-X208`, `EF-X209`).
+- **Unique indexes over nullable columns** collide on `null` (`EF-X106`, `EF-X207`); the fixtures relax them with
+  `MongoSpecModelHelpers.RelaxNullableUniqueIndexes` / `RelaxUniqueForeignKeyIndexes`.
+- **Cross-collection queries** (`EF-216`, `EF-220`, `EF-X001`, `EF-X020`, and the unsplit `EF-X526`) remain the largest block.
+- **Owned collections** (`EF-X512` to `EF-X517`, `EF-X520`, `EF-X521`) and **primitive collections** (`EF-X500` to `EF-X511`).
+- **Time-zone dependence**: several `DateTimeTranslations` tests (`EF-X006`) return wrong results when the machine is not on
+  UTC because an `Unspecified` `DateTime` constant is treated as local time; those overrides accept either outcome.
 
 ### EF-X001 — Sub-query selection across DbSets is not translated
 Comment patterns: `// Fails: Subquery selection EF-X001`, `// Fails: Subqueries not supported EF-X001`, `// Fails: No subquery support EF-X001`.
@@ -240,7 +465,7 @@ Affected: 2 tests (`NorthwindKeylessEntitiesQueryMongoTest.KeylessEntity_with_in
 Status: no `// Fails:` tags remain in the spec tests and the formerly-failing tests pass; the text below is historical.
 Comment pattern: `// Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020`.
 Test-body pattern: the override is wrapped in `#if EF8 || EF9` / `#else`. The `#if EF8 || EF9` branch asserts the translation failure (`AssertTranslationFailed(() => base.X(...))`); the `#else` branch keeps the working EF10 baseline (the real `base` call plus its `AssertMql(...)`).
-Affected: 176 tests across `NorthwindEFPropertyIncludeQueryMongoTest`, `NorthwindStringIncludeQueryMongoTest`, `NorthwindIncludeQueryMongoTest`, `NorthwindIncludeNoTrackingQueryMongoTest`, `NorthwindNavigationsQueryMongoTest`, `NorthwindMiscellaneousQueryMongoTest`, `NorthwindJoinQueryMongoTest`, `NorthwindAggregateOperatorsQueryMongoTest`, `NorthwindAsNoTrackingQueryMongoTest`, `NorthwindKeylessEntitiesQueryMongoTest`, `NorthwindSelectQueryMongoTest`, `NorthwindSetOperationsQueryMongoTest`, `NorthwindWhereQueryMongoTest`, and `BuiltInDataTypesMongoTest`. These are the cross-collection Include/`ThenInclude`/join/navigation shapes implemented for the EF10-targeted query pipeline. On EF8/EF9 the upstream nav-expansion / query pipeline produces a different expression shape (e.g. an extra `.OrderBy(o => o.OrderID)` injected during navigation expansion) that the EF10-targeted translator does not handle, so translation fails with EF Core's `InvalidOperationException` "could not be translated" (a few also throw the provider's `ExpressionNotSupportedException`); the same query translates and runs on EF10. The provider's local `AssertTranslationFailed` helper swallows whichever exception is thrown, so both shapes are covered. Four `Include_reference_dependent_already_tracked` overrides (in the four Include suites) emit MQL from a first principal query *before* the Include sub-query fails to translate, so their `#if EF8 || EF9` branch asserts only the translation failure and omits the empty `AssertMql()`. `BuiltInDataTypesMongoTest.Can_read_back_bool_mapped_as_int_through_navigation` is split three ways (a nested `#if EF9` inside the file's `#if !EF8` branch, plus the `#else` EF8 branch) because that file uses async signatures on EF9/EF10 and sync `void` signatures on EF8.
+Affected: 176 tests (plus 54 in the ported loading/proxy/field-mapping/notification bases: `LoadMongoTest` 30, `FieldsOnlyLoadMongoTest` 14, `LazyLoadProxyMongoTest` 8, `FieldMappingMongoTest` 1, `NotificationEntitiesMongoTest` 1) across `NorthwindEFPropertyIncludeQueryMongoTest`, `NorthwindStringIncludeQueryMongoTest`, `NorthwindIncludeQueryMongoTest`, `NorthwindIncludeNoTrackingQueryMongoTest`, `NorthwindNavigationsQueryMongoTest`, `NorthwindMiscellaneousQueryMongoTest`, `NorthwindJoinQueryMongoTest`, `NorthwindAggregateOperatorsQueryMongoTest`, `NorthwindAsNoTrackingQueryMongoTest`, `NorthwindKeylessEntitiesQueryMongoTest`, `NorthwindSelectQueryMongoTest`, `NorthwindSetOperationsQueryMongoTest`, `NorthwindWhereQueryMongoTest`, and `BuiltInDataTypesMongoTest`. These are the cross-collection Include/`ThenInclude`/join/navigation shapes implemented for the EF10-targeted query pipeline. On EF8/EF9 the upstream nav-expansion / query pipeline produces a different expression shape (e.g. an extra `.OrderBy(o => o.OrderID)` injected during navigation expansion) that the EF10-targeted translator does not handle, so translation fails with EF Core's `InvalidOperationException` "could not be translated" (a few also throw the provider's `ExpressionNotSupportedException`); the same query translates and runs on EF10. The provider's local `AssertTranslationFailed` helper swallows whichever exception is thrown, so both shapes are covered. Four `Include_reference_dependent_already_tracked` overrides (in the four Include suites) emit MQL from a first principal query *before* the Include sub-query fails to translate, so their `#if EF8 || EF9` branch asserts only the translation failure and omits the empty `AssertMql()`. `BuiltInDataTypesMongoTest.Can_read_back_bool_mapped_as_int_through_navigation` is split three ways (a nested `#if EF9` inside the file's `#if !EF8` branch, plus the `#else` EF8 branch) because that file uses async signatures on EF9/EF10 and sync `void` signatures on EF8.
 
 ### EF-X022 — Join/GroupJoin whose inner source is a filtered or ordered sub-query is rejected
 Comment pattern: `// Fails: Join/GroupJoin inner sub-query (filtered/ordered) not supported EF-X022`.
@@ -402,6 +627,237 @@ chains) doesn't hold for an entity-shaped result: entity materialization always 
 fallback doesn't produce once 2+ lookups are registered, regardless of join kind. The guard now rejects
 every declined multi-lookup shape when the result is entity-shaped (reached via `Translate`, not
 `TranslateProjected`), not only the left-outer ones.
+
+### EF-X400 — `DbUpdateConcurrencyException` is thrown without invoking `ThrowingConcurrencyException`
+Comment pattern: `// Fails: DbUpdateConcurrencyException is thrown without invoking ISaveChangesInterceptor.ThrowingConcurrencyException EF-X400`.
+`SaveChangesInterceptionMongoTest.Intercept_SaveChanges_failed` (concurrencyError: true) and `Intercept_to_suppress_concurrency_exception` (16 cases per EF version). `MongoDatabaseWrapper.AssertWritesApplied` throws `DbUpdateConcurrencyException` directly rather than going through `IDiagnosticsLogger<DbLoggerCategory.Update>.OptimisticConcurrencyException`, so `ISaveChangesInterceptor.ThrowingConcurrencyException` is never called and an interceptor cannot observe or suppress the failure. The non-concurrency `Intercept_SaveChanges_failed` cases pass.
+
+### EF-X401 — Ambiguous foreign key discovery between a join/owned type and its owner
+`ModelBuilding101MongoTest.ManyToManyWith*NavsToJoinClassTest` (3 tests) and the ModelBuilder `OwnedTypes` `Can_configure_another_relationship_to_owner` shapes. Model finalization throws `Both relationships between 'PostTag' and 'Post.PostTags' and between 'PostTag' and 'Post' could use {'PostId'} as the foreign key`. Likely a consequence of the same navigation-implies-owned behavior as EF-X403.
+
+### EF-X402 — Projecting an owned collection navigation directly is not translated
+`MaterializationInterceptionMongoTest.Intercept_query_materialization_with_owned_types_projecting_collection` (4 cases on EF9/EF10, 2 on EF8). The query projects the owned collection itself and fails with `The LINQ expression ... could not be translated`.
+
+### EF-X403 — Navigation targets are made owned, so ModelBuilder relationship tests see a different model
+The ModelBuilder test bases (`MongoModelBuilder{Generic,NonGeneric}Test`, EF9+) configure relationships between regular entity types and then assert on the foreign keys and navigations. With the provider's conventions, types reachable only via a navigation become owned (ownership foreign key, `Ownership` flag), so the finalized model has a different shape and the base assertions hit a `NullReferenceException` (164 cases across OneToMany, ManyToOne, OneToOne and Inheritance). This is the dominant root cause for the relationship-test failures; EF-X401, EF-X405 and EF-X407 are related symptoms. Not necessarily a defect: it is the provider's documented embedding model, but the base tests assume top-level entities.
+
+### EF-X404 — Collection-typed properties fail model validation in ModelBuilder tests
+`Primitive_collections_*`, `Element_types_*`, `Can_set_unicode_for_primitive_collections` and similar (68 cases): `The 'List<int>' property 'CollectionQuarks.Charm' could not be mapped because the database provider does not support this type`. Affects `List<T>`, `T[]` and `ObservableCollection<T>` primitive collections when configured through the ModelBuilder API with the test helper's conventions. Real `List<T>` properties work in functional use, so this needs triage: it may be a gap in how primitive collections are registered in the model-building-only test path.
+
+### EF-X405 — Primary key must be mapped to `_id`
+Composite keys, shadow keys and field-backed keys configured by the relationship tests are rejected by `MongoModelValidator.ValidateEntityPrimaryKey` (`primary key property 'X' must be mapped to element '_id'`). 36 cases.
+
+### EF-X406 — `HasData` on owned types fails seed validation
+12 cases in the `OwnedTypes` ModelBuilder tests: `The seed entity for entity type 'OrderDetails' cannot be added because no value was provided for the required property`.
+
+### EF-X407 — Owned type used from multiple navigations with different element names
+12 cases in the `OwnedTypes` ModelBuilder tests: `Owned entity type 'Order' is used in multiple navigations ('Customer.Orders#Order' and 'OrderDetails.Order#Order') with different BSON element ...` is thrown by `MongoModelValidator.ValidateOwnedTypeMappingConsistency`.
+
+### EF-X408 — Expected EF convention/validation exceptions are not thrown
+8 cases (e.g. `Navigation_to_shared_type_is_not_discovered_by_convention`): `Assert.Throws() Failure: No exception was thrown`. The base test expects model finalization to reject a shape that the provider accepts.
+
+### EF-X409 — Many-to-many `[ForeignKey]` navigation shapes cannot be determined
+`ForeignKeyAttribute_configures_the_properties` (4 cases): `Unable to determine the relationship represented by navigation ...`.
+
+### EF-X410 — Multiple row-version properties on one entity are rejected
+`Properties_can_set_row_version` (2 cases): `NotSupportedException: Entity 'Quarks' has multiple properties 'Charm, Up' configured as row versions. Only one row version property per entity is supported.`
+
+### EF-X411 — Model metadata differs from the relational baseline
+24 cases across `NonRelationship` and `OwnedTypes` ModelBuilder tests where a metadata assertion differs: owned-type key/name shapes (`Strings differ`, `Collections differ`, `Sequence contains ...`) and `ValueGenerated` (`Expected: OnAdd, Actual: Never`) for properties the relational providers default to generating.
+
+### EF-X412 — `CompiledModelTestBase`: unmapped CLR types are discovered as owned entity types
+`MongoCompiledModelTest.No_NativeAOT`, `BigModel` and `ComplexTypes` (3 tests). The base model has `IPAddress`, `PhysicalAddress` and similar properties that the relational providers map with value converters; the Mongo provider discovers them as owned entity types and the model build fails with `No suitable constructor was found for ...`. `SimpleModel` passes. The test project needed `<PreserveCompilationContext>true</PreserveCompilationContext>` and extra Roslyn references to the provider and driver assemblies for the generated model to compile.
+### Batch C — conversions, mapping and serialization (`EF-X300`..`EF-X324`)
+
+Ported in `Mapping/`, `Metadata/` and `Query/Translations/` (EF10 only for the `Translations` bases): `ConvertToProviderTypes`, `CustomConverters`,
+`ValueConvertersEndToEnd`, `KeysWithConverters`, `JsonTypes`, `BadDataJsonDeserialization`, `Serialization`, `DataAnnotation`, `MusicStore`,
+`ConferencePlanner`, `Spatial` and the `ByteArray`/`Enum`/`Guid`/`DateOnly`/`TimeOnly`/`DateTime`/`DateTimeOffset`/`TimeSpan` `*TranslationsTestBase`
+classes. Failing tests assert today's failure through `SpecFails.Async/Sync` (Utilities/SpecFails.cs) and carry a `// Fails: <reason> <ticket>` comment.
+Counts are the number of overridden test methods carrying the tag (a method split across `#if` arms counts once). Where a theory only fails for some
+data rows (or depends on the machine time zone) the override uses `SpecFails.*SomeRows`, which accepts success or the expected failure.
+
+- **Fixture-level failures.** `CustomConverters`, `Serialization` and `Spatial` fail while the shared fixture seeds/builds its model (EF-X300, EF-X319, EF-X320).
+  The fixture swallows that exception so the tests run and each asserts its own failure; `ValueConvertersEndToEnd` fails the same way inside its single test.
+
+- **EF-X300** (`Unsupported ValueConverter for 'Nullable<...>' ... Null conversion must be left to EF Core`): value converters declared via `HasConversion` with inline
+  expressions on nullable properties throw `NotSupportedException` when the property is first serialized. For `CustomConverters` this breaks seeding, so the tests also
+  see an empty collection.
+
+- **EF-X301/X302/X303**: queries over a property with a value converter (parameter/literal comparison, `Where` on a shadow/enum-converted property, collection `Contains`)
+  fail in the driver binding of `ValueConverterSerializer` (`InvalidCastException`, `NotSupportedException` for `IHasRepresentationSerializer`, `ArgumentException`).
+
+- **EF-X304**: the provider only generates `ObjectId`/`Guid`/string keys, while the spec models use integer keys. `MongoSpecModelHelpers.MapSingleKeysToId` (test infrastructure)
+  maps every root single-property key to `_id` and registers a test-only sequential generator for `int`/`long`/`short` keys so these models can be seeded. No test is tagged.
+
+- **EF-X305/X306**: `KeysWithConverters`: querying a struct-typed key fails with `The binary operator Equal is not defined`; the insert tests (35) raise
+  `MongoBulkWriteException` (duplicate `_id`) for value-converted keys, which needs investigation as it hits common converted-key shapes.
+
+- **EF-X307**: `DataAnnotation` models whose key property is not named `Id` fail model validation (`primary key property 'X' must be mapped to element '_id'`).
+
+- **EF-X308**: `DataAnnotation` relationship tests (inverse property / foreign key attribute / `NotMapped` ambiguity) behave differently because reference navigations
+  are configured as owned by convention (`...is an ownership`, `...marked as owned`, abstract owned types, `NullReferenceException` when building the model). Not triaged individually.
+
+- **EF-X309**: no database-side constraints, so inserting a null/too-long value does not raise `DbUpdateException`.
+
+- **EF-X310/X311/X315/X317/X319**: failures inside the test body that were not triaged further (`Sequence contains no elements`, `Operation is not valid...`,
+  `NullReferenceException` in the 125 JSON round-trip tests, value differences).
+
+- **EF-X312**: `[Column(TypeName = ...)]` is raised as an error (`ColumnAttributeWithTypeUsed`) unless the warning is ignored; `DataAnnotation` models use it.
+
+- **EF-X314**: the driver rejects the LINQ expression (`b.get_Item("IndexerVisible")`, anonymous-type projection with converted key, subquery over `Aggregate`).
+
+- **EF-X316**: JSON-type models contain properties the provider cannot map (`List<int?>`/`IList<Guid>`/arrays of arrays of exotic elements, `Point`/`Polygon` geometry,
+  `decimal[]`); the model fails to build. 121 methods across `JsonTypes` and `BadDataJsonDeserialization`.
+
+- **EF-X318**: `BadDataJsonDeserialization` expects bad values to throw on materialization; for some row types no exception is thrown (theory rows, so `SomeRows`).
+
+- **EF-X320**: NetTopologySuite types are discovered as entity types (`No suitable constructor was found for ...LineString`).
+
+- **EF-X321**: `DateOnly.Year/Month/Day/...`, `TimeOnly.Hour/...`, `TimeSpan.Hours/...`, `DateTimeOffset.AddX/ToUnixTimeSeconds/Microsecond/...` and
+  `FromDateTime`/`FromTimeSpan`/`ToDateTime` are not translated (`ExpressionNotSupportedException`; "serializer for System.X does not represent members as fields").
+
+- **EF-X322/X323/X324**: `byte[]` queries: `Contains`/`First` need `IBsonArraySerializer` (`InvalidOperationException`), `Contains` over a column and `SequenceEqual`
+  produce pipelines the server rejects (`$in requires an array`), and `byte[].Length` returns no rows (wrong result, 1 test).
+
+- **Existing tickets reused**: EF-216 (cross-collection access, 13), EF-149 (`GroupBy`, 1), EF-X006 (the 5 `DateTimeTranslations` tests whose `Unspecified`-kind constants/parameters are
+  shifted by the local UTC offset; they use `SomeRows` because the result depends on the machine time zone).
+
+- **Test-data adjustments (not failures)**: the `Translations` fixture seeds `DateTime`/`DateTimeOffset` with UTC kind and millisecond precision (MongoDB `Date` has millisecond
+  precision and `Unspecified` kind is treated as local time), both for the stored and the expected data. `DateTimeOffset.Now/UtcNow` do not assert MQL because it embeds the current time.
+
+- `MusicStoreMongoTest.Music_store_project_to_mapped_entity` is skipped on EF8 only: the EF8 base test throws from an `async void` body, so the exception escapes the `SpecFails` wrapper (EF-X311).
+- `ValueConvertersEndToEndTestBase` has non-public `[ConditionalFact]` helper methods that cannot be overridden, so that class has no `Check_all_tests_overridden`.
+### EF-X200 — `Find`/derived-type set over a type hierarchy does not filter by discriminator
+Comment pattern: `// Fails: Find through a derived-type set does not filter by discriminator, so a base-type document is materialized as the derived type EF-X200`.
+Test-body pattern: `Assert.Throws<InvalidOperationException>(() => base.X())` containing `No discriminators matched`.
+Affected: `FindMongoTest.Find_base_type_using_derived_set_from_store` (+ `_async`, run through the set/context/non-generic finders). `Set<DerivedType>().Find(id)` where `id` belongs to a base-type document fails to materialize instead of returning `null`.
+
+### EF-X201 — Explicitly configured / constructor-bound primary keys are not mapped to `_id`
+Not tagged on tests: ported fixtures (`FieldMapping`, `WithConstructors`, the `Load`/`ManyToManyLoad`/`LazyLoadProxy` families, `DataBinding`) add the test convention `MongoSpecModelHelpers.MapSinglePropertyKeysToElementId` (or `FixExternalModel`) which sets the key element name to `_id`. Without it model validation throws `The entity type 'X' primary key property 'Id' must be mapped to element '_id'` for models that call `HasKey(...)` explicitly or whose key is found by constructor/field binding. Count 0 because no test asserts it.
+
+### EF-X202 — Explicit transaction cannot be shared by a second context
+Comment pattern: `// Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202`.
+Affected: the `Update_*` tests in `FieldMappingMongoTest` (EF9/EF10). The base opens a transaction, runs the test in a first context and a verification in a second one that is enlisted with `UseTransaction`; the second use throws `ObjectDisposedException` (`CoreSessionHandle`). The first-context writes are rolled back (no shared-state leak). On EF8 the sync base completes and the tests pass.
+
+### EF-X203 — Property hiding conflicts in the BSON class map
+Comment pattern: `// Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203`.
+Affected: the `*_hiding_props` tests in `FieldMappingMongoTest`. `BlogHiding`/`PostHiding` redeclare `Id` with `new`; the BSON class map throws `BsonSerializationException ... cannot use element name '_id' because it is already being used`.
+
+### EF-X205 — `int` keys are not store-generated
+Comment pattern: `// Fails: int keys are not store-generated, so a second Id=0 insert hits a duplicate key EF-X205`.
+Relational-style upstream models expect `int` keys to be generated on add. The provider has no generator for them, so seeding more than one instance gives duplicate `{Id: 0}`. Ported fixtures that need it (`Load`, `ManyToManyLoad`, `ManyToManyFieldsLoad`, `LazyLoadProxy`, `WithConstructors`) enable `generateIntKeys` in the test convention (an in-process counter generator). Tagged directly on `FieldMappingMongoTest.Can_define_a_backing_field_for_a_navigation_and_query_and_update_it` (EF10), which inserts a second `Id=0` row.
+
+### EF-X206 — Lazy-load/`Single` query over a type hierarchy returns more than one element
+Comment pattern: `// Fails: Lazy-load/Single query over a type hierarchy returns more than one element EF-X206`.
+Affected: `LoadMongoTest.Lazy_loading_uses_field_access_when_abstract_base_class_navigation`, `LazyLoadProxyMongoTest.Lazy_loading_shares_service_*_property_on_derived_types` (the method name differs between EF versions). Possibly the same root cause as EF-X200 (no discriminator filter); not verified.
+
+### EF-X207 — Unique index over a nullable one-to-one foreign key collides on `null`
+Not tagged on tests: the `ManyToManyLoad`/`ManyToManyFieldsLoad`/`DataBinding` fixtures call `ModelBuilder.RelaxUniqueForeignKeyIndexes()` (test plumbing). Without it `createIndexes` fails with `E11000 duplicate key ... { ReferenceInverseId: null }`, because MongoDB unique indexes treat missing/`null` as a value (a partial index is needed).
+
+### EF-X208 — `Include` of a many-to-many skip navigation is not supported
+Comment pattern: `// Fails: Include of a many-to-many skip navigation is not supported EF-X208`.
+Affected: `Load_collection_already_loaded*`/`*_using_Query_already_loaded*` shapes in `ManyToManyLoadMongoTest` and `ManyToManyFieldsLoadMongoTest` (`Including navigation 'X' is not supported`).
+
+### EF-X209 — Many-to-many skip navigation `Load`/`Query` not translated
+Comment pattern: `// Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209`.
+Affected: `Load_collection*` tests in `ManyToManyLoadMongoTest`/`ManyToManyFieldsLoadMongoTest`; `CollectionEntry.Load/Query` builds `SelectMany(skip).NotQuiteInclude(...)`, which is not translated (same on EF8/EF9/EF10).
+
+### EF-X211 — Owned-collection ordinal keys not generated for some owned shapes
+Not tagged on tests: the `generateIntKeys` test convention also gives non-FK `int` key parts of owned types a counter generator. Without it `Add` of an owner with two owned items throws `The instance of entity type 'Owner.Items#Item' cannot be tracked because another instance with the key value '{Id: 0}'` (seen with `[Owned]`/`OwnsMany` collections in `LazyLoadProxyTestBase` and `WithConstructorsTestBase`, e.g. `List<OwnedAddress>`/lazy-loader owned collections). Cause not isolated; may be limited to these shapes.
+
+### EF-X212 — Reading a document with nested owned types reports a required element missing
+Comment pattern: `// Fails: Reading a document with nested owned types reports a required element missing EF-X212`.
+Affected: most `LazyLoadProxyMongoTest` tests (57 methods), all `InvalidOperationException: Document element is missing for required non-nullable property 'Rating'`. Querying `Blog` (with nested owned `Person`/`Culture`/`Manufacturer`/`License` types, some reached through several navigations and with proxies) fails on read even though the seed saved without error. Cause not isolated (possibly the same owned type mapped under two navigations with different element names, or a write that omits the nested values). Treat as a possible write/read round-trip bug for nested owned types.
+
+### EF-X213 — A type reached only through a navigation is auto-owned, so `Set<T>()` is rejected
+Comment pattern: `// Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213`.
+Affected: `WithConstructorsMongoTest` (`Attaching_entity_sets_lazy_loader*`, `Detaching_entity_resets_lazy_loader*`, ...) and one `LazyLoadProxyMongoTest` test. The tests call `Set<T>()` for a type the provider treats as owned (relational providers treat it as an entity type).
+
+### EF-X214 — Concurrency token on an owned type is rejected
+Not tagged on tests: the F1 model (`DataBindingTestBase`) puts concurrency tokens on owned `Location`; the validator throws `NotSupportedException` by design. The ported fixture drops the owned tokens via `ModelBuilder.FixExternalModel(dropOwnedConcurrencyTokens: true)`.
+
+### EF-X215 — `UseSeeding`/`UseAsyncSeeding` delegates are not run by `EnsureCreated`
+Not tagged on tests: the F1 fixture seeds through `UseSeeding`/`UseAsyncSeeding`; `MongoTestStore` only seeds via the fixture's `SeedAsync`, and the provider's `EnsureCreated` did not run the delegates (the tests saw 0/2 rows). `DataBindingMongoTest`'s fixture seeds explicitly.
+
+### EF-X216 — Materialization interception creates the base proxy type for derived-type documents
+Comment pattern: `// Fails: Materialization interception creates the base proxy type (DriverProxy) for derived-type documents, so the cast to TestDriver fails EF-X216`.
+Affected: `DataBindingMongoTest.LocalView_is_initialized_with_entities_from_the_context` (the base declares it non-virtual, so the test is hidden with `new` and skipped; the inherited method fails with `InvalidCastException: DriverProxy -> TestDriver`). `Check_all_tests_overridden` is skipped for that class for the same reason.
+
+### EF-X217 — Keyless query type maps to its own empty collection
+Comment pattern: `// Fails: Keyless query type maps to its own empty collection ... EF-X217`.
+Affected: `WithConstructorsMongoTest.Query_with_keyless_type` (`BlogQuery` is `HasNoKey()` over the blog table in relational tests; Mongo reads an empty `BlogQuery` collection).
+### Tracking / update / graph test bases (EF-X101 – EF-X115)
+
+Ported by `Tracking/*MongoTest.cs` (`CompositeKeyEndToEnd`, `PropertyValues`, `StoreGenerated`, `StoreGeneratedFixup`,
+`GraphUpdates`, `ProxyGraphUpdates`, `ManyToManyTracking`, `MonsterFixup`, `OptimisticConcurrency`), `Query/NullKeysMongoTest.cs`
+and `Update/UpdatesMongoTest.cs`. The `// Fails:` overrides are inline in each class and
+use `SpecFails.Throws[Async]<TException>(...)`, which asserts the exception type and a message fragment and also fails if the test
+starts passing. Counts below are distinct override methods (a method split across `#if EF8/EF9/EF10` arms counts once; a theory counts
+once however many data rows it has). Only about 40 individual test cases pass as the upstream base on each EF version, out of ~3,250.
+
+Common mechanics, none of which are provider changes: `MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: false)` maps every single-property key of the
+upstream models to `_id` (otherwise model validation rejects every model), and `InitFailureGuard` lets a fixture whose model/seed/store
+creation fails still be constructed and re-throws that failure from the first `CreateContext()`, so a class-wide fixture failure is
+asserted per test. A few upstream tests are `public` but not `virtual` (e.g. `PropertyValuesTestBase.Reload_when_entity_deleted_in_store_can_happen_for_any_state`),
+so they cannot be overridden; where they fail they are hidden by a `new` method with `Skip` carrying the ticket id.
+
+### EF-X101 — Entities added without a key get `Id` 0, so tracking/saving collides
+`// Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101`.
+The upstream models use `int`/`long` keys that relational providers generate. The provider has no generator for them, so a second
+entity added with the default key throws `The instance of entity type 'X' cannot be tracked because another instance with the key value '{Id: 0}' is already being tracked`.
+This one cause fails the whole of `GraphUpdates` (EF8: 117 methods, EF9/EF10: 127; 1,787 test cases on EF9/EF10), `PropertyValues` (all
+tests, via the fixture seed), the `Updates` and `ManyToManyTracking` tests that add generated-key entities.
+
+### EF-X102 — Relationship discovery between root entity types fails at model build
+`Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Levels' of type 'ICollection<Level>'`
+(`StoreGeneratedFixup`, all 118 methods) and `'RecordCar.Owner' of type 'RecordPerson'` (`ProxyGraphUpdates`, all 85 methods). The models use
+navigations between root entity types that the provider's convention does not pick up as relationships. Related to [EF-216](https://jira.mongodb.org/browse/EF-216) but surfaces at model build rather than in a query.
+
+### EF-X103 — No value generator for `int`/`long`/enum/converted keys
+`The property 'Gumball.Id' does not have a value set and no value generator is available for properties of type 'int'`
+(`StoreGenerated`; also the `long`-to-`int`, enum, wrapped-int and composite-key-cycle tests, `CompositeKeyEndToEnd` on EF8).
+
+### EF-X104 — Dependent key is null because the principal key was not generated
+`Unable to track an entity of type 'UriDependentOptional' because its primary key property 'PrincipalId' is null` and the wrapped `string`/`Uri`/`Guid`
+variants (`StoreGenerated`, 4 tests).
+
+### EF-X105 — Duplicate `_id` bulk write
+`MongoBulkWriteException ... DuplicateKey ... dup key: { _id: 0 }` when several entities with default `int` keys are saved
+(`StoreGenerated` 10 methods, `Updates` and others). Same root as EF-X101 but fails at the store instead of in the change tracker.
+
+### EF-X106 — Unique index build fails on null values
+`Command createIndexes failed: Index build failed ... dup key: { SelfFk: null }` while creating the `NullKeys` indexes (unique indexes over nullable
+foreign keys with several null values). All 5 `NullKeys` tests.
+
+### EF-X107 — Entity types missing from the model
+`The entity type 'WithNoBackingFields' was not found` (also `WithNullableBackingFields`, `WithObjectBackingFields`): the tests expect model types that the
+fixture's model does not contain under the provider (8 `StoreGenerated` tests).
+
+### EF-X108 — Store-generated / computed value and update semantics differ
+Assertion failures (`Assert.Equal`/`Assert.True`) in `StoreGenerated` (computed/identity values and `After_save_*` behaviors) and `CompositeKeyEndToEnd`
+(EF10): the provider has no database-generated defaults or computed columns, so the value the test expects after `SaveChanges` is not populated. Needs per-test triage.
+
+### EF-X110 — `Include` of a skip navigation is not supported
+`Including navigation 'Navigation' is not supported.` Every `ManyToManyTracking` test that loads a many-to-many relationship through `Include` (31 methods).
+
+### EF-X111 — Concurrency token on an owned entity
+`Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it belongs to an owned entity.` The `OptimisticConcurrency` (F1) model and the
+`MonsterFixup` model both put a concurrency token on an owned type, so the model is rejected and every test fails (31 + 12 methods).
+
+### EF-X112 — Owned many-to-many join entities
+`Cannot save instance of 'JoinOneToTwo' because it is an owned entity without any reference to its owner` and `Cannot create a DbSet for 'JoinOneToTwo' because it is configured as an owned entity type` (4 `ManyToManyTracking` tests).
+
+### EF-X113 — Indexer property access not translated
+`Expression not supported: p.get_Item("Id")` / `j.get_Item("OneId")`: queries over shared-type (property-bag) entity types use the indexer, which the driver cannot translate (2 `ManyToManyTracking` tests).
+
+### EF-X114 — Partial update reports a concurrency conflict
+`DbUpdateConcurrencyException: Conflicts were detected when performing updates to '...Products'` in `Updates.Save_partial_update` (1 test); possibly a real bug in how a partial update of a tracked entity is matched, not just a missing feature.
+
+### EF-X115 — Concurrency message wording
+`UpdatesTestBase.Remove_partial_*`/`Update_*` compare the full exception message with the relational text (`The database operation was expected to affect 1 row(s)...`); the provider says `Conflicts were detected when performing updates to ...` (4 tests).
+
+Tests that also appear under existing tickets: cross-document queries in `ManyToManyTracking` carry [EF-216](https://jira.mongodb.org/browse/EF-216) (8 methods) and the EF8/EF9
+`The LINQ expression 'DbSet<...>' could not be translated` failures in `Updates`/`StoreGenerated` carry EF-X020 (6 methods).
 
 ## Audit findings — tagging hygiene
 

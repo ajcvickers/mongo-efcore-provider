@@ -47,6 +47,40 @@ area. Connection and encryption env vars: see root `AGENTS.md`.
   a run warning, when unset; enable via `eval "$(tests/tools/fetch-crypt-shared.sh)"`, see `CONTRIBUTING.md`); `Compatibility/`
   round-trips stored data across provider versions.
 
+## Ported suites that assert today's failures
+
+Most `*MongoTest` classes were ported cheaply (tracking issue #35; inventory `docs/failing-spec-tests.md`): a test that passes calls
+`base`, and every test that does not yet pass is overridden to **assert the current failure**, so the suite stays green and any change
+in behavior (including the test starting to pass) is detected.
+
+- **Overrides are inline**, in the test class, each preceded by `// Fails: <short reason> <ticket>`. Add a row for a new failure mode
+  to the inventory. Do not move overrides into generated partial classes.
+- **A test that passed before and fails now is a regression**: tag it `// Fails: REGRESSION vs <baseline>: ... <ticket>` and list it in
+  the "Regressions" section of the inventory. A test that failed before and fails differently is not.
+- **Assert the failure with `Utilities/SpecFails`**: `Throws`/`ThrowsAsync` (any exception, optional message fragment),
+  `Throws<T>`/`ThrowsAsync<T>` (exact type; with a fragment it also checks the message; fails if the test unexpectedly passes),
+  `Sync<T>`/`Async<T>` (unwrap `TargetInvocationException`/`AggregateException`), `SyncSomeRows<T>`/`AsyncSomeRows<T>` for theories
+  where only some rows fail or fail only in some environments, and `TranslationFailed`/`TranslationFailedAsync` (the translation fails
+  in whichever form the active query mode reports it).
+- **Model adaptation lives in `Utilities/MongoSpecModelHelpers`**: `MapSingleKeysToId(modelBuilder, generateIntegerKeys)` (single-property
+  keys must map to `_id`; `true` also uses the client-side `TestIntegerValueGenerator<T>`, because the provider generates no integer
+  keys), `RelaxNullableUniqueIndexes`, `RelaxUniqueForeignKeyIndexes`, `FixExternalModel` and the `MapSinglePropertyKeysToElementId`
+  convention. Every workaround is a gap with a ticket: remove it when the provider no longer needs it. `Utilities/InitFailureGuard`
+  lets a fixture whose model, seed or store creation fails still be constructed and rethrows the failure from the first `CreateContext()`,
+  so it can be asserted per test.
+- **Upstream tests that are `public` but not `virtual` cannot be overridden.** Hide one with a `new` method that carries the ticket id: it
+  either asserts the failure (`CompositeKeyEndToEndMongoTest`) or is marked `Skip` when the failure cannot be asserted
+  (`PropertyValuesMongoTest`, `DataBindingMongoTest`).
+- **Remove a base from `MongoComplianceTest.IgnoredTestBases` when you port it.** A base that stays ignored for a concrete reason carries
+  a comment naming the ticket.
+- **Do not put dates or times in MQL baselines.** `Today`/`Now`/`UtcNow` translations embed the current date or time, so those tests do
+  not assert MQL.
+- **Database names are limited to 63 characters.** `TestDatabaseNamer.GetUniqueDatabaseName` truncates the caller's part to fit and never
+  truncates the unique counter, so a long fixture name cannot fail late in a long run.
+- **EF10 `NonShared*TestBase` classes** cache the first test's seeded store in a shared fixture; set `Fixture = null` in the constructor
+  (EF10 only) to get a store per test.
+- **Counts:** `python tests/tools/count-spec-fails.py` regenerates the figures in `docs/failing-spec-tests.md`.
+
 ## Regenerating MQL baselines
 
 ```bash
