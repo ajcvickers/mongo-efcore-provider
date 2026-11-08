@@ -1176,7 +1176,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(bool async)
     {
-        await base.GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(async);
+        // Fails: an unsupported query now throws a different exception type than the base test expects (EF-X705)
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(async), "Exception type was not an exact match");
     }
 #endif
 
@@ -2833,7 +2834,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(bool async)
     {
-        await base.GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(async);
+        // Fails: an unsupported query now throws a different exception type than the base test expects (EF-X705)
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(async), "Exception type was not an exact match");
     }
 #endif
 

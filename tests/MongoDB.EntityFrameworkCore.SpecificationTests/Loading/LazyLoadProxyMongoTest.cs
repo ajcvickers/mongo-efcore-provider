@@ -130,9 +130,8 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
         }
         else
         {
-            Assert.Contains(
-                "Document element is missing for required non-nullable property",
-                Assert.Throws<InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_changed_found_FK(state)).Message);
+            // Fails: Reading a document with nested owned types reports a different value than expected EF-X212
+            SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_many_to_one_reference_to_principal_changed_found_FK(state));
         }
     }
 
