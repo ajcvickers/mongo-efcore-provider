@@ -310,8 +310,9 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
 #endif
 #endif
 
+    // Fails: an Unspecified DateTime is treated as local time, so the value is shifted outside UTC (EF-X006) (depends on the time zone: passes in UTC) EF-X720
     public override void Lazy_loading_handles_shadow_nullable_GUID_FK_in_TPH_model()
-        => base.Lazy_loading_handles_shadow_nullable_GUID_FK_in_TPH_model();
+        => SpecFails.Either(() => base.Lazy_loading_handles_shadow_nullable_GUID_FK_in_TPH_model());
 
     public override void Lazy_loading_finds_correct_entity_type_with_alternate_model()
         => base.Lazy_loading_finds_correct_entity_type_with_alternate_model();

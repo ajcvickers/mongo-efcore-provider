@@ -3217,7 +3217,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #else
     public override async Task Join_with_navigations_in_the_result_selector1(bool async)
     {
-        await base.Join_with_navigations_in_the_result_selector1(async);
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Join_with_navigations_in_the_result_selector1(async));
     }
 #endif
 #endif
