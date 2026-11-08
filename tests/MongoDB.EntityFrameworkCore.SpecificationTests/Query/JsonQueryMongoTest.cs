@@ -184,9 +184,9 @@ public class JsonQueryMongoTest : JsonQueryTestBase<JsonQueryMongoTest.JsonQuery
     public override Task Missing_navigation_works_with_deduplication(bool async)
         => SpecFails.ThrowsAsync(() => base.Missing_navigation_works_with_deduplication(async));
 
-    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900 (depends on the time zone: passes in UTC) EF-X720
     public override Task Contains_on_nested_collection_with_init_only_navigation()
-        => SpecFails.ThrowsAsync(() => base.Contains_on_nested_collection_with_init_only_navigation());
+        => SpecFails.EitherAsync(() => base.Contains_on_nested_collection_with_init_only_navigation());
 
     public override Task Project_json_with_no_properties()
         => base.Project_json_with_no_properties();
@@ -250,13 +250,13 @@ public class JsonQueryMongoTest : JsonQueryTestBase<JsonQueryMongoTest.JsonQuery
     public override Task Project_shadow_properties_from_json_entity()
         => SpecFails.ThrowsAsync(() => base.Project_shadow_properties_from_json_entity());
 
-    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900 (depends on the time zone: passes in UTC) EF-X720
     public override Task Project_proxies_entity_with_json()
-        => SpecFails.ThrowsAsync(() => base.Project_proxies_entity_with_json());
+        => SpecFails.EitherAsync(() => base.Project_proxies_entity_with_json());
 
-    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900 (depends on the time zone: passes in UTC) EF-X720
     public override Task Project_proxies_entity_with_json_with_primitive_collection()
-        => SpecFails.ThrowsAsync(() => base.Project_proxies_entity_with_json_with_primitive_collection());
+        => SpecFails.EitherAsync(() => base.Project_proxies_entity_with_json_with_primitive_collection());
 
     // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
     public override Task Not_ICollection_basic_projection()
