@@ -336,8 +336,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if (EF10 || EF11)
     public override async Task Complex_multi_include_with_order_by_and_paging(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Complex_multi_include_with_order_by_and_paging(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Complex_multi_include_with_order_by_and_paging(async), "Failure");
     }
 #endif
 
@@ -352,8 +352,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if (EF10 || EF11)
     public override async Task Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(async), "Failure");
     }
 #endif
 

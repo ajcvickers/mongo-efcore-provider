@@ -176,7 +176,7 @@ public class DateTimeTranslationsMongoTest : DateTimeTranslationsTestBase<MongoP
 
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task subtract_and_TotalDays()
-        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.subtract_and_TotalDays(), "Expression not supported: (b.DateTime - 1/1/1997 12:00:00 AM).");
+        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.subtract_and_TotalDays(), "Expression not supported: (b.DateTime -");
     // </generated>
 
     private void AssertMql(params string[] expected)

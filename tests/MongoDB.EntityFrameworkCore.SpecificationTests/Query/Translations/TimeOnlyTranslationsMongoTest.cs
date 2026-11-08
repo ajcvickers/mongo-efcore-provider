@@ -71,7 +71,7 @@ public class TimeOnlyTranslationsMongoTest : TimeOnlyTranslationsTestBase<MongoP
 
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task IsBetween()
-        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.IsBetween(), "Expression not supported: b.TimeOnly.IsBetween(2:00 PM, 4:00 PM).");
+        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.IsBetween(), "Expression not supported: b.TimeOnly.IsBetween(");
 
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task Microsecond()
@@ -99,7 +99,7 @@ public class TimeOnlyTranslationsMongoTest : TimeOnlyTranslationsTestBase<MongoP
 
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task Subtract()
-        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.Subtract(), "Expression not supported: (b.TimeOnly - 3:00 AM).");
+        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.Subtract(), "Expression not supported: (b.TimeOnly -");
     // </generated>
 
     private void AssertMql(params string[] expected)

@@ -70,8 +70,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Key_equality_using_property_method_nested(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Key_equality_using_property_method_nested(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_nested(async), "Failure");
     }
 #endif
 
@@ -84,16 +84,16 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Key_equality_using_property_method_and_member_expression1(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Key_equality_using_property_method_and_member_expression1(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_and_member_expression1(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Key_equality_using_property_method_and_member_expression2(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Key_equality_using_property_method_and_member_expression2(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_and_member_expression2(async), "Failure");
     }
 #endif
 
@@ -111,8 +111,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Key_equality_two_conditions_on_same_navigation(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Key_equality_two_conditions_on_same_navigation(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Key_equality_two_conditions_on_same_navigation(async), "Failure");
     }
 #endif
 
@@ -152,8 +152,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Simple_level1_include(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Simple_level1_include(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Simple_level1_include(async), "Failure");
     }
 #endif
 
@@ -166,8 +166,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Simple_level1_level2_include(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Simple_level1_level2_include(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Simple_level1_level2_include(async), "Failure");
     }
 #endif
 
@@ -193,8 +193,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Simple_level1_level2_level3_include(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Simple_level1_level2_level3_include(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Simple_level1_level2_level3_include(async), "Failure");
     }
 #endif
 
@@ -206,8 +206,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Navigation_inside_method_call_translated_to_join(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Navigation_inside_method_call_translated_to_join(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Navigation_inside_method_call_translated_to_join(async), "Failure");
     }
 #endif
 
@@ -219,56 +219,56 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Optional_navigation_inside_method_call_translated_to_join(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_inside_method_call_translated_to_join(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Optional_navigation_inside_method_call_translated_to_join(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Optional_navigation_inside_property_method_translated_to_join(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_inside_property_method_translated_to_join(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Optional_navigation_inside_property_method_translated_to_join(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Optional_navigation_inside_nested_method_call_translated_to_join(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Method_call_on_optional_navigation_translates_to_null_conditional_properly_for_arguments(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Method_call_on_optional_navigation_translates_to_null_conditional_properly_for_arguments(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Method_call_on_optional_navigation_translates_to_null_conditional_properly_for_arguments(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Optional_navigation_inside_method_call_translated_to_join_keeps_original_nullability(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_inside_method_call_translated_to_join_keeps_original_nullability(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Optional_navigation_inside_method_call_translated_to_join_keeps_original_nullability(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability_also_for_arguments(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability_also_for_arguments(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability_also_for_arguments(async), "Failure");
     }
 #endif
 
@@ -373,8 +373,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Include_reference_and_project_into_anonymous_type(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include_reference_and_project_into_anonymous_type(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include_reference_and_project_into_anonymous_type(async), "Failure");
     }
 #endif
 
@@ -496,8 +496,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Where_multiple_nav_prop_reference_optional_compared_to_null5(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Where_multiple_nav_prop_reference_optional_compared_to_null5(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Where_multiple_nav_prop_reference_optional_compared_to_null5(async), "Failure");
     }
 #endif
 
@@ -523,8 +523,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Where_multiple_nav_prop_optional_required(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Where_multiple_nav_prop_optional_required(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Where_multiple_nav_prop_optional_required(async), "Failure");
     }
 #endif
 
@@ -661,8 +661,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Include_with_optional_navigation(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include_with_optional_navigation(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include_with_optional_navigation(async), "Failure");
     }
 #endif
 
@@ -1546,8 +1546,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Accessing_optional_property_inside_result_operator_subquery(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Accessing_optional_property_inside_result_operator_subquery(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Accessing_optional_property_inside_result_operator_subquery(async), "Failure");
     }
 #endif
 
@@ -1560,24 +1560,24 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Include1(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include1(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include1(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Include2(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include2(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include2(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Include3(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include3(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include3(async), "Failure");
     }
 #endif
 
@@ -1608,24 +1608,24 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Include7(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include7(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include7(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Include8(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include8(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include8(async), "Failure");
     }
 #endif
 
 #if (EF10 || EF11)
     public override async Task Include9(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include9(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include9(async), "Failure");
     }
 #endif
 
@@ -1656,8 +1656,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Include13(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include13(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include13(async), "Failure");
     }
 #endif
 
@@ -1677,8 +1677,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Include18_1(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include18_1(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Include18_1(async), "Failure");
     }
 #endif
 
@@ -1759,8 +1759,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Join_with_navigations_in_the_result_selector1(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.Join_with_navigations_in_the_result_selector1(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Join_with_navigations_in_the_result_selector1(async));
     }
 #endif
 
@@ -1839,8 +1839,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if (EF10 || EF11)
     public override async Task Null_conditional_is_not_applied_explicitly_for_optional_navigation(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Null_conditional_is_not_applied_explicitly_for_optional_navigation(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Null_conditional_is_not_applied_explicitly_for_optional_navigation(async), "Failure");
     }
 #endif
 
@@ -2191,8 +2191,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF9 || (EF10 || EF11)
     public override async Task Null_check_removal_applied_recursively_complex(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Null_check_removal_applied_recursively_complex(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Null_check_removal_applied_recursively_complex(async), "Failure");
     }
 #endif
 

@@ -83,11 +83,11 @@ public class DateOnlyTranslationsMongoTest : DateOnlyTranslationsTestBase<MongoP
 
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task ToDateTime_constant_DateTime_with_property_TimeOnly()
-        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.ToDateTime_constant_DateTime_with_property_TimeOnly(), "Expression not supported: 11/10/1990.ToDateTime(b.TimeOnly).");
+        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.ToDateTime_constant_DateTime_with_property_TimeOnly(), "Expression not supported:");
 
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task ToDateTime_property_with_constant_TimeOnly()
-        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.ToDateTime_property_with_constant_TimeOnly(), "Expression not supported: b.DateOnly.ToDateTime(9:05 PM).");
+        => SpecFails.Async<global::MongoDB.Driver.Linq.ExpressionNotSupportedException>(() => base.ToDateTime_property_with_constant_TimeOnly(), "Expression not supported: b.DateOnly.ToDateTime(");
 
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task ToDateTime_property_with_property_TimeOnly()
