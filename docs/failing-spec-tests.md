@@ -20,7 +20,7 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 4,875 |
+| `// Fails:` tag lines | 1,206 | 4,988 |
 | Distinct tagged test methods, any EF version | 1,175 | 3,386 |
 | ... active in the EF8 build | 1,064 | 2,818 |
 | ... active in the EF9 build | 1,141 | 3,212 |
@@ -323,7 +323,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
 | EF-X711 | EF11 only: xUnit v3 rejects a class that hides an inherited test with a `new` method ("has overloads"), so the hiding methods used on EF8 to EF10 for non-virtual upstream tests are not compiled on EF11 and the inherited tests that fail as base are skipped at run time (`Ef11TestSkips`); the reason names the ticket | 0 |
 | EF-X720 | Time zone dependent: a `DateTime` of kind Unspecified is treated as local time (EF-X006), so these `ComplexNavigations*` (and some Translations) tests return values shifted by an hour wherever the machine zone has daylight saving time on the data dates (Europe/London), and pass in UTC, as on the CI runners. `SpecFails.Either` requires a pass in a UTC environment and accepts the known failure elsewhere. Reproduced on Linux (WSL) with and without `TZ=UTC`: the OS makes no difference | 158 |
-| EF-X721 | Non-deterministic: a few `ManyToManyTracking`/`StoreGenerated` tests throw a different exception, or pass, depending on the order the entity graph is traversed (hash randomization), so they use `SpecFails.AnyOutcome`. Seen on EF11 | 4 |
+| EF-X721 | Non-deterministic: the entity graphs of the `ManyToManyTracking`, `StoreGenerated` and `Updates` tests all have default key 0 (EF-X101), so which entity hits the duplicate key first, and so the exception (or whether one is thrown), depends on the traversal order and varies from run to run (hash randomization). Their exact-exception assertions on EF11 use `SpecFails.AnyOutcome`. Seen on EF11 only; not seen on EF8 to EF10 | 128 |
 
 ### Shared root causes across the ported suites
 
