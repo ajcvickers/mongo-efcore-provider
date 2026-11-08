@@ -115,6 +115,8 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
 
     private sealed class Store(IMongoCollection<BCustomer> collection, BsonDocument[] seed)
     {
+        public IMongoCollection<BCustomer> Collection { get; } = collection;
+
         public BsonDocument[] Seed { get; } = seed;
 
         public IMongoCollection<BsonDocument> Raw { get; }
@@ -384,6 +386,27 @@ public class ComplexTypeBulkTests(TemporaryDatabaseFixture database) : IClassFix
         }
 
         store.AssertStored(null, ("b", d => d["Pin"] = Geo(-4, 4)));
+    }
+
+    [Fact]
+    public void SetProperty_on_a_leaf_with_an_empty_element_name_is_refused_and_writes_nothing()
+    {
+        // An empty element name means "not stored" (SaveChanges skips the leaf), so the path would be "Billing." and the
+        // server rejects it mid-operation. Refused at translation instead.
+        var store = Seed();
+        using (var db = SingleEntityDbContext.Create(store.Collection, mb => mb.Entity<BCustomer>(e =>
+               {
+                   e.ComplexProperty(c => c.Billing, a => a.Property(x => x.Street).Metadata.SetElementName(""));
+                   e.ComplexProperty(c => c.Shipping);
+                   e.ComplexProperty(c => c.Pin);
+               })))
+        {
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => db.Entities.ExecuteUpdate(s => s.SetProperty(c => c.Billing.Street, "x")));
+            Assert.Contains("is not stored: its element name is empty", ex.FullMessage());
+        }
+
+        store.AssertUnchanged();
     }
 
     [Fact]

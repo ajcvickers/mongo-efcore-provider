@@ -42,6 +42,23 @@ public static class ComplexTypeUnsupportedAttributeValidationTests
         { typeof(LIgnoreIfNull), nameof(BsonIgnoreIfNullAttribute) },
     };
 
+    // Attributes the provider ignores on the complex PROPERTY itself (the leaves above are covered by the property conventions):
+    // the unsupported member attributes, plus the ones a scalar honours (representation, date-time options) and [BsonId].
+    public static readonly TheoryData<Type, string> ComplexPropertyAttributeCases = new()
+    {
+        { typeof(PSerializer), nameof(BsonSerializerAttribute) },
+        { typeof(PExtraElements), nameof(BsonExtraElementsAttribute) },
+        { typeof(PDefaultValue), nameof(BsonDefaultValueAttribute) },
+        { typeof(PGuidRepresentation), nameof(BsonGuidRepresentationAttribute) },
+        { typeof(PTimeSpanOptions), nameof(BsonTimeSpanOptionsAttribute) },
+        { typeof(PDictionaryOptions), nameof(BsonDictionaryOptionsAttribute) },
+        { typeof(PIgnoreIfDefault), nameof(BsonIgnoreIfDefaultAttribute) },
+        { typeof(PIgnoreIfNull), nameof(BsonIgnoreIfNullAttribute) },
+        { typeof(PRepresentation), nameof(BsonRepresentationAttribute) },
+        { typeof(PDateTimeOptions), nameof(BsonDateTimeOptionsAttribute) },
+        { typeof(PId), nameof(BsonIdAttribute) },
+    };
+
     // MongoModelValidator.UnsupportedClassAttributes that can be applied to a class, plus the constructor and method checks.
     public static readonly TheoryData<Type, string, string> TypeAttributeCases = new()
     {
@@ -114,6 +131,32 @@ public static class ComplexTypeUnsupportedAttributeValidationTests
             ? $"Method '{type.Name}.{nameof(CFactoryMethod.Create)}' is annotated with unsupported attribute '{attribute}'."
             : $"Entity '{type.Name}' {verb} unsupported attribute '{attribute}'.";
         Assert.Equal(expected, ex!.Message);
+    }
+
+    [Theory]
+    [MemberData(nameof(ComplexPropertyAttributeCases))]
+    public static void Unsupported_attribute_on_the_complex_property_itself_is_rejected(Type holder, string attribute)
+    {
+        var ex = Run(nameof(BuildPropertyHolder), holder);
+        Assert.NotNull(ex);
+        Assert.Equal($"Property '{holder.Name}.{nameof(PPlain.Home)}' is annotated with unsupported attribute '{attribute}'.", ex!.Message);
+    }
+
+    [Theory]
+    [MemberData(nameof(ComplexPropertyAttributeCases))]
+    public static void Unsupported_attribute_on_a_nested_complex_property_is_rejected(Type holder, string attribute)
+    {
+        // The same attribute on a complex property inside a complex type: reached at every depth.
+        var ex = Run(nameof(BuildNestedPropertyHolder), holder);
+        Assert.NotNull(ex);
+        Assert.Contains($"unsupported attribute '{attribute}'.", ex!.Message);
+    }
+
+    [Fact]
+    public static void Complex_property_without_unsupported_attributes_builds()
+    {
+        Assert.Null(Run(nameof(BuildPropertyHolder), typeof(PPlain)));
+        Assert.Null(Run(nameof(BuildNestedPropertyHolder), typeof(PPlain)));
     }
 
     // The same complex types without the attribute build (the rejection is the attribute, not the shape).
@@ -197,6 +240,19 @@ public static class ComplexTypeUnsupportedAttributeValidationTests
     }
 #endif
 
+    static void BuildPropertyHolder<T>() where T : class, new()
+    {
+        using var db = SingleEntityDbContext.Create<T>(mb => mb.Entity<T>().ComplexProperty<LPlain>(nameof(PPlain.Home)));
+        _ = db.Model;
+    }
+
+    static void BuildNestedPropertyHolder<T>() where T : class, new()
+    {
+        using var db = SingleEntityDbContext.Create<PWrapper<T>>(mb =>
+            mb.Entity<PWrapper<T>>().ComplexProperty(w => w.Outer, b => b.ComplexProperty<LPlain>(nameof(PPlain.Home))));
+        _ = db.Model;
+    }
+
     static void BuildOwned<T>() where T : class, new()
     {
         using var db = SingleEntityDbContext.Create<Holder<T>>(mb => mb.Entity<Holder<T>>().OwnsOne(h => h.Home));
@@ -233,6 +289,22 @@ public static class ComplexTypeUnsupportedAttributeValidationTests
         public int _id { get; set; }
         public List<T> Items { get; set; } = [];
     }
+
+    public class PPlain { public int _id { get; set; } public LPlain Home { get; set; } = new(); }
+    public class PSerializer { public int _id { get; set; } [BsonSerializer(typeof(MongoDB.Bson.Serialization.Serializers.ObjectSerializer))] public LPlain Home { get; set; } = new(); }
+    public class PExtraElements { public int _id { get; set; } [BsonExtraElements] public LPlain Home { get; set; } = new(); }
+    public class PDefaultValue { public int _id { get; set; } [BsonDefaultValue(null)] public LPlain Home { get; set; } = new(); }
+    public class PGuidRepresentation { public int _id { get; set; } [BsonGuidRepresentation(GuidRepresentation.Standard)] public LPlain Home { get; set; } = new(); }
+    public class PTimeSpanOptions { public int _id { get; set; } [BsonTimeSpanOptions(BsonType.Int32, TimeSpanUnits.Seconds)] public LPlain Home { get; set; } = new(); }
+    public class PDictionaryOptions { public int _id { get; set; } [BsonDictionaryOptions] public LPlain Home { get; set; } = new(); }
+    public class PIgnoreIfDefault { public int _id { get; set; } [BsonIgnoreIfDefault] public LPlain Home { get; set; } = new(); }
+    public class PIgnoreIfNull { public int _id { get; set; } [BsonIgnoreIfNull] public LPlain Home { get; set; } = new(); }
+    public class PRepresentation { public int _id { get; set; } [BsonRepresentation(BsonType.String)] public LPlain Home { get; set; } = new(); }
+    public class PDateTimeOptions { public int _id { get; set; } [BsonDateTimeOptions] public LPlain Home { get; set; } = new(); }
+    public class PId { public int _id { get; set; } [BsonId] public LPlain Home { get; set; } = new(); }
+
+    // A holder whose complex property holds the attributed complex property (one more level).
+    class PWrapper<T> where T : class { public int _id { get; set; } public T Outer { get; set; } = null!; }
 
     public class LPlain { public string City { get; set; } = ""; public string? Value { get; set; } }
     public class LSerializer { public string City { get; set; } = ""; [BsonSerializer] public string? Value { get; set; } }
