@@ -119,10 +119,7 @@ public class DateTimeTranslationsMongoTest : DateTimeTranslationsTestBase<MongoB
     {
         await base.Now();
 
-        AssertMql(
-    """
-    BasicTypesEntities.
-    """);
+        // The translated MQL embeds the current time, so it is not asserted.
     }
 
     // Fails (some data rows): Unspecified-kind DateTime constants/parameters are shifted by the local offset (timezone dependent) EF-X006
@@ -157,20 +154,14 @@ public class DateTimeTranslationsMongoTest : DateTimeTranslationsTestBase<MongoB
     {
         await base.Today();
 
-        AssertMql(
-    """
-    BasicTypesEntities.{ "$match" : { "DateTime" : { "$date" : "2026-11-07T00:00:00Z" } } }
-    """);
+        // The translated MQL embeds today's date, so it is not asserted.
     }
 
     public override async Task UtcNow()
     {
         await base.UtcNow();
 
-        AssertMql(
-    """
-    BasicTypesEntities.
-    """);
+        // The translated MQL embeds the current time, so it is not asserted.
     }
 
     public override async Task Year()

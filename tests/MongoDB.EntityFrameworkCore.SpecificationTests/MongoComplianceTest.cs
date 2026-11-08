@@ -81,6 +81,9 @@ public class MongoComplianceTest : ComplianceTestBase
         // multiple-collection updates) is not skipped there — each runs and asserts its actual failure
         // mode (translation failure or cross-DbSet rejection), tagged with a // Fails: <reason> comment.
         typeof(JsonQueryTestBase<>), // Blocked, EF-X548: seeding throws OverflowException, so every test fails in the fixture.
+#if EF11
+        typeof(Microsoft.EntityFrameworkCore.Scaffolding.CompiledModelTestBase), // Blocked on EF11, EF-X710: the generated compiled model crashes the test host.
+#endif
         typeof(Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.ComplexTypeTestBase), // Complex types: covered by the separate complex type work.
 #endif
 

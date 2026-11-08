@@ -79,17 +79,32 @@ public class FiltersInheritanceQueryMongoTest : FiltersInheritanceQueryTestBase<
         await base.Can_use_of_type_kiwi(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Can_use_derived_set(bool async)
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_use_derived_set(async));
+    }
+#else
     public override async Task Can_use_derived_set(bool async)
     {
         // Fails: Hierarchy materialization fails: discriminator value does not match the requested type EF-X519
         await SpecFails.ThrowsAsync(() => base.Can_use_derived_set(async), "No discriminators matched");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Can_use_IgnoreQueryFilters_and_GetDatabaseValues(bool async)
+    {
+        await base.Can_use_IgnoreQueryFilters_and_GetDatabaseValues(async);
+    }
+#else
     public override async Task Can_use_IgnoreQueryFilters_and_GetDatabaseValues(bool async)
     {
         // Fails: Single/First over query results finds the wrong number of rows (duplicate or missing rows) EF-X537
         await SpecFails.ThrowsAsync(() => base.Can_use_IgnoreQueryFilters_and_GetDatabaseValues(async), "Sequence contains");
     }
+#endif
 
     public class FiltersInheritanceQueryMongoFixture : InheritanceQueryFixtureBase
     {

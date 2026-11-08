@@ -152,11 +152,19 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
         await SpecFails.ThrowsAsync(() => base.Project_collection_navigation_nested_anonymous(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Project_collection_navigation_composed(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Project_collection_navigation_composed(async));
+    }
+#else
     public override async Task Project_collection_navigation_composed(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Project_collection_navigation_composed(async), "could not be translated");
     }
+#endif
 
     public override async Task Project_collection_and_root_entity(bool async)
     {
@@ -337,7 +345,7 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
     public override async Task Complex_multi_include_with_order_by_and_paging_joins_on_correct_key(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key(async), "Failure");
+        await SpecFails.TranslationFailedAsync(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key(async));
     }
 #endif
 
@@ -367,23 +375,47 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
         await SpecFails.ThrowsAsync(() => base.Orderby_SelectMany_with_Include1(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task SelectMany_with_Include2(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.SelectMany_with_Include2(async));
+    }
+#else
     public override async Task SelectMany_with_Include2(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.SelectMany_with_Include2(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task SelectMany_with_Include_ThenInclude(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.SelectMany_with_Include_ThenInclude(async));
+    }
+#else
     public override async Task SelectMany_with_Include_ThenInclude(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.SelectMany_with_Include_ThenInclude(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Multiple_SelectMany_with_Include(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Multiple_SelectMany_with_Include(async));
+    }
+#else
     public override async Task Multiple_SelectMany_with_Include(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Multiple_SelectMany_with_Include(async), "could not be translated");
     }
+#endif
 
 #if EF10
     public override async Task Optional_navigation_with_Include_ThenInclude(bool async)
@@ -396,16 +428,16 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF10
     public override async Task Multiple_optional_navigation_with_Include(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Multiple_optional_navigation_with_Include(async), "Failure");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multiple_optional_navigation_with_Include(async));
     }
 #endif
 
 #if EF10
     public override async Task Multiple_optional_navigation_with_string_based_Include(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Multiple_optional_navigation_with_string_based_Include(async), "Failure");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multiple_optional_navigation_with_string_based_Include(async));
     }
 #endif
 
@@ -449,23 +481,47 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
         await SpecFails.ThrowsAsync(() => base.SelectMany_with_navigation_and_Distinct_projecting_columns_including_join_key(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_collection_with_groupby_in_subquery(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Include_collection_with_groupby_in_subquery(async));
+    }
+#else
     public override async Task Include_collection_with_groupby_in_subquery(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Include_collection_with_groupby_in_subquery(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_collection_with_groupby_in_subquery_and_filter_before_groupby(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Include_collection_with_groupby_in_subquery_and_filter_before_groupby(async));
+    }
+#else
     public override async Task Include_collection_with_groupby_in_subquery_and_filter_before_groupby(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Include_collection_with_groupby_in_subquery_and_filter_before_groupby(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_collection_with_groupby_in_subquery_and_filter_after_groupby(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Include_collection_with_groupby_in_subquery_and_filter_after_groupby(async));
+    }
+#else
     public override async Task Include_collection_with_groupby_in_subquery_and_filter_after_groupby(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Include_collection_with_groupby_in_subquery_and_filter_after_groupby(async), "could not be translated");
     }
+#endif
 
 #if EF10
     public override async Task Include_reference_collection_order_by_reference_navigation(bool async)
@@ -817,53 +873,129 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
         await SpecFails.ThrowsAsync(() => base.Projecting_collection_with_FirstOrDefault(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Skip_on_grouping_element(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_on_grouping_element(async));
+    }
+#else
     public override async Task Skip_on_grouping_element(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Skip_on_grouping_element(async), "could not be translated");
     }
+#endif
 
+#if EF8
+    public override async Task Take_on_grouping_element(bool async)
+    {
+        // Fails: Serialization/format error while translating or materializing EF-X602
+        await SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Take_on_grouping_element(async));
+    }
+#elif EF9
+    public override async Task Take_on_grouping_element(bool async)
+    {
+        // Fails: Serialization/format error while translating or materializing EF-X602
+        await SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Take_on_grouping_element(async));
+    }
+#elif EF10
+    public override async Task Take_on_grouping_element(bool async)
+    {
+        // Fails: Serialization/format error while translating or materializing EF-X602
+        await SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Take_on_grouping_element(async));
+    }
+#else
     public override async Task Take_on_grouping_element(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Take_on_grouping_element(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Skip_Take_on_grouping_element(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_on_grouping_element(async));
+    }
+#else
     public override async Task Skip_Take_on_grouping_element(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Skip_Take_on_grouping_element(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Skip_Take_Distinct_on_grouping_element(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_Distinct_on_grouping_element(async));
+    }
+#else
     public override async Task Skip_Take_Distinct_on_grouping_element(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Skip_Take_Distinct_on_grouping_element(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Skip_Take_ToList_on_grouping_element(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_ToList_on_grouping_element(async));
+    }
+#else
     public override async Task Skip_Take_ToList_on_grouping_element(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Skip_Take_ToList_on_grouping_element(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Skip_Take_on_grouping_element_into_non_entity(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_on_grouping_element_into_non_entity(async));
+    }
+#else
     public override async Task Skip_Take_on_grouping_element_into_non_entity(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Skip_Take_on_grouping_element_into_non_entity(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Skip_Take_on_grouping_element_with_collection_include(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_on_grouping_element_with_collection_include(async));
+    }
+#else
     public override async Task Skip_Take_on_grouping_element_with_collection_include(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Skip_Take_on_grouping_element_with_collection_include(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Skip_Take_on_grouping_element_with_reference_include(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Skip_Take_on_grouping_element_with_reference_include(async));
+    }
+#else
     public override async Task Skip_Take_on_grouping_element_with_reference_include(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Skip_Take_on_grouping_element_with_reference_include(async), "could not be translated");
     }
+#endif
 
     public override async Task Skip_Take_on_grouping_element_inside_collection_projection(bool async)
     {
@@ -871,11 +1003,18 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
         await SpecFails.ThrowsAsync(() => base.Skip_Take_on_grouping_element_inside_collection_projection(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Collection_projection_over_GroupBy_over_parameter(bool async)
+    {
+        await base.Collection_projection_over_GroupBy_over_parameter(async);
+    }
+#else
     public override async Task Collection_projection_over_GroupBy_over_parameter(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Collection_projection_over_GroupBy_over_parameter(async), "could not be translated");
     }
+#endif
 
     public override async Task SelectMany_over_conditional_null_source(bool async)
     {
@@ -929,109 +1068,164 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
         await SpecFails.ThrowsAsync(() => base.Projecting_collection_with_group_by_after_optional_reference_correlated_with_parent(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Final_GroupBy_property_entity_Include_collection(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Final_GroupBy_property_entity_Include_collection(async));
+    }
+#else
     public override async Task Final_GroupBy_property_entity_Include_collection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Final_GroupBy_property_entity_Include_collection(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Final_GroupBy_property_entity_Include_collection_nested(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Final_GroupBy_property_entity_Include_collection_nested(async));
+    }
+#else
     public override async Task Final_GroupBy_property_entity_Include_collection_nested(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Final_GroupBy_property_entity_Include_collection_nested(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Final_GroupBy_property_entity_Include_collection_reference(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Final_GroupBy_property_entity_Include_collection_reference(async));
+    }
+#else
     public override async Task Final_GroupBy_property_entity_Include_collection_reference(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Final_GroupBy_property_entity_Include_collection_reference(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Final_GroupBy_property_entity_Include_collection_multiple(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Final_GroupBy_property_entity_Include_collection_multiple(async));
+    }
+#else
     public override async Task Final_GroupBy_property_entity_Include_collection_multiple(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Final_GroupBy_property_entity_Include_collection_multiple(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Final_GroupBy_property_entity_Include_collection_reference_same_level(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Final_GroupBy_property_entity_Include_collection_reference_same_level(async));
+    }
+#else
     public override async Task Final_GroupBy_property_entity_Include_collection_reference_same_level(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Final_GroupBy_property_entity_Include_collection_reference_same_level(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Final_GroupBy_property_entity_Include_reference(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Final_GroupBy_property_entity_Include_reference(async));
+    }
+#else
     public override async Task Final_GroupBy_property_entity_Include_reference(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Final_GroupBy_property_entity_Include_reference(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Final_GroupBy_property_entity_Include_reference_multiple(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Final_GroupBy_property_entity_Include_reference_multiple(async));
+    }
+#else
     public override async Task Final_GroupBy_property_entity_Include_reference_multiple(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Final_GroupBy_property_entity_Include_reference_multiple(async), "could not be translated");
     }
+#endif
 
 #if EF9 || EF10
     public override async Task Project_collection_and_nested_conditional(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Project_collection_and_nested_conditional(async), "could not be translated");
+        await base.Project_collection_and_nested_conditional(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Multiple_complex_includes(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Multiple_complex_includes(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multiple_complex_includes(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Multiple_complex_includes_EF_Property(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Multiple_complex_includes_EF_Property(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multiple_complex_includes_EF_Property(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_reference_and_collection_order_by(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_and_collection_order_by(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Include_reference_and_collection_order_by(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_reference_ThenInclude_collection_order_by(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_ThenInclude_collection_order_by(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Include_reference_ThenInclude_collection_order_by(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Multiple_complex_include_select(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Multiple_complex_include_select(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multiple_complex_include_select(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_nested_with_optional_navigation(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_nested_with_optional_navigation(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Include_nested_with_optional_navigation(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Complex_multi_include_with_order_by_and_paging(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Complex_multi_include_with_order_by_and_paging(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Complex_multi_include_with_order_by_and_paging(async));
     }
 #endif
 
@@ -1046,72 +1240,72 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9
     public override async Task Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Optional_navigation_with_Include_ThenInclude(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_with_Include_ThenInclude(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Optional_navigation_with_Include_ThenInclude(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Multiple_optional_navigation_with_Include(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Multiple_optional_navigation_with_Include(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multiple_optional_navigation_with_Include(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Multiple_optional_navigation_with_string_based_Include(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Multiple_optional_navigation_with_string_based_Include(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multiple_optional_navigation_with_string_based_Include(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Optional_navigation_with_order_by_and_Include(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_with_order_by_and_Include(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Optional_navigation_with_order_by_and_Include(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Optional_navigation_with_Include_and_order(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_with_Include_and_order(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Optional_navigation_with_Include_and_order(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_reference_collection_order_by_reference_navigation(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_collection_order_by_reference_navigation(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Include_reference_collection_order_by_reference_navigation(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_reference_followed_by_include_collection(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_followed_by_include_collection(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Include_reference_followed_by_include_collection(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task LeftJoin_with_Any_on_outer_source_and_projecting_collection_from_inner(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.LeftJoin_with_Any_on_outer_source_and_projecting_collection_from_inner(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.LeftJoin_with_Any_on_outer_source_and_projecting_collection_from_inner(async));
     }
 #endif
 

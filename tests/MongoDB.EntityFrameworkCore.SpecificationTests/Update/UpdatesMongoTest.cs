@@ -80,16 +80,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
     public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #elif EF9 || EF8
-    // Fails: Cross-collection query not translated on EF8/EF9 (works on EF10) EF-X020; Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+#if EF8
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
-        =>
-            ((global::System.Convert.ToString(async) == "True"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async), "could not be translated")
-                :
-            ((global::System.Convert.ToString(async) == "False"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async);
+        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async));
+#else
+    // Fails: Other unexpected exception from query execution EF-X605
+    public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
+        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async));
+#endif
 #endif
 
 #if EF10
@@ -97,16 +96,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
     public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #elif EF9 || EF8
-    // Fails: Cross-collection query not translated on EF8/EF9 (works on EF10) EF-X020; Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+#if EF8
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
-        =>
-            ((global::System.Convert.ToString(async) == "True"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async), "could not be translated")
-                :
-            ((global::System.Convert.ToString(async) == "False"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async);
+        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async));
+#else
+    // Fails: Other unexpected exception from query execution EF-X605
+    public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
+        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async));
+#endif
 #endif
 
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105

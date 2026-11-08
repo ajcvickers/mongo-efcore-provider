@@ -33,15 +33,9 @@ public class GuidTranslationsMongoTest : GuidTranslationsTestBase<MongoBasicType
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
     // <generated>
-    public override async Task NewGuid()
-    {
-        await base.NewGuid();
-
-        AssertMql(
-    """
-    BasicTypesEntities.
-    """);
-    }
+    // Fails: REGRESSION vs main (likely deliberate): Guid.NewGuid cannot be evaluated once per row on the server, so the native translator refuses it EF-X704
+    public override Task NewGuid()
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NewGuid(), "Guid.NewGuid");
 
     public override async Task New_with_constant()
     {

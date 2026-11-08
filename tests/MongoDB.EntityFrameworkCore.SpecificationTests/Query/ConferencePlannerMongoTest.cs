@@ -52,7 +52,7 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
 #elif EF9 || EF8
     // Fails: Cross-document navigation access issue EF-216
     public override Task AttendeesController_GetSessions()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.AttendeesController_GetSessions(), "The LINQ expression 'DbSet<Session>()");
+        => SpecFails.TranslationFailedAsync(() => base.AttendeesController_GetSessions());
 #endif
 
     public override Task AttendeesController_Post_with_existing_attendee()
@@ -72,13 +72,13 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
         => base.AttendeesController_RemoveSession_bad_session();
 
 #if EF10
-    // Fails (some data rows): Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task SearchController_Search(string searchTerm, int totalCount, int sessionCount)
-        => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.SearchController_Search(searchTerm, totalCount, sessionCount), "Object reference not set to an instance of an object.");
+        => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.SearchController_Search(searchTerm, totalCount, sessionCount), string.Empty);
 #elif EF9 || EF8
-    // Fails: Cross-document navigation access issue EF-216
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task SearchController_Search(string searchTerm, int totalCount, int sessionCount)
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.SearchController_Search(searchTerm, totalCount, sessionCount), "The LINQ expression 'DbSet<Session>()");
+        => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.SearchController_Search(searchTerm, totalCount, sessionCount), string.Empty);
 #endif
 
     // Fails: Single/First over empty result in test body (not triaged) EF-X310
@@ -92,9 +92,8 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
     public override Task SessionsController_Get()
         => base.SessionsController_Get();
 #elif EF9 || EF8
-    // Fails: Cross-document navigation access issue EF-216
     public override Task SessionsController_Get()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.SessionsController_Get(), "The LINQ expression 'DbSet<Session>()");
+        => base.SessionsController_Get();
 #endif
 
     // Fails: Single/First over empty result in test body (not triaged) EF-X310
@@ -105,9 +104,8 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
     public override Task SessionsController_Get_with_bad_ID()
         => base.SessionsController_Get_with_bad_ID();
 #elif EF9 || EF8
-    // Fails: Cross-document navigation access issue EF-216
     public override Task SessionsController_Get_with_bad_ID()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.SessionsController_Get_with_bad_ID(), "The LINQ expression 'DbSet<Session>()");
+        => base.SessionsController_Get_with_bad_ID();
 #endif
 
     public override Task SessionsController_Post()

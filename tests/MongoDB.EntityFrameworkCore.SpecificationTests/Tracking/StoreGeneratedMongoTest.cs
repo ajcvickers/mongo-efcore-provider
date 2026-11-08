@@ -468,23 +468,19 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
 #endif
 
 #if EF9
-    // Fails: Cross-collection query not translated on EF8/EF9 (works on EF10) EF-X020
     public override Task Insert_update_and_delete_with_GuidAsString_key()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Insert_update_and_delete_with_GuidAsString_key(), "could not be translated");
+        => base.Insert_update_and_delete_with_GuidAsString_key();
 #elif EF8
-    // Fails: Cross-collection query not translated on EF8/EF9 (works on EF10) EF-X020
     public override void Insert_update_and_delete_with_GuidAsString_key()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Insert_update_and_delete_with_GuidAsString_key(), "could not be translated");
+        => base.Insert_update_and_delete_with_GuidAsString_key();
 #endif
 
 #if EF9
-    // Fails: Cross-collection query not translated on EF8/EF9 (works on EF10) EF-X020
     public override Task Insert_update_and_delete_with_StringAsGuid_key()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Insert_update_and_delete_with_StringAsGuid_key(), "could not be translated");
+        => base.Insert_update_and_delete_with_StringAsGuid_key();
 #elif EF8
-    // Fails: Cross-collection query not translated on EF8/EF9 (works on EF10) EF-X020
     public override void Insert_update_and_delete_with_StringAsGuid_key()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Insert_update_and_delete_with_StringAsGuid_key(), "could not be translated");
+        => base.Insert_update_and_delete_with_StringAsGuid_key();
 #endif
 
 #if EF10 || EF9

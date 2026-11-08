@@ -165,13 +165,11 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
 #endif
 
 #if EF10 || EF9
-    // Fails: ValueConverterSerializer lacks IHasRepresentationSerializer for queries over converted properties EF-X302
     public override Task Can_query_using_any_data_type()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_using_any_data_type(), "Serializer class ValueConverterSerializer`2 does not implement IHasRep");
+        => base.Can_query_using_any_data_type();
 #elif EF8
-    // Fails: ValueConverterSerializer lacks IHasRepresentationSerializer for queries over converted properties EF-X302
     public override void Can_query_using_any_data_type()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_using_any_data_type(), "Serializer class ValueConverterSerializer`2 does not implement IHasRep");
+        => base.Can_query_using_any_data_type();
 #endif
 
 #if EF10 || EF9
@@ -185,13 +183,11 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
 #endif
 
 #if EF10 || EF9
-    // Fails: ValueConverterSerializer lacks IHasRepresentationSerializer for queries over converted properties EF-X302
     public override Task Can_query_using_any_data_type_shadow()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_using_any_data_type_shadow(), "Serializer class ValueConverterSerializer`2 does not implement IHasRep");
+        => base.Can_query_using_any_data_type_shadow();
 #elif EF8
-    // Fails: ValueConverterSerializer lacks IHasRepresentationSerializer for queries over converted properties EF-X302
     public override void Can_query_using_any_data_type_shadow()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_using_any_data_type_shadow(), "Serializer class ValueConverterSerializer`2 does not implement IHasRep");
+        => base.Can_query_using_any_data_type_shadow();
 #endif
 
 #if EF10 || EF9
@@ -205,36 +201,30 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a converted property to a parameter/literal fails casting ValueConverterSerializer EF-X301
     public override Task Can_query_using_any_nullable_data_type_as_literal()
-        => SpecFails.Async<global::System.InvalidCastException>(() => base.Can_query_using_any_nullable_data_type_as_literal(), "Unable to cast object of type 'MongoDB.EntityFrameworkCore.Serializers");
+        => base.Can_query_using_any_nullable_data_type_as_literal();
 #elif EF8
-    // Fails: Query comparing a converted property to a parameter/literal fails casting ValueConverterSerializer EF-X301
     public override void Can_query_using_any_nullable_data_type_as_literal()
-        => SpecFails.Sync<global::System.InvalidCastException>(() => base.Can_query_using_any_nullable_data_type_as_literal(), "Unable to cast object of type 'MongoDB.EntityFrameworkCore.Serializers");
+        => base.Can_query_using_any_nullable_data_type_as_literal();
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a converted property to a parameter/literal fails casting ValueConverterSerializer EF-X301
     public override Task Can_query_with_null_parameters_using_any_nullable_data_type()
-        => SpecFails.Async<global::System.InvalidCastException>(() => base.Can_query_with_null_parameters_using_any_nullable_data_type(), "Unable to cast object of type 'MongoDB.EntityFrameworkCore.Serializers");
+        => base.Can_query_with_null_parameters_using_any_nullable_data_type();
 #elif EF8
-    // Fails: Query comparing a converted property to a parameter/literal fails casting ValueConverterSerializer EF-X301
     public override void Can_query_with_null_parameters_using_any_nullable_data_type()
-        => SpecFails.Sync<global::System.InvalidCastException>(() => base.Can_query_with_null_parameters_using_any_nullable_data_type(), "Unable to cast object of type 'MongoDB.EntityFrameworkCore.Serializers");
+        => base.Can_query_with_null_parameters_using_any_nullable_data_type();
 #endif
 
 #if EF10
     public override Task Can_read_back_bool_mapped_as_int_through_navigation()
         => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #elif EF9
-    // Fails: Cross-document navigation access issue EF-216
     public override Task Can_read_back_bool_mapped_as_int_through_navigation()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation(), "The LINQ expression 'DbSet<Animal>()");
+        => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #elif EF8
-    // Fails: Cross-document navigation access issue EF-216
     public override void Can_read_back_bool_mapped_as_int_through_navigation()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation(), "The LINQ expression 'DbSet<Animal>()");
+        => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #endif
 
 #if EF10 || EF9

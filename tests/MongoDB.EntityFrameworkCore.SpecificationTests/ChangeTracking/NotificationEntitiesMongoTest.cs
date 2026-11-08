@@ -27,14 +27,8 @@ public class NotificationEntitiesMongoTest(NotificationEntitiesMongoTest.Notific
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Include_brings_entities_referenced_from_already_tracked_notification_entities_as_Unchanged()
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Include_brings_entities_referenced_from_already_tracked_notification_entities_as_Unchanged()).Message);
-#else
     public override void Include_brings_entities_referenced_from_already_tracked_notification_entities_as_Unchanged()
         => base.Include_brings_entities_referenced_from_already_tracked_notification_entities_as_Unchanged();
-#endif
 
     public override void Include_brings_collections_referenced_from_already_tracked_notification_entities_as_Unchanged()
         => base.Include_brings_collections_referenced_from_already_tracked_notification_entities_as_Unchanged();

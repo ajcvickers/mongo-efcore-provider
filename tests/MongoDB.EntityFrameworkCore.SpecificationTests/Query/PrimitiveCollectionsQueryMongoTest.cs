@@ -340,8 +340,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
 #if EF10
     public override async Task Parameter_collection_of_structs_Contains_nullable_struct()
     {
-        // Fails: NullReferenceException for Contains of a null item EF-X503
-        await SpecFails.ThrowsAsync(() => base.Parameter_collection_of_structs_Contains_nullable_struct(), "NullReferenceException");
+        await base.Parameter_collection_of_structs_Contains_nullable_struct();
     }
 #endif
 
@@ -363,8 +362,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
 #if EF10
     public override async Task Parameter_collection_of_nullable_structs_Contains_nullable_struct()
     {
-        // Fails: Contains over collection of structs with value converter not translated or serializer mismatch EF-X504
-        await SpecFails.ThrowsAsync(() => base.Parameter_collection_of_nullable_structs_Contains_nullable_struct(), "WrappedId");
+        await base.Parameter_collection_of_nullable_structs_Contains_nullable_struct();
     }
 #endif
 

@@ -109,25 +109,13 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Setting_reference_to_owned_type_to_null_is_allowed_on_virtual_navigation()
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Setting_reference_to_owned_type_to_null_is_allowed_on_virtual_navigation()).Message);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Non_virtual_one_to_one_reference_to_principal_is_not_lazy_loaded()
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Non_virtual_one_to_one_reference_to_principal_is_not_lazy_loaded()).Message);
-#else
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Non_virtual_one_to_one_reference_to_principal_is_not_lazy_loaded()
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Non_virtual_one_to_one_reference_to_principal_is_not_lazy_loaded()).Message);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Non_virtual_one_to_many_reference_to_principal_is_not_lazy_loaded()
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Non_virtual_one_to_many_reference_to_principal_is_not_lazy_loaded()).Message);
-#else
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Non_virtual_one_to_many_reference_to_principal_is_not_lazy_loaded()
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Non_virtual_one_to_many_reference_to_principal_is_not_lazy_loaded()).Message);
-#endif
 
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Non_virtual_reference_to_dependent_is_not_lazy_loaded()
@@ -186,49 +174,25 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Lazy_load_collection_already_partially_loaded_no_tracking(QueryTrackingBehavior queryTrackingBehavior)
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_already_partially_loaded_no_tracking(queryTrackingBehavior)).Message);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_many_to_one_reference_to_principal_already_loaded(EntityState state, CascadeTiming cascadeDeleteTiming)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded(state, cascadeDeleteTiming)).Message);
-#else
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_many_to_one_reference_to_principal_already_loaded(EntityState state, CascadeTiming cascadeDeleteTiming)
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded(state, cascadeDeleteTiming)).Message);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_reference_to_principal_already_loaded(EntityState state)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded(state)).Message);
-#else
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_one_to_one_reference_to_principal_already_loaded(EntityState state)
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded(state)).Message);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded(EntityState state, CascadeTiming cascadeDeleteTiming)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded(state, cascadeDeleteTiming)).Message);
-#else
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded(EntityState state, CascadeTiming cascadeDeleteTiming)
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded(state, cascadeDeleteTiming)).Message);
-#endif
 
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(EntityState state)
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(state)).Message);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(EntityState state)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(state)).Message);
-#else
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(EntityState state)
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(state)).Message);
-#endif
 
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_many_to_one_reference_to_principal_alternate_key(EntityState state)
@@ -308,25 +272,13 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Lazy_load_collection_for_no_tracking_does_not_throw_if_populated()
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_for_no_tracking_does_not_throw_if_populated()).Message);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_reference_to_principal_for_no_tracking_does_not_throw_if_populated()
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_reference_to_principal_for_no_tracking_does_not_throw_if_populated()).Message);
-#else
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_reference_to_principal_for_no_tracking_does_not_throw_if_populated()
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_reference_to_principal_for_no_tracking_does_not_throw_if_populated()).Message);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_reference_to_dependent_for_no_tracking_does_not_throw_if_populated()
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_reference_to_dependent_for_no_tracking_does_not_throw_if_populated()).Message);
-#else
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_reference_to_dependent_for_no_tracking_does_not_throw_if_populated()
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_reference_to_dependent_for_no_tracking_does_not_throw_if_populated()).Message);
-#endif
 
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override async Task Load_collection(EntityState state, bool async)
@@ -360,9 +312,9 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
 #if !EF11
 #if !EF10
 #if !EF10
-    // Fails: Lazy-load/Single query over a type hierarchy returns more than one element EF-X206
+    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_shares_service__property_on_derived_types()
-        => Assert.Contains("Sequence contains more than one element", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_shares_service__property_on_derived_types()).Message);
+        => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_shares_service__property_on_derived_types()).Message);
 #else
     public override void Lazy_loading_shares_service__property_on_derived_types()
         => base.Lazy_loading_shares_service__property_on_derived_types();
@@ -387,9 +339,9 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
         => Assert.Contains("Document element is missing for required non-nullable property", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Entity_equality_with_proxy_parameter(async))).Message);
 
 #if EF10
-    // Fails: Lazy-load/Single query over a type hierarchy returns more than one element EF-X206
+    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_shares_service_property_on_derived_types()
-        => Assert.Contains("Sequence contains more than one element", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_shares_service_property_on_derived_types()).Message);
+        => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_shares_service_property_on_derived_types()).Message);
 #endif
 
     public class LazyLoadProxyMongoFixture : LoadFixtureBase

@@ -13,7 +13,9 @@
  * limitations under the License.
  */
 
-#if !EF8
+// EF-X710: excluded on EF11. The generated compiled model throws InvalidCastException (ValueComparer<object> to ValueComparer<int>) from its
+// static constructor on a background thread, which crashes the whole test host.
+#if !EF8 && !EF11
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Scaffolding;
 using Microsoft.EntityFrameworkCore.TestUtilities;

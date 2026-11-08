@@ -73,14 +73,19 @@ public class MusicStoreMongoTest(MusicStoreMongoTest.MusicStoreMongoFixture fixt
     public override Task Index_CreatesViewWithGenres()
         => base.Index_CreatesViewWithGenres();
 
+#if EF8 || EF9 || EF10
+    public override Task Index_GetsSixTopAlbums()
+        => base.Index_GetsSixTopAlbums();
+#else
     // Fails: Cross-document navigation access issue EF-216
     public override Task Index_GetsSixTopAlbums()
         => SpecFails.Async<global::System.InvalidOperationException>(() => base.Index_GetsSixTopAlbums(), "Unsupported cross-DbSet query between 'Microsoft.EntityFrameworkCore.T");
+#endif
 
 #if EF10 || EF9
-    // Fails (some data rows): Query fails with InvalidOperationException (not triaged) EF-X311
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Music_store_project_to_mapped_entity()
-        => SpecFails.AsyncSomeRows<global::System.InvalidOperationException>(() => base.Music_store_project_to_mapped_entity(), "Operation is not valid due to the current state of the object.");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Music_store_project_to_mapped_entity());
 #elif EF8
     // Fails: Query fails with InvalidOperationException (not triaged) EF-X311
     [ConditionalFact(Skip = "On EF8 the base test fails inside an async void body, so the exception cannot be caught and asserted. EF-X311")]

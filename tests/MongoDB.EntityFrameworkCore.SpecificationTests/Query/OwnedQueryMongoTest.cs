@@ -77,11 +77,19 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Query_for_branch_type_loads_all_owned_navs_tracking(async), "derivedType");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Query_for_leaf_type_loads_all_owned_navs(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Query_for_leaf_type_loads_all_owned_navs(async));
+    }
+#else
     public override async Task Query_for_leaf_type_loads_all_owned_navs(bool async)
     {
         // Fails: Owned navigations on a derived type fail to materialize: discriminator mismatch EF-X519
         await SpecFails.ThrowsAsync(() => base.Query_for_leaf_type_loads_all_owned_navs(async), "No discriminators matched");
     }
+#endif
 
     public override async Task Query_when_subquery(bool async)
     {
@@ -132,17 +140,25 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_collection_with_composition_complex(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task SelectMany_on_owned_collection(bool async)
+    {
+        // Fails: Other unexpected exception from query execution EF-X605
+        await SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.SelectMany_on_owned_collection(async));
+    }
+#else
     public override async Task SelectMany_on_owned_collection(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.SelectMany_on_owned_collection(async), "could not be translated");
     }
+#endif
 
 #if EF9 || EF10
     public override async Task SelectMany_with_result_selector(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.SelectMany_with_result_selector(async), "could not be translated");
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.SelectMany_with_result_selector(async));
     }
 #endif
 
@@ -217,7 +233,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_collection_count(bool async)
     {
         // Fails: Server aggregate error for owned-collection element access EF-X516
-        await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_collection_count(async), "Command aggregate failed");
+        await SpecFails.TranslationFailedAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_collection_count(async));
     }
 #endif
 
@@ -299,53 +315,117 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Client_method_skip_take_loads_owned_navigations(async), "derivedType");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Client_method_skip_loads_owned_navigations_variation_2(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Client_method_skip_loads_owned_navigations_variation_2(async));
+    }
+#else
     public override async Task Client_method_skip_loads_owned_navigations_variation_2(bool async)
     {
         // Fails: Owned indexer properties / owned-collection element expressions not supported by driver LINQ EF-X514
         await SpecFails.ThrowsAsync(() => base.Client_method_skip_loads_owned_navigations_variation_2(async), "Expression not supported");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Client_method_take_loads_owned_navigations_variation_2(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Client_method_take_loads_owned_navigations_variation_2(async));
+    }
+#else
     public override async Task Client_method_take_loads_owned_navigations_variation_2(bool async)
     {
         // Fails: Owned indexer properties / owned-collection element expressions not supported by driver LINQ EF-X514
         await SpecFails.ThrowsAsync(() => base.Client_method_take_loads_owned_navigations_variation_2(async), "Expression not supported");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Client_method_skip_take_loads_owned_navigations_variation_2(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Client_method_skip_take_loads_owned_navigations_variation_2(async));
+    }
+#else
     public override async Task Client_method_skip_take_loads_owned_navigations_variation_2(bool async)
     {
         // Fails: Owned indexer properties / owned-collection element expressions not supported by driver LINQ EF-X514
         await SpecFails.ThrowsAsync(() => base.Client_method_skip_take_loads_owned_navigations_variation_2(async), "Expression not supported");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Where_owned_collection_navigation_ToList_Count(bool async)
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Where_owned_collection_navigation_ToList_Count(async));
+    }
+#else
     public override async Task Where_owned_collection_navigation_ToList_Count(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Where_owned_collection_navigation_ToList_Count(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Where_collection_navigation_ToArray_Count(bool async)
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Where_collection_navigation_ToArray_Count(async));
+    }
+#else
     public override async Task Where_collection_navigation_ToArray_Count(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Where_collection_navigation_ToArray_Count(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Where_collection_navigation_AsEnumerable_Count(bool async)
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Where_collection_navigation_AsEnumerable_Count(async));
+    }
+#else
     public override async Task Where_collection_navigation_AsEnumerable_Count(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Where_collection_navigation_AsEnumerable_Count(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Where_collection_navigation_ToList_Count_member(bool async)
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Where_collection_navigation_ToList_Count_member(async));
+    }
+#else
     public override async Task Where_collection_navigation_ToList_Count_member(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Where_collection_navigation_ToList_Count_member(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Where_collection_navigation_ToArray_Length_member(bool async)
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Where_collection_navigation_ToArray_Length_member(async));
+    }
+#else
     public override async Task Where_collection_navigation_ToArray_Length_member(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Where_collection_navigation_ToArray_Length_member(async), "could not be translated");
     }
+#endif
 
     public override async Task Can_query_on_indexer_properties(bool async)
     {
@@ -411,29 +491,61 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Can_group_by_indexer_property(bool async)
+    {
+        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
+        await SpecFails.TranslationFailedAsync(() => base.Can_group_by_indexer_property(async));
+    }
+#else
     public override async Task Can_group_by_indexer_property(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Can_group_by_indexer_property(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Can_group_by_converted_indexer_property(bool async)
+    {
+        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
+        await SpecFails.TranslationFailedAsync(() => base.Can_group_by_converted_indexer_property(async));
+    }
+#else
     public override async Task Can_group_by_converted_indexer_property(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Can_group_by_converted_indexer_property(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Can_group_by_owned_indexer_property(bool async)
+    {
+        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
+        await SpecFails.TranslationFailedAsync(() => base.Can_group_by_owned_indexer_property(async));
+    }
+#else
     public override async Task Can_group_by_owned_indexer_property(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Can_group_by_owned_indexer_property(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Can_group_by_converted_owned_indexer_property(bool async)
+    {
+        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
+        await SpecFails.TranslationFailedAsync(() => base.Can_group_by_converted_owned_indexer_property(async));
+    }
+#else
     public override async Task Can_group_by_converted_owned_indexer_property(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.Can_group_by_converted_owned_indexer_property(async), "could not be translated");
     }
+#endif
 
     public override async Task Can_join_on_indexer_property_on_query(bool async)
     {
@@ -470,11 +582,19 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await base.NoTracking_Include_with_cycles_throws(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task NoTracking_Include_with_cycles_does_not_throw_when_performing_identity_resolution(bool async, bool useAsTracking)
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NoTracking_Include_with_cycles_does_not_throw_when_performing_identity_resolution(async, useAsTracking));
+    }
+#else
     public override async Task NoTracking_Include_with_cycles_does_not_throw_when_performing_identity_resolution(bool async, bool useAsTracking)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.NoTracking_Include_with_cycles_does_not_throw_when_performing_identity_resolution(async, useAsTracking), "could not be translated");
     }
+#endif
 
     public override async Task Trying_to_access_non_existent_indexer_property_throws_meaningful_exception(bool async)
     {
@@ -482,11 +602,19 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Trying_to_access_non_existent_indexer_property_throws_meaningful_exception(async), "Exception type was not an exact match");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_with_multiple_aggregates_on_owned_navigation_properties(bool async)
+    {
+        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
+        await SpecFails.TranslationFailedAsync(() => base.GroupBy_with_multiple_aggregates_on_owned_navigation_properties(async));
+    }
+#else
     public override async Task GroupBy_with_multiple_aggregates_on_owned_navigation_properties(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.GroupBy_with_multiple_aggregates_on_owned_navigation_properties(async), "could not be translated");
     }
+#endif
 
     public override async Task Non_nullable_property_through_optional_navigation(bool async)
     {
@@ -545,11 +673,18 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(bool async)
+    {
+        await base.GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(async);
+    }
+#else
     public override async Task GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
         await SpecFails.ThrowsAsync(() => base.GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(async), "could not be translated");
     }
+#endif
 
 #if EF9 || EF10
     public override async Task Count_over_owned_collection(bool async)
@@ -642,40 +777,38 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
 #if EF8 || EF9
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity(async), "could not be translated");
+        await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Filter_owned_entity_chained_with_regular_entity_followed_by_projecting_owned_collection(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Filter_owned_entity_chained_with_regular_entity_followed_by_projecting_owned_collection(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Filter_owned_entity_chained_with_regular_entity_followed_by_projecting_owned_collection(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Project_multiple_owned_navigations(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Project_multiple_owned_navigations(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Project_multiple_owned_navigations(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_filter(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_filter(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_filter(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(async), "could not be translated");
+        await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(async);
     }
 #endif
 
@@ -683,55 +816,53 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_collection_count(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_collection_count(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_collection_count(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(async), "could not be translated");
+        await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_in_predicate_and_projection(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_in_predicate_and_projection(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_in_predicate_and_projection(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Query_loads_reference_nav_automatically_in_projection(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Query_loads_reference_nav_automatically_in_projection(async), "could not be translated");
+        await base.Query_loads_reference_nav_automatically_in_projection(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Left_join_on_entity_with_owned_navigations(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Left_join_on_entity_with_owned_navigations(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Left_join_on_entity_with_owned_navigations(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Left_join_on_entity_with_owned_navigations_complex(bool async)
     {
-        // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
-        await SpecFails.ThrowsAsync(() => base.Left_join_on_entity_with_owned_navigations_complex(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Left_join_on_entity_with_owned_navigations_complex(async));
     }
 #endif
 

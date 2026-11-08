@@ -105,50 +105,32 @@ public class IncludeOneToOneMongoTest : IncludeOneToOneTestBase<IncludeOneToOneM
 
 #if EF8 || EF9
     public override void Include_address()
-    {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        SpecFails.Throws(() => base.Include_address(), "could not be translated");
-    }
+        => base.Include_address();
 #endif
 
 #if EF8 || EF9
     public override void Include_address_EF_Property()
-    {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        SpecFails.Throws(() => base.Include_address_EF_Property(), "could not be translated");
-    }
+        => base.Include_address_EF_Property();
 #endif
 
 #if EF8 || EF9
     public override void Include_address_shadow()
-    {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        SpecFails.Throws(() => base.Include_address_shadow(), "could not be translated");
-    }
+        => base.Include_address_shadow();
 #endif
 
 #if EF8 || EF9
     public override void Include_address_no_tracking()
-    {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        SpecFails.Throws(() => base.Include_address_no_tracking(), "could not be translated");
-    }
+        => base.Include_address_no_tracking();
 #endif
 
 #if EF8 || EF9
     public override void Include_address_no_tracking_EF_Property()
-    {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        SpecFails.Throws(() => base.Include_address_no_tracking_EF_Property(), "could not be translated");
-    }
+        => base.Include_address_no_tracking_EF_Property();
 #endif
 
 #if EF8 || EF9
     public override void Include_address_when_person_already_tracked()
-    {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        SpecFails.Throws(() => base.Include_address_when_person_already_tracked(), "could not be translated");
-    }
+        => base.Include_address_when_person_already_tracked();
 #endif
 
     public class IncludeOneToOneMongoFixture : OneToOneQueryFixtureBase

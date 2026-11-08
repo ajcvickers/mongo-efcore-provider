@@ -116,6 +116,30 @@ public static class SpecFails
         Assert.Fail($"Expected {typeof(TException).Name} containing '{messageFragment}' but the test passed.");
     }
 
+    /// <summary>
+    /// Exactly this exception type (any message), unwrapping reflection and aggregate wrappers. For failures whose message
+    /// is not stable across query modes or EF versions.
+    /// </summary>
+    public static void Throws<TException>(Action test)
+        where TException : Exception
+        => Sync<TException>(test, string.Empty);
+
+    /// <inheritdoc cref="Throws{TException}(Action)"/>
+    public static Task ThrowsAsync<TException>(Func<Task> test)
+        where TException : Exception
+        => Async<TException>(test, string.Empty);
+
+    /// <summary>
+    /// The query fails to translate, in whichever form the active query mode reports it (see
+    /// <c>MongoSpecTestHelpers.AssertNativeTranslationFailed</c>). A wrong-data failure from the test body is not accepted.
+    /// </summary>
+    public static void TranslationFailed(Action test, params Type[] additionalAcceptedTypes)
+        => Query.MongoSpecTestHelpers.AssertNativeTranslationFailed(test, additionalAcceptedTypes);
+
+    /// <inheritdoc cref="TranslationFailed(Action, Type[])"/>
+    public static Task TranslationFailedAsync(Func<Task> test, params Type[] additionalAcceptedTypes)
+        => Query.MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(test, additionalAcceptedTypes);
+
     /// <summary>For theories where only some data rows fail: accepts success or the expected failure.</summary>
     public static async Task AsyncSomeRows<TException>(Func<Task> test, string messageFragment)
         where TException : Exception

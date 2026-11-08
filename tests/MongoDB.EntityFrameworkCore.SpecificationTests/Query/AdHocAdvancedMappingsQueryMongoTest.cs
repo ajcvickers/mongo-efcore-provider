@@ -74,8 +74,7 @@ public class AdHocAdvancedMappingsQueryMongoTest : AdHocAdvancedMappingsQueryTes
 #if EF9 || EF10
     public override async Task Double_convert_interface_created_expression_tree()
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await SpecFails.ThrowsAsync(() => base.Double_convert_interface_created_expression_tree(), "Unsupported cross-DbSet query");
+        await base.Double_convert_interface_created_expression_tree();
     }
 #endif
 
@@ -133,24 +132,23 @@ public class AdHocAdvancedMappingsQueryMongoTest : AdHocAdvancedMappingsQueryTes
 #if EF9 || EF10
     public override async Task Projecting_expression_with_converter_with_closure(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_expression_with_converter_with_closure(async), "could not be translated");
+        // Fails: Other unexpected exception from query execution EF-X605
+        await SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Projecting_expression_with_converter_with_closure(async));
     }
 #endif
 
 #if EF9 || EF10
     public override async Task Projecting_property_with_converter_without_closure(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_with_converter_without_closure(async), "could not be translated");
+        // Fails: Other unexpected exception from query execution EF-X605
+        await SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Projecting_property_with_converter_without_closure(async));
     }
 #endif
 
 #if EF9
     public override async Task Expression_tree_constructed_via_interface_works()
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Expression_tree_constructed_via_interface_works(), "could not be translated");
+        await base.Expression_tree_constructed_via_interface_works();
     }
 #endif
 

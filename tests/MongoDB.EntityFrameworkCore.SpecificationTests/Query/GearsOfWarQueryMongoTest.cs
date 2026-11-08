@@ -166,17 +166,32 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Include_with_join_reference1(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_with_join_reference2(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_with_join_reference2(async));
+    }
+#else
     public override async Task Include_with_join_reference2(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.Include_with_join_reference2(async), "Expression not supported");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_with_join_collection1(bool async)
+    {
+        await base.Include_with_join_collection1(async);
+    }
+#else
     public override async Task Include_with_join_collection1(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.Include_with_join_collection1(async), "Expression not supported");
     }
+#endif
 
     public override async Task Include_with_join_collection2(bool async)
     {
@@ -196,7 +211,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_where_list_contains_navigation2(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
-        await SpecFails.ThrowsAsync(() => base.Include_where_list_contains_navigation2(async), "Expression not supported");
+        await SpecFails.TranslationFailedAsync(() => base.Include_where_list_contains_navigation2(async));
     }
 #endif
 
@@ -213,11 +228,19 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Include_with_join_multi_level(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_with_join_and_inheritance1(bool async)
+    {
+        // Fails: Expression not supported by the driver LINQ translator EF-X527
+        await SpecFails.TranslationFailedAsync(() => base.Include_with_join_and_inheritance1(async));
+    }
+#else
     public override async Task Include_with_join_and_inheritance1(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.Include_with_join_and_inheritance1(async), "Expression not supported");
     }
+#endif
 
     public override async Task Include_with_join_and_inheritance_with_orderby_before_and_after_include(bool async)
     {
@@ -225,11 +248,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Include_with_join_and_inheritance_with_orderby_before_and_after_include(async), "Expression not supported");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_with_join_and_inheritance2(bool async)
+    {
+        await base.Include_with_join_and_inheritance2(async);
+    }
+#else
     public override async Task Include_with_join_and_inheritance2(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.Include_with_join_and_inheritance2(async), "Expression not supported");
     }
+#endif
 
     public override async Task Include_with_join_and_inheritance3(bool async)
     {
@@ -244,17 +274,31 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Where_count_subquery_without_collision(bool async)
+    {
+        await base.Where_count_subquery_without_collision(async);
+    }
+#else
     public override async Task Where_count_subquery_without_collision(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Where_count_subquery_without_collision(async), "Unsupported cross-DbSet query");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Where_any_subquery_without_collision(bool async)
+    {
+        await base.Where_any_subquery_without_collision(async);
+    }
+#else
     public override async Task Where_any_subquery_without_collision(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Where_any_subquery_without_collision(async), "Unsupported cross-DbSet query");
     }
+#endif
 
     public override async Task Select_inverted_boolean(bool async)
     {
@@ -349,11 +393,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Select_null_propagation_optimization7(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_null_propagation_optimization8(bool async)
+    {
+        await base.Select_null_propagation_optimization8(async);
+    }
+#else
     public override async Task Select_null_propagation_optimization8(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
         await SpecFails.ThrowsAsync(() => base.Select_null_propagation_optimization8(async), "Failure");
     }
+#endif
 
     public override async Task Select_null_propagation_optimization9(bool async)
     {
@@ -508,8 +559,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF10
     public override async Task Optional_Navigation_Null_Coalesce_To_Clr_Type(bool async)
     {
-        // Fails: Average/aggregate over a navigation without selector throws 'Operation is not valid due to the current state of the object' EF-X541
-        await SpecFails.ThrowsAsync(() => base.Optional_Navigation_Null_Coalesce_To_Clr_Type(async), "Operation is not valid");
+        await base.Optional_Navigation_Null_Coalesce_To_Clr_Type(async);
     }
 #endif
 
@@ -609,11 +659,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Where_subquery_concat_firstordefault_boolean(async), "Unsupported cross-DbSet query");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Concat_with_count(bool async)
+    {
+        await base.Concat_with_count(async);
+    }
+#else
     public override async Task Concat_with_count(bool async)
     {
         // Fails: NullReferenceException during query execution/materialization EF-X529
         await SpecFails.ThrowsAsync(() => base.Concat_with_count(async), "NullReferenceException");
     }
+#endif
 
     public override async Task Concat_scalars_with_count(bool async)
     {
@@ -695,8 +752,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF10
     public override async Task Conditional_Navigation_With_Member_Access_On_Same_Type(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Conditional_Navigation_With_Member_Access_On_Same_Type(async), "Failure");
+        await base.Conditional_Navigation_With_Member_Access_On_Same_Type(async);
     }
 #endif
 
@@ -724,11 +780,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupJoin_Composite_Key(bool async)
+    {
+        await base.GroupJoin_Composite_Key(async);
+    }
+#else
     public override async Task GroupJoin_Composite_Key(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.GroupJoin_Composite_Key(async), "Expression not supported");
     }
+#endif
 
 #if EF10
     public override async Task Join_navigation_translated_to_subquery_composite_key(bool async)
@@ -761,15 +824,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Collection_with_inheritance_and_join_include_joined(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
-        await SpecFails.ThrowsAsync(() => base.Collection_with_inheritance_and_join_include_joined(async), "Expression not supported");
+        await SpecFails.TranslationFailedAsync(() => base.Collection_with_inheritance_and_join_include_joined(async));
     }
 #endif
 
 #if EF10
     public override async Task Collection_with_inheritance_and_join_include_source(bool async)
     {
-        // Fails: Expression not supported by the driver LINQ translator EF-X527
-        await SpecFails.ThrowsAsync(() => base.Collection_with_inheritance_and_join_include_source(async), "Expression not supported");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Collection_with_inheritance_and_join_include_source(async));
     }
 #endif
 
@@ -793,11 +856,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Non_unicode_string_literals_in_contains_is_used_for_non_unicode_column(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Non_unicode_string_literals_is_used_for_non_unicode_column_with_subquery(bool async)
+    {
+        await base.Non_unicode_string_literals_is_used_for_non_unicode_column_with_subquery(async);
+    }
+#else
     public override async Task Non_unicode_string_literals_is_used_for_non_unicode_column_with_subquery(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Non_unicode_string_literals_is_used_for_non_unicode_column_with_subquery(async), "Unsupported cross-DbSet query");
     }
+#endif
 
     public override async Task Non_unicode_string_literals_is_used_for_non_unicode_column_in_subquery(bool async)
     {
@@ -976,8 +1046,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF10
     public override async Task Optional_navigation_type_compensation_works_with_DTOs(bool async)
     {
-        // Fails: Average/aggregate over a navigation without selector throws 'Operation is not valid due to the current state of the object' EF-X541
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_DTOs(async), "Operation is not valid");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Optional_navigation_type_compensation_works_with_DTOs(async));
     }
 #endif
 
@@ -1056,11 +1126,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Select_correlated_filtered_collection_returning_queryable_throws(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_correlated_filtered_collection_works_with_caching(bool async)
+    {
+        await base.Select_correlated_filtered_collection_works_with_caching(async);
+    }
+#else
     public override async Task Select_correlated_filtered_collection_works_with_caching(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_correlated_filtered_collection_works_with_caching(async), "could not be translated");
     }
+#endif
 
     public override async Task Join_predicate_value_equals_condition(bool async)
     {
@@ -1227,11 +1304,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Subquery_containing_join_gets_lifted_clashing_names(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Subquery_created_by_include_gets_lifted_nested(bool async)
+    {
+        await base.Subquery_created_by_include_gets_lifted_nested(async);
+    }
+#else
     public override async Task Subquery_created_by_include_gets_lifted_nested(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Subquery_created_by_include_gets_lifted_nested(async), "Unsupported cross-DbSet query");
     }
+#endif
 
     public override async Task Subquery_is_lifted_from_additional_from_clause(bool async)
     {
@@ -1345,11 +1429,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Collection_navigation_access_on_derived_entity_using_cast(bool async)
+    {
+        await base.Collection_navigation_access_on_derived_entity_using_cast(async);
+    }
+#else
     public override async Task Collection_navigation_access_on_derived_entity_using_cast(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Collection_navigation_access_on_derived_entity_using_cast(async), "could not be translated");
     }
+#endif
 
     public override async Task Collection_navigation_access_on_derived_entity_using_cast_in_SelectMany(bool async)
     {
@@ -1416,17 +1507,31 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_null_conditional_with_inheritance(bool async)
+    {
+        await base.Select_null_conditional_with_inheritance(async);
+    }
+#else
     public override async Task Select_null_conditional_with_inheritance(bool async)
     {
         // Fails: ArgumentNullException (null string/source argument) during translation or materialization EF-X531
         await SpecFails.ThrowsAsync(() => base.Select_null_conditional_with_inheritance(async), "ArgumentNullException");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_null_conditional_with_inheritance_negative(bool async)
+    {
+        await base.Select_null_conditional_with_inheritance_negative(async);
+    }
+#else
     public override async Task Select_null_conditional_with_inheritance_negative(bool async)
     {
         // Fails: ArgumentNullException (null string/source argument) during translation or materialization EF-X531
         await SpecFails.ThrowsAsync(() => base.Select_null_conditional_with_inheritance_negative(async), "ArgumentNullException");
     }
+#endif
 
     public override async Task Project_collection_navigation_with_inheritance1(bool async)
     {
@@ -1584,11 +1689,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collections_naked_navigation_with_ToList(bool async)
+    {
+        await base.Correlated_collections_naked_navigation_with_ToList(async);
+    }
+#else
     public override async Task Correlated_collections_naked_navigation_with_ToList(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_naked_navigation_with_ToList(async), "could not be translated");
     }
+#endif
 
     public override async Task Correlated_collections_naked_navigation_with_ToList_followed_by_projecting_count(bool async)
     {
@@ -1601,17 +1713,31 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_naked_navigation_with_ToArray(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collections_basic_projection(bool async)
+    {
+        await base.Correlated_collections_basic_projection(async);
+    }
+#else
     public override async Task Correlated_collections_basic_projection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_basic_projection(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collections_basic_projection_explicit_to_list(bool async)
+    {
+        await base.Correlated_collections_basic_projection_explicit_to_list(async);
+    }
+#else
     public override async Task Correlated_collections_basic_projection_explicit_to_list(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_basic_projection_explicit_to_list(async), "could not be translated");
     }
+#endif
 
     public override async Task Correlated_collections_basic_projection_explicit_to_array(bool async)
     {
@@ -1619,11 +1745,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_basic_projection_explicit_to_array(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collections_basic_projection_ordered(bool async)
+    {
+        await base.Correlated_collections_basic_projection_ordered(async);
+    }
+#else
     public override async Task Correlated_collections_basic_projection_ordered(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_basic_projection_ordered(async), "could not be translated");
     }
+#endif
 
     public override async Task Correlated_collections_basic_projection_composite_key(bool async)
     {
@@ -1631,23 +1764,44 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_basic_projection_composite_key(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collections_basic_projecting_single_property(bool async)
+    {
+        await base.Correlated_collections_basic_projecting_single_property(async);
+    }
+#else
     public override async Task Correlated_collections_basic_projecting_single_property(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_basic_projecting_single_property(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collections_basic_projecting_constant(bool async)
+    {
+        await base.Correlated_collections_basic_projecting_constant(async);
+    }
+#else
     public override async Task Correlated_collections_basic_projecting_constant(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_basic_projecting_constant(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collections_basic_projecting_constant_bool(bool async)
+    {
+        await base.Correlated_collections_basic_projecting_constant_bool(async);
+    }
+#else
     public override async Task Correlated_collections_basic_projecting_constant_bool(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_basic_projecting_constant_bool(async), "could not be translated");
     }
+#endif
 
     public override async Task Correlated_collections_projection_of_collection_thru_navigation(bool async)
     {
@@ -1685,11 +1839,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_nested_with_custom_ordering(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collections_same_collection_projected_multiple_times(bool async)
+    {
+        await base.Correlated_collections_same_collection_projected_multiple_times(async);
+    }
+#else
     public override async Task Correlated_collections_same_collection_projected_multiple_times(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collections_same_collection_projected_multiple_times(async), "could not be translated");
     }
+#endif
 
     public override async Task Correlated_collections_similar_collection_projected_multiple_times(bool async)
     {
@@ -1868,11 +2029,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Correlated_collection_with_top_level_Last_with_orderby_on_outer(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Correlated_collection_with_top_level_Last_with_order_by_on_inner(bool async)
+    {
+        await base.Correlated_collection_with_top_level_Last_with_order_by_on_inner(async);
+    }
+#else
     public override async Task Correlated_collection_with_top_level_Last_with_order_by_on_inner(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Correlated_collection_with_top_level_Last_with_order_by_on_inner(async), "could not be translated");
     }
+#endif
 
     public override async Task Null_semantics_on_nullable_bool_from_inner_join_subquery_is_fully_applied(bool async)
     {
@@ -2039,29 +2207,57 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Streaming_correlated_collection_issue_11403_returning_ordered_enumerable_throws(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Streaming_correlated_collection_issue_11403(bool async)
+    {
+        await base.Streaming_correlated_collection_issue_11403(async);
+    }
+#else
     public override async Task Streaming_correlated_collection_issue_11403(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Streaming_correlated_collection_issue_11403(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Project_one_value_type_from_empty_collection(bool async)
+    {
+        await base.Project_one_value_type_from_empty_collection(async);
+    }
+#else
     public override async Task Project_one_value_type_from_empty_collection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Project_one_value_type_from_empty_collection(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Project_one_value_type_converted_to_nullable_from_empty_collection(bool async)
+    {
+        await base.Project_one_value_type_converted_to_nullable_from_empty_collection(async);
+    }
+#else
     public override async Task Project_one_value_type_converted_to_nullable_from_empty_collection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Project_one_value_type_converted_to_nullable_from_empty_collection(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Project_one_value_type_with_client_projection_from_empty_collection(bool async)
+    {
+        await base.Project_one_value_type_with_client_projection_from_empty_collection(async);
+    }
+#else
     public override async Task Project_one_value_type_with_client_projection_from_empty_collection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Project_one_value_type_with_client_projection_from_empty_collection(async), "could not be translated");
     }
+#endif
 
     public override async Task Filter_on_subquery_projecting_one_value_type_from_empty_collection(bool async)
     {
@@ -2069,35 +2265,70 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Filter_on_subquery_projecting_one_value_type_from_empty_collection(async), "Unsupported cross-DbSet query");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_projecting_single_constant_int(bool async)
+    {
+        await base.Select_subquery_projecting_single_constant_int(async);
+    }
+#else
     public override async Task Select_subquery_projecting_single_constant_int(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_projecting_single_constant_int(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_projecting_single_constant_string(bool async)
+    {
+        await base.Select_subquery_projecting_single_constant_string(async);
+    }
+#else
     public override async Task Select_subquery_projecting_single_constant_string(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_projecting_single_constant_string(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_projecting_single_constant_bool(bool async)
+    {
+        await base.Select_subquery_projecting_single_constant_bool(async);
+    }
+#else
     public override async Task Select_subquery_projecting_single_constant_bool(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_projecting_single_constant_bool(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_projecting_single_constant_inside_anonymous(bool async)
+    {
+        await base.Select_subquery_projecting_single_constant_inside_anonymous(async);
+    }
+#else
     public override async Task Select_subquery_projecting_single_constant_inside_anonymous(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_projecting_single_constant_inside_anonymous(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_projecting_multiple_constants_inside_anonymous(bool async)
+    {
+        await base.Select_subquery_projecting_multiple_constants_inside_anonymous(async);
+    }
+#else
     public override async Task Select_subquery_projecting_multiple_constants_inside_anonymous(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_projecting_multiple_constants_inside_anonymous(async), "could not be translated");
     }
+#endif
 
     public override async Task Include_with_order_by_constant(bool async)
     {
@@ -2110,17 +2341,31 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Correlated_collection_order_by_constant(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_projecting_single_constant_null_of_non_mapped_type(bool async)
+    {
+        await base.Select_subquery_projecting_single_constant_null_of_non_mapped_type(async);
+    }
+#else
     public override async Task Select_subquery_projecting_single_constant_null_of_non_mapped_type(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_projecting_single_constant_null_of_non_mapped_type(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_projecting_single_constant_of_non_mapped_type(bool async)
+    {
+        await base.Select_subquery_projecting_single_constant_of_non_mapped_type(async);
+    }
+#else
     public override async Task Select_subquery_projecting_single_constant_of_non_mapped_type(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_projecting_single_constant_of_non_mapped_type(async), "could not be translated");
     }
+#endif
 
     public override async Task Correlated_collection_order_by_constant_null_of_non_mapped_type(bool async)
     {
@@ -2128,23 +2373,44 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Correlated_collection_order_by_constant_null_of_non_mapped_type(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_collection_OrderBy_aggregate(bool async)
+    {
+        await base.Include_collection_OrderBy_aggregate(async);
+    }
+#else
     public override async Task Include_collection_OrderBy_aggregate(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Include_collection_OrderBy_aggregate(async), "Unsupported cross-DbSet query");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_collection_with_complex_OrderBy2(bool async)
+    {
+        await base.Include_collection_with_complex_OrderBy2(async);
+    }
+#else
     public override async Task Include_collection_with_complex_OrderBy2(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Include_collection_with_complex_OrderBy2(async), "Unsupported cross-DbSet query");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_collection_with_complex_OrderBy3(bool async)
+    {
+        await base.Include_collection_with_complex_OrderBy3(async);
+    }
+#else
     public override async Task Include_collection_with_complex_OrderBy3(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Include_collection_with_complex_OrderBy3(async), "Unsupported cross-DbSet query");
     }
+#endif
 
     public override async Task Correlated_collection_with_complex_OrderBy(bool async)
     {
@@ -2169,11 +2435,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Cast_to_derived_type_after_OfType_works(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_boolean(bool async)
+    {
+        await base.Select_subquery_boolean(async);
+    }
+#else
     public override async Task Select_subquery_boolean(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_boolean(async), "could not be translated");
     }
+#endif
 
     public override async Task Select_subquery_boolean_with_pushdown(bool async)
     {
@@ -2205,11 +2478,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Select_subquery_int_with_pushdown_and_coalesce2(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_subquery_boolean_empty(bool async)
+    {
+        await base.Select_subquery_boolean_empty(async);
+    }
+#else
     public override async Task Select_subquery_boolean_empty(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Select_subquery_boolean_empty(async), "could not be translated");
     }
+#endif
 
     public override async Task Select_subquery_boolean_empty_with_pushdown(bool async)
     {
@@ -2253,11 +2533,19 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Select_subquery_distinct_singleordefault_boolean_empty_with_pushdown(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Cast_subquery_to_base_type_using_typed_ToList(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Cast_subquery_to_base_type_using_typed_ToList(async));
+    }
+#else
     public override async Task Cast_subquery_to_base_type_using_typed_ToList(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Cast_subquery_to_base_type_using_typed_ToList(async), "could not be translated");
     }
+#endif
 
     public override async Task Cast_ordered_subquery_to_base_type_using_typed_ToArray(bool async)
     {
@@ -2331,11 +2619,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task String_concat_nullable_expressions_are_coalesced(bool async)
+    {
+        await base.String_concat_nullable_expressions_are_coalesced(async);
+    }
+#else
     public override async Task String_concat_nullable_expressions_are_coalesced(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.String_concat_nullable_expressions_are_coalesced(async), "Expression not supported");
     }
+#endif
 
     public override async Task String_concat_on_various_types(bool async)
     {
@@ -2343,59 +2638,124 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.String_concat_on_various_types(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_Property_Include_Select_Average(bool async)
+    {
+        await base.GroupBy_Property_Include_Select_Average(async);
+    }
+#else
     public override async Task GroupBy_Property_Include_Select_Average(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_Property_Include_Select_Average(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_Property_Include_Select_Sum(bool async)
+    {
+        await base.GroupBy_Property_Include_Select_Sum(async);
+    }
+#else
     public override async Task GroupBy_Property_Include_Select_Sum(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_Property_Include_Select_Sum(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_Property_Include_Select_Count(bool async)
+    {
+        await base.GroupBy_Property_Include_Select_Count(async);
+    }
+#else
     public override async Task GroupBy_Property_Include_Select_Count(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_Property_Include_Select_Count(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_Property_Include_Select_LongCount(bool async)
+    {
+        await base.GroupBy_Property_Include_Select_LongCount(async);
+    }
+#else
     public override async Task GroupBy_Property_Include_Select_LongCount(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_Property_Include_Select_LongCount(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_Property_Include_Select_Max(bool async)
+    {
+        await base.GroupBy_Property_Include_Select_Max(async);
+    }
+#else
     public override async Task GroupBy_Property_Include_Select_Max(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_Property_Include_Select_Max(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_Property_Include_Select_Min(bool async)
+    {
+        await base.GroupBy_Property_Include_Select_Min(async);
+    }
+#else
     public override async Task GroupBy_Property_Include_Select_Min(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_Property_Include_Select_Min(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_Property_Include_Aggregate_with_anonymous_selector(bool async)
+    {
+        await base.GroupBy_Property_Include_Aggregate_with_anonymous_selector(async);
+    }
+#else
     public override async Task GroupBy_Property_Include_Aggregate_with_anonymous_selector(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_Property_Include_Aggregate_with_anonymous_selector(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Group_by_with_include_with_entity_in_result_selector(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Group_by_with_include_with_entity_in_result_selector(async));
+    }
+#else
     public override async Task Group_by_with_include_with_entity_in_result_selector(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Group_by_with_include_with_entity_in_result_selector(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Include_with_group_by_and_FirstOrDefault_gets_properly_applied(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Include_with_group_by_and_FirstOrDefault_gets_properly_applied(async));
+    }
+#else
     public override async Task Include_with_group_by_and_FirstOrDefault_gets_properly_applied(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Include_with_group_by_and_FirstOrDefault_gets_properly_applied(async), "could not be translated");
     }
+#endif
 
     public override async Task Include_collection_with_Cast_to_base(bool async)
     {
@@ -2475,11 +2835,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Filter_with_complex_predicate_containing_subquery(async), "Unsupported cross-DbSet query");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Query_with_complex_let_containing_ordering_and_filter_projecting_firstOrDefault_element_of_let(bool async)
+    {
+        await base.Query_with_complex_let_containing_ordering_and_filter_projecting_firstOrDefault_element_of_let(async);
+    }
+#else
     public override async Task Query_with_complex_let_containing_ordering_and_filter_projecting_firstOrDefault_element_of_let(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Query_with_complex_let_containing_ordering_and_filter_projecting_firstOrDefault_element_of_let(async), "could not be translated");
     }
+#endif
 
 #if EF10
     public override async Task Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation(bool async)
@@ -2509,7 +2876,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task OfTypeNav2(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
-        await SpecFails.ThrowsAsync(() => base.OfTypeNav2(async), "Expression not supported");
+        await SpecFails.TranslationFailedAsync(() => base.OfTypeNav2(async));
     }
 #endif
 
@@ -2517,7 +2884,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task OfTypeNav3(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
-        await SpecFails.ThrowsAsync(() => base.OfTypeNav3(async), "Expression not supported");
+        await SpecFails.TranslationFailedAsync(() => base.OfTypeNav3(async));
     }
 #endif
 
@@ -2541,7 +2908,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Nav_rewrite_with_convert1(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Nav_rewrite_with_convert1(async), "Failure");
+        await SpecFails.TranslationFailedAsync(() => base.Nav_rewrite_with_convert1(async));
     }
 #endif
 
@@ -2549,7 +2916,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Nav_rewrite_with_convert2(bool async)
     {
         // Fails: Missing property values issue EF-164
-        await SpecFails.ThrowsAsync(() => base.Nav_rewrite_with_convert2(async), "Document element is missing for required");
+        await SpecFails.TranslationFailedAsync(() => base.Nav_rewrite_with_convert2(async));
     }
 #endif
 
@@ -2557,7 +2924,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Nav_rewrite_with_convert3(bool async)
     {
         // Fails: Missing property values issue EF-164
-        await SpecFails.ThrowsAsync(() => base.Nav_rewrite_with_convert3(async), "Document element is missing for required");
+        await SpecFails.TranslationFailedAsync(() => base.Nav_rewrite_with_convert3(async));
     }
 #endif
 
@@ -2579,11 +2946,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Include_with_complex_order_by(async), "Unsupported cross-DbSet query");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Anonymous_projection_take_followed_by_projecting_single_element_from_collection_navigation(bool async)
+    {
+        await base.Anonymous_projection_take_followed_by_projecting_single_element_from_collection_navigation(async);
+    }
+#else
     public override async Task Anonymous_projection_take_followed_by_projecting_single_element_from_collection_navigation(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Anonymous_projection_take_followed_by_projecting_single_element_from_collection_navigation(async), "could not be translated");
     }
+#endif
 
     public override async Task Bool_projection_from_subquery_treated_appropriately_in_where(bool async)
     {
@@ -2826,17 +3200,32 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Query_reusing_parameter_with_inner_query_doesnt_declare_duplicate_parameter(async), "BsonSerializationException");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Query_reusing_parameter_with_inner_query_expression_doesnt_declare_duplicate_parameter(bool async)
+    {
+        await base.Query_reusing_parameter_with_inner_query_expression_doesnt_declare_duplicate_parameter(async);
+    }
+#else
     public override async Task Query_reusing_parameter_with_inner_query_expression_doesnt_declare_duplicate_parameter(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Query_reusing_parameter_with_inner_query_expression_doesnt_declare_duplicate_parameter(async), "Unsupported cross-DbSet query");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Query_reusing_parameter_doesnt_declare_duplicate_parameter_complex(bool async)
+    {
+        // Fails: Skip/Take/Distinct between two cross-collection joins (Include/ThenInclude) not supported EF-X535
+        await SpecFails.TranslationFailedAsync(() => base.Query_reusing_parameter_doesnt_declare_duplicate_parameter_complex(async));
+    }
+#else
     public override async Task Query_reusing_parameter_doesnt_declare_duplicate_parameter_complex(bool async)
     {
         // Fails: Skip/Take/Distinct between two cross-collection joins (Include/ThenInclude) not supported EF-X535
         await SpecFails.ThrowsAsync(() => base.Query_reusing_parameter_doesnt_declare_duplicate_parameter_complex(async), "composed between two cross-collection joins");
     }
+#endif
 
     public override async Task Project_entity_and_collection_element(bool async)
     {
@@ -2858,52 +3247,107 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Left_join_with_GroupBy_with_composite_group_key(bool async)
+    {
+        await base.Left_join_with_GroupBy_with_composite_group_key(async);
+    }
+#else
     public override async Task Left_join_with_GroupBy_with_composite_group_key(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Left_join_with_GroupBy_with_composite_group_key(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_with_boolean_grouping_key(bool async)
+    {
+        await base.GroupBy_with_boolean_grouping_key(async);
+    }
+#else
     public override async Task GroupBy_with_boolean_grouping_key(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_with_boolean_grouping_key(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_with_boolean_groupin_key_thru_navigation_access(bool async)
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.GroupBy_with_boolean_groupin_key_thru_navigation_access(async));
+    }
+#else
     public override async Task GroupBy_with_boolean_groupin_key_thru_navigation_access(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_with_boolean_groupin_key_thru_navigation_access(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Group_by_over_projection_with_multiple_properties_accessed_thru_navigation(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Group_by_over_projection_with_multiple_properties_accessed_thru_navigation(async));
+    }
+#else
     public override async Task Group_by_over_projection_with_multiple_properties_accessed_thru_navigation(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Group_by_over_projection_with_multiple_properties_accessed_thru_navigation(async), "could not be translated");
     }
+#endif
 
     public override async Task Group_by_with_aggregate_max_on_entity_type(bool async)
     {
-        await base.Group_by_with_aggregate_max_on_entity_type(async);
+        // Fails: REGRESSION vs main (exception type only): an unsupported query now throws FormatException instead of InvalidOperationException EF-X705
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Group_by_with_aggregate_max_on_entity_type(async), "Exception type was not an exact match");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Group_by_on_StartsWith_with_null_parameter_as_argument(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Group_by_on_StartsWith_with_null_parameter_as_argument(async));
+    }
+#else
     public override async Task Group_by_on_StartsWith_with_null_parameter_as_argument(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Group_by_on_StartsWith_with_null_parameter_as_argument(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Group_by_with_having_StartsWith_with_null_parameter_as_argument(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Group_by_with_having_StartsWith_with_null_parameter_as_argument(async));
+    }
+#else
     public override async Task Group_by_with_having_StartsWith_with_null_parameter_as_argument(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Group_by_with_having_StartsWith_with_null_parameter_as_argument(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Select_StartsWith_with_null_parameter_as_argument(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.Select_StartsWith_with_null_parameter_as_argument(async));
+    }
+#else
     public override async Task Select_StartsWith_with_null_parameter_as_argument(bool async)
     {
         // Fails: Server error executing the generated pipeline EF-X528
         await SpecFails.ThrowsAsync(() => base.Select_StartsWith_with_null_parameter_as_argument(async), "MongoCommandException");
     }
+#endif
 
     public override async Task Select_null_parameter_is_not_null(bool async)
     {
@@ -2915,11 +3359,19 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Where_null_parameter_is_not_null(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task OrderBy_StartsWith_with_null_parameter_as_argument(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentNullException>(() => base.OrderBy_StartsWith_with_null_parameter_as_argument(async));
+    }
+#else
     public override async Task OrderBy_StartsWith_with_null_parameter_as_argument(bool async)
     {
         // Fails: Server error executing the generated pipeline EF-X528
         await SpecFails.ThrowsAsync(() => base.OrderBy_StartsWith_with_null_parameter_as_argument(async), "MongoCommandException");
     }
+#endif
 
     public override async Task OrderBy_Contains_empty_list(bool async)
     {
@@ -3009,17 +3461,33 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Projecting_required_string_column_compared_to_null_parameter(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Group_by_nullable_property_HasValue_and_project_the_grouping_key(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Group_by_nullable_property_HasValue_and_project_the_grouping_key(async));
+    }
+#else
     public override async Task Group_by_nullable_property_HasValue_and_project_the_grouping_key(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Group_by_nullable_property_HasValue_and_project_the_grouping_key(async), "could not be translated");
     }
+#endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Group_by_nullable_property_and_project_the_grouping_key_HasValue(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Group_by_nullable_property_and_project_the_grouping_key_HasValue(async));
+    }
+#else
     public override async Task Group_by_nullable_property_and_project_the_grouping_key_HasValue(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Group_by_nullable_property_and_project_the_grouping_key_HasValue(async), "could not be translated");
     }
+#endif
 
     public override async Task Checked_context_with_cast_does_not_fail(bool isAsync)
     {
@@ -3089,11 +3557,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await base.Enum_closure_typed_as_underlying_type_generates_correct_parameter_type(async);
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Enum_flags_closure_typed_as_underlying_type_generates_correct_parameter_type(bool async)
+    {
+        await base.Enum_flags_closure_typed_as_underlying_type_generates_correct_parameter_type(async);
+    }
+#else
     public override async Task Enum_flags_closure_typed_as_underlying_type_generates_correct_parameter_type(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
         await SpecFails.ThrowsAsync(() => base.Enum_flags_closure_typed_as_underlying_type_generates_correct_parameter_type(async), "Expression not supported");
     }
+#endif
 
     public override async Task Enum_flags_closure_typed_as_different_type_generates_correct_parameter_type(bool async)
     {
@@ -3234,11 +3709,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.SelectMany_predicate_with_non_equality_comparison_with_Take_doesnt_convert_to_join(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task FirstOrDefault_over_int_compared_to_zero(bool async)
+    {
+        await base.FirstOrDefault_over_int_compared_to_zero(async);
+    }
+#else
     public override async Task FirstOrDefault_over_int_compared_to_zero(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.FirstOrDefault_over_int_compared_to_zero(async), "Unsupported cross-DbSet query");
     }
+#endif
 
     public override async Task Correlated_collection_with_inner_collection_references_element_two_levels_up(bool async)
     {
@@ -3269,11 +3751,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Correlated_collection_take(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task GroupBy_Select_sum(bool async)
+    {
+        await base.GroupBy_Select_sum(async);
+    }
+#else
     public override async Task GroupBy_Select_sum(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.GroupBy_Select_sum(async), "could not be translated");
     }
+#endif
 
     public override async Task Sum_with_no_data_nullable_double(bool async)
     {
@@ -3370,16 +3859,16 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF10
     public override async Task Projecting_property_converted_to_nullable_into_element_init(bool async)
     {
-        // Fails: Property converted to nullable/other type in a projection: no coercion operator defined (int to string) EF-X543
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_into_element_init(async), "No coercion operator");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Projecting_property_converted_to_nullable_into_element_init(async));
     }
 #endif
 
 #if EF10
     public override async Task Projecting_property_converted_to_nullable_into_member_assignment(bool async)
     {
-        // Fails: Average/aggregate over a navigation without selector throws 'Operation is not valid due to the current state of the object' EF-X541
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_into_member_assignment(async), "Operation is not valid");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Projecting_property_converted_to_nullable_into_member_assignment(async));
     }
 #endif
 
@@ -3566,11 +4055,19 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     }
 #endif
 
+#if EF8 || EF9 || EF10
+    public override async Task Join_entity_with_itself_grouped_by_key_followed_by_include_skip_take(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Join_entity_with_itself_grouped_by_key_followed_by_include_skip_take(async));
+    }
+#else
     public override async Task Join_entity_with_itself_grouped_by_key_followed_by_include_skip_take(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Join_entity_with_itself_grouped_by_key_followed_by_include_skip_take(async), "could not be translated");
     }
+#endif
 
     public override async Task Where_equals_method_on_nullable_with_object_overload(bool async)
     {
@@ -3652,11 +4149,19 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Using_indexer_on_byte_array_and_string_in_projection(async), "Expression not supported");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Set_operator_with_navigation_in_projection_groupby_aggregate(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Set_operator_with_navigation_in_projection_groupby_aggregate(async));
+    }
+#else
     public override async Task Set_operator_with_navigation_in_projection_groupby_aggregate(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Set_operator_with_navigation_in_projection_groupby_aggregate(async), "could not be translated");
     }
+#endif
 
     public override async Task Nav_expansion_inside_Contains_argument(bool async)
     {
@@ -3664,11 +4169,18 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Nav_expansion_inside_Contains_argument(async), "Unsupported cross-DbSet query");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task Nav_expansion_with_member_pushdown_inside_Contains_argument(bool async)
+    {
+        await base.Nav_expansion_with_member_pushdown_inside_Contains_argument(async);
+    }
+#else
     public override async Task Nav_expansion_with_member_pushdown_inside_Contains_argument(bool async)
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Nav_expansion_with_member_pushdown_inside_Contains_argument(async), "Unsupported cross-DbSet query");
     }
+#endif
 
     public override async Task Subquery_inside_Take_argument(bool async)
     {
@@ -3714,24 +4226,24 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF10
     public override async Task Join_include_coalesce_simple(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Join_include_coalesce_simple(async), "Failure");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Join_include_coalesce_simple(async));
     }
 #endif
 
 #if EF10
     public override async Task Join_include_coalesce_nested(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Join_include_coalesce_nested(async), "Failure");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Join_include_coalesce_nested(async));
     }
 #endif
 
 #if EF10
     public override async Task Join_include_conditional(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Join_include_conditional(async), "Failure");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Join_include_conditional(async));
     }
 #endif
 
@@ -3763,7 +4275,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_multiple_one_to_one_and_one_to_many(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_multiple_one_to_one_and_one_to_many(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_multiple_one_to_one_and_one_to_many(async));
     }
 #endif
 
@@ -3777,8 +4289,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Include_multiple_one_to_one_optional_and_one_to_one_required(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_multiple_one_to_one_optional_and_one_to_one_required(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_multiple_one_to_one_optional_and_one_to_one_required(async));
     }
 #endif
 
@@ -3786,7 +4298,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_Where_Navigation_Included(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_Where_Navigation_Included(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_Where_Navigation_Included(async));
     }
 #endif
 
@@ -3794,7 +4306,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_where_list_contains_navigation(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_where_list_contains_navigation(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_where_list_contains_navigation(async));
     }
 #endif
 
@@ -3810,15 +4322,14 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_accessed_twice_outside_and_inside_subquery(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_accessed_twice_outside_and_inside_subquery(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Navigation_accessed_twice_outside_and_inside_subquery(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_with_nested_navigation_in_order_by(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_with_nested_navigation_in_order_by(async), "could not be translated");
+        await base.Include_with_nested_navigation_in_order_by(async);
     }
 #endif
 
@@ -3972,7 +4483,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_propagation_negative3(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_null_propagation_negative3(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_null_propagation_negative3(async));
     }
 #endif
 
@@ -3980,7 +4491,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_propagation_negative4(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_null_propagation_negative4(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_null_propagation_negative4(async));
     }
 #endif
 
@@ -3988,15 +4499,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_propagation_negative5(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_null_propagation_negative5(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_null_propagation_negative5(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Select_null_propagation_negative8(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_null_propagation_negative8(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Select_null_propagation_negative8(async));
     }
 #endif
 
@@ -4004,15 +4515,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_propagation_works_for_navigations_with_composite_keys(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_null_propagation_works_for_navigations_with_composite_keys(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_null_propagation_works_for_navigations_with_composite_keys(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Select_null_propagation_works_for_multiple_navigations_with_composite_keys(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_null_propagation_works_for_multiple_navigations_with_composite_keys(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Select_null_propagation_works_for_multiple_navigations_with_composite_keys(async));
     }
 #endif
 
@@ -4020,23 +4531,22 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_Where_Navigation(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_Where_Navigation(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_Where_Navigation(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Optional_Navigation_Null_Coalesce_To_Clr_Type(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_Navigation_Null_Coalesce_To_Clr_Type(async), "could not be translated");
+        await base.Optional_Navigation_Null_Coalesce_To_Clr_Type(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Select_Where_Navigation_Client(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_Where_Navigation_Client(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.ThrowsException>(() => base.Select_Where_Navigation_Client(async));
     }
 #endif
 
@@ -4044,7 +4554,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_Where_Navigation_Null(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_Where_Navigation_Null(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_Where_Navigation_Null(async));
     }
 #endif
 
@@ -4052,7 +4562,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_Where_Navigation_Null_Reverse(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_Where_Navigation_Null_Reverse(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_Where_Navigation_Null_Reverse(async));
     }
 #endif
 
@@ -4060,7 +4570,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Singleton_Navigation_With_Member_Access(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Singleton_Navigation_With_Member_Access(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Singleton_Navigation_With_Member_Access(async));
     }
 #endif
 
@@ -4068,7 +4578,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_Singleton_Navigation_With_Member_Access(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_Singleton_Navigation_With_Member_Access(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Select_Singleton_Navigation_With_Member_Access(async));
     }
 #endif
 
@@ -4076,7 +4586,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Join_navigation_translated_to_subquery_composite_key(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Join_navigation_translated_to_subquery_composite_key(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Join_navigation_translated_to_subquery_composite_key(async));
     }
 #endif
 
@@ -4084,7 +4594,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Join_with_order_by_on_inner_sequence_navigation_translated_to_subquery_composite_key(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Join_with_order_by_on_inner_sequence_navigation_translated_to_subquery_composite_key(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Join_with_order_by_on_inner_sequence_navigation_translated_to_subquery_composite_key(async));
     }
 #endif
 
@@ -4099,40 +4609,35 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Collection_with_inheritance_and_join_include_source(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Collection_with_inheritance_and_join_include_source(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Collection_with_inheritance_and_join_include_source(async));
     }
 #endif
 
 #if EF8 || EF9
     public override void Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result1()
-    {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        SpecFails.Throws(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result1(), "could not be translated");
-    }
+        => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result1();
 #endif
 
 #if EF8 || EF9
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override void Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result2()
-    {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        SpecFails.Throws(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result2(), "could not be translated");
-    }
+        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result2());
 #endif
 
 #if EF8 || EF9
     public override async Task Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result3(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result3(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result3(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result4(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result4(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result4(async));
     }
 #endif
 
@@ -4140,23 +4645,23 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_inheritance_and_coalesce_result(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_inheritance_and_coalesce_result(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_inheritance_and_coalesce_result(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_conditional_result(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_conditional_result(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_conditional_result(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_complex_projection_result(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_complex_projection_result(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_complex_projection_result(async));
     }
 #endif
 
@@ -4164,7 +4669,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Coalesce_operator_in_predicate(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Coalesce_operator_in_predicate(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Coalesce_operator_in_predicate(async));
     }
 #endif
 
@@ -4172,7 +4677,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Coalesce_operator_in_predicate_with_other_conditions(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Coalesce_operator_in_predicate_with_other_conditions(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Coalesce_operator_in_predicate_with_other_conditions(async));
     }
 #endif
 
@@ -4180,7 +4685,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Coalesce_operator_in_projection_with_other_conditions(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Coalesce_operator_in_projection_with_other_conditions(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Coalesce_operator_in_projection_with_other_conditions(async));
     }
 #endif
 
@@ -4188,7 +4693,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_predicate(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_predicate(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_predicate(async));
     }
 #endif
 
@@ -4196,7 +4701,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_predicate2(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_predicate2(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_predicate2(async));
     }
 #endif
 
@@ -4204,7 +4709,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_predicate_negated(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_predicate_negated(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_predicate_negated(async));
     }
 #endif
 
@@ -4212,7 +4717,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_predicate_negated_complex1(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_predicate_negated_complex1(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_predicate_negated_complex1(async));
     }
 #endif
 
@@ -4220,7 +4725,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_predicate_negated_complex2(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_predicate_negated_complex2(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_predicate_negated_complex2(async));
     }
 #endif
 
@@ -4228,7 +4733,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_conditional_expression(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_conditional_expression(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_conditional_expression(async));
     }
 #endif
 
@@ -4236,7 +4741,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_binary_expression(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_binary_expression(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_binary_expression(async));
     }
 #endif
 
@@ -4244,7 +4749,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_binary_and_expression(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_binary_and_expression(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_binary_and_expression(async));
     }
 #endif
 
@@ -4252,7 +4757,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_projection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_projection(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_projection(async));
     }
 #endif
 
@@ -4260,15 +4765,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_projection_into_anonymous_type(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_projection_into_anonymous_type(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_projection_into_anonymous_type(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Optional_navigation_type_compensation_works_with_DTOs(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_DTOs(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Optional_navigation_type_compensation_works_with_DTOs(async));
     }
 #endif
 
@@ -4276,7 +4781,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_list_initializers(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_list_initializers(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_list_initializers(async));
     }
 #endif
 
@@ -4284,7 +4789,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_array_initializers(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_array_initializers(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_array_initializers(async));
     }
 #endif
 
@@ -4292,7 +4797,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_orderby(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_orderby(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_orderby(async));
     }
 #endif
 
@@ -4300,7 +4805,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_all(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_all(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_all(async));
     }
 #endif
 
@@ -4308,7 +4813,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_negated_predicate(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_negated_predicate(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_negated_predicate(async));
     }
 #endif
 
@@ -4316,7 +4821,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_contains(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_type_compensation_works_with_contains(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_type_compensation_works_with_contains(async));
     }
 #endif
 
@@ -4324,7 +4829,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Left_join_predicate_value_equals_condition(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Left_join_predicate_value_equals_condition(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Left_join_predicate_value_equals_condition(async));
     }
 #endif
 
@@ -4332,7 +4837,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Left_join_predicate_value(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Left_join_predicate_value(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Left_join_predicate_value(async));
     }
 #endif
 
@@ -4340,7 +4845,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Left_join_predicate_condition_equals_condition(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Left_join_predicate_condition_equals_condition(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Left_join_predicate_condition_equals_condition(async));
     }
 #endif
 
@@ -4487,8 +4992,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Complex_predicate_with_AndAlso_and_nullable_bool_property(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Complex_predicate_with_AndAlso_and_nullable_bool_property(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Complex_predicate_with_AndAlso_and_nullable_bool_property(async));
     }
 #endif
 
@@ -4496,15 +5001,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Distinct_with_optional_navigation_is_translated_to_sql(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Distinct_with_optional_navigation_is_translated_to_sql(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Distinct_with_optional_navigation_is_translated_to_sql(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Sum_with_optional_navigation_is_translated_to_sql(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Sum_with_optional_navigation_is_translated_to_sql(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Sum_with_optional_navigation_is_translated_to_sql(async));
     }
 #endif
 
@@ -4512,15 +5017,14 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Count_with_optional_navigation_is_translated_to_sql(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Count_with_optional_navigation_is_translated_to_sql(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Count_with_optional_navigation_is_translated_to_sql(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task FirstOrDefault_with_manually_created_groupjoin_is_translated_to_sql(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.FirstOrDefault_with_manually_created_groupjoin_is_translated_to_sql(async), "could not be translated");
+        await base.FirstOrDefault_with_manually_created_groupjoin_is_translated_to_sql(async);
     }
 #endif
 
@@ -4528,7 +5032,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task All_with_optional_navigation_is_translated_to_sql(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.All_with_optional_navigation_is_translated_to_sql(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.All_with_optional_navigation_is_translated_to_sql(async));
     }
 #endif
 
@@ -4536,7 +5040,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Client_side_equality_with_parameter_works_with_optional_navigations(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Client_side_equality_with_parameter_works_with_optional_navigations(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Client_side_equality_with_parameter_works_with_optional_navigations(async));
     }
 #endif
 
@@ -4544,71 +5048,72 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_is_properly_lifted_from_subquery_created_by_include(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Where_is_properly_lifted_from_subquery_created_by_include(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Where_is_properly_lifted_from_subquery_created_by_include(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Subquery_containing_left_join_projecting_main_from_clause_gets_lifted(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Subquery_containing_left_join_projecting_main_from_clause_gets_lifted(async), "could not be translated");
+        await base.Subquery_containing_left_join_projecting_main_from_clause_gets_lifted(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_access_on_derived_entity_using_cast(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_access_on_derived_entity_using_cast(async), "could not be translated");
+        await base.Navigation_access_on_derived_entity_using_cast(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_access_on_derived_materialized_entity_using_cast(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_access_on_derived_materialized_entity_using_cast(async), "could not be translated");
+        await base.Navigation_access_on_derived_materialized_entity_using_cast(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_access_via_EFProperty_on_derived_entity_using_cast(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_access_via_EFProperty_on_derived_entity_using_cast(async), "could not be translated");
+        await base.Navigation_access_via_EFProperty_on_derived_entity_using_cast(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_access_fk_on_derived_entity_using_cast(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_access_fk_on_derived_entity_using_cast(async), "could not be translated");
+        await base.Navigation_access_fk_on_derived_entity_using_cast(async);
     }
 #endif
 
 #if EF8 || EF9
+#if EF8
     public override async Task Include_on_derived_entity_using_OfType(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_on_derived_entity_using_OfType(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_on_derived_entity_using_OfType(async));
     }
+#else
+    public override async Task Include_on_derived_entity_using_OfType(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_on_derived_entity_using_OfType(async));
+    }
+#endif
 #endif
 
 #if EF8 || EF9
     public override async Task Include_on_derived_entity_with_cast(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_on_derived_entity_with_cast(async), "could not be translated");
+        await base.Include_on_derived_entity_with_cast(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Contains_on_nullable_array_produces_correct_sql(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Contains_on_nullable_array_produces_correct_sql(async), "could not be translated");
+        await base.Contains_on_nullable_array_produces_correct_sql(async);
     }
 #endif
 
@@ -4616,7 +5121,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_with_collection_composite_key(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Optional_navigation_with_collection_composite_key(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Optional_navigation_with_collection_composite_key(async));
     }
 #endif
 
@@ -4624,7 +5129,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_reference_on_derived_type_using_string(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_on_derived_type_using_string(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_reference_on_derived_type_using_string(async));
     }
 #endif
 
@@ -4632,15 +5137,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_reference_on_derived_type_using_EF_Property(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_on_derived_type_using_EF_Property(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_reference_on_derived_type_using_EF_Property(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_reference_on_derived_type_using_string_nested1(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_on_derived_type_using_string_nested1(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Include_reference_on_derived_type_using_string_nested1(async));
     }
 #endif
 
@@ -4648,7 +5153,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_reference_on_derived_type_using_string_nested2(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_on_derived_type_using_string_nested2(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_reference_on_derived_type_using_string_nested2(async));
     }
 #endif
 
@@ -4656,7 +5161,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_reference_on_derived_type_using_lambda(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_on_derived_type_using_lambda(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_reference_on_derived_type_using_lambda(async));
     }
 #endif
 
@@ -4664,7 +5169,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_reference_on_derived_type_using_lambda_with_soft_cast(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_on_derived_type_using_lambda_with_soft_cast(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_reference_on_derived_type_using_lambda_with_soft_cast(async));
     }
 #endif
 
@@ -4672,7 +5177,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_reference_on_derived_type_using_lambda_with_tracking(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_reference_on_derived_type_using_lambda_with_tracking(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_reference_on_derived_type_using_lambda_with_tracking(async));
     }
 #endif
 
@@ -4680,7 +5185,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_base_navigation_on_derived_entity(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_base_navigation_on_derived_entity(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_base_navigation_on_derived_entity(async));
     }
 #endif
 
@@ -4688,7 +5193,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task ThenInclude_collection_on_derived_after_base_reference(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.ThenInclude_collection_on_derived_after_base_reference(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.ThenInclude_collection_on_derived_after_base_reference(async));
     }
 #endif
 
@@ -4696,7 +5201,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task ThenInclude_collection_on_derived_after_derived_reference(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.ThenInclude_collection_on_derived_after_derived_reference(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.ThenInclude_collection_on_derived_after_derived_reference(async));
     }
 #endif
 
@@ -4704,7 +5209,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Multiple_derived_included_on_one_method(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Multiple_derived_included_on_one_method(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Multiple_derived_included_on_one_method(async));
     }
 #endif
 
@@ -4712,7 +5217,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_nullable_bool_in_conditional_works(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_nullable_bool_in_conditional_works(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_nullable_bool_in_conditional_works(async));
     }
 #endif
 
@@ -4720,7 +5225,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Multiple_orderby_with_navigation_expansion_on_one_of_the_order_bys(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Multiple_orderby_with_navigation_expansion_on_one_of_the_order_bys(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Multiple_orderby_with_navigation_expansion_on_one_of_the_order_bys(async));
     }
 #endif
 
@@ -4728,7 +5233,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Null_semantics_on_nullable_bool_from_left_join_subquery_is_fully_applied(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Null_semantics_on_nullable_bool_from_left_join_subquery_is_fully_applied(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Null_semantics_on_nullable_bool_from_left_join_subquery_is_fully_applied(async));
     }
 #endif
 
@@ -4736,23 +5241,21 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_on_derived_type_with_order_by_and_paging(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_on_derived_type_with_order_by_and_paging(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_on_derived_type_with_order_by_and_paging(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Select_required_navigation_on_derived_type(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Select_required_navigation_on_derived_type(async), "could not be translated");
+        await base.Select_required_navigation_on_derived_type(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Where_required_navigation_on_derived_type(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Where_required_navigation_on_derived_type(async), "could not be translated");
+        await base.Where_required_navigation_on_derived_type(async);
     }
 #endif
 
@@ -4760,31 +5263,28 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Negated_bool_ternary_inside_anonymous_type_in_projection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Negated_bool_ternary_inside_anonymous_type_in_projection(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Negated_bool_ternary_inside_anonymous_type_in_projection(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Order_by_entity_qsre(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Order_by_entity_qsre(async), "could not be translated");
+        await base.Order_by_entity_qsre(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Order_by_entity_qsre_composite_key(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Order_by_entity_qsre_composite_key(async), "could not be translated");
+        await base.Order_by_entity_qsre_composite_key(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Order_by_entity_qsre_with_other_orderbys(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Order_by_entity_qsre_with_other_orderbys(async), "could not be translated");
+        await base.Order_by_entity_qsre_with_other_orderbys(async);
     }
 #endif
 
@@ -4792,7 +5292,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Join_on_entity_qsre_keys_inner_key_is_navigation(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Join_on_entity_qsre_keys_inner_key_is_navigation(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Join_on_entity_qsre_keys_inner_key_is_navigation(async));
     }
 #endif
 
@@ -4800,7 +5300,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Join_on_entity_qsre_keys_inner_key_is_navigation_composite_key(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Join_on_entity_qsre_keys_inner_key_is_navigation_composite_key(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Join_on_entity_qsre_keys_inner_key_is_navigation_composite_key(async));
     }
 #endif
 
@@ -4808,23 +5308,22 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Join_on_entity_qsre_keys_inner_key_is_nested_navigation(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Join_on_entity_qsre_keys_inner_key_is_nested_navigation(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Join_on_entity_qsre_keys_inner_key_is_nested_navigation(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task GroupJoin_on_entity_qsre_keys_inner_key_is_nested_navigation(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.GroupJoin_on_entity_qsre_keys_inner_key_is_nested_navigation(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.GroupJoin_on_entity_qsre_keys_inner_key_is_nested_navigation(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Double_order_by_on_nullable_bool_coming_from_optional_navigation(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Double_order_by_on_nullable_bool_coming_from_optional_navigation(async), "could not be translated");
+        await base.Double_order_by_on_nullable_bool_coming_from_optional_navigation(async);
     }
 #endif
 
@@ -4832,47 +5331,42 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Double_order_by_on_Like(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Double_order_by_on_Like(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Double_order_by_on_Like(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Double_order_by_on_is_null(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Double_order_by_on_is_null(async), "could not be translated");
+        await base.Double_order_by_on_is_null(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task String_compare_with_null_conditional_argument(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.String_compare_with_null_conditional_argument(async), "could not be translated");
+        await base.String_compare_with_null_conditional_argument(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task String_compare_with_null_conditional_argument2(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.String_compare_with_null_conditional_argument2(async), "could not be translated");
+        await base.String_compare_with_null_conditional_argument2(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task String_concat_with_null_conditional_argument(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.String_concat_with_null_conditional_argument(async), "could not be translated");
+        await base.String_concat_with_null_conditional_argument(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task String_concat_with_null_conditional_argument2(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.String_concat_with_null_conditional_argument2(async), "could not be translated");
+        await base.String_concat_with_null_conditional_argument2(async);
     }
 #endif
 
@@ -4888,7 +5382,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_client_method_and_member_access_still_applies_includes(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_with_client_method_and_member_access_still_applies_includes(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Include_with_client_method_and_member_access_still_applies_includes(async));
     }
 #endif
 
@@ -4896,16 +5390,24 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation(async));
     }
 #endif
 
 #if EF8 || EF9
+#if EF8
     public override async Task Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation_complex(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation_complex(async), "could not be translated");
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation_complex(async));
     }
+#else
+    public override async Task Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation_complex(bool async)
+    {
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.Null_semantics_is_correctly_applied_for_function_comparisons_that_take_arguments_from_optional_navigation_complex(async));
+    }
+#endif
 #endif
 
 #if EF8 || EF9
@@ -4919,7 +5421,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task OfTypeNav1(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.OfTypeNav1(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.OfTypeNav1(async));
     }
 #endif
 
@@ -4942,14 +5444,16 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Nav_rewrite_Distinct_with_convert()
     {
-        await base.Nav_rewrite_Distinct_with_convert();
+        // Fails: REGRESSION vs main (exception type only): an unsupported query now throws a different exception type EF-X705
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Nav_rewrite_Distinct_with_convert(), "Exception type was not an exact match");
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Nav_rewrite_Distinct_with_convert_anonymous()
     {
-        await base.Nav_rewrite_Distinct_with_convert_anonymous();
+        // Fails: REGRESSION vs main (exception type only): an unsupported query now throws a different exception type EF-X705
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Nav_rewrite_Distinct_with_convert_anonymous(), "Exception type was not an exact match");
     }
 #endif
 
@@ -4981,47 +5485,42 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_inside_interpolated_string_expanded(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_inside_interpolated_string_expanded(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Navigation_inside_interpolated_string_expanded(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Left_join_projection_using_coalesce_tracking(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Left_join_projection_using_coalesce_tracking(async), "could not be translated");
+        await base.Left_join_projection_using_coalesce_tracking(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Left_join_projection_using_conditional_tracking(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Left_join_projection_using_conditional_tracking(async), "could not be translated");
+        await base.Left_join_projection_using_conditional_tracking(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_based_on_complex_expression1(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_based_on_complex_expression1(async), "could not be translated");
+        await base.Navigation_based_on_complex_expression1(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_based_on_complex_expression2(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_based_on_complex_expression2(async), "could not be translated");
+        await base.Navigation_based_on_complex_expression2(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Navigation_based_on_complex_expression3(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Navigation_based_on_complex_expression3(async), "could not be translated");
+        await base.Navigation_based_on_complex_expression3(async);
     }
 #endif
 
@@ -5044,32 +5543,39 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Reference_include_chain_loads_correctly_when_middle_is_null(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Reference_include_chain_loads_correctly_when_middle_is_null(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Reference_include_chain_loads_correctly_when_middle_is_null(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Include_after_Select_throws(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Include_after_Select_throws(async), "could not be translated");
+        await base.Include_after_Select_throws(async);
     }
 #endif
 
 #if EF8 || EF9
+#if EF8
     public override async Task Complex_GroupBy_after_set_operator_using_result_selector(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Complex_GroupBy_after_set_operator_using_result_selector(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Complex_GroupBy_after_set_operator_using_result_selector(async));
     }
+#else
+    public override async Task Complex_GroupBy_after_set_operator_using_result_selector(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Complex_GroupBy_after_set_operator_using_result_selector(async));
+    }
+#endif
 #endif
 
 #if EF8 || EF9
     public override async Task FirstOrDefault_navigation_access_entity_equality_in_where_predicate_apply_peneding_selector(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.FirstOrDefault_navigation_access_entity_equality_in_where_predicate_apply_peneding_selector(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.FirstOrDefault_navigation_access_entity_equality_in_where_predicate_apply_peneding_selector(async));
     }
 #endif
 
@@ -5108,8 +5614,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task OrderBy_bool_coming_from_optional_navigation(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.OrderBy_bool_coming_from_optional_navigation(async), "could not be translated");
+        await base.OrderBy_bool_coming_from_optional_navigation(async);
     }
 #endif
 
@@ -5204,16 +5709,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Enum_array_contains(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Enum_array_contains(async), "could not be translated");
+        await base.Enum_array_contains(async);
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Trying_to_access_unmapped_property_inside_join_key_selector(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Trying_to_access_unmapped_property_inside_join_key_selector(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.ThrowsException>(() => base.Trying_to_access_unmapped_property_inside_join_key_selector(async));
     }
 #endif
 
@@ -5237,7 +5741,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Composite_key_entity_equal_null(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Composite_key_entity_equal_null(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Composite_key_entity_equal_null(async));
     }
 #endif
 
@@ -5245,7 +5749,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Composite_key_entity_not_equal_null(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Composite_key_entity_not_equal_null(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Composite_key_entity_not_equal_null(async));
     }
 #endif
 
@@ -5253,7 +5757,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_with_comparison(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_with_comparison(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_with_comparison(async));
     }
 #endif
 
@@ -5261,7 +5765,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_with_addition(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_with_addition(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_with_addition(async));
     }
 #endif
 
@@ -5269,7 +5773,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_with_addition_and_final_projection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_with_addition_and_final_projection(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_with_addition_and_final_projection(async));
     }
 #endif
 
@@ -5277,7 +5781,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_with_conditional(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_with_conditional(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_with_conditional(async));
     }
 #endif
 
@@ -5285,7 +5789,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_with_function_call(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_with_function_call(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_with_function_call(async));
     }
 #endif
 
@@ -5293,23 +5797,23 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_with_function_call2(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_with_function_call2(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_with_function_call2(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Projecting_property_converted_to_nullable_into_element_init(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_into_element_init(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Projecting_property_converted_to_nullable_into_element_init(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Projecting_property_converted_to_nullable_into_member_assignment(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_into_member_assignment(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Projecting_property_converted_to_nullable_into_member_assignment(async));
     }
 #endif
 
@@ -5317,7 +5821,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_into_new_array(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_into_new_array(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_into_new_array(async));
     }
 #endif
 
@@ -5325,7 +5829,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_into_unary(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_into_unary(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_into_unary(async));
     }
 #endif
 
@@ -5333,7 +5837,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_into_member_access(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_into_member_access(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_into_member_access(async));
     }
 #endif
 
@@ -5341,7 +5845,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Projecting_property_converted_to_nullable_and_use_it_in_order_by(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_property_converted_to_nullable_and_use_it_in_order_by(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Projecting_property_converted_to_nullable_and_use_it_in_order_by(async));
     }
 #endif
 
@@ -5493,7 +5997,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_TimeOnly_FromDateTime_compared_to_parameter(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Where_TimeOnly_FromDateTime_compared_to_parameter(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Where_TimeOnly_FromDateTime_compared_to_parameter(async));
     }
 #endif
 
@@ -5548,16 +6052,16 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(async));
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(async));
     }
 #endif
 
@@ -5565,7 +6069,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task DateTimeOffset_to_unix_time_milliseconds(bool async)
     {
         // Fails: Manual left join / transparent identifier shape throws ArgumentException (LeftJoinResult / _inner / _outer) EF-X533
-        await SpecFails.ThrowsAsync(() => base.DateTimeOffset_to_unix_time_milliseconds(async), "ArgumentException");
+        await SpecFails.TranslationFailedAsync(() => base.DateTimeOffset_to_unix_time_milliseconds(async));
     }
 #endif
 
@@ -5573,7 +6077,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task DateTimeOffset_to_unix_time_seconds(bool async)
     {
         // Fails: Manual left join / transparent identifier shape throws ArgumentException (LeftJoinResult / _inner / _outer) EF-X533
-        await SpecFails.ThrowsAsync(() => base.DateTimeOffset_to_unix_time_seconds(async), "ArgumentException");
+        await SpecFails.TranslationFailedAsync(() => base.DateTimeOffset_to_unix_time_seconds(async));
     }
 #endif
 
@@ -5581,39 +6085,39 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Find_underlying_property_after_GroupJoin_DefaultIfEmpty(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Find_underlying_property_after_GroupJoin_DefaultIfEmpty(async), "could not be translated");
+        await SpecFails.TranslationFailedAsync(() => base.Find_underlying_property_after_GroupJoin_DefaultIfEmpty(async));
     }
 #endif
 
 #if EF9
     public override async Task Join_include_coalesce_simple(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Join_include_coalesce_simple(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Join_include_coalesce_simple(async));
     }
 #endif
 
 #if EF9
     public override async Task Join_include_coalesce_nested(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Join_include_coalesce_nested(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Join_include_coalesce_nested(async));
     }
 #endif
 
 #if EF9
     public override async Task Join_include_conditional(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Join_include_conditional(async), "could not be translated");
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Join_include_conditional(async));
     }
 #endif
 
 #if EF9
     public override async Task Derived_reference_is_skipped_when_base_type(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Derived_reference_is_skipped_when_base_type(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Derived_reference_is_skipped_when_base_type(async));
     }
 #endif
 

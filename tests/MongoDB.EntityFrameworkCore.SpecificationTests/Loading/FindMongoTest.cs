@@ -83,11 +83,8 @@ public abstract class FindMongoTest(FindMongoTest.FindMongoFixture fixture)
     public override void Find_base_type_using_derived_set_tracked()
         => base.Find_base_type_using_derived_set_tracked();
 
-    // Fails: Find through a derived-type set does not filter by discriminator, so a base-type document is materialized as the derived type EF-X200
     public override void Find_base_type_using_derived_set_from_store()
-        => Assert.Contains(
-            "No discriminators matched",
-            Assert.Throws<InvalidOperationException>(() => base.Find_base_type_using_derived_set_from_store()).Message);
+        => base.Find_base_type_using_derived_set_from_store();
 
     public override void Find_derived_type_using_base_set_tracked()
         => base.Find_derived_type_using_base_set_tracked();
@@ -191,11 +188,8 @@ public abstract class FindMongoTest(FindMongoTest.FindMongoFixture fixture)
     public override Task Find_base_type_using_derived_set_tracked_async(FindTestBase<FindMongoFixture>.CancellationType cancellationType)
         => base.Find_base_type_using_derived_set_tracked_async(cancellationType);
 
-    // Fails: Find through a derived-type set does not filter by discriminator, so a base-type document is materialized as the derived type EF-X200
-    public override async Task Find_base_type_using_derived_set_from_store_async(FindTestBase<FindMongoFixture>.CancellationType cancellationType)
-        => Assert.Contains(
-            "No discriminators matched",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Find_base_type_using_derived_set_from_store_async(cancellationType))).Message);
+    public override Task Find_base_type_using_derived_set_from_store_async(FindTestBase<FindMongoFixture>.CancellationType cancellationType)
+        => base.Find_base_type_using_derived_set_from_store_async(cancellationType);
 
     public override Task Find_derived_type_using_base_set_tracked_async(FindTestBase<FindMongoFixture>.CancellationType cancellationType)
         => base.Find_derived_type_using_base_set_tracked_async(cancellationType);

@@ -31,11 +31,31 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
+#if EF8
+    public override async Task String_contains_on_argument_with_wildcard_constant(bool async)
+    {
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_contains_on_argument_with_wildcard_constant(async));
+    }
+#elif EF9
+    public override async Task String_contains_on_argument_with_wildcard_constant(bool async)
+    {
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_contains_on_argument_with_wildcard_constant(async));
+    }
+#elif EF10
+    public override async Task String_contains_on_argument_with_wildcard_constant(bool async)
+    {
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_contains_on_argument_with_wildcard_constant(async));
+    }
+#else
     public override async Task String_contains_on_argument_with_wildcard_constant(bool async)
     {
         // Fails: ArgumentNullException (null string/source argument) during translation or materialization EF-X531
         await SpecFails.ThrowsAsync(() => base.String_contains_on_argument_with_wildcard_constant(async), "ArgumentNullException");
     }
+#endif
 
     public override async Task String_contains_on_argument_with_wildcard_parameter(bool async)
     {
@@ -55,11 +75,31 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
         await SpecFails.ThrowsAsync(() => base.String_contains_on_argument_with_wildcard_column_negated(async), "could not be translated");
     }
 
+#if EF8
+    public override async Task String_starts_with_on_argument_with_wildcard_constant(bool async)
+    {
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_starts_with_on_argument_with_wildcard_constant(async));
+    }
+#elif EF9
+    public override async Task String_starts_with_on_argument_with_wildcard_constant(bool async)
+    {
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_starts_with_on_argument_with_wildcard_constant(async));
+    }
+#elif EF10
+    public override async Task String_starts_with_on_argument_with_wildcard_constant(bool async)
+    {
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_starts_with_on_argument_with_wildcard_constant(async));
+    }
+#else
     public override async Task String_starts_with_on_argument_with_wildcard_constant(bool async)
     {
         // Fails: ArgumentNullException (null string/source argument) during translation or materialization EF-X531
         await SpecFails.ThrowsAsync(() => base.String_starts_with_on_argument_with_wildcard_constant(async), "ArgumentNullException");
     }
+#endif
 
     public override async Task String_starts_with_on_argument_with_wildcard_parameter(bool async)
     {
@@ -85,11 +125,19 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
         await SpecFails.ThrowsAsync(() => base.String_starts_with_on_argument_with_wildcard_column_negated(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task String_ends_with_on_argument_with_wildcard_constant(bool async)
+    {
+        // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
+        await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_ends_with_on_argument_with_wildcard_constant(async));
+    }
+#else
     public override async Task String_ends_with_on_argument_with_wildcard_constant(bool async)
     {
         // Fails: ArgumentNullException (null string/source argument) during translation or materialization EF-X531
         await SpecFails.ThrowsAsync(() => base.String_ends_with_on_argument_with_wildcard_constant(async), "ArgumentNullException");
     }
+#endif
 
     public override async Task String_ends_with_on_argument_with_wildcard_parameter(bool async)
     {
@@ -133,11 +181,19 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
         await SpecFails.ThrowsAsync(() => base.String_ends_with_not_equals_nullable_column(async), "could not be translated");
     }
 
+#if EF8 || EF9 || EF10
+    public override async Task String_FirstOrDefault_and_LastOrDefault(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.String_FirstOrDefault_and_LastOrDefault(async));
+    }
+#else
     public override async Task String_FirstOrDefault_and_LastOrDefault(bool async)
     {
         // Fails: ArgumentNullException (null string/source argument) during translation or materialization EF-X531
         await SpecFails.ThrowsAsync(() => base.String_FirstOrDefault_and_LastOrDefault(async), "ArgumentNullException");
     }
+#endif
 
     public override async Task String_Contains_and_StartsWith_with_same_parameter(bool async)
     {

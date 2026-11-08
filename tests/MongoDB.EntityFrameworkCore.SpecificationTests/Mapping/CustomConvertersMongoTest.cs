@@ -242,13 +242,11 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
         => base.Can_query_custom_type_not_mapped_by_default_equality(async);
 
 #if EF10 || EF9
-    // Fails: ValueConverterSerializer lacks IHasRepresentationSerializer for queries over converted properties EF-X302
     public override Task Can_query_using_any_data_type()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_using_any_data_type(), "Serializer class ValueConverterSerializer`2 does not implement IHasRep");
+        => base.Can_query_using_any_data_type();
 #elif EF8
-    // Fails: ValueConverterSerializer lacks IHasRepresentationSerializer for queries over converted properties EF-X302
     public override void Can_query_using_any_data_type()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_using_any_data_type(), "Serializer class ValueConverterSerializer`2 does not implement IHasRep");
+        => base.Can_query_using_any_data_type();
 #endif
 
 #if EF10 || EF9
@@ -260,13 +258,11 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
 #endif
 
 #if EF10 || EF9
-    // Fails: ValueConverterSerializer lacks IHasRepresentationSerializer for queries over converted properties EF-X302
     public override Task Can_query_using_any_data_type_shadow()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_using_any_data_type_shadow(), "Serializer class ValueConverterSerializer`2 does not implement IHasRep");
+        => base.Can_query_using_any_data_type_shadow();
 #elif EF8
-    // Fails: ValueConverterSerializer lacks IHasRepresentationSerializer for queries over converted properties EF-X302
     public override void Can_query_using_any_data_type_shadow()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_using_any_data_type_shadow(), "Serializer class ValueConverterSerializer`2 does not implement IHasRep");
+        => base.Can_query_using_any_data_type_shadow();
 #endif
 
 #if EF10 || EF9
@@ -304,23 +300,23 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Can_read_back_bool_mapped_as_int_through_navigation()
         => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation(), "Assert.Single() Failure: The collection was empty");
 #elif EF9
-    // Fails: Cross-document navigation access issue EF-216
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override Task Can_read_back_bool_mapped_as_int_through_navigation()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation(), "The LINQ expression 'DbSet<Animal>()");
+        => SpecFails.ThrowsAsync<global::Xunit.Sdk.SingleException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation());
 #elif EF8
-    // Fails: Cross-document navigation access issue EF-216
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override void Can_read_back_bool_mapped_as_int_through_navigation()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation(), "The LINQ expression 'DbSet<Animal>()");
+        => SpecFails.Throws<global::Xunit.Sdk.SingleException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation());
 #endif
 
 #if EF10 || EF9
-    // Fails: Cross-document navigation access issue EF-216
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Can_read_back_mapped_enum_from_collection_first_or_default()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "The LINQ expression 'DbSet<AnimalIdentification>()' could not be trans");
+        => SpecFails.ThrowsAsync<global::System.NullReferenceException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default());
 #elif EF8
-    // Fails: Cross-document navigation access issue EF-216
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Can_read_back_mapped_enum_from_collection_first_or_default()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "The LINQ expression 'DbSet<AnimalIdentification>()' could not be trans");
+        => SpecFails.Throws<global::System.NullReferenceException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default());
 #endif
 
     // Fails: Value-converter behavior differs from the provider-agnostic expectation (not triaged) EF-X315
@@ -349,9 +345,15 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
         => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Field_on_derived_type_retrieved_via_cast_applies_value_converter(), "Assert.Single() Failure: The collection was empty");
 #endif
 
+#if EF8 || EF9 || EF10
+    // Fails: GroupBy issue EF-149
+    public override void GroupBy_converted_enum()
+        => SpecFails.TranslationFailed(() => base.GroupBy_converted_enum());
+#else
     // Fails: GroupBy issue EF-149
     public override void GroupBy_converted_enum()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.GroupBy_converted_enum(), "The LINQ expression 'DbSet<Entity>()");
+#endif
 
 #if EF10 || EF9
     // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
@@ -429,11 +431,11 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
 #elif EF9
     // Fails: Cross-document navigation access issue EF-216
     public override Task Value_conversion_is_appropriately_used_for_left_join_condition()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Value_conversion_is_appropriately_used_for_left_join_condition(), "The LINQ expression 'DbSet<Blog>()");
+        => SpecFails.TranslationFailedAsync(() => base.Value_conversion_is_appropriately_used_for_left_join_condition());
 #elif EF8
     // Fails: Cross-document navigation access issue EF-216
     public override void Value_conversion_is_appropriately_used_for_left_join_condition()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Value_conversion_is_appropriately_used_for_left_join_condition(), "The LINQ expression 'DbSet<Blog>()");
+        => SpecFails.TranslationFailed(() => base.Value_conversion_is_appropriately_used_for_left_join_condition());
 #endif
 
     // Fails: Query over converted property fails binding ValueConverterSerializer EF-X303
@@ -485,13 +487,13 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
 #endif
 
 #if EF10 || EF9
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Where_conditional_bool_with_value_conversion_is_used()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Where_conditional_bool_with_value_conversion_is_used(), "Assert.Single() Failure: The collection was empty");
+        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Where_conditional_bool_with_value_conversion_is_used());
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Where_conditional_bool_with_value_conversion_is_used()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Where_conditional_bool_with_value_conversion_is_used(), "Assert.Single() Failure: The collection was empty");
+        => SpecFails.Throws<global::System.NotSupportedException>(() => base.Where_conditional_bool_with_value_conversion_is_used());
 #endif
 
 #if EF10 || EF9

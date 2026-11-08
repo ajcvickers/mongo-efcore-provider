@@ -69,44 +69,20 @@ public class LoadMongoTest(LoadMongoTest.LoadMongoFixture fixture)
     public override Task Lazy_load_collection_already_partially_loaded(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
         => base.Lazy_load_collection_already_partially_loaded(state, queryTrackingBehavior, async);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Lazy_load_many_to_one_reference_to_principal_already_loaded(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded(state, queryTrackingBehavior, async))).Message);
-#else
     public override Task Lazy_load_many_to_one_reference_to_principal_already_loaded(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
         => base.Lazy_load_many_to_one_reference_to_principal_already_loaded(state, queryTrackingBehavior, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Lazy_load_one_to_one_reference_to_principal_already_loaded(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded(state, queryTrackingBehavior, async))).Message);
-#else
     public override Task Lazy_load_one_to_one_reference_to_principal_already_loaded(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
         => base.Lazy_load_one_to_one_reference_to_principal_already_loaded(state, queryTrackingBehavior, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Lazy_load_one_to_one_reference_to_dependent_already_loaded(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded(state, deleteOrphansTiming, queryTrackingBehavior, async))).Message);
-#else
     public override Task Lazy_load_one_to_one_reference_to_dependent_already_loaded(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior, bool async)
         => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded(state, deleteOrphansTiming, queryTrackingBehavior, async);
-#endif
 
     public override void Lazy_load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(state, queryTrackingBehavior);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(state, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(state, queryTrackingBehavior);
-#endif
 
     public override void Lazy_load_many_to_one_reference_to_principal_alternate_key(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_many_to_one_reference_to_principal_alternate_key(state, queryTrackingBehavior);
@@ -192,32 +168,14 @@ public class LoadMongoTest(LoadMongoTest.LoadMongoFixture fixture)
     public override Task Lazy_load_collection_already_loaded_full_loader_constructor_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior, bool async)
         => base.Lazy_load_collection_already_loaded_full_loader_constructor_injection(state, deleteOrphansTiming, queryTrackingBehavior, async);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Lazy_load_many_to_one_reference_to_principal_already_loaded_full_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded_full_loader_constructor_injection(state, queryTrackingBehavior, async))).Message);
-#else
     public override Task Lazy_load_many_to_one_reference_to_principal_already_loaded_full_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
         => base.Lazy_load_many_to_one_reference_to_principal_already_loaded_full_loader_constructor_injection(state, queryTrackingBehavior, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Lazy_load_one_to_one_reference_to_principal_already_loaded_full_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded_full_loader_constructor_injection(state, queryTrackingBehavior, async))).Message);
-#else
     public override Task Lazy_load_one_to_one_reference_to_principal_already_loaded_full_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
         => base.Lazy_load_one_to_one_reference_to_principal_already_loaded_full_loader_constructor_injection(state, queryTrackingBehavior, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Lazy_load_one_to_one_reference_to_dependent_already_loaded_full_loader_constructor_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded_full_loader_constructor_injection(state, deleteOrphansTiming, queryTrackingBehavior, async))).Message);
-#else
     public override Task Lazy_load_one_to_one_reference_to_dependent_already_loaded_full_loader_constructor_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior, bool async)
         => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded_full_loader_constructor_injection(state, deleteOrphansTiming, queryTrackingBehavior, async);
-#endif
 
     public override void Lazy_load_collection_already_partially_loaded_full_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_collection_already_partially_loaded_full_loader_constructor_injection(state, queryTrackingBehavior);
@@ -255,32 +213,14 @@ public class LoadMongoTest(LoadMongoTest.LoadMongoFixture fixture)
     public override void Lazy_load_collection_already_loaded_delegate_loader_constructor_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_collection_already_loaded_delegate_loader_constructor_injection(state, deleteOrphansTiming, queryTrackingBehavior);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_constructor_injection(state, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_constructor_injection(state, queryTrackingBehavior);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_constructor_injection(state, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_constructor_injection(state, queryTrackingBehavior);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_constructor_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_constructor_injection(state, deleteOrphansTiming, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_constructor_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_constructor_injection(state, deleteOrphansTiming, queryTrackingBehavior);
-#endif
 
     public override void Lazy_load_collection_already_partially_loaded_delegate_loader_constructor_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_collection_already_partially_loaded_delegate_loader_constructor_injection(state, queryTrackingBehavior);
@@ -318,32 +258,14 @@ public class LoadMongoTest(LoadMongoTest.LoadMongoFixture fixture)
     public override void Lazy_load_collection_already_loaded_delegate_loader_property_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_collection_already_loaded_delegate_loader_property_injection(state, deleteOrphansTiming, queryTrackingBehavior);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_property_injection(state, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_property_injection(state, queryTrackingBehavior);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_property_injection(state, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_property_injection(state, queryTrackingBehavior);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_property_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_property_injection(state, deleteOrphansTiming, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_property_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_property_injection(state, deleteOrphansTiming, queryTrackingBehavior);
-#endif
 
     public override void Lazy_load_collection_already_partially_loaded_delegate_loader_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_collection_already_partially_loaded_delegate_loader_property_injection(state, queryTrackingBehavior);
@@ -381,39 +303,20 @@ public class LoadMongoTest(LoadMongoTest.LoadMongoFixture fixture)
     public override void Lazy_load_collection_already_loaded_delegate_loader_with_state_property_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_collection_already_loaded_delegate_loader_with_state_property_injection(state, deleteOrphansTiming, queryTrackingBehavior);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_with_state_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_with_state_property_injection(state, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_with_state_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_many_to_one_reference_to_principal_already_loaded_delegate_loader_with_state_property_injection(state, queryTrackingBehavior);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_with_state_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_with_state_property_injection(state, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_with_state_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_one_to_one_reference_to_principal_already_loaded_delegate_loader_with_state_property_injection(state, queryTrackingBehavior);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_with_state_property_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_with_state_property_injection(state, deleteOrphansTiming, queryTrackingBehavior)).Message);
-#else
     public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_with_state_property_injection(EntityState state, CascadeTiming deleteOrphansTiming, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded_delegate_loader_with_state_property_injection(state, deleteOrphansTiming, queryTrackingBehavior);
-#endif
 
     public override void Lazy_load_collection_already_partially_loaded_delegate_loader_with_state_property_injection(EntityState state, QueryTrackingBehavior queryTrackingBehavior)
         => base.Lazy_load_collection_already_partially_loaded_delegate_loader_with_state_property_injection(state, queryTrackingBehavior);
 
-    // Fails: Lazy-load of navigation declared on an abstract base class returns extra rows EF-X206
     public override void Lazy_loading_uses_field_access_when_abstract_base_class_navigation()
-        => Assert.Contains("Sequence contains more than one element", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_uses_field_access_when_abstract_base_class_navigation()).Message);
+        => base.Lazy_loading_uses_field_access_when_abstract_base_class_navigation();
 
     public override void Attached_references_to_principal_are_marked_as_loaded(EntityState state, bool lazy)
         => base.Attached_references_to_principal_are_marked_as_loaded(state, lazy);
@@ -502,86 +405,38 @@ public class LoadMongoTest(LoadMongoTest.LoadMongoFixture fixture)
     public override Task Load_collection_already_loaded(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_collection_already_loaded(state, async, deleteOrphansTiming);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_many_to_one_reference_to_principal_already_loaded(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_many_to_one_reference_to_principal_already_loaded(state, async))).Message);
-#else
     public override Task Load_many_to_one_reference_to_principal_already_loaded(EntityState state, bool async)
         => base.Load_many_to_one_reference_to_principal_already_loaded(state, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_reference_to_principal_already_loaded(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_reference_to_principal_already_loaded(state, async, deleteOrphansTiming))).Message);
-#else
     public override Task Load_one_to_one_reference_to_principal_already_loaded(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_one_to_one_reference_to_principal_already_loaded(state, async, deleteOrphansTiming);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_reference_to_dependent_already_loaded(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_reference_to_dependent_already_loaded(state, async, deleteOrphansTiming))).Message);
-#else
     public override Task Load_one_to_one_reference_to_dependent_already_loaded(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_one_to_one_reference_to_dependent_already_loaded(state, async, deleteOrphansTiming);
-#endif
 
     public override Task Load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(EntityState state, bool async)
         => base.Load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(state, async);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(state, async))).Message);
-#else
     public override Task Load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(EntityState state, bool async)
         => base.Load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(state, async);
-#endif
 
     public override Task Load_collection_using_Query_already_loaded(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_collection_using_Query_already_loaded(state, async, deleteOrphansTiming);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_many_to_one_reference_to_principal_using_Query_already_loaded(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_many_to_one_reference_to_principal_using_Query_already_loaded(state, async))).Message);
-#else
     public override Task Load_many_to_one_reference_to_principal_using_Query_already_loaded(EntityState state, bool async)
         => base.Load_many_to_one_reference_to_principal_using_Query_already_loaded(state, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_reference_to_principal_using_Query_already_loaded(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_reference_to_principal_using_Query_already_loaded(state, async))).Message);
-#else
     public override Task Load_one_to_one_reference_to_principal_using_Query_already_loaded(EntityState state, bool async)
         => base.Load_one_to_one_reference_to_principal_using_Query_already_loaded(state, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_reference_to_dependent_using_Query_already_loaded(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_reference_to_dependent_using_Query_already_loaded(state, async, deleteOrphansTiming))).Message);
-#else
     public override Task Load_one_to_one_reference_to_dependent_using_Query_already_loaded(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_one_to_one_reference_to_dependent_using_Query_already_loaded(state, async, deleteOrphansTiming);
-#endif
 
     public override Task Load_one_to_one_PK_to_PK_reference_to_principal_using_Query_already_loaded(EntityState state, bool async)
         => base.Load_one_to_one_PK_to_PK_reference_to_principal_using_Query_already_loaded(state, async);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_PK_to_PK_reference_to_dependent_using_Query_already_loaded(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_PK_to_PK_reference_to_dependent_using_Query_already_loaded(state, async))).Message);
-#else
     public override Task Load_one_to_one_PK_to_PK_reference_to_dependent_using_Query_already_loaded(EntityState state, bool async)
         => base.Load_one_to_one_PK_to_PK_reference_to_dependent_using_Query_already_loaded(state, async);
-#endif
 
     public override Task Load_collection_untyped(EntityState state, bool async)
         => base.Load_collection_untyped(state, async);
@@ -634,62 +489,26 @@ public class LoadMongoTest(LoadMongoTest.LoadMongoFixture fixture)
     public override Task Load_collection_already_loaded_untyped(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_collection_already_loaded_untyped(state, async, deleteOrphansTiming);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_many_to_one_reference_to_principal_already_loaded_untyped(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_many_to_one_reference_to_principal_already_loaded_untyped(state, async))).Message);
-#else
     public override Task Load_many_to_one_reference_to_principal_already_loaded_untyped(EntityState state, bool async)
         => base.Load_many_to_one_reference_to_principal_already_loaded_untyped(state, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_reference_to_principal_already_loaded_untyped(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_reference_to_principal_already_loaded_untyped(state, async))).Message);
-#else
     public override Task Load_one_to_one_reference_to_principal_already_loaded_untyped(EntityState state, bool async)
         => base.Load_one_to_one_reference_to_principal_already_loaded_untyped(state, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_reference_to_dependent_already_loaded_untyped(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_reference_to_dependent_already_loaded_untyped(state, async, deleteOrphansTiming))).Message);
-#else
     public override Task Load_one_to_one_reference_to_dependent_already_loaded_untyped(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_one_to_one_reference_to_dependent_already_loaded_untyped(state, async, deleteOrphansTiming);
-#endif
 
     public override Task Load_collection_using_Query_already_loaded_untyped(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_collection_using_Query_already_loaded_untyped(state, async, deleteOrphansTiming);
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_many_to_one_reference_to_principal_using_Query_already_loaded_untyped(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_many_to_one_reference_to_principal_using_Query_already_loaded_untyped(state, async))).Message);
-#else
     public override Task Load_many_to_one_reference_to_principal_using_Query_already_loaded_untyped(EntityState state, bool async)
         => base.Load_many_to_one_reference_to_principal_using_Query_already_loaded_untyped(state, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_reference_to_principal_using_Query_already_loaded_untyped(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_reference_to_principal_using_Query_already_loaded_untyped(state, async))).Message);
-#else
     public override Task Load_one_to_one_reference_to_principal_using_Query_already_loaded_untyped(EntityState state, bool async)
         => base.Load_one_to_one_reference_to_principal_using_Query_already_loaded_untyped(state, async);
-#endif
 
-#if !EF10
-    // Fails: Cross-collection Include/join not translated on EF8/EF9 EF-X020
-    public override async Task Load_one_to_one_reference_to_dependent_using_Query_already_loaded_untyped(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_one_to_one_reference_to_dependent_using_Query_already_loaded_untyped(state, async, deleteOrphansTiming))).Message);
-#else
     public override Task Load_one_to_one_reference_to_dependent_using_Query_already_loaded_untyped(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
         => base.Load_one_to_one_reference_to_dependent_using_Query_already_loaded_untyped(state, async, deleteOrphansTiming);
-#endif
 
     public override Task Load_collection_alternate_key(EntityState state, bool async)
         => base.Load_collection_alternate_key(state, async);

@@ -136,11 +136,19 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
         await SpecFails.ThrowsAsync(() => base.Parameterless_ctor_on_inner_DTO_gets_called_for_every_row(), "cannot be tracked because another instance");
     }
 
+#if EF9 || EF10
+    public override async Task Union_and_insert_works_correctly_together()
+    {
+        // Fails: InvalidOperationException from query execution or materialization EF-X604
+        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Union_and_insert_works_correctly_together());
+    }
+#else
     public override async Task Union_and_insert_works_correctly_together()
     {
         // Fails: Cross-document navigation access issue EF-216
         await SpecFails.ThrowsAsync(() => base.Union_and_insert_works_correctly_together(), "Unsupported cross-DbSet query");
     }
+#endif
 
     public override async Task Repeated_parameters_in_generated_query_sql()
     {
@@ -227,17 +235,33 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
         await SpecFails.ThrowsAsync(() => base.Aggregate_over_subquery_in_group_by_projection(async), "cannot be tracked because another instance");
     }
 
+#if EF9 || EF10
+    public override async Task Aggregate_over_subquery_in_group_by_projection_2(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Aggregate_over_subquery_in_group_by_projection_2(async));
+    }
+#else
     public override async Task Aggregate_over_subquery_in_group_by_projection_2(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Aggregate_over_subquery_in_group_by_projection_2(async), "could not be translated");
     }
+#endif
 
+#if EF9 || EF10
+    public override async Task Group_by_aggregate_in_subquery_projection_after_group_by(bool async)
+    {
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.TranslationFailedAsync(() => base.Group_by_aggregate_in_subquery_projection_after_group_by(async));
+    }
+#else
     public override async Task Group_by_aggregate_in_subquery_projection_after_group_by(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Group_by_aggregate_in_subquery_projection_after_group_by(async), "could not be translated");
     }
+#endif
 
     public override async Task Subquery_first_member_compared_to_null(bool async)
     {
@@ -257,11 +281,25 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
         await SpecFails.ThrowsAsync(() => base.Flattened_GroupJoin_on_interface_generic(async), "configured as an owned");
     }
 
+#if EF9
+    public override async Task Pushdown_does_not_add_grouping_key_to_projection_when_distinct_is_applied(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Pushdown_does_not_add_grouping_key_to_projection_when_distinct_is_applied(async));
+    }
+#elif EF10
+    public override async Task Pushdown_does_not_add_grouping_key_to_projection_when_distinct_is_applied(bool async)
+    {
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Pushdown_does_not_add_grouping_key_to_projection_when_distinct_is_applied(async));
+    }
+#else
     public override async Task Pushdown_does_not_add_grouping_key_to_projection_when_distinct_is_applied(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
         await SpecFails.ThrowsAsync(() => base.Pushdown_does_not_add_grouping_key_to_projection_when_distinct_is_applied(async), "could not be translated");
     }
+#endif
 
 #if EF10
     public override async Task Filter_on_nested_DTO_with_interface_gets_simplified_correctly(bool async)
@@ -274,16 +312,15 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
 #if EF9
     public override async Task Left_join_with_missing_key_values_on_both_sides(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Left_join_with_missing_key_values_on_both_sides(async), "could not be translated");
+        await base.Left_join_with_missing_key_values_on_both_sides(async);
     }
 #endif
 
 #if EF9
     public override async Task Filter_on_nested_DTO_with_interface_gets_simplified_correctly(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Filter_on_nested_DTO_with_interface_gets_simplified_correctly(async), "could not be translated");
+        // Fails: Argument exception while translating or materializing EF-X603
+        await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Filter_on_nested_DTO_with_interface_gets_simplified_correctly(async));
     }
 #endif
 

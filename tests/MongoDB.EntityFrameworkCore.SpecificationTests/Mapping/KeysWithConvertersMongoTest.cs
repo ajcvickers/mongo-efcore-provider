@@ -383,23 +383,19 @@ public class KeysWithConvertersMongoTest(KeysWithConvertersMongoTest.KeysWithCon
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_query_and_update_owned_entity_with_binary_struct_key()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_binary_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_binary_struct_key();
 #elif EF8
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override void Can_query_and_update_owned_entity_with_binary_struct_key()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_binary_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_binary_struct_key();
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_query_and_update_owned_entity_with_comparable_bytes_struct_key()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_comparable_bytes_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_comparable_bytes_struct_key();
 #elif EF8
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override void Can_query_and_update_owned_entity_with_comparable_bytes_struct_key()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_comparable_bytes_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_comparable_bytes_struct_key();
 #endif
 
 #if EF10 || EF9
@@ -411,23 +407,19 @@ public class KeysWithConvertersMongoTest(KeysWithConvertersMongoTest.KeysWithCon
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_query_and_update_owned_entity_with_comparable_int_struct_key()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_comparable_int_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_comparable_int_struct_key();
 #elif EF8
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override void Can_query_and_update_owned_entity_with_comparable_int_struct_key()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_comparable_int_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_comparable_int_struct_key();
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_query_and_update_owned_entity_with_generic_comparable_bytes_struct_key()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_generic_comparable_bytes_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_generic_comparable_bytes_struct_key();
 #elif EF8
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override void Can_query_and_update_owned_entity_with_generic_comparable_bytes_struct_key()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_generic_comparable_bytes_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_generic_comparable_bytes_struct_key();
 #endif
 
 #if EF10 || EF9
@@ -439,13 +431,11 @@ public class KeysWithConvertersMongoTest(KeysWithConvertersMongoTest.KeysWithCon
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_query_and_update_owned_entity_with_generic_comparable_int_struct_key()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_generic_comparable_int_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_generic_comparable_int_struct_key();
 #elif EF8
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override void Can_query_and_update_owned_entity_with_generic_comparable_int_struct_key()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_generic_comparable_int_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_generic_comparable_int_struct_key();
 #endif
 
 #if EF10 || EF9
@@ -465,23 +455,19 @@ public class KeysWithConvertersMongoTest(KeysWithConvertersMongoTest.KeysWithCon
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_query_and_update_owned_entity_with_int_struct_key()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_int_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_int_struct_key();
 #elif EF8
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override void Can_query_and_update_owned_entity_with_int_struct_key()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_int_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_int_struct_key();
 #endif
 
 #if EF10 || EF9
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_query_and_update_owned_entity_with_structural_generic_comparable_bytes_struct_key()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_structural_generic_comparable_bytes_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_structural_generic_comparable_bytes_struct_key();
 #elif EF8
-    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override void Can_query_and_update_owned_entity_with_structural_generic_comparable_bytes_struct_key()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_query_and_update_owned_entity_with_structural_generic_comparable_bytes_struct_key(), "The binary operator Equal is not defined for the types 'Microsoft.Enti");
+        => base.Can_query_and_update_owned_entity_with_structural_generic_comparable_bytes_struct_key();
 #endif
 
 #if EF10 || EF9
