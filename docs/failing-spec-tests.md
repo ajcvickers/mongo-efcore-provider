@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 5,071 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,352 |
-| ... active in the EF8 build | 1,064 | 2,788 |
-| ... active in the EF9 build | 1,141 | 3,182 |
-| ... active in the EF10 build | 882 | 3,216 |
-| ... active in the EF11 build | not measured | 3,168 |
+| `// Fails:` tag lines | 1,206 | 5,845 |
+| Distinct tagged test methods, any EF version | 1,175 | 4,126 |
+| ... active in the EF8 build | 1,064 | 2,920 |
+| ... active in the EF9 build | 1,141 | 3,562 |
+| ... active in the EF10 build | 882 | 3,913 |
+| ... active in the EF11 build | not measured | 3,901 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 60 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -117,7 +117,7 @@ or pass. About 700 version-cases moved from "asserts a failure" to passing, incl
 | [EF-153](https://jira.mongodb.org/browse/EF-153) | `TagWith EF-153` | `TagWith(...)` content is silently dropped — does not appear in the emitted MQL. | 8 |
 | [EF-164](https://jira.mongodb.org/browse/EF-164) | `Missing property values issue EF-164` / `Projections issue EF-164` | BSON documents that omit a required scalar (or required navigation) throw on materialization — `Project_root_with_missing_scalars`, `Project_root_entity_with_missing_required_navigation`, etc. | 33 |
 | [EF-202](https://jira.mongodb.org/browse/EF-202) | `Entity equality issue EF-202` | Comparing two entities (`entity1 == entity2` / `Contains(entity)`) is not lowered to a key-equality comparison. | 3 |
-| [EF-216](https://jira.mongodb.org/browse/EF-216) | `Cross-document navigation access issue EF-216` / `Navigations issue EF-216` | Navigations that cross collection boundaries cannot be translated; surfaces as `Unsupported cross-DbSet query between ...`. Documented at the helper `AssertNoMultiCollectionQuerySupport`. | 204 |
+| [EF-216](https://jira.mongodb.org/browse/EF-216) | `Cross-document navigation access issue EF-216` / `Navigations issue EF-216` | Navigations that cross collection boundaries cannot be translated; surfaces as `Unsupported cross-DbSet query between ...`. Documented at the helper `AssertNoMultiCollectionQuerySupport`. | 207 |
 | [EF-217](https://jira.mongodb.org/browse/EF-217) | `Call ToString on DateTimeOffset EF-217` | `DateTimeOffset.ToString()` cannot be translated. | 1 |
 | [EF-220](https://jira.mongodb.org/browse/EF-220) | `Multiple query roots issue EF-220` | Queries that reference more than one `DbSet<>` (Cartesian product / cross-join) are not translatable. Includes `SelectMany` across DbSets and tautology-predicate cross-joins. | 64 |
 | [EF-221](https://jira.mongodb.org/browse/EF-221) | _(no remaining `// Fails:` tags)_ | `Equals` calls with genuinely mismatched, non-convertible simple types (e.g. `int?.Equals((ulong)x)`) are now folded to the correct constant result in `MongoEFToLinqTranslatingExpressionVisitor` instead of reaching the driver's `Equals` translator, which threw `InvalidCastException`. The four tests formerly tagged here now pass. | 0 |
@@ -169,14 +169,14 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 
 | Temp ticket | Subject | Count |
 | --- | --- | --- |
-| EF-X001 | Sub-query selection across DbSets is not translated | 133 |
+| EF-X001 | Sub-query selection across DbSets is not translated | 137 |
 | EF-X002 | Provider throws a different exception than the EF translation-failure message | 29 |
 | EF-X003 | Driver-level feature gaps surfaced as test failures | 9 |
 | EF-X004 | ~~Float `Sum`/`Average` truncation (likely duplicate of EF-228)~~ — resolved, no remaining tags | 0 |
 | EF-X005 | BSON document missing nested required reference (AdHoc JSON) | 2 |
-| EF-X006 | MongoDB `DateTimeKind` round-trip handling | 2 |
+| EF-X006 | MongoDB `DateTimeKind` round-trip handling | 3 |
 | EF-X007 | Views / `HasDefiningQuery` semantics for MongoDB collections | 2 |
-| EF-X008 | No support for nested JSON in AdHoc JSON tests | 2 |
+| EF-X008 | No support for nested JSON in AdHoc JSON tests | 3 |
 | EF-X009 | ~~Single uncategorized failure — needs triage~~ — resolved, no remaining tags | 0 |
 | EF-X010 | Provider-specific Include error message differs from EF baseline | 4 |
 | EF-X011 | ~~Compiled query with non-query operator — wrong exception~~ — fixed by EF-233 | 0 |
@@ -192,7 +192,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X021 | Filtered Include / query filter on cross-collection target not translated | 0 |
 | EF-X022 | Join/GroupJoin whose inner source is a filtered or ordered sub-query is rejected | 14 |
 | EF-X024 | `Where`/entity materialization over a flattened multi-join chain onto ambiguous same-navigation or navigation-less siblings is not translated | 2 |
-| EF-X016 | Bulk `ExecuteUpdate`/`ExecuteDelete` source restricted to a single collection scoped by `Where` | 42 |
+| EF-X016 | Bulk `ExecuteUpdate`/`ExecuteDelete` source restricted to a single collection scoped by `Where` | 73 |
 | EF-X400 | `DbUpdateConcurrencyException` is thrown without invoking `ISaveChangesInterceptor.ThrowingConcurrencyException` | 2 |
 | EF-X401 | Ambiguous foreign key discovery between a join/owned type and its owner (`Both relationships ... could use {'PostId'}`) | 4 |
 | EF-X402 | Projecting an owned collection navigation directly (`Select(e => e.OwnedCollection)`) is not translated | 1 |
@@ -225,7 +225,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X317 | `NullReferenceException` in JSON type round-trip (not triaged) | 60 |
 | EF-X318 | Bad JSON value does not throw on materialization | 0 |
 | EF-X319 | Concurrency token on an owned entity is rejected (Serialization) | 2 |
-| EF-X320 | NetTopologySuite spatial types are not supported | 6 |
+| EF-X320 | NetTopologySuite spatial types are not supported | 90 |
 | EF-X321 | `DateOnly`/`TimeOnly`/`TimeSpan`/`DateTimeOffset` members and methods are not translated by the driver | 54 |
 | EF-X322 | `byte[]` is not supported as an array in LINQ | 4 |
 | EF-X323 | Translated `byte[]` pipeline is rejected by the server | 2 |
@@ -282,11 +282,11 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X519 | Hierarchy materialization fails: discriminator value does not match the requested type | 0 |
 | EF-X520 | ElementAt/indexer call is rebuilt with the wrong number of arguments | 4 |
 | EF-X521 | Left join on entity with owned navigations throws ArgumentNullException (key) | 1 |
-| EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 43 |
+| EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 45 |
 | EF-X523 | Model validation rejects the relationship (owned/nested owned or ambiguous FK) | 2 |
 | EF-X524 | NullReferenceException for a query filter using a DbContext list parameter | 1 |
 | EF-X525 | EF8/EF9: filtered query with multiple filtered entities returns duplicate rows | 1 |
-| EF-X526 | Query shape (navigation/projection/set operation) not translated | 622 |
+| EF-X526 | Query shape (navigation/projection/set operation) not translated | 624 |
 | EF-X527 | Expression not supported by the driver LINQ translator | 184 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
 | EF-X529 | NullReferenceException during query execution/materialization | 0 |
@@ -297,7 +297,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X534 | Join key selector that is a sub-query: serializer cannot be created for MongoQuery | 7 |
 | EF-X535 | Skip/Take/Distinct between two cross-collection joins (Include/ThenInclude) not supported | 13 |
 | EF-X537 | Single/First over query results finds the wrong number of rows (duplicate or missing rows) | 0 |
-| EF-X539 | Many-to-many join entity type is configured as owned and cannot be queried as a DbSet | 1 |
+| EF-X539 | Many-to-many join entity type is configured as owned and cannot be queried as a DbSet (`Set<JoinOneToTwo>()` throws). `ManyToManyQueryTestBase<>` and `ManyToManyNoTrackingQueryTestBase<>` are ported on EF10 and EF11 and assert this failure; on EF8 and EF9 they stay ignored because the upstream constructor builds its expected data through the failing fixture | 200 |
 | EF-X540 | Result mismatch whose assertion failure surfaces as TypeLoadException (xunit.assert version skew), hiding the wrong-result cause | 3 |
 | EF-X541 | Average/aggregate over a navigation without selector throws 'Operation is not valid due to the current state of the object' | 3 |
 | EF-X542 | Enum flags bitwise/closure typed as a different type: ConvertIntegralTypeToEnumSerializer lacks IHasRepresentationSerializer | 2 |
@@ -306,8 +306,8 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X545 | Model validation: cannot determine the relationship represented by a navigation | 4 |
 | EF-X546 | Filter on a nested DTO via an interface: serializer value type mismatch | 1 |
 | EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
-| EF-X538 | `InheritanceRelationshipsQueryTestBase<>` not ported: model validation fails in the fixture (dependent side of a 1:1 cannot be determined) | 0 |
-| EF-X548 | `JsonQueryTestBase<>` not ported: seeding the JSON model throws `OverflowException` | 0 |
+| EF-X538 | `InheritanceRelationshipsQueryTestBase<>` (ported with `InitFailureGuard`): model validation fails in the fixture (the dependent side of a 1:1 between a base type and its derived type cannot be determined, although the upstream model calls `HasForeignKey<Derived>` explicitly), so every test asserts that failure | 48 |
+| EF-X548 | `JsonQueryTestBase<>` (ported with `InitFailureGuard`): saving an entity with a `uint[]` or `List<uint>` property holding a value above `Int32.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`), so seeding the JSON model fails and every test asserts that failure | 219 |
 | EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 171 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 5 |
@@ -322,8 +322,43 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X705 | **Regression vs `main` (exception type only):** an unsupported query now throws a different exception type | 5 |
 | EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
 | EF-X711 | EF11 only: xUnit v3 rejects a class that hides an inherited test with a `new` method ("has overloads"), so the hiding methods used on EF8 to EF10 for non-virtual upstream tests are not compiled on EF11 and the inherited tests that fail as base are skipped at run time (`Ef11TestSkips`); the reason names the ticket | 0 |
-| EF-X720 | Time zone dependent: a `DateTime` of kind Unspecified is treated as local time (EF-X006), so these `ComplexNavigations*` (and some Translations) tests return values shifted by an hour wherever the machine zone has daylight saving time on the data dates (Europe/London), and pass in UTC, as on the CI runners. `SpecFails.Either` requires a pass in a UTC environment and accepts the known failure elsewhere. Reproduced on Linux (WSL) with and without `TZ=UTC`: the OS makes no difference | 159 |
+| EF-X720 | Time zone dependent: a `DateTime` of kind Unspecified is treated as local time (EF-X006), so these `ComplexNavigations*` (and some Translations) tests return values shifted by an hour wherever the machine zone has daylight saving time on the data dates (Europe/London), and pass in UTC, as on the CI runners. `SpecFails.Either` requires a pass in a UTC environment and accepts the known failure elsewhere. Reproduced on Linux (WSL) with and without `TZ=UTC`: the OS makes no difference | 160 |
 | EF-X721 | Non-deterministic: the entity graphs of the `ManyToManyTracking`, `StoreGenerated` and `Updates` tests all have default key 0 (EF-X101), so which entity hits the duplicate key first, and so the exception (or whether one is thrown), depends on the traversal order and varies from run to run (hash randomization). Their exact-exception assertions on EF11 use `SpecFails.AnyOutcome`. Seen on EF11 only; not seen on EF8 to EF10 | 128 |
+| EF-X800 | Convert/Parse of a string to byte/decimal/double/short/int/long (`Parse(ToString(b.Int))`) is not supported by the driver LINQ translator (EF11 `*_Parse` tests) | 6 |
+| EF-X801 | `Random.Shared.Next`, `new Random().Next` and `EF.Functions.Random` cannot be evaluated or translated | 7 |
+| EF-X802 | `Convert.ToBoolean` on a bool is not supported | 1 |
+| EF-X803 | `Convert.ToByte` is not supported | 1 |
+| EF-X804 | `Convert.ToDecimal` is not supported | 1 |
+| EF-X805 | `Convert.ToDouble` is not supported | 1 |
+| EF-X806 | `Convert.ToInt16`/`ToInt32`/`ToInt64` are not supported | 3 |
+| EF-X807 | `Convert.ToString` is not supported | 1 |
+| EF-X808 | `DateTime.Compare`/`CompareTo` against an Unspecified-Kind DateTime returns different rows than client evaluation (local-time shift; depends on the machine time zone) | 1 |
+| EF-X809 | Boolean `^` (Xor over boolean) is not supported: MongoDB has no boolean `$xor` operator | 1 |
+| EF-X810 | `<<` (left shift) is not supported by the driver | 1 |
+| EF-X811 | `>>` (right shift) is not supported by the driver | 1 |
+| EF-X812 | **Wrong results.** EF11 `Primitive_collection_in_query` (`array.Count(a => a.Equals(value)) == 2`) silently matches no document for TimeSpan, SByte, UShort, Char, Decimal, DateTimeOffset, UInt, Float, ULong and byte[] element types (int, long, short, string, bool, double, DateTime and the enum pass) | 10 |
+| EF-X813 | DateOnly/TimeOnly array elements in a primitive collection query are serialized through the object serializer and rejected (`BsonSerializationException`) | 2 |
+| EF-X814 | Guid array elements in a primitive collection query cannot be serialized (GuidRepresentation Unspecified) | 1 |
+| EF-X815 | A `byte` primitive collection (`byte[]` field) cannot be queried as an array: `ByteArraySerializer` is not an `IBsonArraySerializer` | 1 |
+| EF-X850 | Navigations suites: query results have null associate navigations (documents in the other collection are not loaded or fixed up). Not root-caused; may mix several causes | 32 |
+| EF-X851 | Unsupported cross-DbSet query: the associate is a separate collection and the query needs a join | 14 |
+| EF-X852 | Query over associate documents in a separate collection cannot be translated (subquery/SelectMany/aggregate) | 11 |
+| EF-X853 | Different exception type than the relational providers throw (NullReference / ExpressionNotSupported / NotSupported) | 5 |
+| EF-X854 | Unmapped associate property: driver `ExpressionNotSupportedException` instead of EF `InvalidOperationException` | 1 |
+| EF-X855 | Untranslatable client method in projection: driver `ExpressionNotSupportedException` instead of client evaluation | 2 |
+| EF-X856 | SelectMany over a nested collection of an optional/required associate cannot be translated | 3 |
+| EF-X857 | EF11-only tests: null associate navigation in the result is not populated | 4 |
+| EF-X858 | Distinct/Select over an owned collection (`EF.Property<List<T>>.AsQueryable()`) cannot be translated | 3 |
+| EF-X859 | GroupBy over an owned collection: driver `ExpressionNotSupportedException` | 1 |
+| EF-X860 | Nested aggregate over an owned collection inside a Select cannot be translated | 1 |
+| EF-X861 | Projecting through an optional owned associate that is null throws `NullReferenceException` | 3 |
+| EF-X862 | Nested collection of a null optional owned associate throws "required but not present in BsonDocument" | 1 |
+| EF-X863 | Projection over an owned collection materializes different values than expected (strings differ) | 3 |
+| EF-X864 | Set operation over different owned collections fails in the server aggregate (`MongoCommandException`) | 1 |
+| EF-X865 | Equality between owned associates: driver `ExpressionNotSupportedException` | 3 |
+| EF-X866 | Owned associate comparison with inline/parameter value does not throw as expected | 2 |
+| EF-X867 | **Wrong results, not yet run in isolation (see the test pollution warning).** Associate/collection equality or Distinct returns the wrong number of rows (`NavigationsStructuralEquality.Two_nested_associates` 7 instead of 1, `Two_nested_collections` 1 instead of 2, `OwnedNavigationsCollection.Distinct_over_projected_filtered_nested_collection` 3 instead of 5) | 3 |
+| EF-X900 | Ad hoc JSON data for MongoDB not ported: the abstract `Seed*` methods write raw relational JSON column values and are no-ops here (EF10 AdHocJson, and the AdHocJson tests merged into `JsonQueryTestBase<>` on EF11), so those tests find no or incomplete data | 48 |
 
 ### Shared root causes across the ported suites
 
