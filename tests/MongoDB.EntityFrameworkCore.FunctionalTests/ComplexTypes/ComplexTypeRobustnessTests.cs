@@ -1508,9 +1508,9 @@ public class ComplexTypeRobustnessTests(TemporaryDatabaseFixture database) : ICl
         Assert.True(double.IsNaN(stored["Value"]["D"].AsDouble));
 
         NativeModeAssert.NativeAndExpected(m => Query(collection, Configure, m, q => q.OrderBy(h => h.Name).ToList()
-                .Select(h => $"{h.Name}:{h.Value.D}:{h.Value.F}")),
+                .Select(h => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{h.Name}:{h.Value.D}:{h.Value.F}"))),
             // -0.0 is stored as +0 (measured: same for a root double; the BSON writer path, not complex-specific).
-            ["nan:NaN:NaN", "ninf:-∞:-∞", "pinf:∞:∞", "zero:0:0"]);
+            ["nan:NaN:NaN", "ninf:-Infinity:-Infinity", "pinf:Infinity:Infinity", "zero:0:0"]);
         NativeModeAssert.NativeAndExpected(m => Query(collection, Configure, m, q => q.Where(h => h.Value.D > 1e308).Select(h => h.Name)), ["pinf"]);
         NativeModeAssert.NativeAndExpected(m => Query(collection, Configure, m, q => q.Where(h => h.Value.F < -1e30f).Select(h => h.Name)), ["ninf"]);
         // The server orders NaN below every number (C# compares NaN false both ways): the documented server semantics.
