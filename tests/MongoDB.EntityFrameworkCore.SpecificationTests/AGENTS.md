@@ -80,6 +80,9 @@ in behavior (including the test starting to pass) is detected.
 - **Time zone dependent assertions.** CI runs in UTC; a developer machine often does not. A `DateTime` of kind Unspecified is treated as local
   time (EF-X006), so some known failures only appear outside UTC. `SpecFails.Either`/`EitherAsync` require a pass in a UTC environment and accept the
   known failure elsewhere (see EF-X720). To reproduce CI on Linux/WSL, run with `TZ=UTC`.
+- **A ported fixture's database is shared and has no rollback.** If a test writes (or a test that relational providers expect to throw succeeds here), later tests
+  see its rows, in an order dependent way (EF-X700 was this). Reset the data afterwards (see `InheritanceQueryMongoFixture.ResetDatabaseAsync`) and, before
+  reporting wrong results as a provider bug, run the test on its own.
 - **EF11 follows the EF10 arms.** A condition that mentions `EF10` is written `(EF10 || EF11)` unless EF11 behaves differently; the
   harvest-and-rebaseline pass splits the arms where it does.
 - **Remove a base from `MongoComplianceTest.IgnoredTestBases` when you port it.** A base that stays ignored for a concrete reason carries

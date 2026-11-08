@@ -21,11 +21,11 @@ Regenerate every figure below (and the `Count` column in the tables) with
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
 | `// Fails:` tag lines | 1,206 | 4,875 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,387 |
-| ... active in the EF8 build | 1,064 | 2,821 |
-| ... active in the EF9 build | 1,141 | 3,215 |
-| ... active in the EF10 build | 882 | 3,249 |
-| ... active in the EF11 build | not measured | 3,196 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,386 |
+| ... active in the EF8 build | 1,064 | 2,818 |
+| ... active in the EF9 build | 1,141 | 3,212 |
+| ... active in the EF10 build | 882 | 3,246 |
+| ... active in the EF11 build | not measured | 3,199 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 60 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -86,6 +86,10 @@ ported in #35 were baselined in the default query mode only, so their stores are
 `NativeTranslationNotSupportedException` and different messages. Baselining them in NativeOnly too is a follow-up; until then these suites give no
 native-only coverage.
 
+**Test pollution warning.** The databases of the ported fixtures are shared by every test in a class and there is no transaction to roll back, unlike a
+relational provider. A test whose `SaveChanges` succeeds where the relational provider throws (no foreign keys, no unique constraint) leaves rows behind and
+changes the results of later tests, in an order dependent way. EF-X700 was this. Before treating a "wrong results" ticket as a provider bug, run the test on its own.
+
 ## Regressions on `release` (passed on `main`, fail on `release`)
 
 The spec port was first written against `main` (the upstream mirror). Re-baselining it against `release` (the fork's trunk, which has
@@ -94,7 +98,6 @@ failure, tagged `// Fails: REGRESSION vs main: ...`, so any change is noticed. W
 
 | Ticket | Test(s) | What changed | EF versions |
 | --- | --- | --- | --- |
-| EF-X700 | `InheritanceQuery`: `Can_query_all_animals`, `Can_use_is_kiwi_in_projection`, `Selecting_only_base_properties_on_derived_type` | Wrong data: the query returns 3 rows where 2 are expected | 8, 9, 10 |
 | EF-X703 | `CompositeKeyEndToEnd.Can_use_two_non_generated_integers_as_composite_key_end_to_end` | After `SaveChanges`, the composite-key row cannot be queried back ("Sequence contains no elements") | 8, 9, 10 |
 | EF-X702 | `DateTimeOffsetTranslations.TimeOfDay` | Wrong data: the time of day is truncated to whole milliseconds | 1 |
 | EF-X701 | `AdHocQueryFilters.Query_filter_with_context_accessor_with_constant` | `NullReferenceException` from a query filter that reads a context member | 9, 10 |
@@ -311,7 +314,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 65 |
 | EF-X604 | `InvalidOperationException` from query execution or materialization | 51 |
 | EF-X605 | Other unexpected exception from query execution | 38 |
-| EF-X700 | **Regression vs `main`:** `InheritanceQuery` base-type queries return an extra row (3 instead of 2) | 3 |
+| EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
 | EF-X701 | **Regression vs `main`:** a query filter that reads a context member throws `NullReferenceException` | 1 |
 | EF-X702 | **Regression vs `main`:** `DateTimeOffset.TimeOfDay` is truncated to whole milliseconds | 1 |
 | EF-X703 | **Regression vs `main`:** a row saved with a composite key of two non-generated integers cannot be queried back | 1 |
@@ -319,7 +322,8 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X705 | **Regression vs `main` (exception type only):** an unsupported query now throws a different exception type | 4 |
 | EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
 | EF-X711 | EF11 only: xUnit v3 rejects a class that hides an inherited test with a `new` method ("has overloads"), so the hiding methods used on EF8 to EF10 for non-virtual upstream tests are not compiled on EF11 and the inherited tests that fail as base are skipped at run time (`Ef11TestSkips`); the reason names the ticket | 0 |
-| EF-X720 | Time zone dependent: a `DateTime` of kind Unspecified is treated as local time (EF-X006), so these `ComplexNavigations*` (and some Translations) tests return values shifted by an hour wherever the machine zone has daylight saving time on the data dates (Europe/London), and pass in UTC, as on the CI runners. `SpecFails.Either` requires a pass in a UTC environment and accepts the known failure elsewhere. Reproduced on Linux (WSL) with and without `TZ=UTC`: the OS makes no difference | 150 |
+| EF-X720 | Time zone dependent: a `DateTime` of kind Unspecified is treated as local time (EF-X006), so these `ComplexNavigations*` (and some Translations) tests return values shifted by an hour wherever the machine zone has daylight saving time on the data dates (Europe/London), and pass in UTC, as on the CI runners. `SpecFails.Either` requires a pass in a UTC environment and accepts the known failure elsewhere. Reproduced on Linux (WSL) with and without `TZ=UTC`: the OS makes no difference | 158 |
+| EF-X721 | Non-deterministic: a few `ManyToManyTracking`/`StoreGenerated` tests throw a different exception, or pass, depending on the order the entity graph is traversed (hash randomization), so they use `SpecFails.AnyOutcome`. Seen on EF11 | 4 |
 
 ### Shared root causes across the ported suites
 
