@@ -6196,7 +6196,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
             await base.InitializeAsync();
         }

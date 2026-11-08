@@ -36,7 +36,7 @@ public class StoreGeneratedFixupMongoTest(StoreGeneratedFixupMongoTest.StoreGene
         public override async LifetimeTask InitializeAsync()
         {
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(TestServer);
+            _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
             await _initFailure.RunAsync(base.InitializeAsync);
         }

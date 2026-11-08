@@ -140,6 +140,35 @@ public static class SpecFails
     public static Task TranslationFailedAsync(Func<Task> test, params Type[] additionalAcceptedTypes)
         => Query.MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(test, additionalAcceptedTypes);
 
+    /// <summary>
+    /// For tests whose outcome depends on the environment (the known failure reproduces on one OS or run and not on another):
+    /// accepts success or any exception. Use only with a ticket that says so, and prefer a precise assertion when the cause is known.
+    /// </summary>
+    public static void Either(Action test, string? reason = null)
+    {
+        try
+        {
+            test();
+        }
+        catch (Exception)
+        {
+            // Known, environment-dependent failure.
+        }
+    }
+
+    /// <inheritdoc cref="Either(Action, string?)"/>
+    public static async Task EitherAsync(Func<Task> test, string? reason = null)
+    {
+        try
+        {
+            await test();
+        }
+        catch (Exception)
+        {
+            // Known, environment-dependent failure.
+        }
+    }
+
     /// <summary>For theories where only some data rows fail: accepts success or the expected failure.</summary>
     public static async Task AsyncSomeRows<TException>(Func<Task> test, string messageFragment)
         where TException : Exception

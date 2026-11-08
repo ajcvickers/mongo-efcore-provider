@@ -401,7 +401,7 @@ public class FieldsOnlyLoadMongoTest(FieldsOnlyLoadMongoTest.FieldsOnlyLoadMongo
         public override async LifetimeTask InitializeAsync()
         {
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(TestServer);
+            _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
             await base.InitializeAsync();
         }

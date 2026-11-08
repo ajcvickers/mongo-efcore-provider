@@ -58,7 +58,7 @@ public class SaveChangesInterceptionMongoTest(SaveChangesInterceptionMongoTest.I
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
             await base.InitializeAsync();
         }
 
@@ -87,7 +87,7 @@ public class QueryExpressionInterceptionMongoTest(QueryExpressionInterceptionMon
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
             await base.InitializeAsync();
         }
 
@@ -127,7 +127,7 @@ public class SingletonInterceptorsMongoTest(SingletonInterceptorsMongoTest.Singl
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
             await base.InitializeAsync();
         }
 
@@ -166,7 +166,7 @@ public class MaterializationInterceptionMongoTest(MaterializationInterceptionMon
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
             await base.InitializeAsync();
         }
 
@@ -209,7 +209,7 @@ public class SingletonInterceptorsMongoTest
     public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-        _testStoreFactory = new MongoTestStoreFactory(server);
+        _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
         await base.InitializeAsync();
     }
 
@@ -253,7 +253,7 @@ public class MaterializationInterceptionMongoTest
     public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-        _testStoreFactory = new MongoTestStoreFactory(server);
+        _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
         await base.InitializeAsync();
     }
 
@@ -295,7 +295,7 @@ public class ConcurrencyDetectorEnabledMongoTest(ConcurrencyDetectorEnabledMongo
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
             await base.InitializeAsync();
         }
     }
@@ -316,7 +316,7 @@ public class ConcurrencyDetectorDisabledMongoTest(ConcurrencyDetectorDisabledMon
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
             await base.InitializeAsync();
         }
 

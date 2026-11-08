@@ -37,7 +37,7 @@ public class MonsterFixupMongoTest(MonsterFixupMongoTest.MonsterFixupMongoFixtur
 
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory ??= new MongoTestStoreFactory(
-                TestServer.GetOrInitializeTestServerAsync(MongoCondition.None).GetAwaiter().GetResult());
+                TestServer.GetOrInitializeTestServerAsync(MongoCondition.None).GetAwaiter().GetResult(), pinDefaultQueryMode: true);
 
         public override MonsterContext CreateContext(DbContextOptions options)
             => new SnapshotMonsterContext(options);

@@ -22,9 +22,9 @@ using Microsoft.EntityFrameworkCore.TestUtilities;
 using Microsoft.EntityFrameworkCore.Query.Translations.Temporal;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query.Translations;
 
-public class DateTimeOffsetTranslationsMongoTest : DateTimeOffsetTranslationsTestBase<MongoBasicTypesQueryFixture>
+public class DateTimeOffsetTranslationsMongoTest : DateTimeOffsetTranslationsTestBase<MongoPinnedBasicTypesQueryFixture>
 {
-    public DateTimeOffsetTranslationsMongoTest(MongoBasicTypesQueryFixture fixture)
+    public DateTimeOffsetTranslationsMongoTest(MongoPinnedBasicTypesQueryFixture fixture)
         : base(fixture)
         => Fixture.TestMqlLoggerFactory.Clear();
 

@@ -27,15 +27,18 @@ public class MongoTestStore : TestStore
 {
     public TestServer TestServer { get; }
 
+    private readonly bool _pinDefaultQueryMode;
+
     // EF's convention: a fixture's store is shared (initialized once per name); the store of a non-shared test is not, so it is
     // initialized, cleaned and seeded for every test (TestStore.InitializeAsync).
-    public static MongoTestStore Create(string name, TestServer testServer, bool shared = false)
-        => new(name, testServer, shared);
+    public static MongoTestStore Create(string name, TestServer testServer, bool shared = false, bool pinDefaultQueryMode = false)
+        => new(name, testServer, shared, pinDefaultQueryMode);
 
-    private MongoTestStore(string name, TestServer testServer, bool shared)
+    private MongoTestStore(string name, TestServer testServer, bool shared, bool pinDefaultQueryMode)
         : base(name, shared)
     {
         TestServer = testServer;
+        _pinDefaultQueryMode = pinDefaultQueryMode;
     }
 
     protected override DbContext CreateDefaultContext()
@@ -46,11 +49,16 @@ public class MongoTestStore : TestStore
     //
     // TODO(EF-417): this switch and the functional Native* parity tests use driver-LINQ as the oracle; retiring the
     // fallback needs a replacement oracle (in-memory LINQ or pinned result sets).
+    //
+    // A store created with pinDefaultQueryMode ignores that switch and always runs the default query mode (an explicit
+    // UseQueryMode wins over the process default). The suites ported in #35 are baselined in the default mode only.
     public override DbContextOptionsBuilder AddProviderOptions(DbContextOptionsBuilder builder)
         => builder.UseMongoDB(TestServer.Client, Name,
-            TestQueryMode.Current != MongoQueryMode.Native
-                ? o => o.UseQueryMode(TestQueryMode.Current)
-                : null);
+            _pinDefaultQueryMode
+                ? o => o.UseQueryMode(MongoQueryMode.Native)
+                : TestQueryMode.Current != MongoQueryMode.Native
+                    ? o => o.UseQueryMode(TestQueryMode.Current)
+                    : null);
 
 #if !EF8
     protected override async Task InitializeAsync(Func<DbContext> createContext, Func<DbContext, Task>? seed,

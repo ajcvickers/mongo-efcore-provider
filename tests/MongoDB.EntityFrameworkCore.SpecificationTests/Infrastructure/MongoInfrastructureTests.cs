@@ -28,7 +28,7 @@ public class LoggingMongoTest : LoggingTestBase
 {
     protected override DbContextOptionsBuilder CreateOptionsBuilder(IServiceCollection services)
         => new DbContextOptionsBuilder()
-            .UseMongoDB("mongodb://localhost:27017", "LoggingMongoTest")
+            .UseMongoDB("mongodb://localhost:27017", "LoggingMongoTest", o => o.UseQueryMode(global::MongoDB.EntityFrameworkCore.Infrastructure.MongoQueryMode.Native))
             .UseInternalServiceProvider(services.AddEntityFrameworkMongoDB().BuildServiceProvider(validateScopes: true));
 
     protected override TestLogger CreateTestLogger()
@@ -48,7 +48,7 @@ public class LoggingMongoTest : LoggingTestBase
 public class ModelBuilding101MongoTest : ModelBuilding101TestBase
 {
     protected override DbContextOptionsBuilder ConfigureContext(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseMongoDB("mongodb://localhost:27017", "ModelBuilding101MongoTest");
+        => optionsBuilder.UseMongoDB("mongodb://localhost:27017", "ModelBuilding101MongoTest", o => o.UseQueryMode(global::MongoDB.EntityFrameworkCore.Infrastructure.MongoQueryMode.Native));
 
     // Fails: Join-class foreign key discovery is ambiguous EF-X401
     public override void ManyToManyWithNavsToJoinClassTest()
@@ -74,7 +74,7 @@ public class MongoServiceCollectionExtensionsTest : EntityFrameworkServiceCollec
 public class SeedingMongoTest : SeedingTestBase
 {
     protected override TestStore TestStore
-        => MongoTestStore.Create("SeedingTest", TestServer.GetOrInitializeTestServerAsync(MongoCondition.None).GetAwaiter().GetResult());
+        => MongoTestStore.Create("SeedingTest", TestServer.GetOrInitializeTestServerAsync(MongoCondition.None).GetAwaiter().GetResult(), pinDefaultQueryMode: true);
 
     protected override SeedingContext CreateContextWithEmptyDatabase(string testId)
     {
@@ -85,7 +85,7 @@ public class SeedingMongoTest : SeedingTestBase
     private class SeedingMongoContext(string testId, TestServer testServer) : SeedingContext(testId)
     {
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-            => optionsBuilder.UseMongoDB(testServer.Client, TestDatabaseNamer.GetUniqueDatabaseName("Seeding" + TestId));
+            => optionsBuilder.UseMongoDB(testServer.Client, TestDatabaseNamer.GetUniqueDatabaseName("Seeding" + TestId), o => o.UseQueryMode(global::MongoDB.EntityFrameworkCore.Infrastructure.MongoQueryMode.Native));
     }
 }
 
@@ -121,7 +121,7 @@ public class SharedTypeQueryMongoTest
     public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-        _testStoreFactory = new MongoTestStoreFactory(server);
+        _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
         await base.InitializeAsync();
     }

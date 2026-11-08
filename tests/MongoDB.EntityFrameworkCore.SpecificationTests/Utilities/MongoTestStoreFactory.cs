@@ -22,23 +22,32 @@ namespace MongoDB.EntityFrameworkCore.SpecificationTests.Utilities;
 
 public class MongoTestStoreFactory : ITestStoreFactory
 {
-    public MongoTestStoreFactory(TestServer testServer)
+    /// <param name="testServer">The server the stores connect to.</param>
+    /// <param name="pinDefaultQueryMode">
+    /// True to run the stores' contexts in the default query mode (<c>Native</c>, with the driver fallback) whatever
+    /// <c>MONGODB_EF_QUERY_MODE</c> says. The suites ported in #35 are baselined in the default mode only, so they pin it;
+    /// the NativeOnly baselines are a follow-up. See <see cref="MongoTestStore"/>.
+    /// </param>
+    public MongoTestStoreFactory(TestServer testServer, bool pinDefaultQueryMode = false)
     {
         TestServer = testServer;
+        PinDefaultQueryMode = pinDefaultQueryMode;
     }
 
     public TestServer TestServer { get; }
+
+    public bool PinDefaultQueryMode { get; }
 
     public IServiceCollection AddProviderServices(IServiceCollection serviceCollection)
         => serviceCollection.AddEntityFrameworkMongoDB().AddSingleton<ILoggerFactory>(CreateListLoggerFactory(_ => true));
 
     // A non-shared test's store: initialized, cleaned and seeded for every test.
     public TestStore Create(string storeName)
-        => MongoTestStore.Create(storeName, TestServer, shared: false);
+        => MongoTestStore.Create(storeName, TestServer, shared: false, pinDefaultQueryMode: PinDefaultQueryMode);
 
     // A fixture's store: initialized once per name.
     public virtual TestStore GetOrCreate(string storeName)
-        => MongoTestStore.Create(storeName, TestServer, shared: true);
+        => MongoTestStore.Create(storeName, TestServer, shared: true, pinDefaultQueryMode: PinDefaultQueryMode);
 
     public virtual ListLoggerFactory CreateListLoggerFactory(Func<string, bool> shouldLogCategory)
         => new TestMqlLoggerFactory(shouldLogCategory);

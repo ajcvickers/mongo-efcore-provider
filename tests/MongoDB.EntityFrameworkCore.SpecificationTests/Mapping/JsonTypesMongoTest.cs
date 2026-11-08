@@ -29,7 +29,7 @@ public class JsonTypesMongoTest
     : JsonTypesTestBase
 {
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseMongoDB("mongodb://localhost:27017", "JsonTypes");
+        => optionsBuilder.UseMongoDB("mongodb://localhost:27017", "JsonTypes", o => o.UseQueryMode(global::MongoDB.EntityFrameworkCore.Infrastructure.MongoQueryMode.Native));
 #elif EF9
     : JsonTypesTestBase
 {
@@ -2421,7 +2421,7 @@ public class JsonTypesMongoTest
     public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-        _testStoreFactory = new MongoTestStoreFactory(server);
+        _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
         await base.InitializeAsync();
     }

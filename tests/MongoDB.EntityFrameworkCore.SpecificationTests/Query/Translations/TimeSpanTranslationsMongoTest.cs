@@ -22,9 +22,9 @@ using Microsoft.EntityFrameworkCore.TestUtilities;
 using Microsoft.EntityFrameworkCore.Query.Translations.Temporal;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query.Translations;
 
-public class TimeSpanTranslationsMongoTest : TimeSpanTranslationsTestBase<MongoBasicTypesQueryFixture>
+public class TimeSpanTranslationsMongoTest : TimeSpanTranslationsTestBase<MongoPinnedBasicTypesQueryFixture>
 {
-    public TimeSpanTranslationsMongoTest(MongoBasicTypesQueryFixture fixture)
+    public TimeSpanTranslationsMongoTest(MongoPinnedBasicTypesQueryFixture fixture)
         : base(fixture)
         => Fixture.TestMqlLoggerFactory.Clear();
 

@@ -22,9 +22,9 @@ using Microsoft.EntityFrameworkCore.TestUtilities;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query.Translations;
 
-public class GuidTranslationsMongoTest : GuidTranslationsTestBase<MongoBasicTypesQueryFixture>
+public class GuidTranslationsMongoTest : GuidTranslationsTestBase<MongoPinnedBasicTypesQueryFixture>
 {
-    public GuidTranslationsMongoTest(MongoBasicTypesQueryFixture fixture)
+    public GuidTranslationsMongoTest(MongoPinnedBasicTypesQueryFixture fixture)
         : base(fixture)
         => Fixture.TestMqlLoggerFactory.Clear();
 

@@ -80,6 +80,12 @@ individually); expect them to split once someone looks at the individual failure
 
 ---
 
+**Query mode.** CI also runs every suite with the driver fallback disabled (`MONGODB_EF_QUERY_MODE=NativeOnly`, the `native-only` job). The suites
+ported in #35 were baselined in the default query mode only, so their stores are pinned to it (`MongoTestStoreFactory(server, pinDefaultQueryMode: true)`;
+`MongoPinnedBasicTypesQueryFixture` for the Translations suites). Under NativeOnly the same tests would fail with
+`NativeTranslationNotSupportedException` and different messages. Baselining them in NativeOnly too is a follow-up; until then these suites give no
+native-only coverage.
+
 ## Regressions on `release` (passed on `main`, fail on `release`)
 
 The spec port was first written against `main` (the upstream mirror). Re-baselining it against `release` (the fork's trunk, which has
@@ -313,6 +319,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X705 | **Regression vs `main` (exception type only):** an unsupported query now throws a different exception type | 4 |
 | EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
 | EF-X711 | EF11 only: xUnit v3 rejects a class that hides an inherited test with a `new` method ("has overloads"), so the hiding methods used on EF8 to EF10 for non-virtual upstream tests are not compiled on EF11 and the inherited tests that fail as base are skipped at run time (`Ef11TestSkips`); the reason names the ticket | 0 |
+| EF-X720 | Environment dependent: the known failure of some `ComplexNavigations*` EF8/EF9 tests (mostly wrong results against the reference evaluation) does not reproduce on the Linux CI runner although it does on Windows, so those assertions use `SpecFails.Either` (success or the known failure). Cause not found: the MongoDB server version and invariant globalization were ruled out | 150 |
 
 ### Shared root causes across the ported suites
 

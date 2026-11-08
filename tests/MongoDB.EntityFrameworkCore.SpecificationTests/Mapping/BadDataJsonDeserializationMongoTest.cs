@@ -31,7 +31,7 @@ public class BadDataJsonDeserializationMongoTest : BadDataJsonDeserializationTes
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseMongoDB("mongodb://localhost:27017", "BadDataJsonDeserialization");
+        => optionsBuilder.UseMongoDB("mongodb://localhost:27017", "BadDataJsonDeserialization", o => o.UseQueryMode(global::MongoDB.EntityFrameworkCore.Infrastructure.MongoQueryMode.Native));
 
     // <generated>
     // Fails: Property type (collection of non-primitive/exotic element, geometry) cannot be mapped by the provider EF-X316

@@ -816,7 +816,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
             await base.InitializeAsync();
         }

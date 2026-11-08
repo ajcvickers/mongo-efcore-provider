@@ -45,10 +45,14 @@ public class MongoBasicTypesQueryFixture : BasicTypesQueryFixtureBase
     public override async LifetimeTask InitializeAsync()
     {
         TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-        _testStoreFactory = new MongoTestStoreFactory(TestServer);
+        _testStoreFactory = new MongoTestStoreFactory(TestServer, PinDefaultQueryMode);
 
         await base.InitializeAsync();
     }
+
+    /// <summary>True to run this fixture's contexts in the default query mode whatever <c>MONGODB_EF_QUERY_MODE</c> says.</summary>
+    protected virtual bool PinDefaultQueryMode
+        => false;
 
     protected override bool UsePooling
         => false;

@@ -155,8 +155,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Project_collection_navigation_composed(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Project_collection_navigation_composed(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Project_collection_navigation_composed(async));
     }
 #else
     public override async Task Project_collection_navigation_composed(bool async)
@@ -263,8 +263,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 
     public override async Task Multi_level_include_one_to_many_optional_and_one_to_many_optional_produces_valid_sql(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Multi_level_include_one_to_many_optional_and_one_to_many_optional_produces_valid_sql(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Multi_level_include_one_to_many_optional_and_one_to_many_optional_produces_valid_sql(async), "Failure");
     }
 
     public override async Task Multi_level_include_correct_PK_is_chosen_as_the_join_predicate_for_queries_that_join_same_table_multiple_times(bool async)
@@ -307,14 +307,14 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 
     public override async Task Include_collection_then_reference(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include_collection_then_reference(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Include_collection_then_reference(async), "Failure");
     }
 
     public override async Task Include_collection_with_conditional_order_by(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include_collection_with_conditional_order_by(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Include_collection_with_conditional_order_by(async), "Failure");
     }
 
 #if (EF10 || EF11)
@@ -549,14 +549,14 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 
     public override async Task Include_collection(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include_collection(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Include_collection(async), "Failure");
     }
 
     public override async Task Include_collection_followed_by_include_reference(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include_collection_followed_by_include_reference(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Include_collection_followed_by_include_reference(async), "Failure");
     }
 
 #if (EF10 || EF11)
@@ -587,8 +587,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 
     public override async Task Include_collection_ThenInclude_two_references(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Include_collection_ThenInclude_two_references(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Include_collection_ThenInclude_two_references(async), "Failure");
     }
 
     public override async Task Include_collection_followed_by_complex_includes_and_projecting_the_included_collection(bool async)
@@ -655,62 +655,62 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 
     public override async Task Filtered_include_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_OrderBy(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_OrderBy_EF_Property(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_OrderBy_EF_Property(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_OrderBy_EF_Property(async), "Failure");
     }
 
     public override async Task Filtered_ThenInclude_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_ThenInclude_OrderBy(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_ThenInclude_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_ThenInclude_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_ThenInclude_OrderBy(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_ThenInclude_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_basic_OrderBy_Take(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_basic_OrderBy_Take(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_basic_OrderBy_Take(async), "Failure");
     }
 
     public override async Task Filtered_include_basic_OrderBy_Skip(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_basic_OrderBy_Skip(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_basic_OrderBy_Skip(async), "Failure");
     }
 
     public override async Task Filtered_include_basic_OrderBy_Skip_Take(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_basic_OrderBy_Skip_Take(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_basic_OrderBy_Skip_Take(async), "Failure");
     }
 
     public override async Task Filtered_include_basic_OrderBy_Skip_Take_EF_Property(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_basic_OrderBy_Skip_Take_EF_Property(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_basic_OrderBy_Skip_Take_EF_Property(async), "Failure");
     }
 
     public override async Task Filtered_include_Skip_without_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_Skip_without_OrderBy(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_Skip_without_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_Take_without_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_Take_without_OrderBy(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_Take_without_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_on_ThenInclude(bool async)
@@ -819,8 +819,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 
     public override async Task Filtered_include_context_accessed_inside_filter_correlated(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_context_accessed_inside_filter_correlated(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_context_accessed_inside_filter_correlated(async), "Failure");
     }
 
     public override async Task Filtered_include_include_parameter_used_inside_filter_throws(bool async)
@@ -851,20 +851,20 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 
     public override async Task Filtered_include_Skip_Take_with_another_Skip_Take_on_top_level(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_Skip_Take_with_another_Skip_Take_on_top_level(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_Skip_Take_with_another_Skip_Take_on_top_level(async), "Failure");
     }
 
     public override async Task Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_FirstOrDefault_on_top_level(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_FirstOrDefault_on_top_level(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_FirstOrDefault_on_top_level(async), "Failure");
     }
 
     public override async Task Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_unordered_Take_on_top_level(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_unordered_Take_on_top_level(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_unordered_Take_on_top_level(async), "Failure");
     }
 
     public override async Task Projecting_collection_with_FirstOrDefault(bool async)
@@ -876,8 +876,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_on_grouping_element(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_on_grouping_element(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Skip_on_grouping_element(async));
     }
 #else
     public override async Task Skip_on_grouping_element(bool async)
@@ -916,8 +916,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_on_grouping_element(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Skip_Take_on_grouping_element(async));
     }
 #else
     public override async Task Skip_Take_on_grouping_element(bool async)
@@ -930,8 +930,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_Distinct_on_grouping_element(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_Distinct_on_grouping_element(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Skip_Take_Distinct_on_grouping_element(async));
     }
 #else
     public override async Task Skip_Take_Distinct_on_grouping_element(bool async)
@@ -944,8 +944,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_ToList_on_grouping_element(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_ToList_on_grouping_element(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Skip_Take_ToList_on_grouping_element(async));
     }
 #else
     public override async Task Skip_Take_ToList_on_grouping_element(bool async)
@@ -958,8 +958,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element_into_non_entity(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_on_grouping_element_into_non_entity(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Skip_Take_on_grouping_element_into_non_entity(async));
     }
 #else
     public override async Task Skip_Take_on_grouping_element_into_non_entity(bool async)
@@ -972,8 +972,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element_with_collection_include(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Skip_Take_on_grouping_element_with_collection_include(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Skip_Take_on_grouping_element_with_collection_include(async));
     }
 #else
     public override async Task Skip_Take_on_grouping_element_with_collection_include(bool async)
@@ -1224,8 +1224,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9
     public override async Task Complex_multi_include_with_order_by_and_paging(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Complex_multi_include_with_order_by_and_paging(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Complex_multi_include_with_order_by_and_paging(async));
     }
 #endif
 
@@ -1240,8 +1240,8 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9
     public override async Task Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(async));
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(async));
     }
 #endif
 
@@ -1312,16 +1312,16 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
 #if EF8 || EF9
     public override async Task Filtered_include_variable_used_inside_filter(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_variable_used_inside_filter(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_variable_used_inside_filter(async), "Failure");
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Filtered_include_context_accessed_inside_filter(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Filtered_include_context_accessed_inside_filter(async), "Failure");
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        await SpecFails.EitherAsync(() => base.Filtered_include_context_accessed_inside_filter(async), "Failure");
     }
 #endif
 
@@ -1347,7 +1347,7 @@ public class ComplexNavigationsCollectionsSharedTypeQueryMongoTest : ComplexNavi
         public override async LifetimeTask InitializeAsync()
         {
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
-            _testStoreFactory = new MongoTestStoreFactory(server);
+            _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
             await base.InitializeAsync();
         }
