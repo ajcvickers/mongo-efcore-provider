@@ -28,16 +28,52 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
     // EF Core 11 moved the AdHoc complex type tests into this base class and added alternate-key and index tests.
     // None of them passes against the provider yet (see #22).
 
+    // These ran as "known gaps" while the non-shared test store was never cleaned between tests (their results depended on the
+    // documents earlier tests left behind); with an isolated store they pass.
+    public override async Task Projecting_complex_property_does_not_auto_include_owned_types()
+    {
+        await base.Projecting_complex_property_does_not_auto_include_owned_types();
+    }
+
+    public override async Task Complex_type_equals_parameter_with_nested_types_with_property_of_same_name()
+    {
+        await base.Complex_type_equals_parameter_with_nested_types_with_property_of_same_name();
+    }
+
+    public override async Task Non_optional_complex_type_with_all_nullable_properties_via_left_join()
+    {
+        await base.Non_optional_complex_type_with_all_nullable_properties_via_left_join();
+    }
+
+    public override async Task Nullable_complex_type_with_discriminator_and_shadow_property()
+    {
+        await base.Nullable_complex_type_with_discriminator_and_shadow_property();
+    }
+
+    public override async Task Optional_complex_type_with_discriminator()
+    {
+        await base.Optional_complex_type_with_discriminator();
+    }
+
+    public override async Task Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip()
+    {
+        await base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip();
+    }
+
+    public override async Task Non_optional_complex_type_with_all_nullable_properties()
+    {
+        await base.Non_optional_complex_type_with_all_nullable_properties();
+    }
+
+    public override async Task Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
+    {
+        await base.Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip();
+    }
+
     public override async Task Can_query_by_alternate_key_on_complex_type_property()
     {
         // Fails: EF11 complex type conformance not implemented yet #22
         await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_query_by_alternate_key_on_complex_type_property());
-    }
-
-    public override async Task Projecting_complex_property_does_not_auto_include_owned_types()
-    {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Projecting_complex_property_does_not_auto_include_owned_types());
     }
 
     public override async Task Can_query_by_complex_type_property_with_index()
@@ -46,58 +82,16 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
         await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_query_by_complex_type_property_with_index());
     }
 
-    public override async Task Complex_type_equals_parameter_with_nested_types_with_property_of_same_name()
-    {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_parameter_with_nested_types_with_property_of_same_name());
-    }
-
     public override async Task Can_delete_entity_with_index_on_complex_type_property()
     {
         // Fails: EF11 complex type conformance not implemented yet #22
         await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_delete_entity_with_index_on_complex_type_property());
     }
 
-    public override async Task Non_optional_complex_type_with_all_nullable_properties_via_left_join()
-    {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Non_optional_complex_type_with_all_nullable_properties_via_left_join());
-    }
-
-    public override async Task Nullable_complex_type_with_discriminator_and_shadow_property()
-    {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_and_shadow_property(), typeof(Exception));
-    }
-
-    public override async Task Optional_complex_type_with_discriminator()
-    {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Optional_complex_type_with_discriminator(), typeof(Exception));
-    }
-
     public override async Task Can_update_entity_with_index_on_complex_type_property()
     {
         // Fails: EF11 complex type conformance not implemented yet #22
         await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Can_update_entity_with_index_on_complex_type_property());
-    }
-
-    public override async Task Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip()
-    {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip(), typeof(Exception));
-    }
-
-    public override async Task Non_optional_complex_type_with_all_nullable_properties()
-    {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Non_optional_complex_type_with_all_nullable_properties(), typeof(Exception));
-    }
-
-    public override async Task Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
-    {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip());
     }
 
     public override async Task Nullable_complex_type_with_discriminator_set_to_null()

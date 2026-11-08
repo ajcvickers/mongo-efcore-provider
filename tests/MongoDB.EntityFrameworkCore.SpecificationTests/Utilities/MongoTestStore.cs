@@ -27,11 +27,13 @@ public class MongoTestStore : TestStore
 {
     public TestServer TestServer { get; }
 
-    public static MongoTestStore Create(string name, TestServer testServer)
-        => new(name, testServer);
+    // EF's convention: a fixture's store is shared (initialized once per name); the store of a non-shared test is not, so it is
+    // initialized, cleaned and seeded for every test (TestStore.InitializeAsync).
+    public static MongoTestStore Create(string name, TestServer testServer, bool shared = false)
+        => new(name, testServer, shared);
 
-    private MongoTestStore(string name, TestServer testServer)
-        : base(name, shared: true)
+    private MongoTestStore(string name, TestServer testServer, bool shared)
+        : base(name, shared)
     {
         TestServer = testServer;
     }
@@ -78,9 +80,10 @@ public class MongoTestStore : TestStore
         }
     }
 
+    // EF resets the store before each seed; the non-shared tests of a class all use one database (<fixture>_NonShared) and rely
+    // on this, so documents left by one test must not be seen by the next (order-dependent "more than one element" failures).
     public override void Clean(DbContext context)
-    {
-    }
+        => TestServer.Client.DropDatabase(Name);
 #endif
 
 #if EF11
@@ -88,5 +91,5 @@ public class MongoTestStore : TestStore
 #else
     public override Task CleanAsync(DbContext context)
 #endif
-        => Task.CompletedTask;
+        => TestServer.Client.DropDatabaseAsync(Name);
 }
