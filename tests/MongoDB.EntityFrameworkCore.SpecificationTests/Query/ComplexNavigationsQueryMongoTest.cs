@@ -3215,8 +3215,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #else
     public override async Task Join_with_navigations_in_the_result_selector1(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.Join_with_navigations_in_the_result_selector1(async));
+        await base.Join_with_navigations_in_the_result_selector1(async);
     }
 #endif
 #endif

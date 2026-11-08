@@ -35,17 +35,15 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
 #if EF11
-    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
     public override Task Primitive_collection_on_subtype(bool async)
-        => SpecFails.ThrowsAsync(() => base.Primitive_collection_on_subtype(async));
+        => base.Primitive_collection_on_subtype(async);
 #endif
 
 #if EF8 || EF9 || (EF10 || EF11)
 #if EF11
     public override async Task Can_query_when_shared_column(bool async)
     {
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
-        await SpecFails.ThrowsAsync(() => base.Can_query_when_shared_column(async));
+        await base.Can_query_when_shared_column(async);
     }
 #else
     public override async Task Can_query_when_shared_column(bool async)
@@ -64,8 +62,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
 #if EF11
     public override async Task Can_query_all_types_when_shared_column(bool async)
     {
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
-        await SpecFails.ThrowsAsync(() => base.Can_query_all_types_when_shared_column(async));
+        await base.Can_query_all_types_when_shared_column(async);
     }
 #else
     public override async Task Can_query_all_types_when_shared_column(bool async)
@@ -174,16 +171,14 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
 #else
     public override async Task Can_query_all_plants(bool async)
     {
-        // Fails: Missing property values issue EF-164
-        await SpecFails.ThrowsAsync(() => base.Can_query_all_plants(async), "Document element is missing for required");
+        await base.Can_query_all_plants(async);
     }
 #endif
 
 #if !EF11
     public override async Task Filter_on_property_inside_complex_type_on_derived_type(bool async)
     {
-        // Fails: Expression not supported by the driver LINQ translator EF-X527
-        await SpecFails.ThrowsAsync(() => base.Filter_on_property_inside_complex_type_on_derived_type(async), "Expression not supported");
+        await base.Filter_on_property_inside_complex_type_on_derived_type(async);
     }
 #endif
 

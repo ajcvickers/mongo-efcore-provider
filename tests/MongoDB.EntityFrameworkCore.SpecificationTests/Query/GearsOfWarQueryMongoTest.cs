@@ -684,8 +684,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 
     public override async Task Concat_with_scalar_projection(bool async)
     {
-        // Fails: NullReferenceException during query execution/materialization EF-X529
-        await SpecFails.ThrowsAsync(() => base.Concat_with_scalar_projection(async), "NullReferenceException");
+        await base.Concat_with_scalar_projection(async);
     }
 
     public override async Task Select_navigation_with_concat_and_count(bool async)
@@ -4043,7 +4042,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(bool async)
     {
         // Fails: Missing property values issue EF-164
-        await SpecFails.ThrowsAsync(() => base.Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(async), "is missing but required");
+        await SpecFails.TranslationFailedAsync(() => base.Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(async));
     }
 #endif
 
@@ -4051,7 +4050,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(bool async)
     {
         // Fails: Missing property values issue EF-164
-        await SpecFails.ThrowsAsync(() => base.Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(async), "is missing but required");
+        await SpecFails.TranslationFailedAsync(() => base.Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(async));
     }
 #endif
 
@@ -6053,7 +6052,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
-        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(async));
+        await SpecFails.TranslationFailedAsync(() => base.Project_navigation_defined_on_base_from_entity_with_inheritance_using_soft_cast(async));
     }
 #endif
 
@@ -6061,7 +6060,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
-        await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(async));
+        await SpecFails.TranslationFailedAsync(() => base.Project_navigation_defined_on_derived_from_entity_with_inheritance_using_soft_cast(async));
     }
 #endif
 

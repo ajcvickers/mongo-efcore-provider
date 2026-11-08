@@ -30,15 +30,13 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
 
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Can_use_proxies_from_multiple_threads_when_navigations_already_loaded(bool noTracking)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Can_use_proxies_from_multiple_threads_when_navigations_already_loaded(noTracking), "Document element is missing for required non-nullable property");
+        => SpecFails.TranslationFailed(() => base.Can_use_proxies_from_multiple_threads_when_navigations_already_loaded(noTracking));
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Detected_principal_reference_navigation_changes_are_detected_and_marked_loaded()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Detected_principal_reference_navigation_changes_are_detected_and_marked_loaded(), "Document element is missing for required non-nullable property");
+        => base.Detected_principal_reference_navigation_changes_are_detected_and_marked_loaded();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Detected_dependent_reference_navigation_changes_are_detected_and_marked_loaded()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Detected_dependent_reference_navigation_changes_are_detected_and_marked_loaded(), "Document element is missing for required non-nullable property");
+        => base.Detected_dependent_reference_navigation_changes_are_detected_and_marked_loaded();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Lazy_load_one_to_one_reference_with_recursive_property(EntityState state)
@@ -53,77 +51,65 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Attached_collections_are_not_marked_as_loaded(EntityState state, bool lazy)
         => base.Attached_collections_are_not_marked_as_loaded(state, lazy);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_collection(EntityState state, bool useAttach, bool useDetach)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection(state, useAttach, useDetach), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_collection(state, useAttach, useDetach), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_many_to_one_reference_to_principal(EntityState state, bool useAttach, bool useDetach)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal(state, useAttach, useDetach), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_many_to_one_reference_to_principal(state, useAttach, useDetach), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_principal(EntityState state, bool useAttach, bool useDetach)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal(state, useAttach, useDetach), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_principal(state, useAttach, useDetach), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_dependent(EntityState state, bool useAttach, bool useDetach)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent(state, useAttach, useDetach), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_dependent(state, useAttach, useDetach), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_PK_to_PK_reference_to_principal(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_principal(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_principal(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_PK_to_PK_reference_to_dependent(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_dependent(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_dependent(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Eager_load_one_to_one_non_virtual_reference_to_owned_type()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Eager_load_one_to_one_non_virtual_reference_to_owned_type(), "Document element is missing for required non-nullable property");
+        => base.Eager_load_one_to_one_non_virtual_reference_to_owned_type();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Eager_load_one_to_one_virtual_reference_to_owned_type()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Eager_load_one_to_one_virtual_reference_to_owned_type(), "Document element is missing for required non-nullable property");
+        => base.Eager_load_one_to_one_virtual_reference_to_owned_type();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Eager_load_one_to_many_non_virtual_collection_of_owned_types()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Eager_load_one_to_many_non_virtual_collection_of_owned_types(), "Document element is missing for required non-nullable property");
+        => base.Eager_load_one_to_many_non_virtual_collection_of_owned_types();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Eager_load_one_to_many_virtual_collection_of_owned_types()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Eager_load_one_to_many_virtual_collection_of_owned_types(), "Document element is missing for required non-nullable property");
+        => base.Eager_load_one_to_many_virtual_collection_of_owned_types();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Eager_load_one_to_many_non_virtual_collection_of_owned_types_with_explicit_lazy_load()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Eager_load_one_to_many_non_virtual_collection_of_owned_types_with_explicit_lazy_load(), "Document element is missing for required non-nullable property");
+        => base.Eager_load_one_to_many_non_virtual_collection_of_owned_types_with_explicit_lazy_load();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Eager_load_one_to_many_virtual_collection_of_owned_types_with_explicit_lazy_load()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Eager_load_one_to_many_virtual_collection_of_owned_types_with_explicit_lazy_load(), "Document element is missing for required non-nullable property");
+        => base.Eager_load_one_to_many_virtual_collection_of_owned_types_with_explicit_lazy_load();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Setting_reference_to_owned_type_to_null_is_allowed_on_non_virtual_navigation()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_reference_to_owned_type_to_null_is_allowed_on_non_virtual_navigation(), "Document element is missing for required non-nullable property");
+        => base.Setting_reference_to_owned_type_to_null_is_allowed_on_non_virtual_navigation();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Setting_reference_to_owned_type_to_null_is_allowed_on_virtual_navigation()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_reference_to_owned_type_to_null_is_allowed_on_virtual_navigation(), "Document element is missing for required non-nullable property");
+        => base.Setting_reference_to_owned_type_to_null_is_allowed_on_virtual_navigation();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Non_virtual_one_to_one_reference_to_principal_is_not_lazy_loaded()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_virtual_one_to_one_reference_to_principal_is_not_lazy_loaded(), "Document element is missing for required non-nullable property");
+        => base.Non_virtual_one_to_one_reference_to_principal_is_not_lazy_loaded();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Non_virtual_one_to_many_reference_to_principal_is_not_lazy_loaded()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_virtual_one_to_many_reference_to_principal_is_not_lazy_loaded(), "Document element is missing for required non-nullable property");
+        => base.Non_virtual_one_to_many_reference_to_principal_is_not_lazy_loaded();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Non_virtual_reference_to_dependent_is_not_lazy_loaded()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_virtual_reference_to_dependent_is_not_lazy_loaded(), "Document element is missing for required non-nullable property");
+        => base.Non_virtual_reference_to_dependent_is_not_lazy_loaded();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Non_virtual_collection_is_not_lazy_loaded()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_virtual_collection_is_not_lazy_loaded(), "Document element is missing for required non-nullable property");
+        => base.Non_virtual_collection_is_not_lazy_loaded();
 
     public override void Lazy_load_many_to_one_reference_to_principal_null_FK(EntityState state)
         => base.Lazy_load_many_to_one_reference_to_principal_null_FK(state);
@@ -131,9 +117,9 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Lazy_load_one_to_one_reference_to_principal_null_FK(EntityState state)
         => base.Lazy_load_one_to_one_reference_to_principal_null_FK(state);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_many_to_one_reference_to_principal_changed_non_found_FK(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_changed_non_found_FK(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_many_to_one_reference_to_principal_changed_non_found_FK(state), string.Empty);
 
     // Fails: Reading a document with nested owned types reports a required element missing (tracked states only) EF-X212
     public override void Lazy_load_many_to_one_reference_to_principal_changed_found_FK(EntityState state)
@@ -162,49 +148,54 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Lazy_load_one_to_one_reference_to_dependent_not_found(EntityState state)
         => base.Lazy_load_one_to_one_reference_to_dependent_not_found(state);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_collection_already_loaded(EntityState state, CascadeTiming cascadeDeleteTiming)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_already_loaded(state, cascadeDeleteTiming), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_collection_already_loaded(state, cascadeDeleteTiming), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+#if EF8
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override void Lazy_load_collection_already_partially_loaded(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_already_partially_loaded(state), "Document element is missing for required non-nullable property");
+        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_collection_already_partially_loaded(state));
+#else
+    // Fails: Other unexpected exception from query execution EF-X605
+    public override void Lazy_load_collection_already_partially_loaded(EntityState state)
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_collection_already_partially_loaded(state), string.Empty);
+#endif
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_collection_already_partially_loaded_no_tracking(QueryTrackingBehavior queryTrackingBehavior)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_already_partially_loaded_no_tracking(queryTrackingBehavior), "Document element is missing for required non-nullable property");
+        => base.Lazy_load_collection_already_partially_loaded_no_tracking(queryTrackingBehavior);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override void Lazy_load_many_to_one_reference_to_principal_already_loaded(EntityState state, CascadeTiming cascadeDeleteTiming)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded(state, cascadeDeleteTiming), "Document element is missing for required non-nullable property");
+        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_many_to_one_reference_to_principal_already_loaded(state, cascadeDeleteTiming));
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_principal_already_loaded(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_principal_already_loaded(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override void Lazy_load_one_to_one_reference_to_dependent_already_loaded(EntityState state, CascadeTiming cascadeDeleteTiming)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded(state, cascadeDeleteTiming), "Document element is missing for required non-nullable property");
+        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_dependent_already_loaded(state, cascadeDeleteTiming));
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_principal_already_loaded(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_PK_to_PK_reference_to_dependent_already_loaded(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_many_to_one_reference_to_principal_alternate_key(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_alternate_key(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_many_to_one_reference_to_principal_alternate_key(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_principal_alternate_key(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_alternate_key(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_principal_alternate_key(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_dependent_alternate_key(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_alternate_key(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_dependent_alternate_key(state), string.Empty);
 
     public override void Lazy_load_many_to_one_reference_to_principal_null_FK_alternate_key(EntityState state)
         => base.Lazy_load_many_to_one_reference_to_principal_null_FK_alternate_key(state);
@@ -212,21 +203,21 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Lazy_load_one_to_one_reference_to_principal_null_FK_alternate_key(EntityState state)
         => base.Lazy_load_one_to_one_reference_to_principal_null_FK_alternate_key(state);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_collection_shadow_fk(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_shadow_fk(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_collection_shadow_fk(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_many_to_one_reference_to_principal_shadow_fk(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_shadow_fk(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_many_to_one_reference_to_principal_shadow_fk(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_principal_shadow_fk(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_shadow_fk(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_principal_shadow_fk(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_dependent_shadow_fk(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_shadow_fk(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_dependent_shadow_fk(state), string.Empty);
 
     public override void Lazy_load_many_to_one_reference_to_principal_null_FK_shadow_fk(EntityState state)
         => base.Lazy_load_many_to_one_reference_to_principal_null_FK_shadow_fk(state);
@@ -234,21 +225,21 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Lazy_load_one_to_one_reference_to_principal_null_FK_shadow_fk(EntityState state)
         => base.Lazy_load_one_to_one_reference_to_principal_null_FK_shadow_fk(state);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_collection_composite_key(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_composite_key(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_collection_composite_key(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_many_to_one_reference_to_principal_composite_key(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_many_to_one_reference_to_principal_composite_key(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_many_to_one_reference_to_principal_composite_key(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_principal_composite_key(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_principal_composite_key(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_principal_composite_key(state), string.Empty);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Lazy_load_one_to_one_reference_to_dependent_composite_key(EntityState state)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_one_to_one_reference_to_dependent_composite_key(state), "Document element is missing for required non-nullable property");
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Lazy_load_one_to_one_reference_to_dependent_composite_key(state), string.Empty);
 
     public override void Lazy_load_many_to_one_reference_to_principal_null_FK_composite_key(EntityState state)
         => base.Lazy_load_many_to_one_reference_to_principal_null_FK_composite_key(state);
@@ -256,55 +247,54 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override void Lazy_load_one_to_one_reference_to_principal_null_FK_composite_key(EntityState state)
         => base.Lazy_load_one_to_one_reference_to_principal_null_FK_composite_key(state);
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_collection_for_detached_is_no_op()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_for_detached_is_no_op(), "Document element is missing for required non-nullable property");
+        => base.Lazy_load_collection_for_detached_is_no_op();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_reference_to_principal_for_detached_is_no_op()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_reference_to_principal_for_detached_is_no_op(), "Document element is missing for required non-nullable property");
+        => base.Lazy_load_reference_to_principal_for_detached_is_no_op();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_reference_to_dependent_for_detached_is_no_op()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_reference_to_dependent_for_detached_is_no_op(), "Document element is missing for required non-nullable property");
+        => base.Lazy_load_reference_to_dependent_for_detached_is_no_op();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_collection_for_no_tracking_does_not_throw_if_populated()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_collection_for_no_tracking_does_not_throw_if_populated(), "Document element is missing for required non-nullable property");
+        => base.Lazy_load_collection_for_no_tracking_does_not_throw_if_populated();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_reference_to_principal_for_no_tracking_does_not_throw_if_populated()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_reference_to_principal_for_no_tracking_does_not_throw_if_populated(), "Document element is missing for required non-nullable property");
+        => base.Lazy_load_reference_to_principal_for_no_tracking_does_not_throw_if_populated();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_load_reference_to_dependent_for_no_tracking_does_not_throw_if_populated()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_load_reference_to_dependent_for_no_tracking_does_not_throw_if_populated(), "Document element is missing for required non-nullable property");
+        => base.Lazy_load_reference_to_dependent_for_no_tracking_does_not_throw_if_populated();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override async Task Load_collection(EntityState state, bool async)
-        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection(state, async), "Document element is missing for required non-nullable property");
+    {
+        // Fails: Other unexpected exception from query execution EF-X605
+        await SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Load_collection(state, async), string.Empty);
+    }
 
 #if EF8
     [ConditionalFact(Skip = "The EF8 test base calls Xunit.Assert.Equal(string, string, bool, bool, bool), missing from xunit 2.9 (MissingMethodException)")]
     public override void Can_serialize_proxies_to_JSON()
         => base.Can_serialize_proxies_to_JSON();
 #else
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+#if EF9 || EF10
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override void Can_serialize_proxies_to_JSON()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Can_serialize_proxies_to_JSON(), "Document element is missing for required non-nullable property");
+        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Can_serialize_proxies_to_JSON());
+#else
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    public override void Can_serialize_proxies_to_JSON()
+        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Can_serialize_proxies_to_JSON());
+#endif
 #endif
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_finds_correct_entity_type_with_already_loaded_owned_types()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_finds_correct_entity_type_with_already_loaded_owned_types(), "Document element is missing for required non-nullable property");
+        => base.Lazy_loading_finds_correct_entity_type_with_already_loaded_owned_types();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_finds_correct_entity_type_with_multiple_queries()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_finds_correct_entity_type_with_multiple_queries(), "Document element is missing for required non-nullable property");
+        => base.Lazy_loading_finds_correct_entity_type_with_multiple_queries();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_finds_correct_entity_type_with_opaque_predicate_and_multiple_queries()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_finds_correct_entity_type_with_opaque_predicate_and_multiple_queries(), "Document element is missing for required non-nullable property");
+        => base.Lazy_loading_finds_correct_entity_type_with_opaque_predicate_and_multiple_queries();
 
     public override void Lazy_loading_finds_correct_entity_type_with_multiple_queries_using_Count()
         => base.Lazy_loading_finds_correct_entity_type_with_multiple_queries_using_Count();
@@ -312,9 +302,8 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
 #if !EF11
 #if !(EF10 || EF11)
 #if !(EF10 || EF11)
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_shares_service__property_on_derived_types()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_shares_service__property_on_derived_types(), "Document element is missing for required non-nullable property");
+        => base.Lazy_loading_shares_service__property_on_derived_types();
 #else
     public override void Lazy_loading_shares_service__property_on_derived_types()
         => base.Lazy_loading_shares_service__property_on_derived_types();
@@ -322,26 +311,23 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
 #endif
 #endif
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_handles_shadow_nullable_GUID_FK_in_TPH_model()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_handles_shadow_nullable_GUID_FK_in_TPH_model(), "Document element is missing for required non-nullable property");
+        => base.Lazy_loading_handles_shadow_nullable_GUID_FK_in_TPH_model();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_finds_correct_entity_type_with_alternate_model()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_finds_correct_entity_type_with_alternate_model(), "Document element is missing for required non-nullable property");
+        => base.Lazy_loading_finds_correct_entity_type_with_alternate_model();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Top_level_projection_track_entities_before_passing_to_client_method()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Top_level_projection_track_entities_before_passing_to_client_method(), "Document element is missing for required non-nullable property");
+        => base.Top_level_projection_track_entities_before_passing_to_client_method();
 
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override async Task Entity_equality_with_proxy_parameter(bool async)
-        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Entity_equality_with_proxy_parameter(async), "Document element is missing for required non-nullable property");
+    {
+        await base.Entity_equality_with_proxy_parameter(async);
+    }
 
 #if (EF10 || EF11)
-    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_shares_service_property_on_derived_types()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_shares_service_property_on_derived_types(), "Document element is missing for required non-nullable property");
+        => base.Lazy_loading_shares_service_property_on_derived_types();
 #endif
 
     public class LazyLoadProxyMongoFixture : LoadFixtureBase
