@@ -77,9 +77,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
     }
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Can_add_and_remove_self_refs()
+        => SpecFails.AnyOutcomeAsync(() => base.Can_add_and_remove_self_refs(), "The instance of entity type 'Person' cannot be tracked because another instance with the k");
+#else
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Can_add_and_remove_self_refs()
         => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_add_and_remove_self_refs(), "The instance of entity type 'Person' cannot be tracked because another instance with the k");
+#endif
 #elif EF8
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Can_add_and_remove_self_refs()
@@ -87,9 +93,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11)
+#if EF11
+    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
+        => SpecFails.AnyOutcomeAsync(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+#else
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
     public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+#endif
 #elif EF9 || EF8
 #if EF8
     // Fails: Other unexpected exception from query execution EF-X605
@@ -103,9 +115,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11)
+#if EF11
+    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
+        => SpecFails.AnyOutcomeAsync(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+#else
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
     public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+#endif
 #elif EF9 || EF8
 #if EF8
     // Fails: Other unexpected exception from query execution EF-X605
@@ -118,9 +136,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 #endif
 
+#if EF11
+    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Can_delete_and_add_for_same_key(bool async)
+        => SpecFails.AnyOutcomeAsync(() => base.Can_delete_and_add_for_same_key(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+#else
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
     public override Task Can_delete_and_add_for_same_key(bool async)
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_delete_and_add_for_same_key(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+#endif
 
 #if (EF10 || EF11)
 #if !EF11
@@ -163,9 +187,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Mutation_of_tracked_values_does_not_mutate_values_in_store()
+        => SpecFails.AnyOutcomeAsync(() => base.Mutation_of_tracked_values_does_not_mutate_values_in_store(), "Assert.Equal() Failure: Values differ");
+#else
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108
     public override Task Mutation_of_tracked_values_does_not_mutate_values_in_store()
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Mutation_of_tracked_values_does_not_mutate_values_in_store(), "Assert.Equal() Failure: Values differ");
+#endif
 #elif EF8
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108
     public override void Mutation_of_tracked_values_does_not_mutate_values_in_store()
@@ -173,9 +203,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Concurrency exception message differs from the relational wording EF-X115 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Remove_partial_on_concurrency_token_original_value_mismatch_throws()
+        => SpecFails.AnyOutcomeAsync(() => base.Remove_partial_on_concurrency_token_original_value_mismatch_throws(), "Strings differ");
+#else
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override Task Remove_partial_on_concurrency_token_original_value_mismatch_throws()
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Remove_partial_on_concurrency_token_original_value_mismatch_throws(), "Strings differ");
+#endif
 #elif EF8
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override void Remove_partial_on_concurrency_token_original_value_mismatch_throws()
@@ -183,9 +219,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Concurrency exception message differs from the relational wording EF-X115 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Remove_partial_on_missing_record_throws()
+        => SpecFails.AnyOutcomeAsync(() => base.Remove_partial_on_missing_record_throws(), "Strings differ");
+#else
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override Task Remove_partial_on_missing_record_throws()
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Remove_partial_on_missing_record_throws(), "Strings differ");
+#endif
 #elif EF8
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override void Remove_partial_on_missing_record_throws()
@@ -211,9 +253,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Partial update of a tracked entity reports a concurrency conflict EF-X114 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Save_partial_update()
+        => SpecFails.AnyOutcomeAsync(() => base.Save_partial_update(), "Conflicts were detected when performing updates to 'EF");
+#else
     // Fails: Partial update of a tracked entity reports a concurrency conflict EF-X114
     public override Task Save_partial_update()
         => SpecFails.ThrowsAsync<global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException>(() => base.Save_partial_update(), "Conflicts were detected when performing updates to 'EF");
+#endif
 #elif EF8
     // Fails: Partial update of a tracked entity reports a concurrency conflict EF-X114
     public override void Save_partial_update()
@@ -221,9 +269,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Concurrency exception message differs from the relational wording EF-X115 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Save_partial_update_on_concurrency_token_original_value_mismatch_throws()
+        => SpecFails.AnyOutcomeAsync(() => base.Save_partial_update_on_concurrency_token_original_value_mismatch_throws(), "Strings differ");
+#else
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override Task Save_partial_update_on_concurrency_token_original_value_mismatch_throws()
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Save_partial_update_on_concurrency_token_original_value_mismatch_throws(), "Strings differ");
+#endif
 #elif EF8
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override void Save_partial_update_on_concurrency_token_original_value_mismatch_throws()
@@ -231,9 +285,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Concurrency exception message differs from the relational wording EF-X115 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Save_partial_update_on_missing_record_throws()
+        => SpecFails.AnyOutcomeAsync(() => base.Save_partial_update_on_missing_record_throws(), "Strings differ");
+#else
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override Task Save_partial_update_on_missing_record_throws()
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Save_partial_update_on_missing_record_throws(), "Strings differ");
+#endif
 #elif EF8
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override void Save_partial_update_on_missing_record_throws()
@@ -241,9 +301,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Save_replaced_principal()
+        => SpecFails.AnyOutcomeAsync(() => base.Save_replaced_principal(), "Assert.Equal() Failure: Values differ");
+#else
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108
     public override Task Save_replaced_principal()
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Save_replaced_principal(), "Assert.Equal() Failure: Values differ");
+#endif
 #elif EF8
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108
     public override void Save_replaced_principal()
