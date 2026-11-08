@@ -63,7 +63,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 
     public override async Task Key_equality_using_property_method_required2(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_required2(async), "Failure");
     }
 
@@ -77,7 +77,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 
     public override async Task Key_equality_using_property_method_nested2(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_nested2(async), "Failure");
     }
 
@@ -99,7 +99,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 
     public override async Task Key_equality_using_property_method_and_member_expression3(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_and_member_expression3(async), "Failure");
     }
 
@@ -118,7 +118,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 
     public override async Task Key_equality_two_conditions_on_same_navigation2(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Key_equality_two_conditions_on_same_navigation2(async), "Failure");
     }
 
@@ -159,7 +159,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 
     public override async Task Simple_level1(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Simple_level1(async), "Failure");
     }
 
@@ -681,7 +681,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task SelectMany_navigation_property(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.SelectMany_navigation_property(async));
     }
 #else
@@ -709,7 +709,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task SelectMany_navigation_property_and_filter_before(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.SelectMany_navigation_property_and_filter_before(async));
     }
 #else
@@ -811,19 +811,19 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 
     public override async Task Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access1(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access1(async), "Failure");
     }
 
     public override async Task Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access2(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access2(async), "Failure");
     }
 
     public override async Task Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access3(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access3(async), "Failure");
     }
 
@@ -1320,13 +1320,13 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if !EF11
     public override async Task Join_condition_optimizations_applied_correctly_when_anonymous_type_with_single_property(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Join_condition_optimizations_applied_correctly_when_anonymous_type_with_single_property(async));
     }
 
     public override async Task Join_condition_optimizations_applied_correctly_when_anonymous_type_with_multiple_properties(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Join_condition_optimizations_applied_correctly_when_anonymous_type_with_multiple_properties(async));
     }
 #endif
@@ -1796,7 +1796,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 
     public override async Task Include_multiple_collections_on_same_level(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_multiple_collections_on_same_level(async), "Failure");
     }
 
@@ -2252,7 +2252,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Key_equality_using_property_method_nested(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_nested(async));
     }
 #endif
@@ -2260,7 +2260,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Key_equality_using_property_method_and_member_expression1(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_and_member_expression1(async));
     }
 #endif
@@ -2268,7 +2268,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Key_equality_using_property_method_and_member_expression2(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Key_equality_using_property_method_and_member_expression2(async));
     }
 #endif
@@ -2276,7 +2276,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Key_equality_two_conditions_on_same_navigation(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Key_equality_two_conditions_on_same_navigation(async));
     }
 #endif
@@ -2299,7 +2299,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Simple_level1_include(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Simple_level1_include(async));
     }
 #endif
@@ -2307,7 +2307,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Simple_level1_level2_include(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Simple_level1_level2_include(async));
     }
 #endif
@@ -2315,7 +2315,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Simple_level1_level2_level3_include(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Simple_level1_level2_level3_include(async));
     }
 #endif
@@ -2323,7 +2323,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Navigation_inside_method_call_translated_to_join(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Navigation_inside_method_call_translated_to_join(async));
     }
 #endif
@@ -2331,7 +2331,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Optional_navigation_inside_method_call_translated_to_join(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Optional_navigation_inside_method_call_translated_to_join(async));
     }
 #endif
@@ -2339,7 +2339,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Optional_navigation_inside_property_method_translated_to_join(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Optional_navigation_inside_property_method_translated_to_join(async));
     }
 #endif
@@ -2347,7 +2347,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Optional_navigation_inside_nested_method_call_translated_to_join(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join(async));
     }
 #endif
@@ -2355,7 +2355,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Method_call_on_optional_navigation_translates_to_null_conditional_properly_for_arguments(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Method_call_on_optional_navigation_translates_to_null_conditional_properly_for_arguments(async));
     }
 #endif
@@ -2363,7 +2363,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Optional_navigation_inside_method_call_translated_to_join_keeps_original_nullability(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Optional_navigation_inside_method_call_translated_to_join_keeps_original_nullability(async));
     }
 #endif
@@ -2371,7 +2371,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability(async));
     }
 #endif
@@ -2379,7 +2379,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability_also_for_arguments(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Optional_navigation_inside_nested_method_call_translated_to_join_keeps_original_nullability_also_for_arguments(async));
     }
 #endif
@@ -2465,7 +2465,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include_reference_and_project_into_anonymous_type(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_reference_and_project_into_anonymous_type(async));
     }
 #endif
@@ -2576,7 +2576,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Where_multiple_nav_prop_reference_optional_compared_to_null5(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Where_multiple_nav_prop_reference_optional_compared_to_null5(async));
     }
 #endif
@@ -2598,7 +2598,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Where_multiple_nav_prop_optional_required(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Where_multiple_nav_prop_optional_required(async));
     }
 #endif
@@ -2706,7 +2706,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include_with_optional_navigation(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_with_optional_navigation(async));
     }
 #endif
@@ -3016,7 +3016,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Accessing_optional_property_inside_result_operator_subquery(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Accessing_optional_property_inside_result_operator_subquery(async));
     }
 #endif
@@ -3024,7 +3024,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include1(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include1(async));
     }
 #endif
@@ -3032,7 +3032,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include2(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include2(async));
     }
 #endif
@@ -3040,7 +3040,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include3(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include3(async));
     }
 #endif
@@ -3072,7 +3072,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include7(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include7(async));
     }
 #endif
@@ -3080,7 +3080,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include8(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include8(async));
     }
 #endif
@@ -3088,7 +3088,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include9(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include9(async));
     }
 #endif
@@ -3120,7 +3120,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include13(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include13(async));
     }
 #endif
@@ -3136,7 +3136,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Include18_1(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include18_1(async));
     }
 #endif
@@ -3208,7 +3208,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8
     public override async Task Join_with_navigations_in_the_result_selector1(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Join_with_navigations_in_the_result_selector1(async));
     }
 #else
@@ -3261,7 +3261,7 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
 #if EF8 || EF9
     public override async Task Null_conditional_is_not_applied_explicitly_for_optional_navigation(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Null_conditional_is_not_applied_explicitly_for_optional_navigation(async));
     }
 #endif

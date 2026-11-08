@@ -76,7 +76,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Project_collection_navigation_composed(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Project_collection_navigation_composed(async));
     }
 #else
@@ -196,7 +196,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 
     public override async Task Multi_level_include_one_to_many_optional_and_one_to_many_optional_produces_valid_sql(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Multi_level_include_one_to_many_optional_and_one_to_many_optional_produces_valid_sql(async), "Failure");
     }
 
@@ -256,13 +256,13 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 
     public override async Task Include_collection_then_reference(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_then_reference(async), "Failure");
     }
 
     public override async Task Include_collection_with_conditional_order_by(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_with_conditional_order_by(async), "Failure");
     }
 
@@ -422,37 +422,37 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 
     public override async Task Include_collection_with_multiple_orderbys_member(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_with_multiple_orderbys_member(async), "Failure");
     }
 
     public override async Task Include_collection_with_multiple_orderbys_property(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_with_multiple_orderbys_property(async), "Failure");
     }
 
     public override async Task Include_collection_with_multiple_orderbys_methodcall(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_with_multiple_orderbys_methodcall(async), "Failure");
     }
 
     public override async Task Include_collection_with_multiple_orderbys_complex(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_with_multiple_orderbys_complex(async), "Failure");
     }
 
     public override async Task Include_collection_with_multiple_orderbys_complex_repeated(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_with_multiple_orderbys_complex_repeated(async), "Failure");
     }
 
     public override async Task Include_collection_with_multiple_orderbys_complex_repeated_checked(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_with_multiple_orderbys_complex_repeated_checked(async), "Failure");
     }
 
@@ -536,13 +536,13 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 
     public override async Task Include_collection(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection(async), "Failure");
     }
 
     public override async Task Include_collection_followed_by_include_reference(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_followed_by_include_reference(async), "Failure");
     }
 
@@ -574,7 +574,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 
     public override async Task Include_collection_ThenInclude_two_references(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Include_collection_ThenInclude_two_references(async), "Failure");
     }
 
@@ -640,61 +640,61 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 
     public override async Task Filtered_include_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_OrderBy_EF_Property(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_OrderBy_EF_Property(async), "Failure");
     }
 
     public override async Task Filtered_ThenInclude_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_ThenInclude_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_ThenInclude_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_ThenInclude_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_basic_OrderBy_Take(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_basic_OrderBy_Take(async), "Failure");
     }
 
     public override async Task Filtered_include_basic_OrderBy_Skip(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_basic_OrderBy_Skip(async), "Failure");
     }
 
     public override async Task Filtered_include_basic_OrderBy_Skip_Take(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_basic_OrderBy_Skip_Take(async), "Failure");
     }
 
     public override async Task Filtered_include_basic_OrderBy_Skip_Take_EF_Property(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_basic_OrderBy_Skip_Take_EF_Property(async), "Failure");
     }
 
     public override async Task Filtered_include_Skip_without_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_Skip_without_OrderBy(async), "Failure");
     }
 
     public override async Task Filtered_include_Take_without_OrderBy(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_Take_without_OrderBy(async), "Failure");
     }
 
@@ -804,7 +804,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 
     public override async Task Filtered_include_context_accessed_inside_filter_correlated(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_context_accessed_inside_filter_correlated(async), "Failure");
     }
 
@@ -842,19 +842,19 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 
     public override async Task Filtered_include_Skip_Take_with_another_Skip_Take_on_top_level(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_Skip_Take_with_another_Skip_Take_on_top_level(async), "Failure");
     }
 
     public override async Task Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_FirstOrDefault_on_top_level(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_FirstOrDefault_on_top_level(async), "Failure");
     }
 
     public override async Task Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_unordered_Take_on_top_level(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_with_Take_without_order_by_followed_by_ThenInclude_and_unordered_Take_on_top_level(async), "Failure");
     }
 
@@ -867,7 +867,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_on_grouping_element(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Skip_on_grouping_element(async));
     }
 #else
@@ -907,7 +907,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Skip_Take_on_grouping_element(async));
     }
 #else
@@ -921,7 +921,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_Distinct_on_grouping_element(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Skip_Take_Distinct_on_grouping_element(async));
     }
 #else
@@ -935,7 +935,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_ToList_on_grouping_element(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Skip_Take_ToList_on_grouping_element(async));
     }
 #else
@@ -949,7 +949,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element_into_non_entity(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Skip_Take_on_grouping_element_into_non_entity(async));
     }
 #else
@@ -963,7 +963,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element_with_collection_include(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Skip_Take_on_grouping_element_with_collection_include(async));
     }
 #else
@@ -1237,7 +1237,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9
     public override async Task Complex_multi_include_with_order_by_and_paging(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Complex_multi_include_with_order_by_and_paging(async));
     }
 #endif
@@ -1253,7 +1253,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9
     public override async Task Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(bool async)
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(async));
     }
 #endif
@@ -1325,7 +1325,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9
     public override async Task Filtered_include_variable_used_inside_filter(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_variable_used_inside_filter(async), "Failure");
     }
 #endif
@@ -1333,7 +1333,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
 #if EF8 || EF9
     public override async Task Filtered_include_context_accessed_inside_filter(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (environment dependent, does not reproduce on Linux CI) EF-X720
+        // Fails: Wrong results compared with the reference (client) evaluation EF-X530 (depends on the time zone: passes in UTC) EF-X720
         await SpecFails.EitherAsync(() => base.Filtered_include_context_accessed_inside_filter(async), "Failure");
     }
 #endif

@@ -77,8 +77,9 @@ in behavior (including the test starting to pass) is detected.
 - **Pin the default query mode for a ported suite.** CI runs the specification tests again with `MONGODB_EF_QUERY_MODE=NativeOnly`. Ported
   suites are baselined in the default mode only, so build their store with `new MongoTestStoreFactory(server, pinDefaultQueryMode: true)`
   (or a fixture that does). Without the pin, every test whose fallback is refused fails in that CI job.
-- **Environment-dependent assertions.** If a known failure does not reproduce on the Linux CI runner, `SpecFails.Either`/`EitherAsync` accept success or
-  the failure. Use it only with a ticket (see EF-X720) and prefer a precise assertion when the cause is known.
+- **Time zone dependent assertions.** CI runs in UTC; a developer machine often does not. A `DateTime` of kind Unspecified is treated as local
+  time (EF-X006), so some known failures only appear outside UTC. `SpecFails.Either`/`EitherAsync` require a pass in a UTC environment and accept the
+  known failure elsewhere (see EF-X720). To reproduce CI on Linux/WSL, run with `TZ=UTC`.
 - **EF11 follows the EF10 arms.** A condition that mentions `EF10` is written `(EF10 || EF11)` unless EF11 behaves differently; the
   harvest-and-rebaseline pass splits the arms where it does.
 - **Remove a base from `MongoComplianceTest.IgnoredTestBases` when you port it.** A base that stays ignored for a concrete reason carries

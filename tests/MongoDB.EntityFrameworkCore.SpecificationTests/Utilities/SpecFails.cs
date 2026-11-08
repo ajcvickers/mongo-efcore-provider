@@ -141,31 +141,50 @@ public static class SpecFails
         => Query.MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(test, additionalAcceptedTypes);
 
     /// <summary>
-    /// For tests whose outcome depends on the environment (the known failure reproduces on one OS or run and not on another):
-    /// accepts success or any exception. Use only with a ticket that says so, and prefer a precise assertion when the cause is known.
+    /// True when the machine time zone is UTC without daylight saving time, as on the CI runners.
+    /// </summary>
+    internal static bool IsUtcEnvironment
+        => TimeZoneInfo.Local.BaseUtcOffset == TimeSpan.Zero && !TimeZoneInfo.Local.SupportsDaylightSavingTime;
+
+    /// <summary>
+    /// For tests whose outcome depends on the machine time zone (EF-X720): a <c>DateTime</c> of kind Unspecified is treated as local
+    /// time (EF-X006), so queries over such data return shifted values wherever the zone is not UTC. In a UTC environment (CI) the
+    /// test must pass; elsewhere it may pass or fail with the known failure, so a developer's machine stays green.
     /// </summary>
     public static void Either(Action test, string? reason = null)
     {
+        if (IsUtcEnvironment)
+        {
+            test();
+            return;
+        }
+
         try
         {
             test();
         }
         catch (Exception)
         {
-            // Known, environment-dependent failure.
+            // Known failure in a non-UTC time zone.
         }
     }
 
     /// <inheritdoc cref="Either(Action, string?)"/>
     public static async Task EitherAsync(Func<Task> test, string? reason = null)
     {
+        if (IsUtcEnvironment)
+        {
+            await test();
+            return;
+        }
+
         try
         {
             await test();
         }
         catch (Exception)
         {
-            // Known, environment-dependent failure.
+            // Known failure in a non-UTC time zone.
         }
     }
 
