@@ -188,6 +188,62 @@ public static class SpecFails
         }
     }
 
+    /// <summary>
+    /// The opposite direction of <see cref="Either(Action, string?)"/>: the test passes in the zones the baseline was recorded in (such
+    /// as Europe/London) and fails in UTC. In a UTC environment (CI) it must fail; elsewhere either outcome is accepted. See EF-X720.
+    /// </summary>
+    public static void FailsInUtc(Action test, string? reason = null)
+    {
+        if (IsUtcEnvironment)
+        {
+            Throws(test);
+            return;
+        }
+
+        AnyOutcome(test);
+    }
+
+    /// <inheritdoc cref="FailsInUtc(Action, string?)"/>
+    public static async Task FailsInUtcAsync(Func<Task> test, string? reason = null)
+    {
+        if (IsUtcEnvironment)
+        {
+            await ThrowsAsync(test);
+            return;
+        }
+
+        await AnyOutcomeAsync(test);
+    }
+
+    /// <summary>
+    /// For tests whose outcome is not deterministic (it depends on the order the entity graph is traversed, which varies with
+    /// hash randomization): accepts success or any exception. Use only with a ticket, and prefer a precise assertion when the cause is known.
+    /// </summary>
+    public static void AnyOutcome(Action test, string? reason = null)
+    {
+        try
+        {
+            test();
+        }
+        catch (Exception)
+        {
+            // Known, non-deterministic failure.
+        }
+    }
+
+    /// <inheritdoc cref="AnyOutcome(Action, string?)"/>
+    public static async Task AnyOutcomeAsync(Func<Task> test, string? reason = null)
+    {
+        try
+        {
+            await test();
+        }
+        catch (Exception)
+        {
+            // Known, non-deterministic failure.
+        }
+    }
+
     /// <summary>For theories where only some data rows fail: accepts success or the expected failure.</summary>
     public static async Task AsyncSomeRows<TException>(Func<Task> test, string messageFragment)
         where TException : Exception

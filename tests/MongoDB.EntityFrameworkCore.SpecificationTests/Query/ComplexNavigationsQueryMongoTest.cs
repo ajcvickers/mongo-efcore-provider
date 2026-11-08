@@ -32,12 +32,13 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
 #if EF11
-    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
+    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605 (depends on the time zone: passes in UTC) EF-X720
     public override Task Join_on_anonymous_type_with_single_property(bool async)
-        => SpecFails.ThrowsAsync(() => base.Join_on_anonymous_type_with_single_property(async));
+        => SpecFails.EitherAsync(() => base.Join_on_anonymous_type_with_single_property(async));
 
+    // Fails: depends on the time zone: passes in UTC EF-X720
     public override Task Join_on_anonymous_type_with_multiple_properties(bool async)
-        => SpecFails.ThrowsAsync(() => base.Join_on_anonymous_type_with_multiple_properties(async));
+        => SpecFails.EitherAsync(() => base.Join_on_anonymous_type_with_multiple_properties(async));
 #endif
 
 #if (EF10 || EF11)

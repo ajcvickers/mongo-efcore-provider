@@ -107,26 +107,10 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_use_is_kiwi_with_other_predicate(async);
     }
 
-#if EF11
-#if EF11
     public override async Task Can_use_is_kiwi_in_projection(bool async)
     {
         await base.Can_use_is_kiwi_in_projection(async);
     }
-#else
-    public override async Task Can_use_is_kiwi_in_projection(bool async)
-    {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Can_use_is_kiwi_in_projection(async));
-    }
-#endif
-#else
-    public override async Task Can_use_is_kiwi_in_projection(bool async)
-    {
-        // Fails: REGRESSION vs main: the query returns an extra row (3 instead of 2) EF-X700
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Can_use_is_kiwi_in_projection(async), "Values differ");
-    }
-#endif
 
     public override async Task Can_use_of_type_bird(bool async)
     {
@@ -171,26 +155,10 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_use_of_type_rose(async);
     }
 
-#if EF11
-#if EF11
     public override async Task Can_query_all_animals(bool async)
     {
         await base.Can_query_all_animals(async);
     }
-#else
-    public override async Task Can_query_all_animals(bool async)
-    {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Can_query_all_animals(async));
-    }
-#endif
-#else
-    public override async Task Can_query_all_animals(bool async)
-    {
-        // Fails: REGRESSION vs main: the query returns an extra row (3 instead of 2) EF-X700
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Can_query_all_animals(async), "Values differ");
-    }
-#endif
 
     public override async Task Can_query_all_animal_views(bool async)
     {
@@ -314,7 +282,14 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
 #if EF9 || (EF10 || EF11)
     public override async Task Can_insert_update_delete()
     {
-        await base.Can_insert_update_delete();
+        try
+        {
+            await base.Can_insert_update_delete();
+        }
+        finally
+        {
+            await Fixture.ResetDatabaseAsync();
+        }
     }
 #endif
 
@@ -346,8 +321,15 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
 #if EF9 || (EF10 || EF11)
     public override async Task Setting_foreign_key_to_a_different_type_throws()
     {
-        // Fails: Query translates natively but returns different data than the expected result EF-X600
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.ThrowsException>(() => base.Setting_foreign_key_to_a_different_type_throws());
+        // Fails: MongoDB has no foreign keys, so the SaveChanges the test expects to throw succeeds and persists a new Kiwi EF-X600
+        try
+        {
+            await SpecFails.ThrowsAsync<global::Xunit.Sdk.ThrowsException>(() => base.Setting_foreign_key_to_a_different_type_throws());
+        }
+        finally
+        {
+            await Fixture.ResetDatabaseAsync();
+        }
     }
 #endif
 
@@ -382,18 +364,10 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Selecting_only_base_properties_on_base_type(async);
     }
 
-#if EF11
     public override async Task Selecting_only_base_properties_on_derived_type(bool async)
     {
         await base.Selecting_only_base_properties_on_derived_type(async);
     }
-#else
-    public override async Task Selecting_only_base_properties_on_derived_type(bool async)
-    {
-        // Fails: REGRESSION vs main: the query returns an extra row (3 instead of 2) EF-X700
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Selecting_only_base_properties_on_derived_type(async), "Values differ");
-    }
-#endif
 
     public override async Task Using_is_operator_on_multiple_type_with_no_result(bool async)
     {
@@ -444,14 +418,30 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
 #if EF8
     public override void Can_insert_update_delete()
     {
-        base.Can_insert_update_delete();
+        try
+        {
+            base.Can_insert_update_delete();
+        }
+        finally
+        {
+            Fixture.ResetDatabaseAsync().GetAwaiter().GetResult();
+        }
     }
 #endif
 
 #if EF8
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: MongoDB has no foreign keys, so the SaveChanges the test expects to throw succeeds and persists a new Kiwi EF-X600
     public override void Setting_foreign_key_to_a_different_type_throws()
-        => SpecFails.Throws<global::Xunit.Sdk.ThrowsException>(() => base.Setting_foreign_key_to_a_different_type_throws());
+    {
+        try
+        {
+            SpecFails.Throws<global::Xunit.Sdk.ThrowsException>(() => base.Setting_foreign_key_to_a_different_type_throws());
+        }
+        finally
+        {
+            Fixture.ResetDatabaseAsync().GetAwaiter().GetResult();
+        }
+    }
 #endif
 
 #if EF8
@@ -484,6 +474,21 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
             _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
             await base.InitializeAsync();
+        }
+
+        /// <summary>
+        /// Drops and re-seeds the database. The fixture's database is shared by every test in the class and, unlike a relational
+        /// provider, there is no transaction to roll back: a test whose SaveChanges succeeds (MongoDB has no foreign keys, so
+        /// Setting_foreign_key_to_a_different_type_throws persists a new Kiwi) would otherwise change the row counts that later
+        /// tests assert, and which tests fail would depend on the run order (and so on the OS).
+        /// </summary>
+        public async Task ResetDatabaseAsync()
+        {
+            ((MongoTestStore)TestStore).TestServer.Client.DropDatabase(StoreName);
+
+            using var context = CreateContext();
+            await context.Database.EnsureCreatedAsync();
+            await SeedAsync(context);
         }
     }
 }

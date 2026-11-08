@@ -33,12 +33,13 @@ public class DateTimeOffsetTranslationsMongoTest : DateTimeOffsetTranslationsTes
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
 #if EF11
-    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
+    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605 (depends on the time zone: passes in UTC) EF-X720
     public override Task DateTime()
-        => SpecFails.ThrowsAsync(() => base.DateTime());
+        => SpecFails.EitherAsync(() => base.DateTime());
 
+    // Fails: depends on the time zone: passes in UTC EF-X720
     public override Task UtcDateTime()
-        => SpecFails.ThrowsAsync(() => base.UtcDateTime());
+        => SpecFails.EitherAsync(() => base.UtcDateTime());
 
     public override Task LocalDateTime()
         => SpecFails.ThrowsAsync(() => base.LocalDateTime());

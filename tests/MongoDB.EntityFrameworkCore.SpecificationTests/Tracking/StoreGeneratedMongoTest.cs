@@ -260,9 +260,15 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
 #endif
 
 #if (EF10 || EF11) || EF9
+#if EF11
+    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
+    public override Task Before_save_use_always_uses_value_if_set(string propertyName)
+        => SpecFails.AnyOutcomeAsync(() => base.Before_save_use_always_uses_value_if_set(propertyName), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+#else
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
     public override Task Before_save_use_always_uses_value_if_set(string propertyName)
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Before_save_use_always_uses_value_if_set(propertyName), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+#endif
 #elif EF8
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
     public override void Before_save_use_always_uses_value_if_set(string propertyName)

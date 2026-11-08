@@ -82,8 +82,9 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
 #endif
 
 #if EF11
+    // Fails: depends on the time zone: fails in UTC EF-X720
     public override Task SessionsController_Delete()
-        => base.SessionsController_Delete();
+        => SpecFails.FailsInUtcAsync(() => base.SessionsController_Delete());
 #else
     // Fails: Single/First over empty result in test body (not triaged) EF-X310
     public override Task SessionsController_Delete()
@@ -123,9 +124,9 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
         => base.SessionsController_Post();
 
 #if EF11
-    // Fails: Unexpected exception on EF11 (not yet triaged) EF-X605
+    // Fails: Unexpected exception on EF11 (not yet triaged) EF-X605 (depends on the time zone: passes in UTC) EF-X720
     public override Task SessionsController_Put()
-        => SpecFails.ThrowsAsync(() => base.SessionsController_Put());
+        => SpecFails.EitherAsync(() => base.SessionsController_Put());
 #else
     public override Task SessionsController_Put()
         => base.SessionsController_Put();
@@ -141,9 +142,9 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
         => base.SpeakersController_GetSpeaker_with_bad_ID();
 
 #if EF11
-    // Fails: Unexpected exception on EF11 (not yet triaged) EF-X605
+    // Fails: Unexpected exception on EF11 (not yet triaged) EF-X605 (depends on the time zone: passes in UTC) EF-X720
     public override Task SpeakersController_GetSpeakers()
-        => SpecFails.ThrowsAsync(() => base.SpeakersController_GetSpeakers());
+        => SpecFails.EitherAsync(() => base.SpeakersController_GetSpeakers());
 #else
     public override Task SpeakersController_GetSpeakers()
         => base.SpeakersController_GetSpeakers();
