@@ -160,9 +160,9 @@ public class JsonQueryMongoTest : JsonQueryTestBase<JsonQueryMongoTest.JsonQuery
     public override Task Project_null_required_navigation(bool async)
         => SpecFails.ThrowsAsync(() => base.Project_null_required_navigation(async));
 
-    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900 (depends on the time zone: fails in UTC) EF-X720
     public override Task Project_missing_required_scalar(bool async)
-        => SpecFails.ThrowsAsync(() => base.Project_missing_required_scalar(async));
+        => SpecFails.FailsInUtcAsync(() => base.Project_missing_required_scalar(async));
 
     // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
     public override Task Project_null_required_scalar(bool async)
@@ -204,8 +204,9 @@ public class JsonQueryMongoTest : JsonQueryTestBase<JsonQueryMongoTest.JsonQuery
     public override Task Try_project_reference_but_JSON_is_collection()
         => base.Try_project_reference_but_JSON_is_collection();
 
+    // Fails: depends on the time zone: passes in UTC EF-X720
     public override Task Project_json_array_of_primitives_on_reference()
-        => base.Project_json_array_of_primitives_on_reference();
+        => SpecFails.EitherAsync(() => base.Project_json_array_of_primitives_on_reference());
 
     public override Task Project_json_array_of_primitives_on_collection()
         => base.Project_json_array_of_primitives_on_collection();
@@ -213,14 +214,17 @@ public class JsonQueryMongoTest : JsonQueryTestBase<JsonQueryMongoTest.JsonQuery
     public override Task Project_element_of_json_array_of_primitives()
         => base.Project_element_of_json_array_of_primitives();
 
+    // Fails: depends on the time zone: passes in UTC EF-X720
     public override Task Predicate_based_on_element_of_json_array_of_primitives1()
-        => base.Predicate_based_on_element_of_json_array_of_primitives1();
+        => SpecFails.EitherAsync(() => base.Predicate_based_on_element_of_json_array_of_primitives1());
 
+    // Fails: depends on the time zone: passes in UTC EF-X720
     public override Task Predicate_based_on_element_of_json_array_of_primitives2()
-        => base.Predicate_based_on_element_of_json_array_of_primitives2();
+        => SpecFails.EitherAsync(() => base.Predicate_based_on_element_of_json_array_of_primitives2());
 
+    // Fails: depends on the time zone: passes in UTC EF-X720
     public override Task Predicate_based_on_element_of_json_array_of_primitives3()
-        => base.Predicate_based_on_element_of_json_array_of_primitives3();
+        => SpecFails.EitherAsync(() => base.Predicate_based_on_element_of_json_array_of_primitives3());
 
     // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
     public override Task Junk_in_json_basic_tracking()
