@@ -23,9 +23,9 @@ using Microsoft.EntityFrameworkCore.TestUtilities;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query.Translations.Operators;
 
-public class LogicalOperatorTranslationsMongoTest : LogicalOperatorTranslationsTestBase<MongoBasicTypesQueryFixture>
+public class LogicalOperatorTranslationsMongoTest : LogicalOperatorTranslationsTestBase<MongoPinnedBasicTypesQueryFixture>
 {
-    public LogicalOperatorTranslationsMongoTest(MongoBasicTypesQueryFixture fixture)
+    public LogicalOperatorTranslationsMongoTest(MongoPinnedBasicTypesQueryFixture fixture)
         : base(fixture)
         => Fixture.TestMqlLoggerFactory.Clear();
 
