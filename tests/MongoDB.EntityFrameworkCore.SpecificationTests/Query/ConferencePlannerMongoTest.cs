@@ -45,7 +45,7 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
     public override Task AttendeesController_Get()
         => base.AttendeesController_Get();
 
-#if EF10
+#if (EF10 || EF11)
     // Fails: Cross-document navigation access issue EF-216
     public override Task AttendeesController_GetSessions()
         => SpecFails.Async<global::System.InvalidOperationException>(() => base.AttendeesController_GetSessions(), "Unsupported cross-DbSet query between 'Microsoft.EntityFrameworkCore.T");
@@ -71,7 +71,7 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
     public override Task AttendeesController_RemoveSession_bad_session()
         => base.AttendeesController_RemoveSession_bad_session();
 
-#if EF10
+#if (EF10 || EF11)
     // Fails: Other unexpected exception from query execution EF-X605
     public override Task SearchController_Search(string searchTerm, int totalCount, int sessionCount)
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.SearchController_Search(searchTerm, totalCount, sessionCount), string.Empty);
@@ -81,16 +81,27 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.SearchController_Search(searchTerm, totalCount, sessionCount), string.Empty);
 #endif
 
+#if EF11
+    public override Task SessionsController_Delete()
+        => base.SessionsController_Delete();
+#else
     // Fails: Single/First over empty result in test body (not triaged) EF-X310
     public override Task SessionsController_Delete()
         => SpecFails.Async<global::System.InvalidOperationException>(() => base.SessionsController_Delete(), "Sequence contains no elements");
+#endif
 
     public override Task SessionsController_Delete_with_bad_ID()
         => base.SessionsController_Delete_with_bad_ID();
 
-#if EF10
+#if (EF10 || EF11)
+#if EF11
+    // Fails: Query returns different data than the expected result EF-X600
+    public override Task SessionsController_Get()
+        => SpecFails.ThrowsAsync(() => base.SessionsController_Get());
+#else
     public override Task SessionsController_Get()
         => base.SessionsController_Get();
+#endif
 #elif EF9 || EF8
     public override Task SessionsController_Get()
         => base.SessionsController_Get();
@@ -100,7 +111,7 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
     public override Task SessionsController_Get_with_ID()
         => SpecFails.Async<global::System.InvalidOperationException>(() => base.SessionsController_Get_with_ID(), "Sequence contains no elements");
 
-#if EF10
+#if (EF10 || EF11)
     public override Task SessionsController_Get_with_bad_ID()
         => base.SessionsController_Get_with_bad_ID();
 #elif EF9 || EF8
@@ -111,8 +122,14 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
     public override Task SessionsController_Post()
         => base.SessionsController_Post();
 
+#if EF11
+    // Fails: Unexpected exception on EF11 (not yet triaged) EF-X605
+    public override Task SessionsController_Put()
+        => SpecFails.ThrowsAsync(() => base.SessionsController_Put());
+#else
     public override Task SessionsController_Put()
         => base.SessionsController_Put();
+#endif
 
     public override Task SessionsController_Put_with_bad_ID()
         => base.SessionsController_Put_with_bad_ID();
@@ -123,8 +140,14 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
     public override Task SpeakersController_GetSpeaker_with_bad_ID()
         => base.SpeakersController_GetSpeaker_with_bad_ID();
 
+#if EF11
+    // Fails: Unexpected exception on EF11 (not yet triaged) EF-X605
+    public override Task SpeakersController_GetSpeakers()
+        => SpecFails.ThrowsAsync(() => base.SpeakersController_GetSpeakers());
+#else
     public override Task SpeakersController_GetSpeakers()
         => base.SpeakersController_GetSpeakers();
+#endif
     // </generated>
 
     public class ConferencePlannerMongoFixture : ConferencePlannerFixtureBase

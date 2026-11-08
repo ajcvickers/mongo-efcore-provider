@@ -79,7 +79,7 @@ public class FiltersInheritanceQueryMongoTest : FiltersInheritanceQueryTestBase<
         await base.Can_use_of_type_kiwi(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_use_derived_set(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -93,7 +93,7 @@ public class FiltersInheritanceQueryMongoTest : FiltersInheritanceQueryTestBase<
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_use_IgnoreQueryFilters_and_GetDatabaseValues(bool async)
     {
         await base.Can_use_IgnoreQueryFilters_and_GetDatabaseValues(async);

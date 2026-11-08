@@ -633,7 +633,7 @@ public class LoadMongoTest(LoadMongoTest.LoadMongoFixture fixture)
     public override void Setting_navigation_to_null_is_detected_by_local_DetectChanges()
         => base.Setting_navigation_to_null_is_detected_by_local_DetectChanges();
 
-#if EF10
+#if (EF10 || EF11)
     public override Task Lazy_loading_is_thread_safe(bool noTracking, bool async)
         => base.Lazy_loading_is_thread_safe(noTracking, async);
 #endif

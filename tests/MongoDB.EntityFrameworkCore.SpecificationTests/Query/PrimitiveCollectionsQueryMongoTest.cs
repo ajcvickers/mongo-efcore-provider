@@ -31,105 +31,171 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-#if EF10
+#if EF11
+    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
+    public override Task Inline_collection_in_query_filter()
+        => SpecFails.ThrowsAsync(() => base.Inline_collection_in_query_filter());
+
+    public override Task Inline_collection_SelectMany_with_unreferenced_collection_value()
+        => SpecFails.ThrowsAsync(() => base.Inline_collection_SelectMany_with_unreferenced_collection_value());
+
+    public override Task Parameter_collection_FrozenSet_of_ints_Contains_int()
+        => base.Parameter_collection_FrozenSet_of_ints_Contains_int();
+
+    public override Task Parameter_collection_IReadOnlySet_of_ints_Contains_int()
+        => base.Parameter_collection_IReadOnlySet_of_ints_Contains_int();
+
+    public override Task Parameter_collection_ReadOnlyCollectionWithContains_of_ints_Contains_int()
+        => base.Parameter_collection_ReadOnlyCollectionWithContains_of_ints_Contains_int();
+
+    public override Task Parameter_collection_Count_with_huge_number_of_values_over_2_operations_same_parameter_different_property()
+        => base.Parameter_collection_Count_with_huge_number_of_values_over_2_operations_same_parameter_different_property();
+
+    public override Task Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_2_operations_same_parameter_different_property()
+        => base.Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_2_operations_same_parameter_different_property();
+
+    public override Task Static_readonly_collection_List_of_ints_Contains_int()
+        => base.Static_readonly_collection_List_of_ints_Contains_int();
+
+    public override Task Static_readonly_collection_FrozenSet_of_ints_Contains_int()
+        => base.Static_readonly_collection_FrozenSet_of_ints_Contains_int();
+
+    public override Task Static_readonly_collection_ImmutableArray_of_ints_Contains_int()
+        => SpecFails.ThrowsAsync(() => base.Static_readonly_collection_ImmutableArray_of_ints_Contains_int());
+
+    public override Task Column_collection_of_strings_Contains()
+        => base.Column_collection_of_strings_Contains();
+
+    public override Task Column_collection_of_strings_Contains_null()
+        => base.Column_collection_of_strings_Contains_null();
+
+    public override Task Column_with_custom_converter()
+        => SpecFails.ThrowsAsync(() => base.Column_with_custom_converter());
+
+    public override Task Parameter_with_inferred_value_converter()
+        => SpecFails.ThrowsAsync(() => base.Parameter_with_inferred_value_converter());
+
+    public override Task Constant_with_inferred_value_converter()
+        => SpecFails.ThrowsAsync(() => base.Constant_with_inferred_value_converter());
+
+    public override Task Multidimensional_array_is_not_supported()
+        => base.Multidimensional_array_is_not_supported();
+
+    public override Task Min_on_MemoryExtensions()
+        => base.Min_on_MemoryExtensions();
+
+    public override Task Max_on_MemoryExtensions()
+        => base.Max_on_MemoryExtensions();
+
+    public override Task Compiled_query_with_uncorrelated_parameter_collection_expression()
+        => base.Compiled_query_with_uncorrelated_parameter_collection_expression();
+
+    public override Task Project_collection_from_entity_type_with_owned()
+        => SpecFails.ThrowsAsync(() => base.Project_collection_from_entity_type_with_owned());
+
+    public override Task Subquery_over_primitive_collection_on_inheritance_derived_type()
+        => SpecFails.ThrowsAsync(() => base.Subquery_over_primitive_collection_on_inheritance_derived_type());
+#endif
+
+#if (EF10 || EF11)
     public override async Task Inline_collection_of_ints_Contains()
     {
         await base.Inline_collection_of_ints_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_of_nullable_ints_Contains()
     {
         await base.Inline_collection_of_nullable_ints_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_of_nullable_ints_Contains_null()
     {
         await base.Inline_collection_of_nullable_ints_Contains_null();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Count_with_zero_values()
     {
         await base.Inline_collection_Count_with_zero_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Count_with_one_value()
     {
         await base.Inline_collection_Count_with_one_value();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Count_with_two_values()
     {
         await base.Inline_collection_Count_with_two_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Count_with_three_values()
     {
         await base.Inline_collection_Count_with_three_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_zero_values()
     {
         await base.Inline_collection_Contains_with_zero_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_one_value()
     {
         await base.Inline_collection_Contains_with_one_value();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_two_values()
     {
         await base.Inline_collection_Contains_with_two_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_three_values()
     {
         await base.Inline_collection_Contains_with_three_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_all_parameters()
     {
         await base.Inline_collection_Contains_with_all_parameters();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_constant_and_parameter()
     {
         await base.Inline_collection_Contains_with_constant_and_parameter();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_mixed_value_types()
     {
         await base.Inline_collection_Contains_with_mixed_value_types();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_List_Contains_with_mixed_value_types()
     {
         // Fails: Inline List<T> collection (Min/Max/Contains/index) not translated or serialized EF-X501
@@ -137,28 +203,28 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_as_Any_with_predicate()
     {
         await base.Inline_collection_Contains_as_Any_with_predicate();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_negated_Contains_as_All()
     {
         await base.Inline_collection_negated_Contains_as_All();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Min_with_two_values()
     {
         await base.Inline_collection_Min_with_two_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_List_Min_with_two_values()
     {
         // Fails: Inline List<T> collection (Min/Max/Contains/index) not translated or serialized EF-X501
@@ -166,14 +232,14 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Max_with_two_values()
     {
         await base.Inline_collection_Max_with_two_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_List_Max_with_two_values()
     {
         // Fails: Inline List<T> collection (Min/Max/Contains/index) not translated or serialized EF-X501
@@ -181,14 +247,14 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Min_with_three_values()
     {
         await base.Inline_collection_Min_with_three_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_List_Min_with_three_values()
     {
         // Fails: Inline List<T> collection (Min/Max/Contains/index) not translated or serialized EF-X501
@@ -196,14 +262,14 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Max_with_three_values()
     {
         await base.Inline_collection_Max_with_three_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_List_Max_with_three_values()
     {
         // Fails: Inline List<T> collection (Min/Max/Contains/index) not translated or serialized EF-X501
@@ -211,140 +277,148 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_of_nullable_value_type_Min()
     {
         await base.Inline_collection_of_nullable_value_type_Min();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_of_nullable_value_type_Max()
     {
         await base.Inline_collection_of_nullable_value_type_Max();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_of_nullable_value_type_with_null_Min()
     {
         await base.Inline_collection_of_nullable_value_type_with_null_Min();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_of_nullable_value_type_with_null_Max()
     {
         await base.Inline_collection_of_nullable_value_type_with_null_Max();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_with_single_parameter_element_Contains()
     {
         await base.Inline_collection_with_single_parameter_element_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_with_single_parameter_element_Count()
     {
         await base.Inline_collection_with_single_parameter_element_Count();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_EF_Parameter()
     {
         await base.Inline_collection_Contains_with_EF_Parameter();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Contains_with_IEnumerable_EF_Parameter()
     {
         await base.Inline_collection_Contains_with_IEnumerable_EF_Parameter();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Count_with_column_predicate_with_EF_Parameter()
     {
         await base.Inline_collection_Count_with_column_predicate_with_EF_Parameter();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Count()
     {
         await base.Parameter_collection_Count();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_ints_Contains_int()
     {
         await base.Parameter_collection_of_ints_Contains_int();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_HashSet_of_ints_Contains_int()
     {
         await base.Parameter_collection_HashSet_of_ints_Contains_int();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
+#if EF11
+    public override async Task Parameter_collection_ImmutableArray_of_ints_Contains_int()
+    {
+    // Fails: Unexpected exception on EF11 (not yet triaged) EF-X605
+        await SpecFails.ThrowsAsync(() => base.Parameter_collection_ImmutableArray_of_ints_Contains_int());
+    }
+#else
     public override async Task Parameter_collection_ImmutableArray_of_ints_Contains_int()
     {
         await base.Parameter_collection_ImmutableArray_of_ints_Contains_int();
     }
 #endif
+#endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_ints_Contains_nullable_int()
     {
         await base.Parameter_collection_of_ints_Contains_nullable_int();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_nullable_ints_Contains_int()
     {
         await base.Parameter_collection_of_nullable_ints_Contains_int();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_nullable_ints_Contains_nullable_int()
     {
         await base.Parameter_collection_of_nullable_ints_Contains_nullable_int();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_nullable_ints_Contains_nullable_int_with_EF_Parameter()
     {
         await base.Parameter_collection_of_nullable_ints_Contains_nullable_int_with_EF_Parameter();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_structs_Contains_struct()
     {
         await base.Parameter_collection_of_structs_Contains_struct();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_structs_Contains_nullable_struct()
     {
         await base.Parameter_collection_of_structs_Contains_nullable_struct();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_structs_Contains_nullable_struct_with_nullable_comparer()
     {
         // Fails: Contains over collection of structs with value converter not translated or serializer mismatch EF-X504
@@ -352,21 +426,21 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_nullable_structs_Contains_struct()
     {
         await base.Parameter_collection_of_nullable_structs_Contains_struct();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_nullable_structs_Contains_nullable_struct()
     {
         await base.Parameter_collection_of_nullable_structs_Contains_nullable_struct();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_nullable_structs_Contains_nullable_struct_with_nullable_comparer()
     {
         // Fails: Contains over collection of structs with value converter not translated or serializer mismatch EF-X504
@@ -374,56 +448,56 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_strings_Contains_string()
     {
         await base.Parameter_collection_of_strings_Contains_string();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_strings_Contains_nullable_string()
     {
         await base.Parameter_collection_of_strings_Contains_nullable_string();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_nullable_strings_Contains_string()
     {
         await base.Parameter_collection_of_nullable_strings_Contains_string();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_nullable_strings_Contains_nullable_string()
     {
         await base.Parameter_collection_of_nullable_strings_Contains_nullable_string();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_DateTimes_Contains()
     {
         await base.Parameter_collection_of_DateTimes_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_bools_Contains()
     {
         await base.Parameter_collection_of_bools_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_enums_Contains()
     {
         await base.Parameter_collection_of_enums_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_null_Contains()
     {
         // Fails: NullReferenceException for Contains of a null item EF-X503
@@ -431,14 +505,14 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_empty_Contains()
     {
         await base.Parameter_collection_empty_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_empty_Join()
     {
         // Fails: Join over primitive collection not translated EF-X017
@@ -446,231 +520,237 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Contains_with_EF_Constant()
     {
         await base.Parameter_collection_Contains_with_EF_Constant();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Where_with_EF_Constant_Where_Any()
     {
         await base.Parameter_collection_Where_with_EF_Constant_Where_Any();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Count_with_column_predicate_with_EF_Constant()
     {
         await base.Parameter_collection_Count_with_column_predicate_with_EF_Constant();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Count_with_huge_number_of_values()
     {
         await base.Parameter_collection_Count_with_huge_number_of_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Count_with_huge_number_of_values_over_5_operations()
     {
         await base.Parameter_collection_Count_with_huge_number_of_values_over_5_operations();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Count_with_huge_number_of_values_over_5_operations_same_parameter()
     {
         await base.Parameter_collection_Count_with_huge_number_of_values_over_5_operations_same_parameter();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
+#if !EF11
     public override async Task Parameter_collection_Count_with_huge_number_of_values_over_2_operations_same_parameter_different_type_mapping()
     {
         await base.Parameter_collection_Count_with_huge_number_of_values_over_2_operations_same_parameter_different_type_mapping();
     }
 #endif
+#endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Count_with_huge_number_of_values_over_5_operations_forced_constants()
     {
         await base.Parameter_collection_Count_with_huge_number_of_values_over_5_operations_forced_constants();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Count_with_huge_number_of_values_over_5_operations_mixed_parameters_constants()
     {
         await base.Parameter_collection_Count_with_huge_number_of_values_over_5_operations_mixed_parameters_constants();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_ints_Contains_int_with_huge_number_of_values()
     {
         await base.Parameter_collection_of_ints_Contains_int_with_huge_number_of_values();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_5_operations()
     {
         await base.Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_5_operations();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_5_operations_same_parameter()
     {
         await base.Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_5_operations_same_parameter();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
+#if !EF11
     public override async Task Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_2_operations_same_parameter_different_type_mapping()
     {
         await base.Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_2_operations_same_parameter_different_type_mapping();
     }
 #endif
+#endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_5_operations_forced_constants()
     {
         await base.Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_5_operations_forced_constants();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_5_operations_mixed_parameters_constants()
     {
         await base.Parameter_collection_of_ints_Contains_int_with_huge_number_of_values_over_5_operations_mixed_parameters_constants();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_of_ints_Contains()
     {
         await base.Column_collection_of_ints_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_of_nullable_ints_Contains()
     {
         await base.Column_collection_of_nullable_ints_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_of_nullable_ints_Contains_null()
     {
         await base.Column_collection_of_nullable_ints_Contains_null();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
+#if !EF11
     public override async Task Column_collection_of_strings_contains_null()
     {
         await base.Column_collection_of_strings_contains_null();
     }
 #endif
+#endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_of_nullable_strings_contains_null()
     {
         await base.Column_collection_of_nullable_strings_contains_null();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_of_bools_Contains()
     {
         await base.Column_collection_of_bools_Contains();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Contains_on_Enumerable()
     {
         await base.Contains_on_Enumerable();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Contains_on_MemoryExtensions()
     {
         await base.Contains_on_MemoryExtensions();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Contains_with_MemoryExtensions_with_null_comparer()
     {
         await base.Contains_with_MemoryExtensions_with_null_comparer();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Count_method()
     {
         await base.Column_collection_Count_method();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Length()
     {
         await base.Column_collection_Length();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Count_with_predicate()
     {
         await base.Column_collection_Count_with_predicate();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Where_Count()
     {
         await base.Column_collection_Where_Count();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_index_int()
     {
         await base.Column_collection_index_int();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_index_string()
     {
         await base.Column_collection_index_string();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_index_datetime()
     {
         await base.Column_collection_index_datetime();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_index_beyond_end()
     {
         await base.Column_collection_index_beyond_end();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Nullable_reference_column_collection_index_equals_nullable_column()
     {
         // Fails: Wrong result: collection index compared with nullable column EF-X505
@@ -678,35 +758,35 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Non_nullable_reference_column_collection_index_equals_nullable_column()
     {
         await base.Non_nullable_reference_column_collection_index_equals_nullable_column();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_index_Column()
     {
         await base.Inline_collection_index_Column();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_index_Column_with_EF_Constant()
     {
         await base.Inline_collection_index_Column_with_EF_Constant();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_value_index_Column()
     {
         await base.Inline_collection_value_index_Column();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_List_value_index_Column()
     {
         // Fails: Inline List<T> collection (Min/Max/Contains/index) not translated or serialized EF-X501
@@ -714,42 +794,42 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_index_Column_equal_Column()
     {
         await base.Parameter_collection_index_Column_equal_Column();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_index_Column_equal_constant()
     {
         await base.Parameter_collection_index_Column_equal_constant();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_ElementAt()
     {
         await base.Column_collection_ElementAt();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_First()
     {
         await base.Column_collection_First();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_FirstOrDefault()
     {
         await base.Column_collection_FirstOrDefault();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Single()
     {
         // Fails: Single/SingleOrDefault over a primitive collection not translated EF-X502
@@ -757,7 +837,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_SingleOrDefault()
     {
         // Fails: Single/SingleOrDefault over a primitive collection not translated EF-X502
@@ -765,84 +845,84 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Skip()
     {
         await base.Column_collection_Skip();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Take()
     {
         await base.Column_collection_Take();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Skip_Take()
     {
         await base.Column_collection_Skip_Take();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Where_Skip()
     {
         await base.Column_collection_Where_Skip();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Where_Take()
     {
         await base.Column_collection_Where_Take();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Where_Skip_Take()
     {
         await base.Column_collection_Where_Skip_Take();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Contains_over_subquery()
     {
         await base.Column_collection_Contains_over_subquery();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_OrderByDescending_ElementAt()
     {
         await base.Column_collection_OrderByDescending_ElementAt();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Where_ElementAt()
     {
         await base.Column_collection_Where_ElementAt();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Any()
     {
         await base.Column_collection_Any();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Distinct()
     {
         await base.Column_collection_Distinct();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_SelectMany()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -850,7 +930,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_SelectMany_with_filter()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -858,7 +938,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_SelectMany_with_Select_to_anonymous_type()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -866,14 +946,14 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_projection_from_top_level()
     {
         await base.Column_collection_projection_from_top_level();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Join_parameter_collection()
     {
         // Fails: Join over primitive collection not translated EF-X017
@@ -881,7 +961,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Join_ordered_column_collection()
     {
         // Fails: Join over primitive collection not translated EF-X017
@@ -889,105 +969,105 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_Concat_column_collection()
     {
         await base.Parameter_collection_Concat_column_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_with_type_inference_for_JsonScalarExpression()
     {
         await base.Parameter_collection_with_type_inference_for_JsonScalarExpression();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Union_parameter_collection()
     {
         await base.Column_collection_Union_parameter_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Intersect_inline_collection()
     {
         await base.Column_collection_Intersect_inline_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Inline_collection_Except_column_collection()
     {
         await base.Inline_collection_Except_column_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Where_Union()
     {
         await base.Column_collection_Where_Union();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_equality_parameter_collection()
     {
         await base.Column_collection_equality_parameter_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Concat_parameter_collection_equality_inline_collection()
     {
         await base.Column_collection_Concat_parameter_collection_equality_inline_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_equality_inline_collection()
     {
         await base.Column_collection_equality_inline_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_equality_inline_collection_with_parameters()
     {
         await base.Column_collection_equality_inline_collection_with_parameters();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_Where_equality_inline_collection()
     {
         await base.Column_collection_Where_equality_inline_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_in_subquery_Count_as_compiled_query()
     {
         await base.Parameter_collection_in_subquery_Count_as_compiled_query();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_in_subquery_Union_column_collection_as_compiled_query()
     {
         await base.Parameter_collection_in_subquery_Union_column_collection_as_compiled_query();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_in_subquery_Union_column_collection()
     {
         await base.Parameter_collection_in_subquery_Union_column_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_in_subquery_Union_column_collection_nested()
     {
         await base.Parameter_collection_in_subquery_Union_column_collection_nested();
@@ -999,28 +1079,28 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
         base.Parameter_collection_in_subquery_and_Convert_as_compiled_query();
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Parameter_collection_in_subquery_Union_another_parameter_collection_as_compiled_query()
     {
         await base.Parameter_collection_in_subquery_Union_another_parameter_collection_as_compiled_query();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Column_collection_in_subquery_Union_parameter_collection()
     {
         await base.Column_collection_in_subquery_Union_parameter_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_ints_simple()
     {
         await base.Project_collection_of_ints_simple();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_ints_ordered()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -1028,7 +1108,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_datetimes_filtered()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -1036,14 +1116,14 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_nullable_ints_with_paging()
     {
         await base.Project_collection_of_nullable_ints_with_paging();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_nullable_ints_with_paging2()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -1051,35 +1131,35 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_nullable_ints_with_paging3()
     {
         await base.Project_collection_of_nullable_ints_with_paging3();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_ints_with_distinct()
     {
         await base.Project_collection_of_ints_with_distinct();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_nullable_ints_with_distinct()
     {
         await base.Project_collection_of_nullable_ints_with_distinct();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_collection_of_ints_with_ToList_and_FirstOrDefault()
     {
         await base.Project_collection_of_ints_with_ToList_and_FirstOrDefault();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_empty_collection_of_nullables_and_collection_only_containing_nulls()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -1087,7 +1167,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_multiple_collections()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -1095,21 +1175,21 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_primitive_collections_element()
     {
         await base.Project_primitive_collections_element();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_inline_collection()
     {
         await base.Project_inline_collection();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_inline_collection_with_Union()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -1117,7 +1197,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_inline_collection_with_Concat()
     {
         // Fails: Primitive-collection projection/SelectMany/Union/Concat/ordering not translated EF-X500
@@ -1125,21 +1205,21 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Nested_contains_with_Lists_and_no_inferred_type_mapping()
     {
         await base.Nested_contains_with_Lists_and_no_inferred_type_mapping();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Nested_contains_with_arrays_and_no_inferred_type_mapping()
     {
         await base.Nested_contains_with_arrays_and_no_inferred_type_mapping();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Values_of_enum_casted_to_underlying_value()
     {
         // Fails: Server error: input to $map must be an array (enum collection cast) EF-X506
@@ -2112,7 +2192,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
 
             // Blocker: the provider cannot serialize a ValueConverter over a nullable value type
             // ("Unsupported ValueConverter for 'Nullable<WrappedId>'"), which fails seeding for every test.
-#if EF10
+#if (EF10 || EF11)
             modelBuilder.Entity<PrimitiveCollectionsEntity>().Ignore(e => e.NullableWrappedIdWithNullableComparer);
 #endif
         }

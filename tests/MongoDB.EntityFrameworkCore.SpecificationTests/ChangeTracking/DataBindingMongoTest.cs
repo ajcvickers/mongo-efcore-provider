@@ -37,6 +37,7 @@ public class DataBindingMongoTest(DataBindingMongoTest.DataBindingMongoFixture f
     public override void Attaching_entity_to_context_is_reflected_in_local_view(bool toObservableCollection)
         => base.Attaching_entity_to_context_is_reflected_in_local_view(toObservableCollection);
 
+#if !EF11
     // The base declares this test non-virtual, so it cannot be overridden; hide it and skip.
     // Fails: Materialization interception creates the base proxy type (DriverProxy) for derived-type documents, so the cast to TestDriver fails EF-X216
     [ConditionalTheory(Skip = "Base test is non-virtual; fails with InvalidCastException (DriverProxy to TestDriver) because the base proxy type is created for derived-type documents, EF-X216")]
@@ -47,6 +48,7 @@ public class DataBindingMongoTest(DataBindingMongoTest.DataBindingMongoFixture f
     {
     }
 #pragma warning restore xUnit1024
+#endif
 
     public override void Entities_materialized_into_context_are_reflected_in_local_view(bool toObservableCollection)
         => base.Entities_materialized_into_context_are_reflected_in_local_view(toObservableCollection);
@@ -147,7 +149,7 @@ public class DataBindingMongoTest(DataBindingMongoTest.DataBindingMongoFixture f
     public override void Entity_removed_from_navigation_property_binding_list_is_removed_from_nav_property_but_not_marked_Deleted(CascadeTiming deleteOrphansTiming)
         => base.Entity_removed_from_navigation_property_binding_list_is_removed_from_nav_property_but_not_marked_Deleted(deleteOrphansTiming);
 
-#if EF10
+#if (EF10 || EF11)
     public override void Remove_detached_entity_from_LocalView(bool toObservableCollection)
         => base.Remove_detached_entity_from_LocalView(toObservableCollection);
 #endif

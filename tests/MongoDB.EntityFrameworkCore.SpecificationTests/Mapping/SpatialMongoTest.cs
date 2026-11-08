@@ -38,7 +38,7 @@ public class SpatialMongoTest(SpatialMongoTest.SpatialMongoFixture fixture)
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
     // <generated>
-#if EF10
+#if (EF10 || EF11)
     // Fails: NetTopologySuite spatial types are not supported (discovered as entity types) EF-X320
     public override void Can_roundtrip_Z_and_M()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_roundtrip_Z_and_M(), "No suitable constructor was found for the type 'LineStringEntity.LineS");
@@ -48,7 +48,7 @@ public class SpatialMongoTest(SpatialMongoTest.SpatialMongoFixture fixture)
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_roundtrip_Z_and_M(), "No suitable constructor was found for entity type 'LineStringEntity.Li");
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     // Fails: NetTopologySuite spatial types are not supported (discovered as entity types) EF-X320
     public override Task Mutation_of_tracked_values_does_not_mutate_values_in_store()
         => SpecFails.Async<global::System.InvalidOperationException>(() => base.Mutation_of_tracked_values_does_not_mutate_values_in_store(), "No suitable constructor was found for the type 'LineStringEntity.LineS");
@@ -62,7 +62,7 @@ public class SpatialMongoTest(SpatialMongoTest.SpatialMongoFixture fixture)
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Mutation_of_tracked_values_does_not_mutate_values_in_store(), "No suitable constructor was found for entity type 'LineStringEntity.Li");
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     // Fails: NetTopologySuite spatial types are not supported (discovered as entity types) EF-X320
     public override void Translators_handle_static_members()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Translators_handle_static_members(), "No suitable constructor was found for the type 'LineStringEntity.LineS");
@@ -72,7 +72,7 @@ public class SpatialMongoTest(SpatialMongoTest.SpatialMongoFixture fixture)
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Translators_handle_static_members(), "No suitable constructor was found for entity type 'LineStringEntity.Li");
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     // Fails: NetTopologySuite spatial types are not supported (discovered as entity types) EF-X320
     public override void Values_are_copied_into_change_tracker()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Values_are_copied_into_change_tracker(), "No suitable constructor was found for the type 'LineStringEntity.LineS");
@@ -82,7 +82,7 @@ public class SpatialMongoTest(SpatialMongoTest.SpatialMongoFixture fixture)
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Values_are_copied_into_change_tracker(), "No suitable constructor was found for entity type 'LineStringEntity.Li");
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     // Fails: NetTopologySuite spatial types are not supported (discovered as entity types) EF-X320
     public override void Values_arent_compared_by_reference()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Values_arent_compared_by_reference(), "No suitable constructor was found for the type 'LineStringEntity.LineS");

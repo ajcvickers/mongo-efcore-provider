@@ -43,7 +43,15 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-#if EF10
+#if EF11
+    public override Task Query_filter_with_EF_Constant_throws()
+        => base.Query_filter_with_EF_Constant_throws();
+
+    public override Task Query_filter_with_EF_Parameter_throws()
+        => base.Query_filter_with_EF_Parameter_throws();
+#endif
+
+#if (EF10 || EF11)
     public override async Task Named_query_filters()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -51,7 +59,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Named_query_filters_ignore_some()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -59,7 +67,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Named_query_filters_caching()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -67,7 +75,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Named_query_filters_ignore_all()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -75,7 +83,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Named_query_filters_anonymous()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -83,7 +91,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Named_query_filters_anonymous_ignore()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -91,14 +99,14 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Named_query_filters_combined()
     {
         await base.Named_query_filters_combined();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Named_query_filters_overwriting()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -106,7 +114,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Named_query_filters_removing()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -131,7 +139,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
         await base.Weak_entities_with_query_filter_subquery_flattening();
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Query_filter_with_pk_fk_optimization()
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
@@ -156,7 +164,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
         await base.Query_filter_with_null_constant();
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task IsDeleted_query_filter_with_conversion_to_int_works(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
@@ -164,7 +172,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Group_by_multiple_aggregate_joining_different_tables(bool async)
     {
         await base.Group_by_multiple_aggregate_joining_different_tables(async);
@@ -177,7 +185,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Group_by_multiple_aggregate_joining_different_tables_with_query_filter(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -197,7 +205,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
         await SpecFails.ThrowsAsync<global::System.NullReferenceException>(() => base.Query_filter_with_context_accessor_with_constant(async));
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Query_filter_with_primary_constructor_parameter()
     {
         await base.Query_filter_with_primary_constructor_parameter();

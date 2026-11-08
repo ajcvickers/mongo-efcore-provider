@@ -166,14 +166,14 @@ public class NonSharedPrimitiveCollectionsQueryMongoTest : NonSharedPrimitiveCol
         await base.Inline_collection_in_query_filter();
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Project_collection_from_entity_type_with_owned()
     {
         await base.Project_collection_from_entity_type_with_owned();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Subquery_over_primitive_collection_on_inheritance_derived_type()
     {
         await base.Subquery_over_primitive_collection_on_inheritance_derived_type();

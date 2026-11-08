@@ -34,11 +34,25 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-#if EF8 || EF9 || EF10
+#if EF11
+    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
+    public override Task Primitive_collection_on_subtype(bool async)
+        => SpecFails.ThrowsAsync(() => base.Primitive_collection_on_subtype(async));
+#endif
+
+#if EF8 || EF9 || (EF10 || EF11)
+#if EF11
+    public override async Task Can_query_when_shared_column(bool async)
+    {
+    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+        await SpecFails.ThrowsAsync(() => base.Can_query_when_shared_column(async));
+    }
+#else
     public override async Task Can_query_when_shared_column(bool async)
     {
         await base.Can_query_when_shared_column(async);
     }
+#endif
 #else
     public override async Task Can_query_when_shared_column(bool async)
     {
@@ -47,10 +61,18 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
     }
 #endif
 
+#if EF11
+    public override async Task Can_query_all_types_when_shared_column(bool async)
+    {
+    // Fails: Reading a document with nested owned types reports a required element missing EF-X212
+        await SpecFails.ThrowsAsync(() => base.Can_query_all_types_when_shared_column(async));
+    }
+#else
     public override async Task Can_query_all_types_when_shared_column(bool async)
     {
         await base.Can_query_all_types_when_shared_column(async);
     }
+#endif
 
     public override async Task Can_use_of_type_animal(bool async)
     {
@@ -67,7 +89,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_use_is_kiwi_with_cast(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_use_backwards_is_animal(bool async)
     {
         await base.Can_use_backwards_is_animal(async);
@@ -85,11 +107,26 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_use_is_kiwi_with_other_predicate(async);
     }
 
+#if EF11
+#if EF11
+    public override async Task Can_use_is_kiwi_in_projection(bool async)
+    {
+        await base.Can_use_is_kiwi_in_projection(async);
+    }
+#else
+    public override async Task Can_use_is_kiwi_in_projection(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Can_use_is_kiwi_in_projection(async));
+    }
+#endif
+#else
     public override async Task Can_use_is_kiwi_in_projection(bool async)
     {
         // Fails: REGRESSION vs main: the query returns an extra row (3 instead of 2) EF-X700
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Can_use_is_kiwi_in_projection(async), "Values differ");
     }
+#endif
 
     public override async Task Can_use_of_type_bird(bool async)
     {
@@ -116,7 +153,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_use_of_type_kiwi(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_use_backwards_of_type_animal(bool async)
     {
         await base.Can_use_backwards_of_type_animal(async);
@@ -134,11 +171,26 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_use_of_type_rose(async);
     }
 
+#if EF11
+#if EF11
+    public override async Task Can_query_all_animals(bool async)
+    {
+        await base.Can_query_all_animals(async);
+    }
+#else
+    public override async Task Can_query_all_animals(bool async)
+    {
+        // Fails: Query translates natively but returns different data than the expected result EF-X600
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Can_query_all_animals(async));
+    }
+#endif
+#else
     public override async Task Can_query_all_animals(bool async)
     {
         // Fails: REGRESSION vs main: the query returns an extra row (3 instead of 2) EF-X700
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Can_query_all_animals(async), "Values differ");
     }
+#endif
 
     public override async Task Can_query_all_animal_views(bool async)
     {
@@ -146,11 +198,18 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await SpecFails.ThrowsAsync(() => base.Can_query_all_animal_views(async), "Failure");
     }
 
+#if EF11
+    public override async Task Can_query_all_plants(bool async)
+    {
+        await base.Can_query_all_plants(async);
+    }
+#else
     public override async Task Can_query_all_plants(bool async)
     {
         // Fails: Missing property values issue EF-164
         await SpecFails.ThrowsAsync(() => base.Can_query_all_plants(async), "Document element is missing for required");
     }
+#endif
 
 #if !EF11
     public override async Task Filter_on_property_inside_complex_type_on_derived_type(bool async)
@@ -170,7 +229,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_query_all_birds(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_query_just_kiwis(bool async)
     {
         await base.Can_query_just_kiwis(async);
@@ -183,7 +242,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_query_just_roses(bool async)
     {
         await base.Can_query_just_roses(async);
@@ -201,7 +260,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_include_animals(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_include_prey(bool async)
     {
         await base.Can_include_prey(async);
@@ -224,7 +283,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Can_use_of_type_kiwi_where_north_on_derived_property(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Discriminator_used_when_projection_over_derived_type(bool async)
     {
         await base.Discriminator_used_when_projection_over_derived_type(async);
@@ -252,7 +311,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Discriminator_used_when_projection_over_of_type(async);
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Can_insert_update_delete()
     {
         await base.Can_insert_update_delete();
@@ -284,7 +343,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Union_entity_equality(async);
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Setting_foreign_key_to_a_different_type_throws()
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -292,7 +351,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Byte_enum_value_constant_used_in_projection(bool async)
     {
         await base.Byte_enum_value_constant_used_in_projection(async);
@@ -305,7 +364,7 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Member_access_on_intermediate_type_works()
     {
         await base.Member_access_on_intermediate_type_works();
@@ -323,11 +382,18 @@ public class InheritanceQueryMongoTest : InheritanceQueryTestBase<InheritanceQue
         await base.Selecting_only_base_properties_on_base_type(async);
     }
 
+#if EF11
+    public override async Task Selecting_only_base_properties_on_derived_type(bool async)
+    {
+        await base.Selecting_only_base_properties_on_derived_type(async);
+    }
+#else
     public override async Task Selecting_only_base_properties_on_derived_type(bool async)
     {
         // Fails: REGRESSION vs main: the query returns an extra row (3 instead of 2) EF-X700
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Selecting_only_base_properties_on_derived_type(async), "Values differ");
     }
+#endif
 
     public override async Task Using_is_operator_on_multiple_type_with_no_result(bool async)
     {

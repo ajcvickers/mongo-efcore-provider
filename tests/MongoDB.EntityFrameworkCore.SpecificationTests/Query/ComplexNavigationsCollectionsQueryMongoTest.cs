@@ -73,7 +73,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Project_collection_navigation_nested_anonymous(async), "could not be translated");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Project_collection_navigation_composed(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -206,7 +206,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Multi_level_include_correct_PK_is_chosen_as_the_join_predicate_for_queries_that_join_same_table_multiple_times(async), "Failure");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Multiple_complex_includes(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -214,7 +214,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Multiple_complex_includes_EF_Property(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -222,7 +222,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Multiple_complex_includes_self_ref(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
@@ -230,7 +230,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Multiple_complex_includes_self_ref_EF_Property(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
@@ -238,7 +238,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Include_reference_and_collection_order_by(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -246,7 +246,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Include_reference_ThenInclude_collection_order_by(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -266,7 +266,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Include_collection_with_conditional_order_by(async), "Failure");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Multiple_complex_include_select(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -274,7 +274,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Include_nested_with_optional_navigation(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -282,7 +282,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Complex_multi_include_with_order_by_and_paging(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
@@ -290,7 +290,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Complex_multi_include_with_order_by_and_paging_joins_on_correct_key(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
@@ -298,7 +298,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Complex_multi_include_with_order_by_and_paging_joins_on_correct_key2(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
@@ -348,7 +348,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Required_navigation_with_Include(async), "Failure");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Required_navigation_with_Include_ThenInclude(bool async)
     {
         // Fails: Wrong results compared with the reference (client) evaluation EF-X530
@@ -356,7 +356,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Optional_navigation_with_Include_ThenInclude(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -364,7 +364,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Multiple_optional_navigation_with_Include(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -372,7 +372,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Multiple_optional_navigation_with_string_based_Include(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -380,7 +380,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Optional_navigation_with_order_by_and_Include(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -388,7 +388,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Optional_navigation_with_Include_and_order(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -456,7 +456,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Include_collection_with_multiple_orderbys_complex_repeated_checked(async), "Failure");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Include_collection_with_groupby_in_subquery(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -470,7 +470,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Include_collection_with_groupby_in_subquery_and_filter_before_groupby(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -484,7 +484,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Include_collection_with_groupby_in_subquery_and_filter_after_groupby(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -498,7 +498,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Include_reference_collection_order_by_reference_navigation(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -546,7 +546,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Include_collection_followed_by_include_reference(async), "Failure");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Include_reference_followed_by_include_collection(bool async)
     {
         // Fails: Missing property values issue EF-164
@@ -786,7 +786,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Filtered_include_complex_three_level_with_middle_having_filter2(async), "Failure");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Filtered_include_variable_used_inside_filter(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -794,7 +794,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Filtered_include_context_accessed_inside_filter(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -864,7 +864,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Projecting_collection_with_FirstOrDefault(async), "could not be translated");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_on_grouping_element(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -890,7 +890,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         // Fails: Serialization/format error while translating or materializing EF-X602
         await SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Take_on_grouping_element(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Take_on_grouping_element(bool async)
     {
         // Fails: Serialization/format error while translating or materializing EF-X602
@@ -904,7 +904,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -918,7 +918,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_Distinct_on_grouping_element(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -932,7 +932,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_ToList_on_grouping_element(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -946,7 +946,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element_into_non_entity(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -960,7 +960,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element_with_collection_include(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -974,7 +974,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Skip_Take_on_grouping_element_with_reference_include(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -994,7 +994,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Skip_Take_on_grouping_element_inside_collection_projection(async), "could not be translated");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Collection_projection_over_GroupBy_over_parameter(bool async)
     {
         await base.Collection_projection_over_GroupBy_over_parameter(async);
@@ -1065,7 +1065,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.ThrowsAsync(() => base.Projecting_collection_with_group_by_after_optional_reference_correlated_with_parent(async), "could not be translated");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Final_GroupBy_property_entity_Include_collection(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -1079,7 +1079,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Final_GroupBy_property_entity_Include_collection_nested(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -1093,7 +1093,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Final_GroupBy_property_entity_Include_collection_reference(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -1107,7 +1107,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Final_GroupBy_property_entity_Include_collection_multiple(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -1121,7 +1121,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Final_GroupBy_property_entity_Include_collection_reference_same_level(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -1135,7 +1135,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Final_GroupBy_property_entity_Include_reference(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -1149,7 +1149,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Final_GroupBy_property_entity_Include_reference_multiple(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -1163,7 +1163,7 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Project_collection_and_nested_conditional(bool async)
     {
         await base.Project_collection_and_nested_conditional(async);

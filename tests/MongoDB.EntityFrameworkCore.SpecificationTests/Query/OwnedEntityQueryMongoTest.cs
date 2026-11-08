@@ -41,7 +41,7 @@ public class OwnedEntityQueryMongoTest : OwnedEntityQueryTestBase
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Include_collection_for_entity_with_owned_type_works()
     {
         // Fails: Owned collection items with a generated int key all get key 0 (no value generation), so tracking fails EF-X522
@@ -49,14 +49,14 @@ public class OwnedEntityQueryMongoTest : OwnedEntityQueryTestBase
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Multilevel_owned_entities_determine_correct_nullability()
     {
         await base.Multilevel_owned_entities_determine_correct_nullability();
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Correlated_subquery_with_owned_navigation_being_compared_to_null_works()
     {
         // Fails: Owned collection items with a generated int key all get key 0 (no value generation), so tracking fails EF-X522
@@ -64,7 +64,7 @@ public class OwnedEntityQueryMongoTest : OwnedEntityQueryTestBase
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Owned_entity_multiple_level_in_aggregate()
     {
         // Fails: Deeply nested owned types: model validation rejects the relationship EF-X523
@@ -78,7 +78,7 @@ public class OwnedEntityQueryMongoTest : OwnedEntityQueryTestBase
         await SpecFails.ThrowsAsync(() => base.Projecting_correlated_collection_property_for_owned_entity(async), "cannot be tracked because another instance");
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Accessing_scalar_property_in_derived_type_projection_does_not_load_owned_navigations()
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
@@ -92,7 +92,7 @@ public class OwnedEntityQueryMongoTest : OwnedEntityQueryTestBase
         await SpecFails.ThrowsAsync(() => base.Multiple_single_result_in_projection_containing_owned_types(async), "could not be translated");
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Can_auto_include_navigation_from_model()
     {
         // Fails: Owned collection items with a generated int key all get key 0 (no value generation), so tracking fails EF-X522
@@ -100,7 +100,7 @@ public class OwnedEntityQueryMongoTest : OwnedEntityQueryTestBase
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Nested_owned_required_dependents_are_materialized()
     {
         await base.Nested_owned_required_dependents_are_materialized();

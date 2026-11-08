@@ -169,7 +169,7 @@ public class QueryFilterFuncletizationMongoTest : QueryFilterFuncletizationTestB
         base.Using_multiple_context_in_filter_parametrize_only_current_context();
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override void Using_multiple_entities_with_filters_reuses_parameters()
     {
         // Fails: Multiple query roots issue EF-220

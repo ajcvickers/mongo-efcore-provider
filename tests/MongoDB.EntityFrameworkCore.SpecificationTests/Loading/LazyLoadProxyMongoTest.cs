@@ -310,8 +310,8 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
         => base.Lazy_loading_finds_correct_entity_type_with_multiple_queries_using_Count();
 
 #if !EF11
-#if !EF10
-#if !EF10
+#if !(EF10 || EF11)
+#if !(EF10 || EF11)
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_shares_service__property_on_derived_types()
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_shares_service__property_on_derived_types()).Message);
@@ -338,7 +338,7 @@ public class LazyLoadProxyMongoTest(LazyLoadProxyMongoTest.LazyLoadProxyMongoFix
     public override async Task Entity_equality_with_proxy_parameter(bool async)
         => Assert.Contains("Document element is missing for required non-nullable property", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Entity_equality_with_proxy_parameter(async))).Message);
 
-#if EF10
+#if (EF10 || EF11)
     // Fails: Reading a document with nested owned types reports a required element missing EF-X212
     public override void Lazy_loading_shares_service_property_on_derived_types()
         => Assert.Contains("Document element is missing for required non-nullable property", Assert.Throws<global::System.InvalidOperationException>(() => base.Lazy_loading_shares_service_property_on_derived_types()).Message);

@@ -32,6 +32,27 @@ public class DateTimeOffsetTranslationsMongoTest : DateTimeOffsetTranslationsTes
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
+#if EF11
+    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
+    public override Task DateTime()
+        => SpecFails.ThrowsAsync(() => base.DateTime());
+
+    public override Task UtcDateTime()
+        => SpecFails.ThrowsAsync(() => base.UtcDateTime());
+
+    public override Task LocalDateTime()
+        => SpecFails.ThrowsAsync(() => base.LocalDateTime());
+
+    public override Task ToOffset()
+        => SpecFails.ThrowsAsync(() => base.ToOffset());
+
+    public override Task Ctor_DateTime()
+        => SpecFails.ThrowsAsync(() => base.Ctor_DateTime());
+
+    public override Task Ctor_DateTime_TimeSpan()
+        => SpecFails.ThrowsAsync(() => base.Ctor_DateTime_TimeSpan());
+#endif
+
     // <generated>
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task AddDays()

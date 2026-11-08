@@ -31,35 +31,35 @@ public class IncludeOneToOneMongoTest : IncludeOneToOneTestBase<IncludeOneToOneM
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-#if EF10
+#if (EF10 || EF11)
     public override void Include_address()
     {
         base.Include_address();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override void Include_address_EF_Property()
     {
         base.Include_address_EF_Property();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override void Include_address_shadow()
     {
         base.Include_address_shadow();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override void Include_address_no_tracking()
     {
         base.Include_address_no_tracking();
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override void Include_address_no_tracking_EF_Property()
     {
         base.Include_address_no_tracking_EF_Property();
@@ -91,7 +91,7 @@ public class IncludeOneToOneMongoTest : IncludeOneToOneTestBase<IncludeOneToOneM
         base.Include_person_no_tracking_EF_Property();
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override void Include_address_when_person_already_tracked()
     {
         base.Include_address_when_person_already_tracked();

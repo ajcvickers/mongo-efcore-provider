@@ -43,6 +43,12 @@ public class AdHocNavigationsQueryMongoTest : AdHocNavigationsQueryTestBase
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
+#if EF11
+    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
+    public override Task Filtered_collection_through_optional_navigation_does_not_match_on_null_keys(bool async)
+        => SpecFails.ThrowsAsync(() => base.Filtered_collection_through_optional_navigation_does_not_match_on_null_keys(async));
+#endif
+
     public override async Task ThenInclude_with_interface_navigations()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522

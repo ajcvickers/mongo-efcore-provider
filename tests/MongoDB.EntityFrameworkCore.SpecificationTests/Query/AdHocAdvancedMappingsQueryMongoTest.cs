@@ -41,14 +41,14 @@ public class AdHocAdvancedMappingsQueryMongoTest : AdHocAdvancedMappingsQueryTes
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Setting_IsUnicode_generates_unicode_literal_in_SQL()
     {
         await base.Setting_IsUnicode_generates_unicode_literal_in_SQL();
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Projecting_correlated_collection_along_with_non_mapped_property()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -56,7 +56,7 @@ public class AdHocAdvancedMappingsQueryMongoTest : AdHocAdvancedMappingsQueryTes
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Projection_failing_with_EnumToStringConverter()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -64,21 +64,21 @@ public class AdHocAdvancedMappingsQueryMongoTest : AdHocAdvancedMappingsQueryTes
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Expression_tree_constructed_via_interface_works()
     {
         await base.Expression_tree_constructed_via_interface_works();
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Double_convert_interface_created_expression_tree()
     {
         await base.Double_convert_interface_created_expression_tree();
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Casts_are_removed_from_expression_tree_when_redundant()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -86,7 +86,7 @@ public class AdHocAdvancedMappingsQueryMongoTest : AdHocAdvancedMappingsQueryTes
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Can_query_hierarchy_with_non_nullable_property_on_derived()
     {
         // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
@@ -94,42 +94,42 @@ public class AdHocAdvancedMappingsQueryMongoTest : AdHocAdvancedMappingsQueryTes
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Query_generates_correct_datetime2_parameter_definition(int? fractionalSeconds, string postfix)
     {
         await base.Query_generates_correct_datetime2_parameter_definition(fractionalSeconds, postfix);
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Query_generates_correct_datetimeoffset_parameter_definition(int? fractionalSeconds, string postfix)
     {
         await base.Query_generates_correct_datetimeoffset_parameter_definition(fractionalSeconds, postfix);
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Query_generates_correct_timespan_parameter_definition(int? fractionalSeconds, string postfix)
     {
         await base.Query_generates_correct_timespan_parameter_definition(fractionalSeconds, postfix);
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Hierarchy_query_with_abstract_type_sibling(bool async)
     {
         await base.Hierarchy_query_with_abstract_type_sibling(async);
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Projecting_property_with_converter_with_closure(bool async)
     {
         await base.Projecting_property_with_converter_with_closure(async);
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Projecting_expression_with_converter_with_closure(bool async)
     {
         // Fails: Other unexpected exception from query execution EF-X605
@@ -137,7 +137,7 @@ public class AdHocAdvancedMappingsQueryMongoTest : AdHocAdvancedMappingsQueryTes
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Projecting_property_with_converter_without_closure(bool async)
     {
         // Fails: Other unexpected exception from query execution EF-X605

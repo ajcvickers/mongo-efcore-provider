@@ -77,7 +77,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Query_for_branch_type_loads_all_owned_navs_tracking(async), "derivedType");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Query_for_leaf_type_loads_all_owned_navs(bool async)
     {
         // Fails: Argument exception while translating or materializing EF-X603
@@ -97,14 +97,14 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Query_when_subquery(async), "derivedType");
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Project_owned_reference_navigation_which_owns_additional(bool async)
     {
         await base.Project_owned_reference_navigation_which_owns_additional(async);
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Project_owned_reference_navigation_which_does_not_own_additional(bool async)
     {
         await base.Project_owned_reference_navigation_which_does_not_own_additional(async);
@@ -140,7 +140,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Navigation_rewrite_on_owned_collection_with_composition_complex(async), "could not be translated");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task SelectMany_on_owned_collection(bool async)
     {
         // Fails: Other unexpected exception from query execution EF-X605
@@ -154,7 +154,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task SelectMany_with_result_selector(bool async)
     {
         // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
@@ -167,14 +167,14 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await base.Set_throws_for_owned_type(async);
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity(async);
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Filter_owned_entity_chained_with_regular_entity_followed_by_projecting_owned_collection(bool async)
     {
         // Fails: Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) EF-X512
@@ -182,7 +182,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Project_multiple_owned_navigations(bool async)
     {
         // Fails: Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) EF-X512
@@ -196,7 +196,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Project_multiple_owned_navigations_with_expansion_on_owned_collections(async), "could not be translated");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_filter(bool async)
     {
         // Fails: Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) EF-X512
@@ -204,7 +204,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(async);
@@ -229,7 +229,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.SelectMany_on_owned_reference_with_entity_in_between_ending_in_owned_collection(async), "could not be translated");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_collection_count(bool async)
     {
         // Fails: Server aggregate error for owned-collection element access EF-X516
@@ -237,7 +237,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference(bool async)
     {
         // Fails: Wrong results for owned-collection operators (ElementAt/Union/...) EF-X515
@@ -245,14 +245,14 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(async);
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_in_predicate_and_projection(bool async)
     {
         // Fails: Wrong results for owned-collection operators (ElementAt/Union/...) EF-X515
@@ -266,7 +266,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Query_with_OfType_eagerly_loads_correct_owned_navigations(async), "derivedType");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Query_loads_reference_nav_automatically_in_projection(bool async)
     {
         await base.Query_loads_reference_nav_automatically_in_projection(async);
@@ -283,7 +283,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await base.Owned_entity_without_owner_does_not_throw_for_identity_resolution(async, useAsTracking);
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Preserve_includes_when_applying_skip_take_after_anonymous_type_select(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
@@ -315,7 +315,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Client_method_skip_take_loads_owned_navigations(async), "derivedType");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Client_method_skip_loads_owned_navigations_variation_2(bool async)
     {
         // Fails: Argument exception while translating or materializing EF-X603
@@ -329,7 +329,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Client_method_take_loads_owned_navigations_variation_2(bool async)
     {
         // Fails: Argument exception while translating or materializing EF-X603
@@ -343,7 +343,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Client_method_skip_take_loads_owned_navigations_variation_2(bool async)
     {
         // Fails: Argument exception while translating or materializing EF-X603
@@ -357,7 +357,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Where_owned_collection_navigation_ToList_Count(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -371,7 +371,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Where_collection_navigation_ToArray_Count(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -385,7 +385,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Where_collection_navigation_AsEnumerable_Count(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -399,7 +399,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Where_collection_navigation_ToList_Count_member(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -413,7 +413,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Where_collection_navigation_ToArray_Length_member(bool async)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -483,7 +483,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Can_OrderBy_owned_indexer_properties(async), "Expression not supported");
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Can_OrderBy_owned_indexer_properties_converted(bool async)
     {
         // Fails: Owned indexer properties / owned-collection element expressions not supported by driver LINQ EF-X514
@@ -491,7 +491,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_group_by_indexer_property(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
@@ -505,7 +505,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_group_by_converted_indexer_property(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
@@ -519,7 +519,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_group_by_owned_indexer_property(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
@@ -533,7 +533,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Can_group_by_converted_owned_indexer_property(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
@@ -582,7 +582,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await base.NoTracking_Include_with_cycles_throws(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task NoTracking_Include_with_cycles_does_not_throw_when_performing_identity_resolution(bool async, bool useAsTracking)
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -602,7 +602,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Trying_to_access_non_existent_indexer_property_throws_meaningful_exception(async), "Exception type was not an exact match");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task GroupBy_with_multiple_aggregates_on_owned_navigation_properties(bool async)
     {
         // Fails: Owned-collection operators (SelectMany/GroupBy/equality/...) not translated EF-X513
@@ -657,7 +657,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await base.Simple_query_entity_with_owned_collection(async);
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Left_join_on_entity_with_owned_navigations(bool async)
     {
         // Fails: Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) EF-X512
@@ -665,7 +665,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Left_join_on_entity_with_owned_navigations_complex(bool async)
     {
         // Fails: Left join on entity with owned navigations throws ArgumentNullException (key) EF-X521
@@ -673,7 +673,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(bool async)
     {
         await base.GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(async);
@@ -686,7 +686,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Count_over_owned_collection(bool async)
     {
         // Fails: Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) EF-X512
@@ -694,7 +694,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Any_without_predicate_over_owned_collection(bool async)
     {
         // Fails: Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) EF-X512
@@ -702,7 +702,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Any_with_predicate_over_owned_collection(bool async)
     {
         // Fails: Wrong results for owned-collection operators (ElementAt/Union/...) EF-X515
@@ -710,7 +710,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Contains_over_owned_collection(bool async)
     {
         // Fails: Owned collection Contains over indexer property builds an invalid expression EF-X520
@@ -718,7 +718,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task ElementAt_over_owned_collection(bool async)
     {
         // Fails: Wrong results for owned-collection operators (ElementAt/Union/...) EF-X515
@@ -726,7 +726,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task ElementAtOrDefault_over_owned_collection(bool async)
     {
         // Fails: Server aggregate error for owned-collection element access EF-X516
@@ -734,7 +734,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task OrderBy_ElementAt_over_owned_collection(bool async)
     {
         // Fails: Owned indexer properties / owned-collection element expressions not supported by driver LINQ EF-X514
@@ -742,7 +742,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Skip_Take_over_owned_collection(bool async)
     {
         // Fails: Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) EF-X512
@@ -750,7 +750,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task FirstOrDefault_over_owned_collection(bool async)
     {
         // Fails: Owned indexer properties / owned-collection element expressions not supported by driver LINQ EF-X514
@@ -758,7 +758,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Distinct_over_owned_collection(bool async)
     {
         // Fails: Materializing an owned collection from a BsonDocument throws ArgumentNullException (derivedType) EF-X512
@@ -766,7 +766,7 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Union_over_owned_collection(bool async)
     {
         // Fails: Wrong results for owned-collection operators (ElementAt/Union/...) EF-X515

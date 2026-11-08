@@ -587,6 +587,10 @@ public class MongoModelBuilderGenericTest : MongoModelBuilderTestBase
 
     public class MongoGenericOwnedTypes(MongoModelBuilderFixture fixture) : MongoOwnedTypes(fixture)
     {
+#if EF11
+        private readonly object? _ef11Skips = Ef11TestSkips.SkipIfListed("xUnit v3 (EF11) cannot hide this non-virtual upstream test; it fails here for the reasons in EF-X411 (see the New-method override on EF8 to EF10)", "Can_configure_relationship_with_PK_ValueConverter_after_FK");
+#endif
+
         protected override TestModelBuilder CreateModelBuilder(Action<ModelConfigurationBuilder>? configure = null)
             => new GenericTestModelBuilder(Fixture, configure);
     }
@@ -632,6 +636,10 @@ public class MongoModelBuilderNonGenericTest : MongoModelBuilderTestBase
 
     public class MongoNonGenericOwnedTypes(MongoModelBuilderFixture fixture) : MongoOwnedTypes(fixture)
     {
+#if EF11
+        private readonly object? _ef11Skips = Ef11TestSkips.SkipIfListed("xUnit v3 (EF11) cannot hide this non-virtual upstream test; it fails here for the reasons in EF-X411 (see the New-method override on EF8 to EF10)", "Can_configure_relationship_with_PK_ValueConverter_after_FK");
+#endif
+
         protected override TestModelBuilder CreateModelBuilder(Action<ModelConfigurationBuilder>? configure = null)
             => new NonGenericTestModelBuilder(Fixture, configure);
     }

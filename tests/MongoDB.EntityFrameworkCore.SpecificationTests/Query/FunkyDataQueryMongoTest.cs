@@ -43,7 +43,7 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
         // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
         await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_contains_on_argument_with_wildcard_constant(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task String_contains_on_argument_with_wildcard_constant(bool async)
     {
         // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
@@ -87,7 +87,7 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
         // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
         await SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoCommandException>(() => base.String_starts_with_on_argument_with_wildcard_constant(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task String_starts_with_on_argument_with_wildcard_constant(bool async)
     {
         // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
@@ -125,7 +125,7 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
         await SpecFails.ThrowsAsync(() => base.String_starts_with_on_argument_with_wildcard_column_negated(async), "could not be translated");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task String_ends_with_on_argument_with_wildcard_constant(bool async)
     {
         // Fails: The server rejects the generated pipeline (MongoCommandException) EF-X601
@@ -181,7 +181,7 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
         await SpecFails.ThrowsAsync(() => base.String_ends_with_not_equals_nullable_column(async), "could not be translated");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task String_FirstOrDefault_and_LastOrDefault(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600

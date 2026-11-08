@@ -43,12 +43,18 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
+#if EF11
+    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
+    public override Task Coalesce_in_conditional_with_value_conversion(bool async)
+        => SpecFails.ThrowsAsync(() => base.Coalesce_in_conditional_with_value_conversion(async));
+#endif
+
     public override async Task First_FirstOrDefault_ix_async()
     {
         await base.First_FirstOrDefault_ix_async();
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task LeftJoin_with_missing_key_values_on_both_sides(bool async)
     {
         await base.LeftJoin_with_missing_key_values_on_both_sides(async);
@@ -136,7 +142,7 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
         await SpecFails.ThrowsAsync(() => base.Parameterless_ctor_on_inner_DTO_gets_called_for_every_row(), "cannot be tracked because another instance");
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Union_and_insert_works_correctly_together()
     {
         // Fails: InvalidOperationException from query execution or materialization EF-X604
@@ -235,7 +241,7 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
         await SpecFails.ThrowsAsync(() => base.Aggregate_over_subquery_in_group_by_projection(async), "cannot be tracked because another instance");
     }
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Aggregate_over_subquery_in_group_by_projection_2(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -249,7 +255,7 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
     public override async Task Group_by_aggregate_in_subquery_projection_after_group_by(bool async)
     {
         // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
@@ -287,7 +293,7 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
         // Fails: Argument exception while translating or materializing EF-X603
         await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Pushdown_does_not_add_grouping_key_to_projection_when_distinct_is_applied(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Pushdown_does_not_add_grouping_key_to_projection_when_distinct_is_applied(bool async)
     {
         // Fails: Argument exception while translating or materializing EF-X603
@@ -301,7 +307,7 @@ public class AdHocMiscellaneousQueryMongoTest : AdHocMiscellaneousQueryTestBase
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Filter_on_nested_DTO_with_interface_gets_simplified_correctly(bool async)
     {
         // Fails: Filter on a nested DTO via an interface: serializer value type mismatch EF-X546

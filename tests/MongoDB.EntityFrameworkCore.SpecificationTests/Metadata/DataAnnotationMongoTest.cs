@@ -40,7 +40,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void Attribute_set_shadow_FK_name_is_preserved_with_HasPrincipalKey()
         => base.Attribute_set_shadow_FK_name_is_preserved_with_HasPrincipalKey();
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails (some data rows): Single/First over empty result in test body (not triaged) EF-X310
     public override Task ConcurrencyCheckAttribute_throws_if_value_in_database_changed()
         => SpecFails.AsyncSomeRows<global::System.InvalidOperationException>(() => base.ConcurrencyCheckAttribute_throws_if_value_in_database_changed(), "Sequence contains no elements");
@@ -50,7 +50,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
         => SpecFails.SyncSomeRows<global::System.InvalidOperationException>(() => base.ConcurrencyCheckAttribute_throws_if_value_in_database_changed(), "Sequence contains no elements");
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task DatabaseGeneratedAttribute_autogenerates_values_when_set_to_identity()
         => base.DatabaseGeneratedAttribute_autogenerates_values_when_set_to_identity();
 #elif EF8
@@ -186,7 +186,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void InverseProperty_with_case_sensitive_clr_property()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.InverseProperty_with_case_sensitive_clr_property(), "An error was generated for warning 'Microsoft.EntityFrameworkCore.Mode");
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: [Column(TypeName)] is reported as an error by default EF-X312
     public override void InverseProperty_with_potentially_ambigous_derived_types()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.InverseProperty_with_potentially_ambigous_derived_types(), "An error was generated for warning 'Microsoft.EntityFrameworkCore.Mode");
@@ -242,7 +242,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void Keyless_fluent_api_and_key_attribute_do_not_cause_warning()
         => base.Keyless_fluent_api_and_key_attribute_do_not_cause_warning();
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: Required/MaxLength/StringLength are not enforced by the store EF-X309
     public override Task MaxLengthAttribute_throws_while_inserting_value_longer_than_max_length()
         => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.MaxLengthAttribute_throws_while_inserting_value_longer_than_max_length(), "Assert.Throws() Failure: No exception was thrown");
@@ -294,17 +294,23 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void NotMapped_on_abstract_base_class_property_ignores_it()
         => base.NotMapped_on_abstract_base_class_property_ignores_it();
 
-#if EF10
+#if (EF10 || EF11)
+#if EF11
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    public override void NotMapped_on_base_class_property_and_overridden_property_ignores_them()
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.NotMapped_on_base_class_property_and_overridden_property_ignores_them());
+#else
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void NotMapped_on_base_class_property_and_overridden_property_ignores_them()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.NotMapped_on_base_class_property_and_overridden_property_ignores_them(), "The entity type 'AbstractBaseEntity2' cannot be instantiated because i");
+#endif
 #elif EF9 || EF8
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void NotMapped_on_base_class_property_and_overridden_property_ignores_them()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.NotMapped_on_base_class_property_and_overridden_property_ignores_them(), "The corresponding CLR type for entity type 'AbstractBaseEntity2' canno");
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void NotMapped_on_base_class_property_discovered_through_navigation_ignores_it()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.NotMapped_on_base_class_property_discovered_through_navigation_ignores_it(), "The entity type 'AbstractBaseEntity3' cannot be instantiated because i");
@@ -314,10 +320,16 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.NotMapped_on_base_class_property_discovered_through_navigation_ignores_it(), "The corresponding CLR type for entity type 'AbstractBaseEntity3' canno");
 #endif
 
-#if EF10
+#if (EF10 || EF11)
+#if EF11
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    public override void NotMapped_on_base_class_property_ignores_it()
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.NotMapped_on_base_class_property_ignores_it());
+#else
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void NotMapped_on_base_class_property_ignores_it()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.NotMapped_on_base_class_property_ignores_it(), "The entity type 'AbstractBaseEntity1' cannot be instantiated because i");
+#endif
 #elif EF9 || EF8
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void NotMapped_on_base_class_property_ignores_it()
@@ -327,10 +339,16 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void NotMapped_on_new_property_with_same_name_as_in_unmapped_base_class_ignores_it()
         => base.NotMapped_on_new_property_with_same_name_as_in_unmapped_base_class_ignores_it();
 
-#if EF10
+#if (EF10 || EF11)
+#if EF11
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    public override void NotMapped_on_overridden_property_is_ignored()
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.NotMapped_on_overridden_property_is_ignored());
+#else
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void NotMapped_on_overridden_property_is_ignored()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.NotMapped_on_overridden_property_is_ignored(), "The entity type 'AbstractBaseEntity3' cannot be instantiated because i");
+#endif
 #elif EF9 || EF8
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void NotMapped_on_overridden_property_is_ignored()
@@ -365,7 +383,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void PrecisionAttribute_sets_precision_for_properties_and_fields()
         => base.PrecisionAttribute_sets_precision_for_properties_and_fields();
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: Required/MaxLength/StringLength are not enforced by the store EF-X309
     public override Task RequiredAttribute_for_navigation_throws_while_inserting_null_value()
         => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.RequiredAttribute_for_navigation_throws_while_inserting_null_value(), "Assert.Throws() Failure: No exception was thrown");
@@ -375,7 +393,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
         => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.RequiredAttribute_for_navigation_throws_while_inserting_null_value(), "Assert.Throws() Failure: No exception was thrown");
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: Required/MaxLength/StringLength are not enforced by the store EF-X309
     public override Task RequiredAttribute_for_property_throws_while_inserting_null_value()
         => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.RequiredAttribute_for_property_throws_while_inserting_null_value(), "Assert.Throws() Failure: No exception was thrown");
@@ -416,7 +434,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void Shared_ForeignKey_to_different_principals()
         => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Shared_ForeignKey_to_different_principals(), "The entity type 'Profile12' has been marked as owned and must be refer");
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: Required/MaxLength/StringLength are not enforced by the store EF-X309
     public override Task StringLengthAttribute_throws_while_inserting_value_longer_than_max_length()
         => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.StringLengthAttribute_throws_while_inserting_value_longer_than_max_length(), "Assert.Throws() Failure: No exception was thrown");
@@ -432,7 +450,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override global::Microsoft.EntityFrameworkCore.Metadata.IModel TableNameAttribute_affects_table_name_in_TPH()
         => base.TableNameAttribute_affects_table_name_in_TPH();
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: Single/First over empty result in test body (not triaged) EF-X310
     public override Task TimestampAttribute_throws_if_value_in_database_changed()
         => SpecFails.Async<global::System.InvalidOperationException>(() => base.TimestampAttribute_throws_if_value_in_database_changed(), "Sequence contains no elements");

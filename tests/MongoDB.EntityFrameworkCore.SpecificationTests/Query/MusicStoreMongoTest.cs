@@ -73,7 +73,7 @@ public class MusicStoreMongoTest(MusicStoreMongoTest.MusicStoreMongoFixture fixt
     public override Task Index_CreatesViewWithGenres()
         => base.Index_CreatesViewWithGenres();
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override Task Index_GetsSixTopAlbums()
         => base.Index_GetsSixTopAlbums();
 #else
@@ -82,7 +82,7 @@ public class MusicStoreMongoTest(MusicStoreMongoTest.MusicStoreMongoFixture fixt
         => SpecFails.Async<global::System.InvalidOperationException>(() => base.Index_GetsSixTopAlbums(), "Unsupported cross-DbSet query between 'Microsoft.EntityFrameworkCore.T");
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Music_store_project_to_mapped_entity()
         => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Music_store_project_to_mapped_entity());

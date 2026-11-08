@@ -28,7 +28,7 @@ public class ValueConvertersEndToEndMongoTest(ValueConvertersEndToEndMongoTest.V
     : ValueConvertersEndToEndTestBase<ValueConvertersEndToEndMongoTest.ValueConvertersEndToEndMongoFixture>(fixture)
 {
     // <generated>
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override Task Can_insert_and_read_back_with_conversions(int[] valueOrder)
         => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_insert_and_read_back_with_conversions(valueOrder), "Unsupported ValueConverter for 'Nullable<Int32>' encountered. Null con");

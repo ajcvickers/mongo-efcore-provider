@@ -30,7 +30,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
     // <generated>
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_compare_enum_to_constant()
         => base.Can_compare_enum_to_constant();
 #elif EF8
@@ -38,7 +38,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_compare_enum_to_constant();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_compare_enum_to_parameter()
         => base.Can_compare_enum_to_parameter();
 #elif EF8
@@ -52,47 +52,57 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
     public override Task Can_filter_projection_with_inline_enum_variable(bool async)
         => base.Can_filter_projection_with_inline_enum_variable(async);
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_insert_and_read_back_all_non_nullable_data_types()
         => base.Can_insert_and_read_back_all_non_nullable_data_types();
+#endif
 #elif EF8
     public override void Can_insert_and_read_back_all_non_nullable_data_types()
         => base.Can_insert_and_read_back_all_non_nullable_data_types();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null()
         => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null();
+#endif
 #elif EF8
     public override void Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null()
         => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null()
         => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null();
+#endif
 #elif EF8
     public override void Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null()
         => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_insert_and_read_back_non_nullable_backed_data_types()
         => base.Can_insert_and_read_back_non_nullable_backed_data_types();
+#endif
 #elif EF8
     public override void Can_insert_and_read_back_non_nullable_backed_data_types()
         => base.Can_insert_and_read_back_non_nullable_backed_data_types();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_insert_and_read_back_nullable_backed_data_types()
         => base.Can_insert_and_read_back_nullable_backed_data_types();
+#endif
 #elif EF8
     public override void Can_insert_and_read_back_nullable_backed_data_types()
         => base.Can_insert_and_read_back_nullable_backed_data_types();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_insert_and_read_back_object_backed_data_types()
         => base.Can_insert_and_read_back_object_backed_data_types();
 #elif EF8
@@ -100,7 +110,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_insert_and_read_back_object_backed_data_types();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_insert_and_read_back_with_binary_key()
         => base.Can_insert_and_read_back_with_binary_key();
 #elif EF8
@@ -108,7 +118,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_insert_and_read_back_with_binary_key();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_insert_and_read_back_with_null_binary_foreign_key()
         => base.Can_insert_and_read_back_with_null_binary_foreign_key();
 #elif EF8
@@ -116,7 +126,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_insert_and_read_back_with_null_binary_foreign_key();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_insert_and_read_back_with_null_string_foreign_key()
         => base.Can_insert_and_read_back_with_null_string_foreign_key();
 #elif EF8
@@ -124,7 +134,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_insert_and_read_back_with_null_string_foreign_key();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_insert_and_read_back_with_string_key()
         => base.Can_insert_and_read_back_with_string_key();
 #elif EF8
@@ -132,7 +142,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_insert_and_read_back_with_string_key();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_insert_and_read_with_max_length_set()
         => base.Can_insert_and_read_with_max_length_set();
 #elif EF8
@@ -140,7 +150,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_insert_and_read_with_max_length_set();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_insert_query_multiline_string()
         => base.Can_insert_query_multiline_string();
 #elif EF8
@@ -148,7 +158,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_insert_query_multiline_string();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_perform_query_with_ansi_strings_test()
         => base.Can_perform_query_with_ansi_strings_test();
 #elif EF8
@@ -156,7 +166,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_perform_query_with_ansi_strings_test();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Can_perform_query_with_max_length()
         => base.Can_perform_query_with_max_length();
 #elif EF8
@@ -164,59 +174,71 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_perform_query_with_max_length();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_query_using_any_data_type()
         => base.Can_query_using_any_data_type();
+#endif
 #elif EF8
     public override void Can_query_using_any_data_type()
         => base.Can_query_using_any_data_type();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     // Fails: Query over converted property fails binding ValueConverterSerializer EF-X303
     public override Task Can_query_using_any_data_type_nullable_shadow()
         => SpecFails.Async<global::System.ArgumentException>(() => base.Can_query_using_any_data_type_nullable_shadow(), "Expression of type 'MongoDB.EntityFrameworkCore.Serializers.ValueConve");
+#endif
 #elif EF8
     // Fails: Query over converted property fails binding ValueConverterSerializer EF-X303
     public override void Can_query_using_any_data_type_nullable_shadow()
         => SpecFails.Sync<global::System.ArgumentException>(() => base.Can_query_using_any_data_type_nullable_shadow(), "Expression of type 'MongoDB.EntityFrameworkCore.Serializers.ValueConve");
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_query_using_any_data_type_shadow()
         => base.Can_query_using_any_data_type_shadow();
+#endif
 #elif EF8
     public override void Can_query_using_any_data_type_shadow()
         => base.Can_query_using_any_data_type_shadow();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     // Fails: Query over converted property fails binding ValueConverterSerializer EF-X303
     public override Task Can_query_using_any_nullable_data_type()
         => SpecFails.Async<global::System.ArgumentException>(() => base.Can_query_using_any_nullable_data_type(), "Expression of type 'MongoDB.EntityFrameworkCore.Serializers.ValueConve");
+#endif
 #elif EF8
     // Fails: Query over converted property fails binding ValueConverterSerializer EF-X303
     public override void Can_query_using_any_nullable_data_type()
         => SpecFails.Sync<global::System.ArgumentException>(() => base.Can_query_using_any_nullable_data_type(), "Expression of type 'MongoDB.EntityFrameworkCore.Serializers.ValueConve");
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_query_using_any_nullable_data_type_as_literal()
         => base.Can_query_using_any_nullable_data_type_as_literal();
+#endif
 #elif EF8
     public override void Can_query_using_any_nullable_data_type_as_literal()
         => base.Can_query_using_any_nullable_data_type_as_literal();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
+#if !EF11
     public override Task Can_query_with_null_parameters_using_any_nullable_data_type()
         => base.Can_query_with_null_parameters_using_any_nullable_data_type();
+#endif
 #elif EF8
     public override void Can_query_with_null_parameters_using_any_nullable_data_type()
         => base.Can_query_with_null_parameters_using_any_nullable_data_type();
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override Task Can_read_back_bool_mapped_as_int_through_navigation()
         => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #elif EF9
@@ -227,7 +249,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     // Fails: Cross-document navigation access issue EF-216
     public override Task Can_read_back_mapped_enum_from_collection_first_or_default()
         => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "The LINQ expression 'DbSet<AnimalIdentification>()' could not be trans");
@@ -243,7 +265,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
     public override void Object_equals_method_over_enum_works()
         => base.Object_equals_method_over_enum_works();
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Object_to_string_conversion()
         => base.Object_to_string_conversion();
 #elif EF8
@@ -251,7 +273,7 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
         => base.Object_to_string_conversion();
 #endif
 
-#if EF10 || EF9
+#if (EF10 || EF11) || EF9
     public override Task Optional_datetime_reading_null_from_database()
         => base.Optional_datetime_reading_null_from_database();
 #elif EF8

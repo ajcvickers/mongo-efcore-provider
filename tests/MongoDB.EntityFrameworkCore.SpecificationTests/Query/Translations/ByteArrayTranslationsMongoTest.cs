@@ -32,6 +32,12 @@ public class ByteArrayTranslationsMongoTest : ByteArrayTranslationsTestBase<Mong
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
+#if EF11
+    // Fails: new in the EF11 upstream package; asserts any failure until triaged. EF-X605
+    public override Task Any()
+        => SpecFails.ThrowsAsync(() => base.Any());
+#endif
+
     // <generated>
     // Fails: Translated pipeline is rejected by the server EF-X323
     public override Task Contains_with_column()

@@ -31,7 +31,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_group_key(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -45,7 +45,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_group_count(bool async)
     {
         await base.GroupBy_is_optimized_when_projecting_group_count(async);
@@ -58,7 +58,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_expression_containing_group_key(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -84,7 +84,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Query translates natively but returns different data than the expected result EF-X600
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.GroupBy_is_optimized_when_projecting_aggregate_on_the_group(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_aggregate_on_the_group(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -110,7 +110,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Query translates natively but returns different data than the expected result EF-X600
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.GroupBy_is_optimized_when_projecting_anonymous_type_containing_group_key_and_group_aggregate(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_anonymous_type_containing_group_key_and_group_aggregate(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -136,7 +136,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Query translates natively but returns different data than the expected result EF-X600
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.GroupBy_is_optimized_when_projecting_anonymous_type_containing_group_key_and_multiple_group_aggregates(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_anonymous_type_containing_group_key_and_multiple_group_aggregates(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -150,7 +150,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_conditional_expression_containing_group_key(bool async)
     {
         await base.GroupBy_is_optimized_when_projecting_conditional_expression_containing_group_key(async);
@@ -163,7 +163,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF9 || EF10
+#if EF9 || (EF10 || EF11)
 #if EF9
     public override async Task GroupBy_is_optimized_when_filtering_and_projecting_anonymous_type_with_group_key_and_function_aggregate(bool async)
     {
@@ -191,7 +191,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Query translates natively but returns different data than the expected result EF-X600
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.GroupBy_is_optimized_when_projecting_function_aggregate_with_expression(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_function_aggregate_with_expression(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -217,7 +217,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Query translates natively but returns different data than the expected result EF-X600
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.GroupBy_is_optimized_when_projecting_expression_with_multiple_function_aggregates(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_projecting_expression_with_multiple_function_aggregates(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -231,7 +231,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task GroupBy_is_optimized_when_grouping_by_row_and_projecting_column_of_the_key_row(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -245,7 +245,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Grouping_by_all_columns_doesnt_produce_a_groupby_statement(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -295,7 +295,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         await SpecFails.ThrowsAsync(() => base.Grouping_by_all_columns_with_aggregate_function_works_6(async), "Expression of type");
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Grouping_by_all_columns_with_aggregate_function_works_7(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -321,7 +321,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Query translates natively but returns different data than the expected result EF-X600
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.Grouping_by_all_columns_with_aggregate_function_works_8(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Grouping_by_all_columns_with_aggregate_function_works_8(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -347,7 +347,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Query translates natively but returns different data than the expected result EF-X600
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.Grouping_by_all_columns_with_aggregate_function_works_9(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Grouping_by_all_columns_with_aggregate_function_works_9(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -373,7 +373,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Query translates natively but returns different data than the expected result EF-X600
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.Grouping_by_all_columns_with_aggregate_function_works_10(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Grouping_by_all_columns_with_aggregate_function_works_10(bool async)
     {
         // Fails: Query translates natively but returns different data than the expected result EF-X600
@@ -417,7 +417,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         await base.All_Grouped_from_LINQ_101(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Count_Grouped_from_LINQ_101(bool async)
     {
         await base.Count_Grouped_from_LINQ_101(async);
@@ -430,7 +430,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task LongCount_Grouped_from_LINQ_101(bool async)
     {
         await base.LongCount_Grouped_from_LINQ_101(async);
@@ -443,7 +443,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Sum_Grouped_from_LINQ_101(bool async)
     {
         await base.Sum_Grouped_from_LINQ_101(async);
@@ -456,7 +456,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Min_Grouped_from_LINQ_101(bool async)
     {
         await base.Min_Grouped_from_LINQ_101(async);
@@ -474,7 +474,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         await base.Min_Elements_from_LINQ_101(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Max_Grouped_from_LINQ_101(bool async)
     {
         await base.Max_Grouped_from_LINQ_101(async);
@@ -492,7 +492,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         await base.Max_Elements_from_LINQ_101(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Average_Grouped_from_LINQ_101(bool async)
     {
         await base.Average_Grouped_from_LINQ_101(async);
@@ -511,7 +511,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         await SpecFails.ThrowsAsync(() => base.Group_Join_from_LINQ_101(async), "could not be translated");
     }
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Cross_Join_with_Group_Join_from_LINQ_101(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
@@ -519,7 +519,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF10
+#if (EF10 || EF11)
     public override async Task Left_Outer_Join_with_Group_Join_from_LINQ_101(bool async)
     {
         // Fails: Expression not supported by the driver LINQ translator EF-X527
@@ -527,7 +527,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_1(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -541,7 +541,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_2(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -555,7 +555,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_3(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -569,7 +569,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_4(bool async)
     {
         await base.Whats_new_2021_sample_4(async);
@@ -582,7 +582,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_5(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -596,7 +596,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_6(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -628,7 +628,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Argument exception while translating or materializing EF-X603
         await SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Whats_new_2021_sample_8(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Whats_new_2021_sample_8(bool async)
     {
         // Fails: Argument exception while translating or materializing EF-X603
@@ -642,7 +642,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_9(bool async)
     {
         // Fails: GroupBy issue EF-149
@@ -656,7 +656,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     }
 #endif
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_10(bool async)
     {
         await base.Whats_new_2021_sample_10(async);
@@ -681,7 +681,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Serialization/format error while translating or materializing EF-X602
         await SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Whats_new_2021_sample_11(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Whats_new_2021_sample_11(bool async)
     {
         // Fails: Serialization/format error while translating or materializing EF-X602
@@ -707,7 +707,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Serialization/format error while translating or materializing EF-X602
         await SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Whats_new_2021_sample_12(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Whats_new_2021_sample_12(bool async)
     {
         // Fails: Serialization/format error while translating or materializing EF-X602
@@ -733,7 +733,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         // Fails: Serialization/format error while translating or materializing EF-X602
         await SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Whats_new_2021_sample_13(async));
     }
-#elif EF10
+#elif (EF10 || EF11)
     public override async Task Whats_new_2021_sample_13(bool async)
     {
         // Fails: Serialization/format error while translating or materializing EF-X602
@@ -752,7 +752,7 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         await base.Whats_new_2021_sample_14(async);
     }
 
-#if EF8 || EF9 || EF10
+#if EF8 || EF9 || (EF10 || EF11)
     public override async Task Whats_new_2021_sample_15(bool async)
     {
         // Fails: GroupBy issue EF-149
