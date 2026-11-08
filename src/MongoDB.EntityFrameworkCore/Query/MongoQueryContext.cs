@@ -173,7 +173,7 @@ public class MongoQueryContext : QueryContext
     {
         if (!_deferring)
         {
-            return base.StartTracking(entityType, entity, valueBuffer);
+            return ComplexDiscriminatorSeeding.Seed(base.StartTracking(entityType, entity, valueBuffer));
         }
 
         DeferTracking(entityType, entity, valueBuffer.IsEmpty, valueBuffer);
@@ -183,7 +183,7 @@ public class MongoQueryContext : QueryContext
     internal static ValueBuffer EmptyShadowValues => ValueBuffer.Empty;
 
     internal InternalEntityEntry ReplayStartTracking(IEntityType entityType, object entity, ValueBuffer valueBuffer)
-        => base.StartTracking(entityType, entity, valueBuffer);
+        => ComplexDiscriminatorSeeding.Seed(base.StartTracking(entityType, entity, valueBuffer));
 
     private void DeferTracking(IEntityType entityType, object entity, bool noShadowValues, ValueBuffer shadowValues)
 #else
@@ -192,7 +192,7 @@ public class MongoQueryContext : QueryContext
     {
         if (!_deferring)
         {
-            return base.StartTracking(entityType, entity, snapshot);
+            return ComplexDiscriminatorSeeding.Seed(base.StartTracking(entityType, entity, snapshot));
         }
 
         DeferTracking(entityType, entity, ReferenceEquals(snapshot, Snapshot.Empty), snapshot);
@@ -202,7 +202,7 @@ public class MongoQueryContext : QueryContext
     internal static ISnapshot EmptyShadowValues => Snapshot.Empty;
 
     internal InternalEntityEntry ReplayStartTracking(IEntityType entityType, object entity, ISnapshot snapshot)
-        => base.StartTracking(entityType, entity, snapshot);
+        => ComplexDiscriminatorSeeding.Seed(base.StartTracking(entityType, entity, snapshot));
 
     private void DeferTracking(IEntityType entityType, object entity, bool noShadowValues, ISnapshot shadowValues)
 #endif

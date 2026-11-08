@@ -97,7 +97,7 @@ internal static class ComplexTypeMaterializationBuilder
             ? BuildCollection(complexProperty, value)
             : Expression.Condition(
                 Expression.Property(value, IsBsonDocumentProperty),
-                Construct(complexProperty.ComplexType, Expression.Property(value, AsBsonDocumentProperty)).ConvertIfRequired(clrType),
+                BuildSingle(complexProperty, value, absentIsNull),
                 Expression.Throw(Expression.Call(WrongBsonTypeMethod, Expression.Constant(complexProperty), value), clrType));
 
         return Expression.Block(
@@ -166,6 +166,30 @@ internal static class ComplexTypeMaterializationBuilder
                 Expression.Constant(
                     ComplexTypeRefusals.RequiredComplexElementMissing(complexProperty.GetElementName(), isNull, DisplayName(complexProperty)))),
             clrType);
+    }
+
+    // A single (non-collection) complex value read from a stored document.
+    private static Expression BuildSingle(IComplexProperty complexProperty, ParameterExpression value, bool absentIsNull)
+    {
+        Expression constructed = Construct(complexProperty.ComplexType, Expression.Property(value, AsBsonDocumentProperty))
+            .ConvertIfRequired(complexProperty.ClrType);
+#if !EF8 && !EF9
+        // An optional complex property with a discriminator (EF10 HasDiscriminator(): the way EF tells a null property from one
+        // whose members are all null) is null when the discriminator is null or missing, whatever the other members hold.
+        if (complexProperty.IsOptional() && complexProperty.ComplexType.FindDiscriminatorProperty() is { } discriminator)
+        {
+            constructed = Expression.Condition(
+                Expression.Property(
+                    Expression.Call(
+                        Expression.Property(value, AsBsonDocumentProperty), GetValueOrDefaultMethod,
+                        Expression.Constant(discriminator.GetElementName()), Expression.Constant(BsonNull.Value, typeof(BsonValue))),
+                    IsBsonNullProperty),
+                Absent(complexProperty, isNull: true, absentIsNull),
+                constructed);
+        }
+#endif
+
+        return constructed;
     }
 
     private static Expression BuildCollection(IComplexProperty complexProperty, ParameterExpression value)
@@ -264,6 +288,9 @@ internal static class ComplexTypeMaterializationBuilder
 
     private static string DisplayName(IComplexProperty complexProperty)
         => complexProperty.DeclaringType.DisplayName() + "." + complexProperty.Name;
+
+    private static readonly MethodInfo GetValueOrDefaultMethod =
+        typeof(BsonDocument).GetMethod(nameof(BsonDocument.GetValue), [typeof(string), typeof(BsonValue)])!;
 
     private static readonly PropertyInfo IsBsonNullProperty = typeof(BsonValue).GetProperty(nameof(BsonValue.IsBsonNull))!;
     private static readonly PropertyInfo IsBsonDocumentProperty = typeof(BsonValue).GetProperty(nameof(BsonValue.IsBsonDocument))!;

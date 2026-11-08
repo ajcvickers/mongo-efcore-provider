@@ -102,8 +102,7 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
 
     public override async Task Nullable_complex_type_with_discriminator_set_to_null()
     {
-        // Fails: EF11 complex type conformance not implemented yet #22
-        await MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Nullable_complex_type_with_discriminator_set_to_null(), typeof(Exception));
+        await base.Nullable_complex_type_with_discriminator_set_to_null();
     }
 
     public override async Task Can_save_batch_swapping_alternate_key_values_on_complex_type_property()
