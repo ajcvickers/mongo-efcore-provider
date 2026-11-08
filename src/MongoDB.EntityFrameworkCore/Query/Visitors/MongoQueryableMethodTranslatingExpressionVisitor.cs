@@ -372,6 +372,88 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
         }
     }
 
+    /// <summary>
+    /// Refuses (in every mode) a projection holding a conditional whose BOTH branches read a whole complex value
+    /// (<c>e.Flag ? e.Home : e.Work</c>, <c>a is Dog ? ((Dog)a).Kennel : a.Base</c>): the staged test and the two complex
+    /// reads collide, so the plain form fails with a deserialization error and the TPH form silently returns the same
+    /// branch for every row. A single complex branch against null, a coalesce, and conditionals over leaves are unaffected.
+    /// </summary>
+    private static void ThrowIfConditionalBetweenWholeComplexValues(ShapedQueryExpression source, LambdaExpression selector)
+    {
+        // Only an entity-shaped source (a join or grouping source has a different shaper type and is not substituted), and only
+        // when the selector holds a conditional at all.
+        if (source.QueryExpression is not MongoQueryExpression mongoQuery
+            || source.ShaperExpression.Type != selector.Parameters[0].Type
+            || !ConditionalFinder.Finds(selector.Body))
+        {
+            return;
+        }
+
+        var body = ReplacingExpressionVisitor.Replace(selector.Parameters[0], source.ShaperExpression, selector.Body);
+        var model = mongoQuery.CollectionExpression.EntityType.Model;
+        if (ConditionalBetweenComplexValuesFinder.Finds(body, model))
+        {
+            throw new NotSupportedException(ComplexTypeRefusals.ConditionalBetweenWholeValues());
+        }
+    }
+
+    private sealed class ConditionalFinder : System.Linq.Expressions.ExpressionVisitor
+    {
+        private bool _found;
+
+        internal static bool Finds(Expression body)
+        {
+            var finder = new ConditionalFinder();
+            finder.Visit(body);
+            return finder._found;
+        }
+
+        protected override Expression VisitConditional(ConditionalExpression node)
+        {
+            _found = true;
+            return node;
+        }
+    }
+
+    private sealed class ConditionalBetweenComplexValuesFinder(IModel model) : System.Linq.Expressions.ExpressionVisitor
+    {
+        private bool _found;
+
+        internal static bool Finds(Expression body, IModel model)
+        {
+            var finder = new ConditionalBetweenComplexValuesFinder(model);
+            finder.Visit(body);
+            return finder._found;
+        }
+
+        // EF's shaper nodes cannot be walked (their children throw); a conditional never hides inside one.
+        [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+            => node is ShapedQueryExpression or GroupByShaperExpression or StructuralTypeShaperExpression ? node : base.Visit(node);
+
+        protected override Expression VisitConditional(ConditionalExpression node)
+        {
+            if (IsWholeComplexValue(node.IfTrue) && IsWholeComplexValue(node.IfFalse))
+            {
+                _found = true;
+                return node;
+            }
+
+            return base.VisitConditional(node);
+        }
+
+        // A member read typed as the complex property it names, off the entity shaper or a hop chain, or off a DOWNCAST of it
+        // (`((Dog)a).Kennel`: a property declared on a derived type, which the shaper's own base type does not have).
+        private bool IsWholeComplexValue(Expression branch)
+        {
+            branch = branch.RemoveConvert();
+            return MongoProjectionBindingExpressionVisitor.ResolveComplexValueProperty(branch) != null
+                   || branch is MemberExpression { Expression: { } owner } member
+                   && model.FindEntityType(owner.Type)?.FindComplexProperty(member.Member.Name) is { } complexProperty
+                   && complexProperty.ClrType == member.Type;
+        }
+    }
+
     // The single complex-value-operand message, shared by every refusal site.
     private static NotSupportedException ComplexValueOperandRefusal(string operatorName)
         => new(ComplexTypeRefusals.WholeValueOperand(operatorName));
@@ -554,6 +636,8 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor :
         {
             ThrowIfGroupByOverComplexValue(source, selector);
         }
+
+        ThrowIfConditionalBetweenWholeComplexValues(source, selector);
 
         var translated = TranslateSelectCore(source, selector);
         RecordComplexValueShaperLeaf(translated);

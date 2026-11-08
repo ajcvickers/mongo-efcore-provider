@@ -226,7 +226,101 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                 ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
         }
 
+        if (isSelfReferencing)
+        {
+            ThrowIfValueReadsThroughOptionalComplexHop(mongoQueryExpression, entityType, propertySelector, value);
+        }
+
         return new MongoNonQueryExpression.Setter(property, value, isSelfReferencing, complexElementPath);
+    }
+
+    /// <summary>
+    /// A computed setter value that reads a member through an OPTIONAL complex property is missing for a document whose
+    /// parent is null or absent, and in the pipeline <c>$set</c> a missing value REMOVES the target field (or an arithmetic
+    /// value stores BSON null), leaving a document no read accepts. The read is refused unless it is the direct left operand
+    /// of a null-coalescing operator, which renders as <c>$ifNull</c> and supplies a value.
+    /// </summary>
+    private void ThrowIfValueReadsThroughOptionalComplexHop(
+        MongoQueryExpression mongoQueryExpression, IEntityType entityType, LambdaExpression propertySelector, Expression value)
+    {
+        var finder = new OptionalComplexHopReadFinder(entityType, propertySelector.Parameters);
+        finder.Visit(value);
+        if (finder.Hop is { } hop)
+        {
+            AddTranslationErrorDetails(ComplexTypeRefusals.BulkValueReadsThroughOptionalComplexHop(finder.Path!, hop));
+            throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+                ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
+        }
+    }
+
+    private sealed class OptionalComplexHopReadFinder(IEntityType entityType, IReadOnlyList<ParameterExpression> parameters)
+        : ExpressionVisitor
+    {
+        public string? Hop { get; private set; }
+
+        public string? Path { get; private set; }
+
+        protected override Expression VisitBinary(BinaryExpression node)
+        {
+            if (node.NodeType == ExpressionType.Coalesce && IsOptionalHopChain(node.Left.RemoveConvert()!, out _, out _))
+            {
+                // The guarded read supplies its own fallback: only the right side can still contain an unguarded read.
+                Visit(node.Right);
+                return node;
+            }
+
+            return base.VisitBinary(node);
+        }
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (Hop is null && IsOptionalHopChain(node, out var hop, out var path))
+            {
+                Hop = hop;
+                Path = path;
+                return node;
+            }
+
+            return base.VisitMember(node);
+        }
+
+        private bool IsOptionalHopChain(Expression expression, out string? hopName, out string? path)
+        {
+            hopName = null;
+            path = null;
+            var names = new List<string>();
+            var current = expression;
+            while (current.TryGetMemberOrEFProperty(out var receiver, out var name))
+            {
+                names.Insert(0, name);
+                current = receiver.RemoveConvert()!;
+            }
+
+            if (names.Count < 2 || current is not ParameterExpression parameter || !parameters.Contains(parameter))
+            {
+                return false;
+            }
+
+            ITypeBase scope = entityType;
+            for (var i = 0; i < names.Count - 1; i++)
+            {
+                if (scope.FindComplexProperty(names[i]) is not { } hop)
+                {
+                    return false;
+                }
+
+                if (!hop.IsCollection && hop.IsOptional())
+                {
+                    hopName = $"{hop.DeclaringType.DisplayName()}.{hop.Name}";
+                    path = string.Join(".", names);
+                    return true;
+                }
+
+                scope = hop.ComplexType;
+            }
+
+            return false;
+        }
     }
 
     /// <summary>

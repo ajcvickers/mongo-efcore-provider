@@ -159,6 +159,17 @@ internal sealed partial class MongoExpressionTranslator
         if (translated is null)
             return false;
 
+        // A BARE field read as the value (an aggregate operand, a group key, a projection leaf) keeps its plain read: the
+        // reductions skip null/missing by design, and only a comparison or computation over the field needs the null guard
+        // (ValueScopeField) that TranslateOperand added for the optional-parent case.
+        if (translated is MongoFieldExpression { NullSafe: true } bareField
+            && !StructuralPath.IsComplexElementScope(_scopeType)
+            && _outerParam is null && _innerPrefix is null
+            && CrossesOptionalComplexHop(valueBody))
+        {
+            translated = new MongoFieldExpression(bareField.Property, bareField.ElementName, nullSafe: false);
+        }
+
         if (!AllFieldsDefaultSerialized(translated))
             return false;
 
@@ -215,7 +226,7 @@ internal sealed partial class MongoExpressionTranslator
             if (dateTimeIsOuter)
                 return false;
 
-            receiverExpr = ScopeField(property, fieldPath!);
+            receiverExpr = ValueScopeField(property, fieldPath!, receiver);
         }
         else if (TryTranslateDateTimeMember(receiver, out var nestedDateTimeExpr))
         {
@@ -1259,6 +1270,18 @@ internal sealed partial class MongoExpressionTranslator
         => new(property, path, nullSafe || StructuralPath.IsComplexElementScope(_scopeType));
 
     /// <summary>
+    /// A field read in VALUE position (an arithmetic/math/date-part operand, or the member side of a relational comparison
+    /// against a value). A leaf under an OPTIONAL complex property is MISSING whenever that ancestor is null or absent, and the
+    /// aggregation dialect orders MISSING below every value, so a bare <c>$lt</c>/<c>$lte</c> over it is true where C# (null
+    /// propagation) answers false. Marking the field <see cref="MongoFieldExpression.NullSafe"/> makes <c>MayBeNull</c> true
+    /// (structurally, through arithmetic, math and date parts), so the renderer adds its null guard. Single-scope (root)
+    /// translators only; element scopes are already null-safe and owned hops are unchanged. A plain <c>Where(Opt.I &lt; 5)</c>
+    /// is rendered in the query dialect, where MISSING never matches, and is unaffected.
+    /// </summary>
+    private MongoFieldExpression ValueScopeField(IProperty property, string path, Expression member)
+        => ScopeField(property, path, _outerParam is null && _innerPrefix is null && CrossesOptionalComplexHop(member));
+
+    /// <summary>
     /// A field of the OUTER (root) row read inside an element scope. Inside a COMPLEX collection's element scope it is
     /// <see cref="MongoOuterFieldExpression.NullSafe"/> when it may be absent (a nullable property, or one under an optional
     /// owned/complex ancestor): the element's leaves read a null element's members as null, so the outer value must
@@ -1470,7 +1493,7 @@ internal sealed partial class MongoExpressionTranslator
                     && nodeType is ExpressionType.Equal or ExpressionType.NotEqual;
                 MongoExpression leftField = leftIsOuter && _innerPrefix is null
                     ? OuterField(leftProperty, leftPath!, leftUnwrapped)
-                    : ScopeValue(ScopeField(leftProperty, leftPath!, leftNullSafe));
+                    : ScopeValue(ScopeField(leftProperty, leftPath!, leftNullSafe || IsRelational(nodeType) && ValueScopeField(leftProperty, leftPath!, leftUnwrapped).NullSafe));
                 return new MongoBinaryExpression(mongoOp.Value, leftField, valueExpr);
             }
         }
@@ -1509,7 +1532,7 @@ internal sealed partial class MongoExpressionTranslator
                     && nodeType is ExpressionType.Equal or ExpressionType.NotEqual;
                 MongoExpression rightField = rightIsOuter && _innerPrefix is null
                     ? OuterField(rightProperty, rightPath!, rightUnwrapped)
-                    : ScopeValue(ScopeField(rightProperty, rightPath!, rightNullSafe));
+                    : ScopeValue(ScopeField(rightProperty, rightPath!, rightNullSafe || IsRelational(nodeType) && ValueScopeField(rightProperty, rightPath!, rightUnwrapped).NullSafe));
                 return new MongoBinaryExpression(mongoOp.Value, rightField, valueExpr);
             }
         }
@@ -1593,6 +1616,9 @@ internal sealed partial class MongoExpressionTranslator
             : new MongoBinaryExpression(
                 MongoBinaryOperator.AndAlso, new MongoNumericTypeBracketExpression(numericTypeBracket), comparisonResult);
     }
+
+    private static bool IsRelational(ExpressionType nodeType)
+        => nodeType is ExpressionType.LessThan or ExpressionType.LessThanOrEqual or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual;
 
     // Subsumed by TranslateOperand's own MongoConvertExpression guard, but kept as a cheap early-out. Nullable
     // relational comparisons don't decline here; they get a bracket via NeedsNumericTypeBracket.
@@ -1903,7 +1929,7 @@ internal sealed partial class MongoExpressionTranslator
             // NativeSelectManyBinderTests.
             return operandIsOuter
                 ? OuterField(property, fieldPath!, node)
-                : ScopeValue(ScopeField(property, fieldPath!));
+                : ScopeValue(ValueScopeField(property, fieldPath!, node));
         }
 
         // A flattened alias with no backing IProperty (a post-Distinct computed key part, or any output alias of a
