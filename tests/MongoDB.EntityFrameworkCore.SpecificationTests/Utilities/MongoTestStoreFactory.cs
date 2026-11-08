@@ -32,11 +32,13 @@ public class MongoTestStoreFactory : ITestStoreFactory
     public IServiceCollection AddProviderServices(IServiceCollection serviceCollection)
         => serviceCollection.AddEntityFrameworkMongoDB().AddSingleton<ILoggerFactory>(CreateListLoggerFactory(_ => true));
 
+    // A non-shared test's store: initialized, cleaned and seeded for every test.
     public TestStore Create(string storeName)
-        => MongoTestStore.Create(storeName, TestServer);
+        => MongoTestStore.Create(storeName, TestServer, shared: false);
 
+    // A fixture's store: initialized once per name.
     public virtual TestStore GetOrCreate(string storeName)
-        => Create(storeName);
+        => MongoTestStore.Create(storeName, TestServer, shared: true);
 
     public virtual ListLoggerFactory CreateListLoggerFactory(Func<string, bool> shouldLogCategory)
         => new TestMqlLoggerFactory(shouldLogCategory);
