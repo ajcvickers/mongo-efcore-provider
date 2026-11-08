@@ -892,7 +892,12 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
     public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
+#if EF10
+        // The EF10 overrides of this class were added by the spec port and are baselined in the default query mode only.
+        _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
+#else
         _testStoreFactory = new MongoTestStoreFactory(server);
+#endif
 
         await base.InitializeAsync();
     }

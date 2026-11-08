@@ -64,9 +64,9 @@ public class NorthwindFunctionsQueryMongoTest : NorthwindFunctionsQueryTestBase<
     public override Task Where_functions_nested(bool async)
         => base.Where_functions_nested(async);
 
-    // Fails: MongoDB DateTimeKind handling EF-X006
+    // Fails: MongoDB DateTimeKind handling EF-X006 (depends on the time zone: passes in UTC) EF-X720
     public override Task Static_equals_nullable_datetime_compared_to_non_nullable(bool async)
-        => SpecFails.ThrowsAsync(() => base.Static_equals_nullable_datetime_compared_to_non_nullable(async));
+        => SpecFails.EitherAsync(() => base.Static_equals_nullable_datetime_compared_to_non_nullable(async));
 
     public override Task Static_equals_int_compared_to_long(bool async)
         => base.Static_equals_int_compared_to_long(async);
