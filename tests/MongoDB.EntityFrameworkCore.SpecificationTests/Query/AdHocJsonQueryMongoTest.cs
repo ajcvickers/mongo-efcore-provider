@@ -29,6 +29,13 @@ namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
 public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
 {
+#if EF10
+    // On EF10 the class is pinned to the default query mode (see the test store factory below), so the NativeOnly expectations never apply.
+    private static bool QueryModeIsNativeOnly => false;
+#else
+    private static bool QueryModeIsNativeOnly => MongoSpecTestHelpers.IsNativeOnly;
+#endif
+
 #if EF10 || EF11
     public AdHocJsonQueryMongoTest(NonSharedFixture fixture)
         : base(fixture)
@@ -229,7 +236,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
     {
         // Fails: Entity id=5 has no RequiredReference field EF-X005
         // A bare owned-reference leaf is not a native projection (main threw here too): NativeOnly refuses it.
-        if (MongoSpecTestHelpers.IsNativeOnly)
+        if (QueryModeIsNativeOnly)
         {
             await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(() => base.Project_missing_required_navigation(async));
             AssertMql();
@@ -267,7 +274,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
     {
         // Fails: NestedRequiredReference is null in BsonDocument for entity id=6 EF-X005
         // A bare owned-reference leaf is not a native projection (main threw here too): NativeOnly refuses it.
-        if (MongoSpecTestHelpers.IsNativeOnly)
+        if (QueryModeIsNativeOnly)
         {
             await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(() => base.Project_null_required_navigation(async));
             AssertMql();
