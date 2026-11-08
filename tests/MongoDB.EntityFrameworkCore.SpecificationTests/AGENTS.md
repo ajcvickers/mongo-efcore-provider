@@ -71,6 +71,11 @@ in behavior (including the test starting to pass) is detected.
 - **Upstream tests that are `public` but not `virtual` cannot be overridden.** Hide one with a `new` method that carries the ticket id: it
   either asserts the failure (`CompositeKeyEndToEndMongoTest`) or is marked `Skip` when the failure cannot be asserted
   (`PropertyValuesMongoTest`, `DataBindingMongoTest`).
+- **On EF11 (xUnit v3) a `new` hiding method is rejected** ("has overloads, which is not supported"). The hides are wrapped in `#if !EF11`,
+  and an inherited test that fails as base is skipped at run time by `Ef11TestSkips.SkipIfListed(...)` from a field initializer in the test
+  class (EF-X711). Upstream tests that exist only on some versions are wrapped the same way.
+- **EF11 follows the EF10 arms.** A condition that mentions `EF10` is written `(EF10 || EF11)` unless EF11 behaves differently; the
+  harvest-and-rebaseline pass splits the arms where it does.
 - **Remove a base from `MongoComplianceTest.IgnoredTestBases` when you port it.** A base that stays ignored for a concrete reason carries
   a comment naming the ticket.
 - **Do not put dates or times in MQL baselines.** `Today`/`Now`/`UtcNow` translations embed the current date or time, so those tests do
