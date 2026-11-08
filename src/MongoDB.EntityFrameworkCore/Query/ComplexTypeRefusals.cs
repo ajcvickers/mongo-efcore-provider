@@ -84,6 +84,10 @@ internal static class ComplexTypeRefusals
            + "optional complex property, which may be null in a stored document: the server cannot set a member of a null "
            + "value. Set the whole optional complex property instead (SetProperty(e => e.Optional, value)).";
 
+    internal static string BulkSetUnstoredLeaf(string setterTarget)
+        => $"ExecuteUpdate cannot set '{setterTarget}' because it is not stored: its element name is empty, so SaveChanges "
+           + "never writes it either.";
+
     internal static string BulkSetRequiredComplexLeafToNull(string path)
         => $"ExecuteUpdate cannot set the required member '{path}' of a complex property to null: the stored document "
            + "would no longer be readable. No document was modified.";
@@ -119,6 +123,9 @@ internal static class ComplexTypeRefusals
 
     internal static string ComplexCollectionNotICollection(string complexPropertyName, string collectionTypeName, string iCollectionTypeName)
         => $"Complex collection '{complexPropertyName}' is typed as '{collectionTypeName}', which does not implement '{iCollectionTypeName}'.";
+
+    internal static string UnsupportedAttributeOnComplexProperty(string complexPropertyName, string attributeName)
+        => $"Property '{complexPropertyName}' is annotated with unsupported attribute '{attributeName}'.";
 
     // ---- Query refusals ----
 

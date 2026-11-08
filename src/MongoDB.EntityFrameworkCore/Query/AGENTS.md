@@ -55,7 +55,9 @@ Gate and fallback:
   so bulk takes the refusal cost where queries take the net's documented limits. Setters: a complex leaf through REQUIRED single
   complex hops (dotted stored path, `StructuralPath`), a whole complex property/collection from a captured value (serialized by
   `ComplexValueWriter`, as SaveChanges writes it; a required one can't be null); refused: a leaf under an optional complex
-  hop (the server's `$set` of a dotted path under a null parent errors mid-operation), a whole complex value read from the row,
+  hop (the server's `$set` of a dotted path under a null parent errors mid-operation), a leaf whose element name is empty (not stored),
+  a required leaf set to null, a computed value that reads through an optional complex hop unless null-coalesced (a missing value would
+  remove or null the target), a whole complex value read from the row,
   a self-referencing value for a BsonRepresentation leaf (root scalars keep their pre-existing behaviour), and two setters
   whose stored paths contain one another (`ThrowIfSetterPathsOverlap`: the server rejects such a `$set`). Refusal messages
   print expressions through `ExpressionShapePrinter` (constants as `?`), never `Expression.ToString()`.

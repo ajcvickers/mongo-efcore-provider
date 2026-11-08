@@ -277,7 +277,39 @@ public class MongoModelValidator : ModelValidator
 
         foreach (var complexProperty in type.GetDeclaredComplexProperties())
         {
+            ValidateNoUnsupportedComplexPropertyAttributes(complexProperty);
             ValidateNoUnsupportedAttributesOrAnnotations(complexProperty.ComplexType);
+        }
+    }
+
+    // Attributes that have no effect on a complex property itself. The property conventions only see scalar properties, so the
+    // CLR member is read directly. Includes the ones honoured on a scalar (representation, date-time options) and [BsonId]
+    // (entity keys only): a complex value is written as a whole subdocument by the provider's own writer.
+    private static readonly Type[] UnsupportedComplexPropertyAttributes =
+    [
+        typeof(BsonDefaultValueAttribute), typeof(BsonDictionaryOptionsAttribute), typeof(BsonExtraElementsAttribute),
+        typeof(BsonGuidRepresentationAttribute), typeof(BsonIgnoreIfDefaultAttribute), typeof(BsonIgnoreIfNullAttribute),
+        typeof(BsonSerializationOptionsAttribute), typeof(BsonSerializerAttribute), typeof(BsonTimeSpanOptionsAttribute),
+        typeof(BsonIdAttribute)
+    ];
+
+    /// <summary>
+    /// Validate that no attribute the provider ignores is declared on the complex property's own CLR member
+    /// (the leaves of a complex type are covered by the property conventions).
+    /// </summary>
+    /// <exception cref="NotSupportedException">When an unsupported attribute is declared on the complex property.</exception>
+    private static void ValidateNoUnsupportedComplexPropertyAttributes(IComplexProperty complexProperty)
+    {
+        if ((complexProperty.PropertyInfo ?? (MemberInfo?)complexProperty.FieldInfo) is not { } member)
+        {
+            return;
+        }
+
+        if (FindUndefinedAttribute(member.GetCustomAttributes(inherit: true).OfType<Attribute>(), UnsupportedComplexPropertyAttributes)
+            is { } unsupported)
+        {
+            throw new NotSupportedException(
+                ComplexTypeRefusals.UnsupportedAttributeOnComplexProperty($"{complexProperty.DeclaringType.DisplayName()}.{complexProperty.Name}", unsupported.GetType().ShortDisplayName()));
         }
     }
 

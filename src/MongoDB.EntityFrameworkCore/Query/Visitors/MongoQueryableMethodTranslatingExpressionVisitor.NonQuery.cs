@@ -387,6 +387,15 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             hopScope = hop.ComplexType;
         }
 
+        // A leaf (or hop) whose element name is empty is not stored (SaveChanges skips it), so there is nothing to set: the
+        // path would be "Addr." and the server rejects it mid-operation.
+        if (resolved.Segments.Any(string.IsNullOrEmpty))
+        {
+            AddTranslationErrorDetails(ComplexTypeRefusals.BulkSetUnstoredLeaf(ExpressionShapePrinter.Print(propertySelector.Body)));
+            throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+                ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
+        }
+
         target = (IPropertyBase)resolved.Leaf;
         path = string.Join(".", resolved.Segments);
         return true;
