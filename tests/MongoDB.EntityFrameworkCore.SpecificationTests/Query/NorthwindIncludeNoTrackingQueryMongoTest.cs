@@ -1065,7 +1065,7 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "o
         // The provider throws the driver's ExpressionNotSupportedException rather than the base test's expected
         // InvalidOperationException, so base surfaces an Xunit ThrowsException wrapping it. Pin both the wrapper
         // type and the driver exception name, so a behavior change in either direction is caught.
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Include_collection_with_client_filter(async));
         if (MongoSpecTestHelpers.IsNativeOnly)
         {

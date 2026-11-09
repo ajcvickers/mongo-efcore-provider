@@ -62,6 +62,8 @@ in behavior (including the test starting to pass) is detected.
   `Sync<T>`/`Async<T>` (unwrap `TargetInvocationException`/`AggregateException`), `SyncSomeRows<T>`/`AsyncSomeRows<T>` for theories
   where only some rows fail or fail only in some environments, and `TranslationFailed`/`TranslationFailedAsync` (the translation fails
   in whichever form the active query mode reports it).
+  `Capture<T>`/`CaptureAsync<T>` return the exception when the override must inspect it. Never use raw `Assert.Throws*` in a `// Fails:`
+  method: `python tests/tools/count-spec-fails.py --check` rejects it.
 - **Model adaptation lives in `Utilities/MongoSpecModelHelpers`**: `MapSingleKeysToId(modelBuilder, generateIntegerKeys)` (single-property
   keys must map to `_id`; `true` also uses the client-side `TestIntegerValueGenerator<T>`, because the provider generates no integer
   keys), `RelaxNullableUniqueIndexes`, `RelaxUniqueForeignKeyIndexes`, `FixExternalModel` and the `MapSinglePropertyKeysToElementId`

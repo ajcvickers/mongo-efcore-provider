@@ -30,191 +30,191 @@ public class ManyToManyLoadMongoTest(ManyToManyLoadMongoTest.ManyToManyLoadMongo
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection(state, queryTrackingBehavior, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection(state, queryTrackingBehavior, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query(state, async), "could not be translated");
 
     public override void Attached_collections_are_not_marked_as_loaded(EntityState state, bool lazy)
         => base.Attached_collections_are_not_marked_as_loaded(state, lazy);
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_already_loaded(EntityState state, bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_already_loaded(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_already_loaded(state, async), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_using_Query_already_loaded(EntityState state, bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_already_loaded(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_already_loaded(state, async), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_partially_loaded(EntityState state, bool forceIdentityResolution, bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_partially_loaded(state, forceIdentityResolution, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_partially_loaded(state, forceIdentityResolution, async), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_partially_loaded_no_explicit_join(EntityState state, bool forceIdentityResolution, bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_partially_loaded_no_explicit_join(state, forceIdentityResolution, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_partially_loaded_no_explicit_join(state, forceIdentityResolution, async), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override void Load_collection_partially_loaded_no_tracking(QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("is not supported", Assert.Throws<global::System.InvalidOperationException>(() => base.Load_collection_partially_loaded_no_tracking(queryTrackingBehavior)).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Load_collection_partially_loaded_no_tracking(queryTrackingBehavior), "is not supported");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_untyped(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_untyped(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_untyped(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_untyped(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_untyped(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_untyped(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_not_found_untyped(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_not_found_untyped(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_not_found_untyped(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_not_found_untyped(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_not_found_untyped(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_not_found_untyped(state, async), "could not be translated");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_already_loaded_untyped(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_already_loaded_untyped(state, async, deleteOrphansTiming))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_already_loaded_untyped(state, async, deleteOrphansTiming), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_using_Query_already_loaded_untyped(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_already_loaded_untyped(state, async, deleteOrphansTiming))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_already_loaded_untyped(state, async, deleteOrphansTiming), "is not supported");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_composite_key(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_composite_key(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_composite_key(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_composite_key(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_composite_key(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_composite_key(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_for_detached_throws(bool async, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_for_detached_throws(async, queryTrackingBehavior))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_for_detached_throws(async, queryTrackingBehavior), "could not be translated");
 
     public override void Query_collection_for_detached_throws(QueryTrackingBehavior queryTrackingBehavior)
         => base.Query_collection_for_detached_throws(queryTrackingBehavior);
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_Include(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_Include_for_inverse(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include_for_inverse(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include_for_inverse(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_Include_for_same_collection(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include_for_same_collection(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include_for_same_collection(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_filtered_Include(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_filtered_Include(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_filtered_Include(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_filtered_Include_and_projection(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_filtered_Include_and_projection(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_filtered_Include_and_projection(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_join(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_join(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_join(async), "could not be translated");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Query_with_Include_marks_only_left_as_loaded(bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_Include_marks_only_left_as_loaded(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_Include_marks_only_left_as_loaded(async), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Query_with_filtered_Include_marks_only_left_as_loaded(bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_filtered_Include_marks_only_left_as_loaded(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_filtered_Include_marks_only_left_as_loaded(async), "is not supported");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_unidirectional(EntityState state, QueryTrackingBehavior queryTrackingBehavior, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_unidirectional(state, queryTrackingBehavior, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_unidirectional(state, queryTrackingBehavior, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_unidirectional(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_unidirectional(state, async), "could not be translated");
 
     public override void Attached_collections_are_not_marked_as_loaded_unidirectional(EntityState state, bool lazy)
         => base.Attached_collections_are_not_marked_as_loaded_unidirectional(state, lazy);
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_already_loaded_unidirectional(EntityState state, bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_already_loaded_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_already_loaded_unidirectional(state, async), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_using_Query_already_loaded_unidirectional(EntityState state, bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_already_loaded_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_already_loaded_unidirectional(state, async), "is not supported");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_untyped_unidirectional(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_untyped_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_untyped_unidirectional(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_untyped_unidirectional(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_untyped_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_untyped_unidirectional(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_not_found_untyped_unidirectional(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_not_found_untyped_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_not_found_untyped_unidirectional(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_not_found_untyped_unidirectional(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_not_found_untyped_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_not_found_untyped_unidirectional(state, async), "could not be translated");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_already_loaded_untyped_unidirectional(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_already_loaded_untyped_unidirectional(state, async, deleteOrphansTiming))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_already_loaded_untyped_unidirectional(state, async, deleteOrphansTiming), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Load_collection_using_Query_already_loaded_untyped_unidirectional(EntityState state, bool async, CascadeTiming deleteOrphansTiming)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_already_loaded_untyped_unidirectional(state, async, deleteOrphansTiming))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_already_loaded_untyped_unidirectional(state, async, deleteOrphansTiming), "is not supported");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_composite_key_unidirectional(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_composite_key_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_composite_key_unidirectional(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_composite_key_unidirectional(EntityState state, bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_composite_key_unidirectional(state, async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_composite_key_unidirectional(state, async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_for_detached_throws_unidirectional(bool async, QueryTrackingBehavior queryTrackingBehavior)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_for_detached_throws_unidirectional(async, queryTrackingBehavior))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_for_detached_throws_unidirectional(async, queryTrackingBehavior), "could not be translated");
 
     public override void Query_collection_for_detached_throws_unidirectional(QueryTrackingBehavior queryTrackingBehavior)
         => base.Query_collection_for_detached_throws_unidirectional(queryTrackingBehavior);
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_Include_unidirectional(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include_unidirectional(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include_unidirectional(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_Include_for_inverse_unidirectional(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include_for_inverse_unidirectional(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_Include_for_inverse_unidirectional(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_filtered_Include_unidirectional(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_filtered_Include_unidirectional(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_filtered_Include_unidirectional(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_filtered_Include_and_projection_unidirectional(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_filtered_Include_and_projection_unidirectional(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_filtered_Include_and_projection_unidirectional(async), "could not be translated");
 
     // Fails: Many-to-many skip navigation SelectMany/NotQuiteInclude (Load/Query) not translated EF-X209
     public override async Task Load_collection_using_Query_with_join_unidirectional(bool async)
-        => Assert.Contains("could not be translated", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_join_unidirectional(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Load_collection_using_Query_with_join_unidirectional(async), "could not be translated");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Query_with_Include_marks_only_left_as_loaded_unidirectional(bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_Include_marks_only_left_as_loaded_unidirectional(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_Include_marks_only_left_as_loaded_unidirectional(async), "is not supported");
 
     // Fails: Include of a many-to-many skip navigation is not supported EF-X208
     public override async Task Query_with_filtered_Include_marks_only_left_as_loaded_unidirectional(bool async)
-        => Assert.Contains("is not supported", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_filtered_Include_marks_only_left_as_loaded_unidirectional(async))).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_filtered_Include_marks_only_left_as_loaded_unidirectional(async), "is not supported");
 
     public class ManyToManyLoadMongoFixture : ManyToManyLoadFixtureBase
     {

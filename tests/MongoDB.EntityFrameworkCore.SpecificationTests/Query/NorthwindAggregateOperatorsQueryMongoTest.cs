@@ -105,7 +105,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task MinBy_no_data_subquery_value_type(bool async)
     {
         // MinBy over an empty value-type sequence throws in LINQ (Enumerable.MinBy, and the First it becomes); so does the provider.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.MinBy_no_data_subquery_value_type(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.MinBy_no_data_subquery_value_type(async));
 
         AssertMql(
             """
@@ -166,7 +166,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task MaxBy_no_data_subquery_value_type(bool async)
     {
         // MaxBy over an empty value-type sequence throws in LINQ (Enumerable.MaxBy, and the First it becomes); so does the provider.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.MaxBy_no_data_subquery_value_type(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.MaxBy_no_data_subquery_value_type(async));
 
         AssertMql(
             """
@@ -373,7 +373,7 @@ Orders.{ "$match" : { "_id" : 10243 } }, { "$sort" : { "_id" : 1 } }, { "$limit"
     public override async Task Average_with_unmapped_property_access_throws_meaningful_exception(bool async)
     {
         // Fails: Does not use translation failed message EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Average_with_unmapped_property_access_throws_meaningful_exception(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -621,7 +621,7 @@ Orders.{ "$match" : { "_id" : 42 } }, { "$project" : { "_id" : "$_id" } }, { "$g
     public override async Task Where_OrderBy_Count_client_eval(bool async)
     {
         // Fails: Does not throw expected unable to translate exception EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_OrderBy_Count_client_eval(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -640,7 +640,7 @@ Orders.{ "$match" : { "_id" : 42 } }, { "$project" : { "_id" : "$_id" } }, { "$g
     public override async Task OrderBy_Where_Count_client_eval(bool async)
     {
         // Fails: Does not throw expected unable to translate exception EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.OrderBy_Where_Count_client_eval(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -659,7 +659,7 @@ Orders.{ "$match" : { "_id" : 42 } }, { "$project" : { "_id" : "$_id" } }, { "$g
     public override async Task OrderBy_Where_Count_client_eval_mixed(bool async)
     {
         // Fails: Does not throw expected unable to translate exception EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.OrderBy_Where_Count_client_eval_mixed(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -678,7 +678,7 @@ Orders.{ "$match" : { "_id" : 42 } }, { "$project" : { "_id" : "$_id" } }, { "$g
     public override async Task OrderBy_Count_with_predicate_client_eval(bool async)
     {
         // Fails: Does not throw expected unable to translate exception EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.OrderBy_Count_with_predicate_client_eval(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -697,7 +697,7 @@ Orders.{ "$match" : { "_id" : 42 } }, { "$project" : { "_id" : "$_id" } }, { "$g
     public override async Task OrderBy_Count_with_predicate_client_eval_mixed(bool async)
     {
         // Fails: Does not throw expected unable to translate exception EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.OrderBy_Count_with_predicate_client_eval_mixed(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -716,7 +716,7 @@ Orders.{ "$match" : { "_id" : 42 } }, { "$project" : { "_id" : "$_id" } }, { "$g
     public override async Task OrderBy_Where_Count_with_predicate_client_eval(bool async)
     {
         // Fails: Does not throw expected unable to translate exception EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.OrderBy_Where_Count_with_predicate_client_eval(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -735,7 +735,7 @@ Orders.{ "$match" : { "_id" : 42 } }, { "$project" : { "_id" : "$_id" } }, { "$g
     public override async Task OrderBy_Where_Count_with_predicate_client_eval_mixed(bool async)
     {
         // Fails: Does not throw expected unable to translate exception EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.OrderBy_Where_Count_with_predicate_client_eval_mixed(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)

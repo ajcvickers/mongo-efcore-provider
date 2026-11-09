@@ -491,7 +491,7 @@ BasicTypesEntities.{ "$match" : { "String" : { "$regularExpression" : { "pattern
     // them (permanently). The driver-LINQ fallback then accepts the overload without checking the culture, so
     // nothing throws and the base's Assert.ThrowsAsync<InvalidOperationException> fails with ThrowsException.
     public override async Task StartsWith_with_StringComparison_unsupported()
-        => await Assert.ThrowsAsync<ThrowsException>(() => base.StartsWith_with_StringComparison_unsupported());
+        => await SpecFails.ThrowsAsync<ThrowsException>(() => base.StartsWith_with_StringComparison_unsupported());
 
     public override async Task EndsWith_Literal()
     {
@@ -565,7 +565,7 @@ BasicTypesEntities.{ "$match" : { "String" : { "$regularExpression" : { "pattern
 
     // Same decline as StartsWith_with_StringComparison_unsupported.
     public override async Task EndsWith_with_StringComparison_unsupported()
-        => await Assert.ThrowsAsync<ThrowsException>(() => base.EndsWith_with_StringComparison_unsupported());
+        => await SpecFails.ThrowsAsync<ThrowsException>(() => base.EndsWith_with_StringComparison_unsupported());
 
     public override async Task Contains_Literal()
     {
@@ -637,7 +637,7 @@ BasicTypesEntities.{ "$match" : { "String" : { "$regularExpression" : { "pattern
 
     // Same decline as StartsWith_with_StringComparison_unsupported.
     public override async Task Contains_with_StringComparison_unsupported()
-        => await Assert.ThrowsAsync<ThrowsException>(() => base.Contains_with_StringComparison_unsupported());
+        => await SpecFails.ThrowsAsync<ThrowsException>(() => base.Contains_with_StringComparison_unsupported());
 
     public override async Task Contains_constant_with_whitespace()
     {

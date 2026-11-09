@@ -61,21 +61,21 @@ public class MongoCompiledModelTest
     public override async Task No_NativeAOT()
         => Assert.Contains(
             "No suitable constructor was found for",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.No_NativeAOT())).Message);
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.No_NativeAOT())).Message);
 
     // Fails: Properties of types without a Mongo mapping (IPAddress, ...) are discovered as owned entity types EF-X412
 #pragma warning disable xUnit1024 // BigModel is also the name of a protected overload in the base class
     public override async Task BigModel()
         => Assert.Contains(
             "No suitable constructor was found for",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.BigModel())).Message);
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.BigModel())).Message);
 #pragma warning restore xUnit1024
 
     // Fails: Properties of types without a Mongo mapping (IPAddress, ...) are discovered as owned entity types EF-X412
     public override async Task ComplexTypes()
         => Assert.Contains(
             "No suitable constructor was found for",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.ComplexTypes())).Message);
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.ComplexTypes())).Message);
 
     protected override BuildSource AddReferences(BuildSource build, string filePath = "")
     {

@@ -1105,7 +1105,7 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "o
         // Fails: Throws with Mongo-specific message rather than the generic EF message. EF-X010
         // The provider throws the driver's ExpressionNotSupportedException rather than the base test's expected
         // InvalidOperationException, so base fails with ThrowsException. Pin the wrapper and the driver type.
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Include_collection_with_client_filter(async));
         if (MongoSpecTestHelpers.IsNativeOnly)
         {

@@ -34,7 +34,7 @@ public class WithConstructorsMongoTest(WithConstructorsMongoTest.WithConstructor
 
     // Fails: Keyless query type maps to its own empty collection (relational view/SQL query over Blogs not available) EF-X217
     public override void Query_with_keyless_type()
-        => Assert.Contains("The collection was empty", Assert.ThrowsAny<System.Exception>(() => base.Query_with_keyless_type()).Message);
+        => SpecFails.Throws<System.Exception>(() => base.Query_with_keyless_type(), "The collection was empty");
 
     public override void Query_with_context_injected()
         => base.Query_with_context_injected();
@@ -74,46 +74,46 @@ public class WithConstructorsMongoTest(WithConstructorsMongoTest.WithConstructor
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Query_with_loader_injected_for_reference()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_injected_for_reference()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_injected_for_reference(), "configured as an owned entity type");
 
     public override void Query_with_loader_injected_for_collections()
         => base.Query_with_loader_injected_for_collections();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override async Task Query_with_loader_injected_for_reference_async()
-        => Assert.Contains("configured as an owned entity type", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_loader_injected_for_reference_async())).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_loader_injected_for_reference_async(), "configured as an owned entity type");
 
     public override Task Query_with_loader_injected_for_collections_async()
         => base.Query_with_loader_injected_for_collections_async();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Query_with_POCO_loader_injected_for_reference()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Query_with_POCO_loader_injected_for_reference()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Query_with_POCO_loader_injected_for_reference(), "configured as an owned entity type");
 
     public override void Query_with_POCO_loader_injected_for_collections()
         => base.Query_with_POCO_loader_injected_for_collections();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override async Task Query_with_loader_delegate_injected_for_reference_async()
-        => Assert.Contains("configured as an owned entity type", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_loader_delegate_injected_for_reference_async())).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_loader_delegate_injected_for_reference_async(), "configured as an owned entity type");
 
     public override Task Query_with_loader_delegate_injected_for_collections_async()
         => base.Query_with_loader_delegate_injected_for_collections_async();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Query_with_loader_injected_into_property_for_reference()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_injected_into_property_for_reference()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_injected_into_property_for_reference(), "configured as an owned entity type");
 
     public override void Query_with_loader_injected_into_property_for_collections()
         => base.Query_with_loader_injected_into_property_for_collections();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Attaching_entity_sets_lazy_loader()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Attaching_entity_sets_lazy_loader()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Attaching_entity_sets_lazy_loader(), "configured as an owned entity type");
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Detaching_entity_resets_lazy_loader_so_it_can_be_reattached()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Detaching_entity_resets_lazy_loader_so_it_can_be_reattached()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Detaching_entity_resets_lazy_loader_so_it_can_be_reattached(), "configured as an owned entity type");
 
     public override void Query_with_loader_injected_into_field_for_reference()
         => base.Query_with_loader_injected_into_field_for_reference();
@@ -129,36 +129,36 @@ public class WithConstructorsMongoTest(WithConstructorsMongoTest.WithConstructor
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Attaching_entity_sets_lazy_loader_delegate()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Attaching_entity_sets_lazy_loader_delegate()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Attaching_entity_sets_lazy_loader_delegate(), "configured as an owned entity type");
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Detaching_entity_resets_lazy_loader_delegate_so_it_can_be_reattached()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Detaching_entity_resets_lazy_loader_delegate_so_it_can_be_reattached()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Detaching_entity_resets_lazy_loader_delegate_so_it_can_be_reattached(), "configured as an owned entity type");
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Query_with_loader_delegate_injected_into_property_for_reference()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_delegate_injected_into_property_for_reference()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_delegate_injected_into_property_for_reference(), "configured as an owned entity type");
 
     public override void Query_with_loader_delgate_injected_into_property_for_collections()
         => base.Query_with_loader_delgate_injected_into_property_for_collections();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override async Task Query_with_loader_delegate_injected_into_property_for_reference_async()
-        => Assert.Contains("configured as an owned entity type", (await Assert.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_loader_delegate_injected_into_property_for_reference_async())).Message);
+        => await SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Query_with_loader_delegate_injected_into_property_for_reference_async(), "configured as an owned entity type");
 
     public override Task Query_with_loader_delegate_injected_into_property_for_collections_async()
         => base.Query_with_loader_delegate_injected_into_property_for_collections_async();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Query_with_loader_injected_into_property_via_constructor_for_reference()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_injected_into_property_via_constructor_for_reference()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_injected_into_property_via_constructor_for_reference(), "configured as an owned entity type");
 
     public override void Query_with_loader_injected_into_property_via_constructor_for_collections()
         => base.Query_with_loader_injected_into_property_via_constructor_for_collections();
 
     // Fails: Type reached only through a navigation is auto-owned, so Set<T>() is rejected EF-X213
     public override void Query_with_loader_delegate_injected_into_property_via_constructor_for_reference()
-        => Assert.Contains("configured as an owned entity type", Assert.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_delegate_injected_into_property_via_constructor_for_reference()).Message);
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Query_with_loader_delegate_injected_into_property_via_constructor_for_reference(), "configured as an owned entity type");
 
     public override void Query_with_loader_delegate_injected_into_property_via_constructor_for_collections()
         => base.Query_with_loader_delegate_injected_into_property_via_constructor_for_collections();

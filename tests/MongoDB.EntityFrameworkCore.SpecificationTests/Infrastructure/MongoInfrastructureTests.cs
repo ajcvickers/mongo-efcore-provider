@@ -52,15 +52,15 @@ public class ModelBuilding101MongoTest : ModelBuilding101TestBase
 
     // Fails: Join-class foreign key discovery is ambiguous EF-X401
     public override void ManyToManyWithNavsToJoinClassTest()
-        => Assert.Throws<InvalidOperationException>(() => base.ManyToManyWithNavsToJoinClassTest());
+        => SpecFails.Throws<InvalidOperationException>(() => base.ManyToManyWithNavsToJoinClassTest());
 
     // Fails: Join-class foreign key discovery is ambiguous EF-X401
     public override void ManyToManyWithNavsToAndFromJoinClassTest()
-        => Assert.Throws<InvalidOperationException>(() => base.ManyToManyWithNavsToAndFromJoinClassTest());
+        => SpecFails.Throws<InvalidOperationException>(() => base.ManyToManyWithNavsToAndFromJoinClassTest());
 
     // Fails: Join-class foreign key discovery is ambiguous EF-X401
     public override void ManyToManyWithPayloadAndNavsToJoinClassTest()
-        => Assert.Throws<InvalidOperationException>(() => base.ManyToManyWithPayloadAndNavsToJoinClassTest());
+        => SpecFails.Throws<InvalidOperationException>(() => base.ManyToManyWithPayloadAndNavsToJoinClassTest());
 }
 
 public class MongoServiceCollectionExtensionsTest : EntityFrameworkServiceCollectionExtensionsTestBase
@@ -113,10 +113,7 @@ public class SharedTypeQueryMongoTest
 
     // Fails: Subqueries across DbSets in a query filter are not supported EF-X001
     public override async Task Can_use_shared_type_entity_type_in_query_filter(bool async)
-        => Assert.Contains(
-            "Unsupported cross-DbSet query between",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Can_use_shared_type_entity_type_in_query_filter(async))).Message);
+        => await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Can_use_shared_type_entity_type_in_query_filter(async), "Unsupported cross-DbSet query between");
 
     public override async LifetimeTask InitializeAsync()
     {

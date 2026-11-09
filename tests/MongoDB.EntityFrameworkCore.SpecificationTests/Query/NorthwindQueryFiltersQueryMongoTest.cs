@@ -157,7 +157,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     {
         // Fails: Cross-document navigation access issue EF-216; on EF10 the query filter on the
         // $lookup target makes the join inner a filtered sub-query, which is not supported EF-X022
-        await Assert.ThrowsAnyAsync<Exception>(() => base.Included_many_to_one_query(async));
+        await SpecFails.ThrowsAsync<Exception>(() => base.Included_many_to_one_query(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
         {
@@ -219,7 +219,7 @@ Orders.{ "$lookup" : { "from" : "Customers", "localField" : "CustomerID", "forei
     public override async Task Client_eval(bool async)
     {
         // Fails: Does not throw expected unable to translate exception EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Client_eval(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -239,7 +239,7 @@ Products.
     {
         // Fails: Cross-document navigation access issue EF-216; on EF10 the query filter on the
         // $lookup target makes the join inner a filtered sub-query, which is not supported EF-X022
-        await Assert.ThrowsAnyAsync<Exception>(() => base.Included_many_to_one_query2(async));
+        await SpecFails.ThrowsAsync<Exception>(() => base.Included_many_to_one_query2(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
         {
@@ -258,7 +258,7 @@ Orders.
     {
         // Fails: Limited support on client evaluation EF-X003 (driver-LINQ mode throws a wrapped
         // ExpressionNotSupportedException); native-only mode rejects the shape outright.
-        await Assert.ThrowsAnyAsync<System.Exception>(
+        await SpecFails.ThrowsAsync<System.Exception>(
             () => base.Included_one_to_many_query_with_client_eval(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
