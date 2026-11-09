@@ -98,7 +98,7 @@ failure, tagged `// Fails: REGRESSION vs main: ...`, so any change is noticed. W
 
 | Ticket | Test(s) | What changed | EF versions |
 | --- | --- | --- | --- |
-| EF-X703 | `CompositeKeyEndToEnd.Can_use_two_non_generated_integers_as_composite_key_end_to_end` | After `SaveChanges`, the composite-key row cannot be queried back ("Sequence contains no elements") | 8, 9, 10 |
+| EF-X703 | **Fixed.** `CompositeKeyEndToEnd.Can_use_two_non_generated_integers_as_composite_key_end_to_end` could not query back a saved row. The discriminator is part of the composite key, so it is stored in `_id._t`, but the discriminator filter of a derived-type query targeted a top-level `_t` (`MongoDiscriminatorPredicate`). The test now calls `base`; regression test `CompositeKeyDiscriminatorTests` | 0 |
 | EF-X702 | `DateTimeOffsetTranslations.TimeOfDay` | Wrong data: the time of day is truncated to whole milliseconds | 1 |
 | EF-X701 | `AdHocQueryFilters.Query_filter_with_context_accessor_with_constant` | `NullReferenceException` from a query filter that reads a context member | 9, 10 |
 | EF-X704 | `GuidTranslations.NewGuid` | Refused ("cannot be evaluated once per row on the server"); probably deliberate | 1 |
@@ -317,7 +317,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
 | EF-X701 | **Regression vs `main`:** a query filter that reads a context member throws `NullReferenceException` | 1 |
 | EF-X702 | **Regression vs `main`:** `DateTimeOffset.TimeOfDay` is truncated to whole milliseconds | 1 |
-| EF-X703 | **Regression vs `main`:** a row saved with a composite key of two non-generated integers cannot be queried back | 1 |
+| EF-X703 | **Fixed:** a derived-type query filtered on a top-level discriminator even when the discriminator is part of the composite key (`_id._t`) | 0 |
 | EF-X704 | **Regression vs `main` (probably deliberate):** `Guid.NewGuid()` in a query is refused (cannot be evaluated once per row) | 1 |
 | EF-X705 | **Regression vs `main` (exception type only):** an unsupported query now throws a different exception type | 5 |
 | EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
