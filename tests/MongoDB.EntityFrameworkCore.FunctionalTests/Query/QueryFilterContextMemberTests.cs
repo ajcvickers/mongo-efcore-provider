@@ -27,7 +27,8 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 /// <summary>
 /// EF-X701: a query filter that reads a list member of the context (<c>Foo == 1 ? Baz.Contains(e.Bar) : e.Bar == Bar</c>)
 /// threw <see cref="NullReferenceException"/> while building the pipeline whenever that list was unset, even when the
-/// branch using it was not the one taken. An unset list is now BSON null: only evaluating it fails, as in C#.
+/// branch using it was not the one taken. An unset list is now an empty list, as EF Core treats a null collection
+/// parameter: <c>Contains</c> matches nothing, whichever branch is taken.
 /// </summary>
 [XUnitCollection("QueryTests")]
 public class QueryFilterContextMemberTests(TemporaryDatabaseFixture database) : IClassFixture<TemporaryDatabaseFixture>
@@ -104,15 +105,12 @@ public class QueryFilterContextMemberTests(TemporaryDatabaseFixture database) : 
 
     [Theory]
     [MemberData(nameof(Modes))]
-    public void Unset_list_fails_when_its_branch_is_taken(MongoQueryMode mode)
+    public void Unset_list_matches_nothing_when_its_branch_is_taken(MongoQueryMode mode)
     {
-        using var db = Context(Seed(nameof(Unset_list_fails_when_its_branch_is_taken) + mode), mode);
+        using var db = Context(Seed(nameof(Unset_list_matches_nothing_when_its_branch_is_taken) + mode), mode);
         db.Foo = 1;
         db.Baz = null;
 
-        // C# throws for `null.Contains(x)`; the server rejects `$in` over null. Either way it must not silently return rows.
-        var ex = Record.Exception(() => db.FooBars.ToList());
-        Assert.NotNull(ex);
-        Assert.IsNotType<NullReferenceException>(ex);
+        Assert.Empty(db.FooBars.ToList());
     }
 }
