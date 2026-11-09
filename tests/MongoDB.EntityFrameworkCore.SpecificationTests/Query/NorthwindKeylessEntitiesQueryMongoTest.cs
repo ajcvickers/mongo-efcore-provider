@@ -49,7 +49,7 @@ Customers.{ "$match" : { "City" : "London" } }
         // instead of returning wrong data. https://github.com/ajcvickers/mongo-efcore-provider/issues/23
         Assert.Contains(
             "Document element is missing for required non-nullable property 'CategoryName'",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.KeylessEntity_by_database_view(async))).Message);
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.KeylessEntity_by_database_view(async))).Message);
 #else
         // Fails: Views are not supported, so this returns all entities from mapped collection (driver-LINQ
         // mode, which executes and returns wrong data). EF-X007. Native-only mode also rejects the query as

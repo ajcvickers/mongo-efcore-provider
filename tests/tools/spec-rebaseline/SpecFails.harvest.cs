@@ -27,6 +27,15 @@ public static class SpecFails
         where TException : Exception
         => HarvestAsync(test, m, f);
 
+    // Capture sites inspect the exception, so they are not harvested: they keep asserting.
+    public static TException Capture<TException>(Action test)
+        where TException : Exception
+        => Assert.ThrowsAny<TException>(test);
+
+    public static Task<TException> CaptureAsync<TException>(Func<Task> test)
+        where TException : Exception
+        => Assert.ThrowsAnyAsync<TException>(test);
+
     public static void TranslationFailed(Action test, [CallerMemberName] string? m = null, [CallerFilePath] string? f = null)
         => HarvestSync(test, m, f);
 

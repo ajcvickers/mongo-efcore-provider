@@ -1634,7 +1634,7 @@ OrderDetails.{ "$match" : { "$and" : [{ "_id.OrderID" : 11077 }, { "$expr" : { "
     {
 #if EF8 || EF9
         // EF-255: Guid.NewGuid has no per-row server-side equivalent; the provider throws instead of baking one value.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Where_guid_newguid(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Where_guid_newguid(async));
 #else
         await base.Where_guid_newguid(async);
 

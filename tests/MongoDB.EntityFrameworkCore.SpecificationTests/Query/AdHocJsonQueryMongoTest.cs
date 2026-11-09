@@ -169,7 +169,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
         // Fails: Missing property values issue EF-164
         Assert.Contains(
             "Document element is missing for required non-nullable property 'Number'",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() =>
                 base.Project_root_with_missing_scalars(async)))
             .Message);
 
@@ -182,11 +182,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
     public override async Task Project_top_level_json_entity_with_missing_scalars(bool async)
     {
         // Fails: No support for nested JSON EF-X008
-        Assert.Contains(
-            "Document element is missing for required",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Project_top_level_json_entity_with_missing_scalars(async)))
-            .Message);
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Project_top_level_json_entity_with_missing_scalars(async), "Document element is missing for required");
 
         AssertMql(
             """
@@ -200,7 +196,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
         // MongoProjectionBindingExpressionVisitor.VisitMethodCall.
         Assert.Contains(
             CoreStrings.TranslationFailed("")[48..],
-            (await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() =>
                 base.Project_nested_json_entity_with_missing_scalars(async)))
             .Message);
 
@@ -222,7 +218,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
         // Fails: Missing property values issue EF-164
         // The document lacks two required references (the root's, and one inside an element of its owned collection). Which is reported first
         // depends on whether the collection's elements are built before the root's own references are checked, which is not part of the contract.
-        var message = (await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var message = (await SpecFails.CaptureAsync<InvalidOperationException>(() =>
             base.Project_root_entity_with_missing_required_navigation(async))).Message;
         Assert.Matches("Field '(Nested)?RequiredReference' required but not present", message);
 
@@ -245,7 +241,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
 
         Assert.Contains(
             "Field 'RequiredReference' required but not present",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() =>
                 base.Project_missing_required_navigation(async)))
             .Message);
 
@@ -258,11 +254,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
     public override async Task Project_root_entity_with_null_required_navigation(bool async)
     {
         // Fails: Projections issue EF-164
-        Assert.Contains(
-            "Field 'NestedRequiredReference' required but not present",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Project_root_entity_with_null_required_navigation(async)))
-            .Message);
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Project_root_entity_with_null_required_navigation(async), "Field 'NestedRequiredReference' required but not present");
 
         AssertMql(
             """
@@ -281,11 +273,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
             return;
         }
 
-        Assert.Contains(
-            "Field 'NestedRequiredReference' required but not present",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Project_null_required_navigation(async)))
-            .Message);
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Project_null_required_navigation(async), "Field 'NestedRequiredReference' required but not present");
 
         AssertMql(
             """

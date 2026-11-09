@@ -29,7 +29,7 @@ public class SaveChangesInterceptionMongoTest(SaveChangesInterceptionMongoTest.I
     {
         if (concurrencyError)
         {
-            await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(
+            await SpecFails.ThrowsAsync<Xunit.Sdk.XunitException>(
                 () => base.Intercept_SaveChanges_failed(async, inject, noAcceptChanges, concurrencyError));
         }
         else
@@ -40,7 +40,7 @@ public class SaveChangesInterceptionMongoTest(SaveChangesInterceptionMongoTest.I
 
     // Fails: DbUpdateConcurrencyException is thrown without invoking ISaveChangesInterceptor.ThrowingConcurrencyException EF-X400
     public override Task Intercept_to_suppress_concurrency_exception(bool async, bool inject, bool noAcceptChanges)
-        => Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(
+        => SpecFails.ThrowsAsync<Xunit.Sdk.XunitException>(
             () => base.Intercept_to_suppress_concurrency_exception(async, inject, noAcceptChanges));
 
     public class InterceptionMongoFixture : InterceptionFixtureBase
@@ -178,10 +178,7 @@ public class MaterializationInterceptionMongoTest(MaterializationInterceptionMon
 
     // Fails: Projecting an owned collection navigation directly is not translated EF-X402
     public override async Task Intercept_query_materialization_with_owned_types_projecting_collection(bool async)
-        => Assert.Contains(
-            "could not be translated",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Intercept_query_materialization_with_owned_types_projecting_collection(async))).Message);
+        => await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Intercept_query_materialization_with_owned_types_projecting_collection(async), "could not be translated");
 }
 #else
 public class SingletonInterceptorsMongoTest
@@ -264,10 +261,7 @@ public class MaterializationInterceptionMongoTest
 
     // Fails: Projecting an owned collection navigation directly is not translated EF-X402
     public override async Task Intercept_query_materialization_with_owned_types_projecting_collection(bool async, bool usePooling)
-        => Assert.Contains(
-            "could not be translated",
-            (await Assert.ThrowsAsync<InvalidOperationException>(
-                () => base.Intercept_query_materialization_with_owned_types_projecting_collection(async, usePooling))).Message);
+        => await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Intercept_query_materialization_with_owned_types_projecting_collection(async, usePooling), "could not be translated");
 
     public class MongoLibraryContext(DbContextOptions options) : LibraryContext(options)
     {

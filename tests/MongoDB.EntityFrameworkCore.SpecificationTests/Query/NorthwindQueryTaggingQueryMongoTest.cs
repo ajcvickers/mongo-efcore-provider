@@ -67,7 +67,7 @@ Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }
         // Fails: Subquery selection EF-X001
         Assert.Contains(
             "The LINQ expression",
-            Assert.Throws<InvalidOperationException>(() => base.Tags_on_subquery()).Message);
+            SpecFails.Capture<InvalidOperationException>(() => base.Tags_on_subquery()).Message);
 
         // Fails: TagWith EF-153
         Assert.DoesNotContain("Yanni", string.Join('|', Fixture.TestMqlLoggerFactory.MqlStatements));

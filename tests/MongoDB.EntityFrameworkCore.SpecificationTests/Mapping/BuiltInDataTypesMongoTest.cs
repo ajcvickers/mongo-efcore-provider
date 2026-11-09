@@ -43,7 +43,7 @@ public class BuiltInDataTypesMongoTest(BuiltInDataTypesMongoTest.BuiltInDataType
     public override async Task Object_to_string_conversion()
         => Assert.Contains(
             "Actual:   \"97\"",
-            (await Assert.ThrowsAsync<EqualException>(() => base.Object_to_string_conversion())).Message);
+            (await SpecFails.CaptureAsync<EqualException>(() => base.Object_to_string_conversion())).Message);
 
     public override Task Optional_datetime_reading_null_from_database()
         => base.Optional_datetime_reading_null_from_database();
@@ -62,7 +62,7 @@ public class BuiltInDataTypesMongoTest(BuiltInDataTypesMongoTest.BuiltInDataType
     public override void Object_to_string_conversion()
         => Assert.Contains(
             "Unsupported conversion from object to string in $convert with no onError value.",
-            Assert.Throws<MongoCommandException>(() => base.Object_to_string_conversion()).Message);
+            SpecFails.Capture<MongoCommandException>(() => base.Object_to_string_conversion()).Message);
 
     public override void Optional_datetime_reading_null_from_database()
         => base.Optional_datetime_reading_null_from_database();

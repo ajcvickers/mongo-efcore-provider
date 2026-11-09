@@ -3626,7 +3626,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
 
     public override async Task Comparing_collection_navigation_to_null_complex(bool async)
     {
-        await Assert.ThrowsAnyAsync<Exception>(() => base.Comparing_collection_navigation_to_null_complex(async));
+        await SpecFails.ThrowsAsync<Exception>(() => base.Comparing_collection_navigation_to_null_complex(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
         {
@@ -4352,7 +4352,7 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "o
 
     public override async Task Max_on_empty_sequence_throws(bool async)
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Max_on_empty_sequence_throws(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Max_on_empty_sequence_throws(async));
 
         AssertMql(
             """
@@ -4742,42 +4742,42 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     {
         // EF-255: Random.Next has no per-row server-side equivalent; the driver would fold it into one constant,
         // so the provider throws instead of returning silently wrong rows.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_1(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_1(async));
     }
 
     public override async Task Random_next_is_not_funcletized_2(bool async)
     {
         // EF-255: Random.Next has no per-row server-side equivalent; the driver would fold it into one constant,
         // so the provider throws instead of returning silently wrong rows.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_2(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_2(async));
     }
 
     public override async Task Random_next_is_not_funcletized_3(bool async)
     {
         // EF-255: Random.Next has no per-row server-side equivalent; the driver would fold it into one constant,
         // so the provider throws instead of returning silently wrong rows.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_3(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_3(async));
     }
 
     public override async Task Random_next_is_not_funcletized_4(bool async)
     {
         // EF-255: Random.Next has no per-row server-side equivalent; the driver would fold it into one constant,
         // so the provider throws instead of returning silently wrong rows.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_4(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_4(async));
     }
 
     public override async Task Random_next_is_not_funcletized_5(bool async)
     {
         // EF-255: Random.Next has no per-row server-side equivalent; the driver would fold it into one constant,
         // so the provider throws instead of returning silently wrong rows.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_5(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_5(async));
     }
 
     public override async Task Random_next_is_not_funcletized_6(bool async)
     {
         // EF-255: Random.Next has no per-row server-side equivalent; the driver would fold it into one constant,
         // so the provider throws instead of returning silently wrong rows.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_6(async));
+        await SpecFails.ThrowsAsync<InvalidOperationException>(() => base.Random_next_is_not_funcletized_6(async));
     }
 
 #endif
@@ -4818,7 +4818,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
             CoreStrings.ClientProjectionCapturingConstantInMethodInstance(
                 "MongoDB.EntityFrameworkCore.SpecificationTests.Query.NorthwindMiscellaneousQueryMongoTest",
                 "InstanceMethod"),
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Client_code_using_instance_method_throws(async)))
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.Client_code_using_instance_method_throws(async)))
             .Message);
     }
 
@@ -4828,7 +4828,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
             CoreStrings.ClientProjectionCapturingConstantInMethodArgument(
                 "MongoDB.EntityFrameworkCore.SpecificationTests.Query.NorthwindMiscellaneousQueryMongoTest",
                 "StaticMethod"),
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Client_code_using_instance_in_static_method(async)))
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.Client_code_using_instance_in_static_method(async)))
             .Message);
     }
 
@@ -4837,7 +4837,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
         Assert.Equal(
             CoreStrings.ClientProjectionCapturingConstantInTree(
                 "MongoDB.EntityFrameworkCore.SpecificationTests.Query.NorthwindMiscellaneousQueryMongoTest"),
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Client_code_using_instance_in_anonymous_type(async)))
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.Client_code_using_instance_in_anonymous_type(async)))
             .Message);
     }
 
@@ -4907,7 +4907,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task Where_query_composition3(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_query_composition3(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -4926,7 +4926,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task Where_query_composition4(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_query_composition4(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -4945,7 +4945,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task Where_query_composition5(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_query_composition5(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -4964,7 +4964,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task Where_query_composition6(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_query_composition6(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -5032,7 +5032,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task OrderBy_client_mixed(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.OrderBy_client_mixed(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -5051,7 +5051,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task OrderBy_multiple_queries(bool async)
     {
         // Fails: Multiple query roots issue EF-220
-        await Assert.ThrowsAnyAsync<Exception>(() => base.OrderBy_multiple_queries(async));
+        await SpecFails.ThrowsAsync<Exception>(() => base.OrderBy_multiple_queries(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
         {
@@ -5121,7 +5121,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task Queryable_reprojection(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Queryable_reprojection(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -5140,7 +5140,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task All_client(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.All_client(async));
         if (MongoSpecTestHelpers.IsNativeOnly)
         {
@@ -5158,7 +5158,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task All_client_and_server_top_level(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.All_client_and_server_top_level(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -5177,7 +5177,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task All_client_or_server_top_level(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.All_client_or_server_top_level(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -5196,7 +5196,7 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
     public override async Task First_client_predicate(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF, but still throws EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.First_client_predicate(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)

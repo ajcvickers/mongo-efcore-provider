@@ -122,7 +122,7 @@ Customers.
         // EF-255: EF.Functions.Random() has no per-row server-side translation; refuse rather than evaluate it once.
         Assert.Contains(
             "Random",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Random_return_less_than_1(async))).Message);
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.Random_return_less_than_1(async))).Message);
 
         AssertMql();
     }
@@ -132,7 +132,7 @@ Customers.
         // EF-255: EF.Functions.Random() has no per-row server-side translation; refuse rather than evaluate it once.
         Assert.Contains(
             "Random",
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.Random_return_greater_than_0(async))).Message);
+            (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.Random_return_greater_than_0(async))).Message);
 
         AssertMql();
     }

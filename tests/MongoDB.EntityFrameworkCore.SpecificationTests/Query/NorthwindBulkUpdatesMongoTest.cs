@@ -254,20 +254,20 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
 
     // Fails: Throws a non-translation exception, but still throws EF-X002
     public override Task Update_Concat_set_constant(bool async)
-        => Assert.ThrowsAnyAsync<Exception>(() => base.Update_Concat_set_constant(async));
+        => SpecFails.ThrowsAsync<Exception>(() => base.Update_Concat_set_constant(async));
 
     // Fails: the Except source goes native, so the $unionWith pipeline runs inside the asserter's
     // multi-document transaction and the server rejects it (MongoCommandException) EF-X002.
     public override Task Update_Except_set_constant(bool async)
-        => Assert.ThrowsAnyAsync<Exception>(() => base.Update_Except_set_constant(async));
+        => SpecFails.ThrowsAsync<Exception>(() => base.Update_Except_set_constant(async));
 
     // Fails: same $unionWith-inside-a-transaction rejection as Update_Except_set_constant EF-X002.
     public override Task Update_Intersect_set_constant(bool async)
-        => Assert.ThrowsAnyAsync<Exception>(() => base.Update_Intersect_set_constant(async));
+        => SpecFails.ThrowsAsync<Exception>(() => base.Update_Intersect_set_constant(async));
 
     // Fails: Throws a non-translation exception, but still throws EF-X002
     public override Task Update_Union_set_constant(bool async)
-        => Assert.ThrowsAnyAsync<Exception>(() => base.Update_Union_set_constant(async));
+        => SpecFails.ThrowsAsync<Exception>(() => base.Update_Union_set_constant(async));
 
     public override Task Update_Where_Distinct_set_constant(bool async)
         => base.Update_Where_Distinct_set_constant(async);
@@ -362,7 +362,7 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
     // snapshot reads the filtered-inner join, which the driver's LINQ provider cannot translate, so a
     // non-translation exception surfaces before the bulk path's own rejection, but still throws EF-X002
     public override Task Update_with_LeftJoin(bool async)
-        => Assert.ThrowsAnyAsync<Exception>(() => base.Update_with_LeftJoin(async));
+        => SpecFails.ThrowsAsync<Exception>(() => base.Update_with_LeftJoin(async));
 #endif
 
 #if EF10 || EF11
@@ -370,7 +370,7 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
     // snapshot reads the filtered-inner join, which the driver's LINQ provider cannot translate, so a
     // non-translation exception surfaces before the bulk path's own rejection, but still throws EF-X002
     public override Task Update_with_LeftJoin_via_flattened_GroupJoin(bool async)
-        => Assert.ThrowsAnyAsync<Exception>(() => base.Update_with_LeftJoin_via_flattened_GroupJoin(async));
+        => SpecFails.ThrowsAsync<Exception>(() => base.Update_with_LeftJoin_via_flattened_GroupJoin(async));
 #endif
 
 #if EF10 || EF11
@@ -417,7 +417,7 @@ public class NorthwindBulkUpdatesMongoTest : NorthwindBulkUpdatesTestBase<Northw
     // snapshot reads the filtered-inner join, which the driver's LINQ provider cannot translate, so a
     // non-translation exception surfaces before the bulk path's own rejection, but still throws EF-X002
     public override Task Update_with_join_set_constant(bool async)
-        => Assert.ThrowsAnyAsync<Exception>(() => base.Update_with_join_set_constant(async));
+        => SpecFails.ThrowsAsync<Exception>(() => base.Update_with_join_set_constant(async));
 
 #if EF9
     // Fails: ExecuteUpdate/ExecuteDelete source restricted to a Where predicate; joins / correlated subqueries unsupported EF-X016

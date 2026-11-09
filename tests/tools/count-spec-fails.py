@@ -230,8 +230,43 @@ def scan_file(path, version):
     return res
 
 
+RAW_THROWS = re.compile(r'Assert\.Throws(?:Any)?(?:Async)?')
+STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
+MEMBER_START =re.compile(r'^\s*(?:public|protected|private|internal|#if|#endif|#else|#elif|\[)')
+
+
+def check_raw_throws(files):
+    """Reports raw Assert.Throws* inside a method tagged `// Fails:`: those must use Utilities/SpecFails (issue #46)."""
+    bad = []
+    for f in files:
+        lines = open(f, encoding='utf-8-sig').read().split(chr(10))
+        rel = os.path.relpath(f, ROOT).replace(chr(92), '/')
+        for i, l in enumerate(lines):
+            if not FAILS.search(l) or not l.lstrip().startswith('//'):
+                continue
+            indent = len(l) - len(l.lstrip())
+            j = i + 1
+            while j < len(lines) and lines[j].lstrip().startswith('//'):
+                j += 1
+            if j >= len(lines):
+                continue
+            nxt = lines[j]
+            before_sig = (len(nxt) - len(nxt.lstrip())) <= indent
+            k = j + 1
+            while k < len(lines):
+                t = lines[k]
+                ti = len(t) - len(t.lstrip())
+                if t.strip() and ((before_sig and ti <= indent and MEMBER_START.match(t)) or (not before_sig and ti < indent)):
+                    break
+                if RAW_THROWS.search(STRING_LITERAL.sub('""', t)) and not t.lstrip().startswith('//') and not rel.startswith(('Utilities/', 'Query/MongoSpecTestHelpers')):
+                    bad.append(f'{rel}:{k + 1}: {t.strip()[:110]}')
+                k += 1
+    return bad
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--check', action='store_true', help='fail if a `// Fails:` method uses raw Assert.Throws*')
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--by-file', metavar='TICKET')
     ap.add_argument('--all-arms', action='store_true')
@@ -242,6 +277,13 @@ def main():
         dn[:] = [d for d in dn if d not in ('obj', 'bin')]
         files += [os.path.join(dp, f) for f in fn if f.endswith('.cs')]
     files.sort()
+
+    if args.check:
+        bad = check_raw_throws(files)
+        for b in bad:
+            print(b)
+        print(f'{len(bad)} raw Assert.Throws* in `// Fails:` methods')
+        return 1 if bad else 0
 
     per_ticket = collections.defaultdict(lambda: collections.defaultdict(set))  # version -> ticket -> {(file,method)}
     raw_tag_lines = 0

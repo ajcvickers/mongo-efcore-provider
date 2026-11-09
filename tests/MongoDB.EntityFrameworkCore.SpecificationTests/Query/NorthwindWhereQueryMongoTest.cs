@@ -497,7 +497,7 @@ Employees.{ "$match" : { "Title" : "Sales Representative" } }, { "$project" : { 
     public override async Task Where_client(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_client(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -535,7 +535,7 @@ Employees.{ "$match" : { "Title" : "Sales Representative" } }, { "$project" : { 
     public override async Task Where_subquery_correlated_client_eval(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() => base.Where_subquery_correlated_client_eval(async));
+        await SpecFails.ThrowsAsync<ThrowsException>(() => base.Where_subquery_correlated_client_eval(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
         {
@@ -553,7 +553,7 @@ Employees.{ "$match" : { "Title" : "Sales Representative" } }, { "$project" : { 
     public override async Task Where_client_and_server_top_level(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_client_and_server_top_level(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -572,7 +572,7 @@ Employees.{ "$match" : { "Title" : "Sales Representative" } }, { "$project" : { 
     public override async Task Where_client_or_server_top_level(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_client_or_server_top_level(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -591,7 +591,7 @@ Employees.{ "$match" : { "Title" : "Sales Representative" } }, { "$project" : { 
     public override async Task Where_client_and_server_non_top_level(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_client_and_server_non_top_level(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
@@ -610,7 +610,7 @@ Employees.{ "$match" : { "Title" : "Sales Representative" } }, { "$project" : { 
     public override async Task Where_client_deep_inside_predicate_and_server_top_level(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF. EF-X002
-        await Assert.ThrowsAsync<ThrowsException>(() =>
+        await SpecFails.ThrowsAsync<ThrowsException>(() =>
             base.Where_client_deep_inside_predicate_and_server_top_level(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)

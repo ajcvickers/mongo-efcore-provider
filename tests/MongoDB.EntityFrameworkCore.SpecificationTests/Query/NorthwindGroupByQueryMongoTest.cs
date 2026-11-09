@@ -161,7 +161,7 @@ Orders.{ "$sort" : { "OrderDate" : -1 } }, { "$group" : { "_id" : "$CustomerID",
         {
             Assert.Contains(
                 "Document element is missing for required non-nullable property",
-                (await Assert.ThrowsAsync<InvalidOperationException>(() => base.GroupBy_ResultSelector_Entire_Entity_Where(async))).Message);
+                (await SpecFails.CaptureAsync<InvalidOperationException>(() => base.GroupBy_ResultSelector_Entire_Entity_Where(async))).Message);
         }
     }
 
@@ -249,7 +249,7 @@ Orders.{ "$group" : { "_id" : "$CustomerID", "_v" : { "$avg" : "$_id" } } }, { "
 
     public override async Task GroupBy_Property_Select_Average_with_group_enumerable_projected(bool async)
     {
-        await Assert.ThrowsAnyAsync<Exception>(() => base.GroupBy_Property_Select_Average_with_group_enumerable_projected(async));
+        await SpecFails.ThrowsAsync<Exception>(() => base.GroupBy_Property_Select_Average_with_group_enumerable_projected(async));
 
         AssertMql(
         );

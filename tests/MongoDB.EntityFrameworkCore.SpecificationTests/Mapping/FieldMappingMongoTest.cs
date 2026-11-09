@@ -68,44 +68,44 @@ public class FieldMappingMongoTest(FieldMappingMongoTest.FieldMappingMongoFixtur
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Simple_query_hiding_props(bool tracking)
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Simple_query_hiding_props(tracking)).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Simple_query_hiding_props(tracking), "cannot use element name '_id' because it is already being used");
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Include_collection_hiding_props(bool tracking)
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Include_collection_hiding_props(tracking)).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Include_collection_hiding_props(tracking), "cannot use element name '_id' because it is already being used");
 
     // Fails: int keys are not store-generated, so a second Id=0 insert hits a duplicate key EF-X205
     public override void Can_define_a_backing_field_for_a_navigation_and_query_and_update_it()
-        => Assert.Contains("DuplicateKey", Assert.ThrowsAny<global::System.Exception>(() => base.Can_define_a_backing_field_for_a_navigation_and_query_and_update_it()).Message);
+        => SpecFails.Throws<global::System.Exception>(() => base.Can_define_a_backing_field_for_a_navigation_and_query_and_update_it(), "DuplicateKey");
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Include_reference_hiding_props(bool tracking)
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Include_reference_hiding_props(tracking)).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Include_reference_hiding_props(tracking), "cannot use element name '_id' because it is already being used");
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Load_collection_hiding_props()
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Load_collection_hiding_props()).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Load_collection_hiding_props(), "cannot use element name '_id' because it is already being used");
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Load_reference_hiding_props()
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Load_reference_hiding_props()).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Load_reference_hiding_props(), "cannot use element name '_id' because it is already being used");
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Query_with_conditional_constant_hiding_props(bool tracking)
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Query_with_conditional_constant_hiding_props(tracking)).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Query_with_conditional_constant_hiding_props(tracking), "cannot use element name '_id' because it is already being used");
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Query_with_conditional_param_hiding_props(bool tracking)
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Query_with_conditional_param_hiding_props(tracking)).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Query_with_conditional_param_hiding_props(tracking), "cannot use element name '_id' because it is already being used");
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Projection_hiding_props(bool tracking)
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Projection_hiding_props(tracking)).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Projection_hiding_props(tracking), "cannot use element name '_id' because it is already being used");
 
 #if EF8
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Update_hiding_props()
-        => Assert.Contains("cannot use element name '_id' because it is already being used", Assert.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Update_hiding_props()).Message);
+        => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Update_hiding_props(), "cannot use element name '_id' because it is already being used");
 #endif
 
     public override void Simple_query_full_props(bool tracking)
@@ -372,67 +372,67 @@ public class FieldMappingMongoTest(FieldMappingMongoTest.FieldMappingMongoFixtur
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_auto_props()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_auto_props())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_auto_props(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override async Task Update_hiding_props()
-        => Assert.Contains("cannot use element name '_id' because it is already being used", (await Assert.ThrowsAsync<global::MongoDB.Bson.BsonSerializationException>(() => base.Update_hiding_props())).Message);
+        => await SpecFails.ThrowsAsync<global::MongoDB.Bson.BsonSerializationException>(() => base.Update_hiding_props(), "cannot use element name '_id' because it is already being used");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_full_props()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_full_props())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_full_props(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_full_props_with_named_fields()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_full_props_with_named_fields())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_full_props_with_named_fields(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_read_only_props()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_read_only_props())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_read_only_props(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_props_with_IReadOnlyCollection()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_props_with_IReadOnlyCollection())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_props_with_IReadOnlyCollection(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_read_only_props_with_named_fields()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_read_only_props_with_named_fields())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_read_only_props_with_named_fields(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_write_only_props()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_write_only_props())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_write_only_props(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_write_only_props_with_named_fields()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_write_only_props_with_named_fields())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_write_only_props_with_named_fields(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_fields_only()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_fields_only())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_fields_only(), "CoreSessionHandle");
 #endif
 
 #if !EF8
     // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
     public override async Task Update_fields_only_only_for_navs_too()
-        => Assert.Contains("CoreSessionHandle", (await Assert.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_fields_only_only_for_navs_too())).Message);
+        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_fields_only_only_for_navs_too(), "CoreSessionHandle");
 #endif
 
     public class FieldMappingMongoFixture : FieldMappingFixtureBase

@@ -717,7 +717,7 @@ OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "f
 
     public override async Task Join_with_nav_projected_in_subquery_when_client_eval(bool async)
     {
-        await Assert.ThrowsAnyAsync<Exception>(() => base.Join_with_nav_projected_in_subquery_when_client_eval(async));
+        await SpecFails.ThrowsAsync<Exception>(() => base.Join_with_nav_projected_in_subquery_when_client_eval(async));
 
         AssertMql(
         );
@@ -725,7 +725,7 @@ OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "f
 
     public override async Task Join_with_nav_in_predicate_in_subquery_when_client_eval(bool async)
     {
-        await Assert.ThrowsAnyAsync<Exception>(() => base.Join_with_nav_in_predicate_in_subquery_when_client_eval(async));
+        await SpecFails.ThrowsAsync<Exception>(() => base.Join_with_nav_in_predicate_in_subquery_when_client_eval(async));
 
         AssertMql(
         );
@@ -733,7 +733,7 @@ OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "f
 
     public override async Task Join_with_nav_in_orderby_in_subquery_when_client_eval(bool async)
     {
-        await Assert.ThrowsAnyAsync<Exception>(() => base.Join_with_nav_in_orderby_in_subquery_when_client_eval(async));
+        await SpecFails.ThrowsAsync<Exception>(() => base.Join_with_nav_in_orderby_in_subquery_when_client_eval(async));
 
         AssertMql(
         );
@@ -741,7 +741,7 @@ OrderDetails.{ "$lookup" : { "from" : "Orders", "localField" : "_id.OrderID", "f
 
     public override async Task Select_Where_Navigation_Client(bool async)
     {
-        var exception = await Assert.ThrowsAnyAsync<Exception>(() => base.Select_Where_Navigation_Client(async));
+        var exception = await SpecFails.CaptureAsync<Exception>(() => base.Select_Where_Navigation_Client(async));
 
         if (MongoSpecTestHelpers.IsNativeOnly)
         {
@@ -759,7 +759,7 @@ Orders.
     public override async Task Collection_select_nav_prop_all_client(bool async)
     {
         // Fails: Not throwing expected translation failed exception from EF. EF-X002
-        await Assert.ThrowsAsync<ContainsException>(() =>
+        await SpecFails.ThrowsAsync<ContainsException>(() =>
             base.Collection_select_nav_prop_all_client(async));
 
         AssertMql();

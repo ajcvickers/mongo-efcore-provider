@@ -130,6 +130,19 @@ public static class SpecFails
         => Async<TException>(test, string.Empty);
 
     /// <summary>
+    /// This exception type (or a subclass), returned so the override can inspect it further (message, inner exception). Prefer
+    /// <see cref="Throws{TException}(Action, string)"/> when a message fragment is enough.
+    /// </summary>
+    public static TException Capture<TException>(Action test)
+        where TException : Exception
+        => Assert.ThrowsAny<TException>(test);
+
+    /// <inheritdoc cref="Capture{TException}(Action)"/>
+    public static Task<TException> CaptureAsync<TException>(Func<Task> test)
+        where TException : Exception
+        => Assert.ThrowsAnyAsync<TException>(test);
+
+    /// <summary>
     /// The query fails to translate, in whichever form the active query mode reports it (see
     /// <c>MongoSpecTestHelpers.AssertNativeTranslationFailed</c>). A wrong-data failure from the test body is not accepted.
     /// </summary>

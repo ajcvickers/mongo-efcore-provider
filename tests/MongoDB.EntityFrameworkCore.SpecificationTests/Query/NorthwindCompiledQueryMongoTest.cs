@@ -260,7 +260,7 @@ Customers.{ "$match" : { "_id" : "ANATR" } }
     // tree would likely make this query succeed; until then this pins the failure.
     public override void Multiple_queries()
     {
-        var exception = Assert.Throws<InvalidOperationException>(() => base.Multiple_queries());
+        var exception = SpecFails.Capture<InvalidOperationException>(() => base.Multiple_queries());
 
         // Asserts the message that GetProjectionIndex raises for an unflattened projection mapping; in particular,
         // this must not be the driver-LINQ bridge's "Unsupported cross-DbSet query" guard.

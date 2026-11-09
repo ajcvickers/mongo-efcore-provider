@@ -593,7 +593,7 @@ BasicTypesEntities.{ "$project" : { "_v" : { "$switch" : { "branches" : [{ "case
     {
         // .NET's Math.Acosh returns NaN for x < 1 (row excluded), but MongoDB's $acosh throws a server error, and
         // the seed data includes -8.5. Same operator on every translation path, so this can't pass on this data.
-        var exception = await Assert.ThrowsAsync<MongoCommandException>(() => base.Acosh());
+        var exception = await SpecFails.CaptureAsync<MongoCommandException>(() => base.Acosh());
         Assert.Contains("cannot apply $acosh", exception.Message);
     }
     public override async Task Asin()
@@ -648,7 +648,7 @@ BasicTypesEntities.{ "$project" : { "_v" : { "$switch" : { "branches" : [{ "case
     public override async Task Atanh()
     {
         // Same domain mismatch as Acosh: $atanh throws outside [-1, 1] (seed has 8.6); Math.Atanh returns NaN.
-        var exception = await Assert.ThrowsAsync<MongoCommandException>(() => base.Atanh());
+        var exception = await SpecFails.CaptureAsync<MongoCommandException>(() => base.Atanh());
         Assert.Contains("cannot apply $atanh", exception.Message);
     }
     public override async Task Atan2()
