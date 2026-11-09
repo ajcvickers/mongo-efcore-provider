@@ -50,7 +50,7 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 | --- | --- | --- |
 | EF-X526 | 622 | Query shape (navigation/projection/set operation) not translated |
 | EF-X101 | 299 | Entities added without an explicit key get Id 0 (no int/long key generation), so tracking/saving them ... |
-| EF-X530 | 237 | Wrong results compared with the reference (client) evaluation |
+| EF-X530 | 236 | Wrong results compared with the reference (client) evaluation |
 | EF-216 | 204 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
 | EF-X102 | 203 | Relationship discovery between root entity types fails at model build (Unable to determine the relatio... |
 | EF-X527 | 185 | Expression not supported by the driver LINQ translator |
@@ -288,7 +288,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X527 | Expression not supported by the driver LINQ translator | 184 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
 | EF-X529 | NullReferenceException during query execution/materialization | 0 |
-| EF-X530 | Wrong results compared with the reference (client) evaluation | 237 |
+| EF-X530 | Wrong results compared with the reference (client) evaluation | 236 |
 | EF-X531 | ArgumentNullException (null string/source argument) during translation or materialization | 10 |
 | EF-X532 | GroupBy over all columns builds an invalid materialization expression (QueryingEnumerable not assignable) | 9 |
 | EF-X533 | Manual left join / transparent identifier shape throws ArgumentException (LeftJoinResult / _inner / _outer) | 38 |

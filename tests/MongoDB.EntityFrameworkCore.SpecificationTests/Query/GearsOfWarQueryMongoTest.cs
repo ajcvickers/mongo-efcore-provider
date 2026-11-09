@@ -5372,8 +5372,7 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Time_of_day_datetimeoffset(bool async)
     {
-        // Fails: Wrong results compared with the reference (client) evaluation EF-X530
-        await SpecFails.ThrowsAsync(() => base.Time_of_day_datetimeoffset(async), "Failure");
+        await base.Time_of_day_datetimeoffset(async);
     }
 #endif
 
