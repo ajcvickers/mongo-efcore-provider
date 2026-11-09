@@ -3,6 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Configurations>Debug EF8;Release EF8;Debug EF9;Release EF9;Debug EF10;Release EF10;Debug EF11;Release EF11</Configurations>
     <Platforms>AnyCPU</Platforms>
+    <PreserveCompilationContext>true</PreserveCompilationContext>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug EF8' ">
     <DefineConstants>TRACE;DEBUG;EF8</DefineConstants>

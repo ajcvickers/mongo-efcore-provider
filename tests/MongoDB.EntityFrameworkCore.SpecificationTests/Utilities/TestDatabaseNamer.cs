@@ -33,6 +33,21 @@ public static class TestDatabaseNamer
     private static readonly string TimeStamp = DateTime.Now.ToString("s").Replace(':', '-');
     private static int DbCount;
 
+    // MongoDB rejects database names longer than 63 characters.
+    private const int MaxDatabaseNameLength = 63;
+
     public static string GetUniqueDatabaseName(string? staticName = null)
-        => $"{TestDatabasePrefix}{TimeStamp}{staticName}-{Interlocked.Increment(ref DbCount)}";
+    {
+        var head = TestDatabasePrefix + TimeStamp;
+        var suffix = $"-{Interlocked.Increment(ref DbCount)}";
+
+        // The counter grows over a long run, so truncate the caller's part (never the counter, which keeps the name unique).
+        var room = Math.Max(0, MaxDatabaseNameLength - head.Length - suffix.Length);
+        if (staticName != null && staticName.Length > room)
+        {
+            staticName = staticName[..room];
+        }
+
+        return head + staticName + suffix;
+    }
 }
