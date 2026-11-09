@@ -4143,6 +4143,81 @@ public class SearchIndexTests(AtlasTemporaryDatabaseFixture database)
         string? expectedDocument = null)
         => ValidateIndex(fixture.GetCollection<BsonDocument>(collectionNamespace), indexName, expectedDocument);
 
+    // Newer Atlas Local images no longer echo default-valued properties back in "latestDefinition" and return the
+    // storedSource include/exclude lists in a different order. Both sides are normalized the same way before comparing,
+    // so the same expectations hold for old and new servers. Only values equal to the documented default are dropped.
+    private static readonly Dictionary<string, BsonValue> DefaultSearchProperties = new()
+    {
+        ["store"] = true,
+        ["indexOptions"] = "offsets",
+        ["norms"] = "include",
+        ["indexDoubles"] = true,
+        ["indexIntegers"] = true,
+        ["foldDiacritics"] = true,
+        ["representation"] = "double",
+        ["minGrams"] = 2,
+        ["maxGrams"] = 15,
+        ["tokenization"] = "edgeGram",
+        ["indexShapes"] = false,
+        ["termNotInBounds"] = "omit",
+        ["originalTokens"] = "omit",
+        ["ignoreCase"] = true,
+        ["generateNumberParts"] = true,
+        ["concatenateWords"] = false,
+        ["concatenateNumbers"] = false,
+        ["concatenateAll"] = false,
+        ["splitOnNumerics"] = true,
+        ["splitOnCaseChange"] = true,
+        ["stemEnglishPossessive"] = true,
+        ["ignoreKeywords"] = false,
+        ["preserveOriginal"] = false,
+    };
+
+    private static BsonValue NormalizeSearchDefinition(BsonValue value, string? name = null)
+    {
+        switch (value)
+        {
+            case BsonDocument document:
+                var result = new BsonDocument();
+                foreach (var element in document)
+                {
+                    if (DefaultSearchProperties.TryGetValue(element.Name, out var defaultValue) && element.Value == defaultValue)
+                    {
+                        continue;
+                    }
+
+                    // The length token filter's "max" defaults to 255.
+                    if (element.Name == "max" && element.Value == 255 && document.GetValue("type", "") == "length")
+                    {
+                        continue;
+                    }
+
+                    var normalized = NormalizeSearchDefinition(element.Value, element.Name);
+                    if (element.Name == "fields" && normalized is BsonDocument { ElementCount: 0 })
+                    {
+                        continue;
+                    }
+
+                    result.Add(element.Name, normalized);
+                }
+
+                // Key order is not significant (and differs between server versions).
+                return new BsonDocument(result.OrderBy(e => e.Name, StringComparer.Ordinal));
+
+            case BsonArray array:
+                var items = array.Select(v => NormalizeSearchDefinition(v)).ToList();
+                if (name is "include" or "exclude")
+                {
+                    items = items.OrderBy(v => v.ToString(), StringComparer.Ordinal).ToList();
+                }
+
+                return new BsonArray(items);
+
+            default:
+                return value;
+        }
+    }
+
     internal static BsonDocument ValidateIndex(IMongoCollection<BsonDocument> collection,
         string indexName = "default",
         string? expectedDocument = null)
@@ -4153,12 +4228,18 @@ public class SearchIndexTests(AtlasTemporaryDatabaseFixture database)
         Assert.Equal("search", index["type"].AsString);
         Assert.Equal("READY", index["status"].AsString);
         Assert.True(index["queryable"].AsBoolean);
-        Assert.Equal(0, index["latestVersion"].AsInt32);
+        // Atlas Local replaced "latestVersion" with "latestDefinitionVersion": { version, createdAt } in newer images.
+        var latestVersion = index.TryGetValue("latestVersion", out var legacyVersion)
+            ? legacyVersion.AsInt32
+            : index["latestDefinitionVersion"]["version"].AsInt32;
+        Assert.Equal(0, latestVersion);
 
         if (expectedDocument != null)
         {
-            var document = index["latestDefinition"].ToJson(new JsonWriterSettings { Indent = true });
-            Assert.Equal(expectedDocument, document, ignoreLineEndingDifferences: true);
+            var settings = new JsonWriterSettings { Indent = true };
+            var expected = NormalizeSearchDefinition(BsonDocument.Parse(expectedDocument)).ToJson(settings);
+            var document = NormalizeSearchDefinition(index["latestDefinition"]).ToJson(settings);
+            Assert.Equal(expected, document, ignoreLineEndingDifferences: true);
         }
 
         return index;
