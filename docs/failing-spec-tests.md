@@ -100,7 +100,7 @@ failure, tagged `// Fails: REGRESSION vs main: ...`, so any change is noticed. W
 | --- | --- | --- | --- |
 | EF-X703 | **Fixed.** `CompositeKeyEndToEnd.Can_use_two_non_generated_integers_as_composite_key_end_to_end` could not query back a saved row. The discriminator is part of the composite key, so it is stored in `_id._t`, but the discriminator filter of a derived-type query targeted a top-level `_t` (`MongoDiscriminatorPredicate`). The test now calls `base`; regression test `CompositeKeyDiscriminatorTests` | 0 |
 | EF-X702 | `DateTimeOffsetTranslations.TimeOfDay` | Wrong data: the time of day is truncated to whole milliseconds | 1 |
-| EF-X701 | `AdHocQueryFilters.Query_filter_with_context_accessor_with_constant` | `NullReferenceException` from a query filter that reads a context member | 9, 10 |
+| EF-X701 | **Fixed.** `AdHocQueryFilters.Query_filter_with_context_accessor_with_constant` threw `NullReferenceException` while building the pipeline for an unset list member of the context (`Foo == 1 ? Baz.Contains(e.Bar) : ...`), even though the list's branch was not taken. `MongoPipelineFactory` now serializes an unset list parameter as BSON null; regression test `QueryFilterContextMemberTests` | 0 |
 | EF-X704 | `GuidTranslations.NewGuid` | Refused ("cannot be evaluated once per row on the server"); probably deliberate | 1 |
 | EF-X705 | `GearsOfWar`: `Group_by_with_aggregate_max_on_entity_type`, `Nav_rewrite_Distinct_with_convert`, `_anonymous`; `ComplexNavigationsSharedType`: one GroupJoin test | Only the exception type of an unsupported query changed (`FormatException` / `ArgumentException` instead of `InvalidOperationException`). `AGENTS.md` does not count this as a break | 8, 9, 10 |
 
@@ -315,7 +315,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X604 | `InvalidOperationException` from query execution or materialization | 51 |
 | EF-X605 | Other unexpected exception from query execution | 61 |
 | EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
-| EF-X701 | **Regression vs `main`:** a query filter that reads a context member throws `NullReferenceException` | 1 |
+| EF-X701 | **Fixed:** an unset list parameter (a context member used by a query filter) is serialized as BSON null instead of throwing `NullReferenceException` | 0 |
 | EF-X702 | **Regression vs `main`:** `DateTimeOffset.TimeOfDay` is truncated to whole milliseconds | 1 |
 | EF-X703 | **Fixed:** a derived-type query filtered on a top-level discriminator even when the discriminator is part of the composite key (`_id._t`) | 0 |
 | EF-X704 | **Regression vs `main` (probably deliberate):** `Guid.NewGuid()` in a query is refused (cannot be evaluated once per row) | 1 |

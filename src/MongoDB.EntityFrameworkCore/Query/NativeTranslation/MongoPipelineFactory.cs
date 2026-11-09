@@ -954,6 +954,11 @@ internal sealed class MongoPipelineFactory
         // precede the single-entity branch, which would misread the array as one entity.
         if (entityMemberProperty is not null && isArray)
         {
+            // A null list (a captured/context member that is unset) stays BSON null: the server fails only if the
+            // expression using it is evaluated, as C# would throw only if the branch ran (EF-X701).
+            if (rawValue is null)
+                return BsonNull.Value;
+
             var getter = entityMemberProperty.GetGetter();
             var array = new BsonArray();
             foreach (var element in (System.Collections.IEnumerable)rawValue!)
@@ -1014,8 +1019,12 @@ internal sealed class MongoPipelineFactory
         // Parameterized $in/$nin collection: serialize each element with the element serializer.
         if (isArray)
         {
+            // See the entity-list branch: an unset list is BSON null, not a build-time NullReferenceException (EF-X701).
+            if (rawValue is null)
+                return BsonNull.Value;
+
             var array = new BsonArray();
-            foreach (var element in (System.Collections.IEnumerable)rawValue!)
+            foreach (var element in (System.Collections.IEnumerable)rawValue)
                 array.Add(Serialize(element));
 
             return array;
