@@ -265,6 +265,7 @@ public class Ef382ArrayContainsTests(TemporaryDatabaseFixture database) : IClass
     {
         public string Heading { get; set; } = "";
         public List<string> Tags { get; set; } = [];
+        public List<int> Scores { get; set; } = [];
     }
 
     private static readonly Action<ModelBuilder> QuantifierModel =
@@ -399,6 +400,67 @@ public class Ef382ArrayContainsTests(TemporaryDatabaseFixture database) : IClass
                 .ToList();
             Assert.Equal([("mixed", 1), ("noneKeep", 2)], negated.Select(c => (c.Title, c.N)));
         }
+    }
+
+    // #40: a captured non-nullable item inside an owned collection's element predicate ($elemMatch, the query dialect, with a
+    // parameter placeholder), the same item in an aggregation-dialect filtered count, and a missing / BSON-null / empty list.
+    [Fact]
+    public void Owned_collection_element_contains_a_constant_or_captured_value_matches_in_memory_LINQ()
+    {
+        var collectionName = TemporaryDatabaseFixtureBase.CreateCollectionName(
+            nameof(Owned_collection_element_contains_a_constant_or_captured_value_matches_in_memory_LINQ))
+            + Guid.NewGuid().ToString("N")[..8];
+        var mongoCollection = database.MongoDatabase.GetCollection<QuantifierOwner>(collectionName);
+        mongoCollection.InsertMany([
+            new QuantifierOwner { Title = "a", Posts = [new QuantifierPost { Scores = [5, 6] }, new QuantifierPost { Scores = [] }] },
+            new QuantifierOwner { Title = "b", Posts = [new QuantifierPost { Scores = [7] }] },
+            new QuantifierOwner { Title = "c", Posts = [] }
+        ]);
+        var raw = database.MongoDatabase.GetCollection<MongoDB.Bson.BsonDocument>(collectionName);
+        raw.InsertMany([
+            new MongoDB.Bson.BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Title", "d_missing" },
+                { "Posts", new MongoDB.Bson.BsonArray { new MongoDB.Bson.BsonDocument { { "Heading", "h" } } } }
+            },
+            new MongoDB.Bson.BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Title", "e_null" },
+                { "Posts", new MongoDB.Bson.BsonArray { new MongoDB.Bson.BsonDocument { { "Heading", "h" }, { "Scores", MongoDB.Bson.BsonNull.Value } } } }
+            }
+        ]);
+
+        var data = new List<QuantifierOwner>
+        {
+            new() { Title = "a", Posts = [new QuantifierPost { Scores = [5, 6] }, new QuantifierPost { Scores = [] }] },
+            new() { Title = "b", Posts = [new QuantifierPost { Scores = [7] }] },
+            new() { Title = "c", Posts = [] },
+            new() { Title = "d_missing", Posts = [new QuantifierPost()] },
+            new() { Title = "e_null", Posts = [new QuantifierPost()] }
+        };
+
+        foreach (var wanted in new[] { 5, 7, 99 })
+        {
+            foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.NativeOnly })
+            {
+                using var db = CreateQuantifierContext(mongoCollection, mode);
+                Assert.Equal(
+                    [.. data.Where(o => o.Posts.Any(p => p.Scores.Contains(wanted))).Select(o => o.Title).Order()],
+                    db.Entities.Where(o => o.Posts.Any(p => p.Scores.Contains(wanted))).OrderBy(o => o.Title).Select(o => o.Title).ToList());
+                Assert.Equal(
+                    [.. data.Where(o => o.Posts.All(p => !p.Scores.Contains(wanted))).Select(o => o.Title).Order()],
+                    db.Entities.Where(o => o.Posts.All(p => !p.Scores.Contains(wanted))).OrderBy(o => o.Title).Select(o => o.Title).ToList());
+                Assert.Equal(
+                    [.. data.OrderBy(o => o.Title, StringComparer.Ordinal).Select(o => o.Posts.Count(p => p.Scores.Contains(wanted)))],
+                    db.Entities.OrderBy(o => o.Title).Select(o => o.Posts.Count(p => p.Scores.Contains(wanted))).ToList());
+                Assert.Equal(
+                    [.. data.OrderBy(o => o.Title, StringComparer.Ordinal).Select(o => o.Posts.Count(p => !p.Scores.Contains(wanted)))],
+                    db.Entities.OrderBy(o => o.Title).Select(o => o.Posts.Count(p => !p.Scores.Contains(wanted))).ToList());
+            }
+        }
+
+        using var constants = CreateQuantifierContext(mongoCollection, MongoQueryMode.NativeOnly);
+        Assert.Equal(["a"], constants.Entities.Where(o => o.Posts.Any(p => p.Scores.Contains(5))).OrderBy(o => o.Title).Select(o => o.Title).ToList());
     }
 
     private static SingleEntityDbContext<QuantifierOwner> CreateQuantifierContext(

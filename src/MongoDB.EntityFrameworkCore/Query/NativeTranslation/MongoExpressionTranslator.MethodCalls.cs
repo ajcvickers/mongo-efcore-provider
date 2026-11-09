@@ -961,19 +961,22 @@ internal sealed partial class MongoExpressionTranslator
     /// <paramref name="arrayProperty"/> itself as context would coerce the scalar to the whole collection type.
     /// <see langword="null"/> when that can't be done correctly (e.g. a whole-collection converter's serializer).
     /// </summary>
-    private static MongoExpression? TranslateArrayContainsItem(Expression itemExpr, IProperty arrayProperty)
+    private static MongoExpression? TranslateArrayContainsItem(Expression itemExpr, IProperty arrayProperty, bool allowNull)
     {
         var elementType = arrayProperty.ClrType.TryGetEnumerableElementType();
         if (elementType is null)
             return null;
 
-        // A query parameter: only for an element type that cannot hold null and an item of exactly that type, so the value is
-        // never null at run time (`{ field: null }` also matches a missing field, which this arm doesn't reproduce, hence the
-        // constant case below declines null too). The placeholder serializes through the array's ELEMENT serializer.
+        // A query parameter, of exactly the element type, serialized through the array's ELEMENT serializer. Outside an
+        // aggregation-only scope (allowNull false) the item must be unable to be null at run time: `{ field: null }` also matches a
+        // missing field, which the query dialect's rendering doesn't reproduce.
         if (NativeQueryParameter.TryGetQueryParameterName(itemExpr, out var parameterName))
         {
-            if (itemExpr.Type != elementType || !elementType.IsValueType || Nullable.GetUnderlyingType(elementType) is not null)
+            if (itemExpr.Type != elementType
+                || (!allowNull && (!elementType.IsValueType || Nullable.GetUnderlyingType(elementType) is not null)))
+            {
                 return null;
+            }
 
             var parameterArrayInfo = BsonSerializerFactory.GetPropertySerializationInfo(arrayProperty);
             return parameterArrayInfo.Serializer is IBsonArraySerializer parameterArraySerializer
@@ -992,9 +995,10 @@ internal sealed partial class MongoExpressionTranslator
         if (underlyingItemType != underlyingElementType)
             return null;
 
-        // { field: null } also matches a missing element, which this arm doesn't reproduce; decline.
+        // { field: null } also matches a missing element, which the query dialect doesn't reproduce; decline there. In an
+        // aggregation-only scope `$in: [null, array]` is exactly `list.Contains(null)`.
         if (constant.Value is null)
-            return null;
+            return allowNull ? new MongoConstantExpression(MongoDB.Bson.BsonNull.Value, forSerialization: null) : null;
 
         var arrayInfo = BsonSerializerFactory.GetPropertySerializationInfo(arrayProperty);
         if (arrayInfo.Serializer is not IBsonArraySerializer arraySerializer

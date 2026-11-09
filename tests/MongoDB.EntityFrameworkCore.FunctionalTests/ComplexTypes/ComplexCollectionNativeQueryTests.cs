@@ -687,10 +687,10 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x") || p.Zip == 99)))), ["full", "mixed"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
         PerMode(Q(q => N(q.Where(h => h.Ps.Count(p => p.Labels.Contains("x")) == 1))), ["full", "mixed"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("nope"))))), [], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
-        // A captured string can be null at run time (where `{ f: null }` is not `list.Contains(null)`), so it is not translated:
-        // the fallback is refused like the other null-element shapes.
+        // A captured string is translated too: in an element scope (always the aggregation dialect) `$in: [null, array]` is
+        // `list.Contains(null)`, so a null parameter needs no special case.
         var captured = "x";
-        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains(captured))))), [], NotNative, NullElementRefusal, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains(captured))))), ["full", "mixed"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Count == 0)))), ["mixed", "null"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
         // Sum over an element leaf: refused in every mode.
         PerMode(Q(q => q.OrderBy(h => h.Name).Select(h => h.Ps.Sum(p => p.Zip)).ToList().Select(x => x?.ToString() ?? "<null>")), [],

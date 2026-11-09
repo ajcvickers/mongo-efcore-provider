@@ -18,6 +18,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Infrastructure;
@@ -57,6 +58,10 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
         public List<bool> Flags { get; set; } = [];
         public List<string> Tags { get; set; } = [];
         public List<int?> Maybe { get; set; } = [];
+        public int[] Ints { get; set; } = [];
+
+        [BsonRepresentation(BsonType.String)]
+        public List<Hue> NamedHues { get; set; } = [];
     }
 
     public class TypedHolder
@@ -100,7 +105,9 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
         Ratios = [2.5],
         Flags = [true],
         Tags = ["x", "$y"],
-        Maybe = [5, null]
+        Maybe = [5, null],
+        Ints = [5],
+        NamedHues = [Hue.Green]
     };
 
     private static TypedVariant Other() => new()
@@ -114,8 +121,10 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
         Prices = [9.25m],
         Ratios = [3.5],
         Flags = [false],
-        Tags = ["z"],
-        Maybe = [null]
+        Tags = ["z", null!],
+        Maybe = [null],
+        Ints = [8],
+        NamedHues = [Hue.Red]
     };
 
     // The data every case is judged against. An in-memory holder stands in for each stored document: a null element is `null`.
@@ -157,7 +166,7 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
                             { "Label", "nullarrays" }, { "Nums", BsonNull.Value }, { "Longs", BsonNull.Value }, { "Ids", BsonNull.Value },
                             { "Days", BsonNull.Value }, { "Hues", BsonNull.Value }, { "Prices", BsonNull.Value },
                             { "Ratios", BsonNull.Value }, { "Flags", BsonNull.Value }, { "Tags", BsonNull.Value },
-                            { "Maybe", BsonNull.Value }
+                            { "Maybe", BsonNull.Value }, { "Ints", BsonNull.Value }, { "NamedHues", BsonNull.Value }
                         }
                     }
                 }
@@ -204,6 +213,11 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
         var price = 1.5m;
         var ratio = 2.5;
         var yes = true;
+        var x = "x";
+        var dollar = "$y";
+        string? none = null;
+        int? maybe = 5;
+        int? noInt = null;
 
         yield return new("int constant", h => h.Many.Any(m => m.Nums.Contains(5)), h => h.Many.Any(m => V(m).Nums.Contains(5)));
         yield return new("int parameter", h => h.Many.Any(m => m.Nums.Contains(five)), h => h.Many.Any(m => V(m).Nums.Contains(5)));
@@ -239,6 +253,26 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
         yield return new("string constant starting with $", h => h.Many.Any(m => m.Tags.Contains("$y")), h => h.Many.Any(m => V(m).Tags.Contains("$y")));
         yield return new("string constant, negated", h => h.Many.Any(m => !m.Tags.Contains("x")), h => h.Many.Any(m => !V(m).Tags.Contains("x")));
         yield return new("nullable element, non-null constant", h => h.Many.Any(m => m.Maybe.Contains(5)), h => h.Many.Any(m => V(m).Maybe.Contains(5)));
+        yield return new("array member (Enumerable.Contains)", h => h.Many.Any(m => m.Ints.Contains(5)), h => h.Many.Any(m => V(m).Ints.Contains(5)));
+        yield return new("array member, parameter", h => h.Many.Any(m => m.Ints.Contains(five)), h => h.Many.Any(m => V(m).Ints.Contains(5)));
+        yield return new("enum stored as a string, constant", h => h.Many.Any(m => m.NamedHues.Contains(Hue.Green)),
+            h => h.Many.Any(m => V(m).NamedHues.Contains(Hue.Green)));
+        yield return new("enum stored as a string, parameter", h => h.Many.Any(m => m.NamedHues.Contains(green)),
+            h => h.Many.Any(m => V(m).NamedHues.Contains(Hue.Green)));
+        // In an element scope (always the aggregation dialect) `$in: [null, array]` is `list.Contains(null)`, so a null-capable item
+        // is translated: a captured string, a null constant, a nullable parameter, a null parameter.
+        yield return new("string parameter", h => h.Many.Any(m => m.Tags.Contains(x)), h => h.Many.Any(m => V(m).Tags.Contains("x")));
+        yield return new("string parameter, negated", h => h.Many.Any(m => !m.Tags.Contains(x)), h => h.Many.Any(m => !V(m).Tags.Contains("x")));
+        yield return new("string parameter starting with $", h => h.Many.Any(m => m.Tags.Contains(dollar)), h => h.Many.Any(m => V(m).Tags.Contains("$y")));
+        yield return new("null string parameter (matches a list that holds a null)", h => h.Many.Any(m => m.Tags.Contains(none!)),
+            h => h.Many.Any(m => V(m).Tags.Contains(null!)));
+        yield return new("null constant", h => h.Many.Any(m => m.Maybe.Contains(null)), h => h.Many.Any(m => V(m).Maybe.Contains(null)));
+        yield return new("null constant, negated", h => h.Many.Any(m => !m.Maybe.Contains(null)), h => h.Many.Any(m => !V(m).Maybe.Contains(null)));
+        yield return new("nullable parameter", h => h.Many.Any(m => m.Maybe.Contains(maybe)), h => h.Many.Any(m => V(m).Maybe.Contains(5)));
+        yield return new("null nullable parameter", h => h.Many.Any(m => m.Maybe.Contains(noInt)), h => h.Many.Any(m => V(m).Maybe.Contains(null)));
+        // EF extracts the converted value (int to int?) as a nullable parameter, so this is the nullable-parameter case.
+        yield return new("non-nullable captured value against a nullable element type", h => h.Many.Any(m => m.Maybe.Contains(five)),
+            h => h.Many.Any(m => V(m).Maybe.Contains(5)));
         yield return new("root list, constant", h => h.Top.Contains(5), h => h.Top.Contains(5));
         yield return new("root list, parameter", h => h.Top.Contains(five), h => h.Top.Contains(5));
         yield return new("root list, negated", h => !h.Top.Contains(5), h => !h.Top.Contains(5));
@@ -251,17 +285,9 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
     // (NotSupported) under NativeOnly, and fine under explicit DriverLinq over data that holds no null element.
     private static IEnumerable<Case> DeclinedCases()
     {
-        var x = "x";
-        string? none = null;
-        int? maybe = 5;
-
         // Not natively translated whatever its predicate (a Where(..).Count() chain), so it reaches the null-element refusal.
         yield return new("Where(..).Count() chain", h => h.Many.Where(m => m.Nums.Contains(5)).Count() == 1,
             h => h.Many.Where(m => V(m).Nums.Contains(5)).Count() == 1);
-        yield return new("string parameter (may be null at run time)", h => h.Many.Any(m => m.Tags.Contains(x)), h => h.Many.Any(m => V(m).Tags.Contains("x")));
-        yield return new("null constant", h => h.Many.Any(m => m.Maybe.Contains(null)), h => h.Many.Any(m => V(m).Maybe.Contains(null)));
-        yield return new("null parameter", h => h.Many.Any(m => m.Tags.Contains(none!)), h => h.Many.Any(m => V(m).Tags.Contains(null!)));
-        yield return new("nullable parameter", h => h.Many.Any(m => m.Maybe.Contains(maybe)), h => h.Many.Any(m => V(m).Maybe.Contains(5)));
         yield return new("element member as the item", h => h.Many.Any(m => m.Nums.Contains(m.Label.Length)),
             h => h.Many.Any(m => V(m).Nums.Contains(V(m).Label.Length)));
     }
@@ -332,12 +358,9 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
             Assert.True(
                 Throws<NativeTranslationNotSupportedException>(() => Run(withNull, MongoQueryMode.Native, query)), $"Native: {label}");
 
-            // Explicit DriverLinq is the opt-in; the null-argument cases are not comparable with the oracle (driver semantics).
-            if (!label.StartsWith("null", StringComparison.Ordinal))
-            {
-                Assert.True(
-                    Expected(withNullElements: false, expected).SequenceEqual(Run(clean, MongoQueryMode.DriverLinq, query)), $"DriverLinq: {label}");
-            }
+            // Explicit DriverLinq is the opt-in.
+            Assert.True(
+                Expected(withNullElements: false, expected).SequenceEqual(Run(clean, MongoQueryMode.DriverLinq, query, label)), $"DriverLinq: {label}");
         }
     }
 
@@ -365,6 +388,31 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
         catch (Exception ex) when (ex is not Xunit.Sdk.XunitException)
         {
             throw new InvalidOperationException($"{mode}: {label}: {ex.Message}", ex);
+        }
+    }
+
+    [Fact]
+    public void A_cached_plan_reads_the_parameter_per_execution()
+    {
+        var collection = Seed(nameof(A_cached_plan_reads_the_parameter_per_execution), withNullElements: true);
+        var oracle = Oracle(withNullElements: true);
+
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native })
+        {
+            using var db = Context(collection, mode);
+            foreach (var n in new[] { 5, 7, 8, 99, 5 })
+            {
+                Assert.Equal(
+                    [.. oracle.Where(h => h.Many.Any(m => V(m).Nums.Contains(n))).Select(h => h.Name).OrderBy(x => x, StringComparer.Ordinal)],
+                    db.Entities.Where(h => h.Many.Any(m => m.Nums.Contains(n))).OrderBy(h => h.Name).Select(h => h.Name).ToList());
+            }
+
+            foreach (var tag in new[] { "x", "z", null, "$y", "nope" })
+            {
+                Assert.Equal(
+                    [.. oracle.Where(h => h.Many.Any(m => V(m).Tags.Contains(tag))).Select(h => h.Name).OrderBy(x => x, StringComparer.Ordinal)],
+                    db.Entities.Where(h => h.Many.Any(m => m.Tags.Contains(tag))).OrderBy(h => h.Name).Select(h => h.Name).ToList());
+            }
         }
     }
 
