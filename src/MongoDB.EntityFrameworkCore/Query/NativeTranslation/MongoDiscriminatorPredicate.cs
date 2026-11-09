@@ -57,7 +57,7 @@ internal static class MongoDiscriminatorPredicate
             return true;
         }
 
-        var field = new MongoFieldExpression(discriminatorProperty, discriminatorProperty.GetElementName());
+        var field = new MongoFieldExpression(discriminatorProperty, MongoExpressionTranslator.GetPropertyFieldPath(discriminatorProperty));
         predicate = values.Length == 1
             ? new MongoBinaryExpression(
                 negated ? MongoBinaryOperator.NotEqual : MongoBinaryOperator.Equal, field,
