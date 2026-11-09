@@ -25,13 +25,144 @@ using MongoDB.EntityFrameworkCore.Storage;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
-#if EF9
+#if EF9 || EF10 // On EF11 the AdHocJsonQueryTestBase tests are part of JsonQueryTestBase<> (see JsonQueryMongoTest).
 
 public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
 {
+#if EF10
+    // On EF10 the class is pinned to the default query mode (see the test store factory below), so the NativeOnly expectations never apply.
+    private static bool QueryModeIsNativeOnly => false;
+#else
+    private static bool QueryModeIsNativeOnly => MongoSpecTestHelpers.IsNativeOnly;
+#endif
+
+#if EF10 || EF11
+    public AdHocJsonQueryMongoTest(NonSharedFixture fixture)
+        : base(fixture)
+    {
+        // The class-level fixture would reuse the first test's (already seeded) test store for every test;
+        // give each test its own uniquely named database instead.
+#if EF11
+        NonSharedFixture = null;
+#else
+        Fixture = null;
+#endif
+    }
+
+#endif
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
+
+#if EF10 || EF11
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Optional_json_properties_materialized_as_null_when_the_element_in_json_is_not_present()
+        => SpecFails.ThrowsAsync(() => base.Optional_json_properties_materialized_as_null_when_the_element_in_json_is_not_present());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Can_project_nullable_json_property_when_the_element_in_json_is_not_present()
+        => SpecFails.ThrowsAsync(() => base.Can_project_nullable_json_property_when_the_element_in_json_is_not_present());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Accessing_missing_navigation_works()
+        => SpecFails.ThrowsAsync(() => base.Accessing_missing_navigation_works());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Missing_navigation_works_with_deduplication(bool async)
+        => SpecFails.ThrowsAsync(() => base.Missing_navigation_works_with_deduplication(async));
+
+    public override Task Contains_on_nested_collection_with_init_only_navigation()
+        => base.Contains_on_nested_collection_with_init_only_navigation();
+
+    public override Task Project_json_with_no_properties()
+        => base.Project_json_with_no_properties();
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Query_with_nested_json_collection_mapped_to_private_field_via_IReadOnlyList()
+        => SpecFails.ThrowsAsync(() => base.Query_with_nested_json_collection_mapped_to_private_field_via_IReadOnlyList());
+
+    public override Task Project_entity_with_json_null_values()
+        => base.Project_entity_with_json_null_values();
+
+    public override Task Try_project_collection_but_JSON_is_entity()
+        => base.Try_project_collection_but_JSON_is_entity();
+
+    public override Task Try_project_reference_but_JSON_is_collection()
+        => base.Try_project_reference_but_JSON_is_collection();
+
+    public override Task Project_json_array_of_primitives_on_reference()
+        => base.Project_json_array_of_primitives_on_reference();
+
+    public override Task Project_json_array_of_primitives_on_collection()
+        => base.Project_json_array_of_primitives_on_collection();
+
+    public override Task Project_element_of_json_array_of_primitives()
+        => base.Project_element_of_json_array_of_primitives();
+
+    public override Task Predicate_based_on_element_of_json_array_of_primitives1()
+        => base.Predicate_based_on_element_of_json_array_of_primitives1();
+
+    public override Task Predicate_based_on_element_of_json_array_of_primitives2()
+        => base.Predicate_based_on_element_of_json_array_of_primitives2();
+
+    public override Task Predicate_based_on_element_of_json_array_of_primitives3()
+        => base.Predicate_based_on_element_of_json_array_of_primitives3();
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Junk_in_json_basic_tracking()
+        => SpecFails.ThrowsAsync(() => base.Junk_in_json_basic_tracking());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Junk_in_json_basic_no_tracking()
+        => SpecFails.ThrowsAsync(() => base.Junk_in_json_basic_no_tracking());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Tricky_buffering_basic()
+        => SpecFails.ThrowsAsync(() => base.Tricky_buffering_basic());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Shadow_properties_basic_tracking()
+        => SpecFails.ThrowsAsync(() => base.Shadow_properties_basic_tracking());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Shadow_properties_basic_no_tracking()
+        => SpecFails.ThrowsAsync(() => base.Shadow_properties_basic_no_tracking());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Project_shadow_properties_from_json_entity()
+        => SpecFails.ThrowsAsync(() => base.Project_shadow_properties_from_json_entity());
+
+    public override Task Project_proxies_entity_with_json()
+        => base.Project_proxies_entity_with_json();
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Not_ICollection_basic_projection()
+        => SpecFails.ThrowsAsync(() => base.Not_ICollection_basic_projection());
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Bad_json_properties_duplicated_navigations(bool async)
+        => SpecFails.ThrowsAsync(() => base.Bad_json_properties_duplicated_navigations(async));
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Bad_json_properties_duplicated_scalars(bool async)
+        => SpecFails.ThrowsAsync(() => base.Bad_json_properties_duplicated_scalars(async));
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Bad_json_properties_empty_navigations(bool async)
+        => SpecFails.ThrowsAsync(() => base.Bad_json_properties_empty_navigations(async));
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Bad_json_properties_empty_scalars(bool async)
+        => SpecFails.ThrowsAsync(() => base.Bad_json_properties_empty_scalars(async));
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Bad_json_properties_null_navigations(bool async)
+        => SpecFails.ThrowsAsync(() => base.Bad_json_properties_null_navigations(async));
+
+    // Fails: Ad hoc JSON data for MongoDB not ported (the base seeds raw relational JSON column values), so the query finds no or incomplete data EF-X900
+    public override Task Bad_json_properties_null_scalars(bool async)
+        => SpecFails.ThrowsAsync(() => base.Bad_json_properties_null_scalars(async));
+#endif
 
     public override async Task Project_root_with_missing_scalars(bool async)
     {
@@ -105,7 +236,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
     {
         // Fails: Entity id=5 has no RequiredReference field EF-X005
         // A bare owned-reference leaf is not a native projection (main threw here too): NativeOnly refuses it.
-        if (MongoSpecTestHelpers.IsNativeOnly)
+        if (QueryModeIsNativeOnly)
         {
             await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(() => base.Project_missing_required_navigation(async));
             AssertMql();
@@ -143,7 +274,7 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
     {
         // Fails: NestedRequiredReference is null in BsonDocument for entity id=6 EF-X005
         // A bare owned-reference leaf is not a native projection (main threw here too): NativeOnly refuses it.
-        if (MongoSpecTestHelpers.IsNativeOnly)
+        if (QueryModeIsNativeOnly)
         {
             await MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(() => base.Project_null_required_navigation(async));
             AssertMql();
@@ -727,6 +858,31 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
             nullRequiredNav]).ConfigureAwait(false);
     }
 
+#if !EF9
+    // The remaining seeds are abstract in the base: they are written for relational providers as raw JSON column values.
+    // They are not implemented for MongoDB, so the tests that use them find no data (or no collection) and assert that.
+    protected override Task Seed30028(DbContext ctx)
+        => Task.CompletedTask;
+
+    protected override Task Seed33046(DbContext ctx)
+        => Task.CompletedTask;
+
+    protected override Task SeedBadJsonProperties(ContextBadJsonProperties ctx)
+        => Task.CompletedTask;
+
+    protected override Task SeedJunkInJson(DbContext ctx)
+        => Task.CompletedTask;
+
+    protected override Task SeedNotICollection(DbContext ctx)
+        => Task.CompletedTask;
+
+    protected override Task SeedShadowProperties(DbContext ctx)
+        => Task.CompletedTask;
+
+    protected override Task SeedTrickyBuffering(DbContext ctx)
+        => Task.CompletedTask;
+
+#endif
     private TestMqlLoggerFactory TestMqlLoggerFactory
         => (TestMqlLoggerFactory)ListLoggerFactory;
 
@@ -743,7 +899,12 @@ public class AdHocJsonQueryMongoTest : AdHocJsonQueryTestBase
     public override async LifetimeTask InitializeAsync()
     {
         var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
+#if EF10
+        // The EF10 overrides of this class were added by the spec port and are baselined in the default query mode only.
+        _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
+#else
         _testStoreFactory = new MongoTestStoreFactory(server);
+#endif
 
         await base.InitializeAsync();
     }

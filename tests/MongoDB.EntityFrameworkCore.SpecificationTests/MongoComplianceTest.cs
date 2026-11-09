@@ -36,15 +36,17 @@ public class MongoComplianceTest : ComplianceTestBase
         // Query test bases (present across EF8/EF9/EF10).
         typeof(ComplexTypeQueryTestBase<>), // Complex types: covered by the separate complex type work.
         typeof(FilteredQueryTestBase<>), // No tests of its own; covered by the ported NorthwindQueryFiltersQueryTestBase<>.
-        typeof(InheritanceRelationshipsQueryTestBase<>), // Blocked, EF-X538: model validation fails in the fixture, so no test body runs.
 #if EF11
         // Complex type inheritance is not supported; tracked in https://github.com/ajcvickers/mongo-efcore-provider/issues/22
         typeof(InheritanceComplexTypesQueryTestBase<>),
 #endif
-        typeof(ManyToManyNoTrackingQueryTestBase<>), // Blocked, EF-X539: the join entity is configured as owned.
-        typeof(ManyToManyQueryTestBase<>), // Blocked, EF-X539: the join entity is configured as owned.
+#if EF8 || EF9
+        // Blocked on EF8/EF9, EF-X539: the join entity is configured as owned, and the upstream test constructor builds its expected data
+        // through the fixture, so no test can be constructed. Ported for EF10+ (ManyToManyQueryMongoTest), where the failure is per test.
+        typeof(ManyToManyNoTrackingQueryTestBase<>),
+        typeof(ManyToManyQueryTestBase<>),
+#endif
         typeof(QueryTestBase<>),
-        typeof(SpatialQueryTestBase<>),
 #if !EF11
         typeof(AdHocComplexTypeQueryTestBase), // Complex types: covered by the separate complex type work.
 #endif
@@ -62,25 +64,13 @@ public class MongoComplianceTest : ComplianceTestBase
         // table-sharing, cross-collection/navigation, and join scenarios outside that supported subset,
         // so they remain ignored here; behavioral coverage lives in
         // FunctionalTests/Query/ExecuteDeleteTests.cs and ExecuteUpdateTests.cs.
-        typeof(Microsoft.EntityFrameworkCore.BulkUpdates.BulkUpdatesTestBase<>),
-#if EF11
-        typeof(Microsoft.EntityFrameworkCore.BulkUpdates.Inheritance.FiltersInheritanceBulkUpdatesTestBase<>),
-#else
-        typeof(Microsoft.EntityFrameworkCore.BulkUpdates.FiltersInheritanceBulkUpdatesTestBase<>),
-#endif
-#if EF11
-        typeof(Microsoft.EntityFrameworkCore.BulkUpdates.Inheritance.InheritanceBulkUpdatesTestBase<>),
-#else
-        typeof(Microsoft.EntityFrameworkCore.BulkUpdates.InheritanceBulkUpdatesTestBase<>),
-#endif
-        typeof(Microsoft.EntityFrameworkCore.BulkUpdates.NonSharedModelBulkUpdatesTestBase),
+        typeof(Microsoft.EntityFrameworkCore.BulkUpdates.BulkUpdatesTestBase<>), // Abstract infrastructure of the bulk-update suites: assert helpers only, no tests of its own.
         // NorthwindBulkUpdatesTestBase is implemented by NorthwindBulkUpdatesMongoTest: the supported
         // single-collection Where-scoped scalar cases, as well as OrderBy/Skip/Take/Distinct-scoped cases
         // (executed via the two-phase _id-projection path), call base and pass; everything outside that
         // subset (joins, set ops, GroupBy, SelectMany, navigations, non-entity projections,
         // multiple-collection updates) is not skipped there — each runs and asserts its actual failure
         // mode (translation failure or cross-DbSet rejection), tagged with a // Fails: <reason> comment.
-        typeof(JsonQueryTestBase<>), // Blocked, EF-X548: seeding throws OverflowException, so every test fails in the fixture.
 #if EF11
         typeof(Microsoft.EntityFrameworkCore.Scaffolding.CompiledModelTestBase), // Blocked on EF11, EF-X710: the generated compiled model crashes the test host.
 #endif
@@ -98,14 +88,10 @@ public class MongoComplianceTest : ComplianceTestBase
 
 #if !EF8 && !EF9
         // Test bases added in EF10+.
-#if !EF11
-        typeof(AdHocJsonQueryTestBase),
-#endif
-        // NorthwindFunctionsQueryMongoTest exists only for EF8 and EF9 — the EF10 build deliberately omits it.
-        typeof(NorthwindFunctionsQueryTestBase<>),
         typeof(Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.ComplexCollectionTestBase), // Complex types: covered by the separate complex type work.
         // Associations (complex properties, navigations, owned navigations) and the remaining Translations bases
         // (Operators.*, Miscellaneous) are not yet ported.
+        // abstract: covered by the derived Navigations/OwnedNavigations/ComplexProperties ports
         typeof(Microsoft.EntityFrameworkCore.Query.Associations.AssociationsBulkUpdateTestBase<>),
         typeof(Microsoft.EntityFrameworkCore.Query.Associations.AssociationsCollectionTestBase<>),
         typeof(Microsoft.EntityFrameworkCore.Query.Associations.AssociationsMiscellaneousTestBase<>),
@@ -120,26 +106,6 @@ public class MongoComplianceTest : ComplianceTestBase
         typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexProperties.ComplexPropertiesProjectionTestBase<>),
         typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexProperties.ComplexPropertiesSetOperationsTestBase<>),
         typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexProperties.ComplexPropertiesStructuralEqualityTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.Navigations.NavigationsCollectionTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.Navigations.NavigationsIncludeTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.Navigations.NavigationsMiscellaneousTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.Navigations.NavigationsPrimitiveCollectionTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.Navigations.NavigationsProjectionTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.Navigations.NavigationsSetOperationsTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.Navigations.NavigationsStructuralEqualityTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedNavigations.OwnedNavigationsCollectionTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedNavigations.OwnedNavigationsMiscellaneousTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedNavigations.OwnedNavigationsPrimitiveCollectionTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedNavigations.OwnedNavigationsProjectionTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedNavigations.OwnedNavigationsSetOperationsTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedNavigations.OwnedNavigationsStructuralEqualityTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Translations.MiscellaneousTranslationsTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Translations.Operators.ArithmeticOperatorTranslationsTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Translations.Operators.BitwiseOperatorTranslationsTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Translations.Operators.ComparisonOperatorTranslationsTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Translations.Operators.LogicalOperatorTranslationsTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Query.Translations.Operators.MiscellaneousOperatorTranslationsTestBase<>),
-        typeof(Microsoft.EntityFrameworkCore.Types.TypeTestBase<,>),
 #endif
     ];
 
