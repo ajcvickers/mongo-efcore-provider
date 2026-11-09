@@ -161,7 +161,7 @@ public class TestMqlLoggerFactory : ListLoggerFactory
                     using (var stream = File.OpenRead(fileName))
                     using (var bufferedStream = new BufferedStream(stream))
                     {
-                        syntaxTree = CSharpSyntaxTree.ParseText(SourceText.From(bufferedStream));
+                        syntaxTree = CSharpSyntaxTree.ParseText(SourceText.From(bufferedStream), BuildParseOptions());
                     }
 
                     // Read through the source file, copying contents to a temp file (with the baseline change)
@@ -346,4 +346,18 @@ public class TestMqlLoggerFactory : ListLoggerFactory
         /// </summary>
         public readonly SortedDictionary<int, int> LineDisplacements = new();
     }
+
+    // Parse with this build's EF-version symbol so an AssertMql inside an active `#if EF10` arm is part of the syntax tree.
+    private static CSharpParseOptions BuildParseOptions()
+        => CSharpParseOptions.Default.WithPreprocessorSymbols(
+#if EF11
+            "EF11"
+#elif EF10
+            "EF10"
+#elif EF9
+            "EF9"
+#else
+            "EF8"
+#endif
+        );
 }

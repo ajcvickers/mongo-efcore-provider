@@ -111,6 +111,13 @@ var to confirm green.
 - `AssertMql` runs after `await base.Test(...)`, so data/behavior failures never reach the rewriter — but it will
   record MQL for a test whose only remaining failure is the baseline, including a partial pipeline before an
   expected throw.
+- To baseline a pass-through test, add an empty `AssertMql();` after the `base` call and run the rewrite; the rewriter parses the file with the
+  current build's `EF8`..`EF11` symbol, so run it once per EF version to fill each `#if` arm (EF11: the spec exe). Repeat build+run until no
+  empty `AssertMql();` remains in an arm the build compiles. Skipped tests never run, so leave them without `AssertMql`.
+- MQL that embeds a client-generated integer key (`TestIntegerValueGenerator`, process-wide counter) is not stable; normalize it before
+  comparing (see `AssertMqlIgnoringGeneratedKeys` in `FiltersInheritanceQueryMongoTest`).
+- Ported suites are pinned to the default query mode, so `NativeOnly` does not reveal fallbacks. To find them, temporarily set
+  `pinDefaultQueryMode: false`, run with `MONGODB_EF_QUERY_MODE=NativeOnly`, note the failing tests in a comment, then restore the pin.
 - Always scope with a tight `--filter`, then `git diff` and rebuild before trusting it: it can corrupt files or
   mis-place output, truncates at 9 statements, and needs to resolve source file+line from the stack trace.
 
