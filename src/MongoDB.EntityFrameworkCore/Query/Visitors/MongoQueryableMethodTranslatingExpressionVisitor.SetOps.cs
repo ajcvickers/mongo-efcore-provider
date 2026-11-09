@@ -381,6 +381,13 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                 return false;
             }
 
+            // Milliseconds (DateTime) and ticks (DateTimeOffset) are read through different serializers.
+            if (MongoDatePartExpression.IsTimeOfDay(projection1.Expression)
+                && ((MongoDatePartExpression)projection1.Expression).Part != ((MongoDatePartExpression)expression2!).Part)
+            {
+                return false;
+            }
+
             var field1 = StoredField(select1, projection1.Expression);
             var field2 = expression2 is not null ? StoredField(select2, expression2) : null;
 

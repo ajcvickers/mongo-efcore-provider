@@ -139,12 +139,18 @@ public sealed class BsonSerializerFactory
     internal static readonly TimeSpanSerializer TimeOfDayMillisecondsSerializer = new(BsonType.Int64, TimeSpanUnits.Milliseconds);
 
     /// <summary>
+    /// Reads a native <c>DateTimeOffset.TimeOfDay</c> projection leaf, which the server computes from the stored
+    /// <c>Ticks</c> as a whole number of ticks since midnight.
+    /// </summary>
+    internal static readonly TimeSpanSerializer TimeOfDayTicksSerializer = new(BsonType.Int64, TimeSpanUnits.Ticks);
+
+    /// <summary>
     /// <see cref="TimeOfDayMillisecondsSerializer"/> for a <paramref name="readType"/> of <see cref="TimeSpan"/> or
     /// <see cref="Nullable{TimeSpan}"/>.
     /// </summary>
-    internal static IBsonSerializer CreateTimeOfDaySerializer(Type readType)
-        => readType == typeof(TimeSpan) ? TimeOfDayMillisecondsSerializer
-            : readType == typeof(TimeSpan?) ? new NullableSerializer<TimeSpan>(TimeOfDayMillisecondsSerializer)
+    internal static IBsonSerializer CreateTimeOfDaySerializer(Type readType, bool ticks = false)
+        => readType == typeof(TimeSpan) ? (ticks ? TimeOfDayTicksSerializer : TimeOfDayMillisecondsSerializer)
+            : readType == typeof(TimeSpan?) ? new NullableSerializer<TimeSpan>(ticks ? TimeOfDayTicksSerializer : TimeOfDayMillisecondsSerializer)
             : throw new ArgumentException($"A TimeOfDay value can't be read as '{readType.ShortDisplayName()}'.", nameof(readType));
 
     internal static IBsonSerializer CreateTypeSerializer(Type type, IReadOnlyProperty? property = null)

@@ -217,7 +217,8 @@ public class MongoConditionalAndDateTimeTranslatorTests
         Assert.True(translator.TryTranslateTimeOfDayLeaf(body, out var result));
 
         var datePart = Assert.IsType<MongoDatePartExpression>(result);
-        Assert.Equal(MongoDatePart.TimeOfDay, datePart.Part);
+        // The exact value comes from the stored Ticks, not from the millisecond BSON date (EF-X702).
+        Assert.Equal(MongoDatePart.TimeOfDayTicks, datePart.Part);
         var local = Assert.IsType<MongoDateTimeOffsetLocalExpression>(datePart.Operand);
         Assert.Equal("OccurredOffset", local.Operand.ElementName);
     }
