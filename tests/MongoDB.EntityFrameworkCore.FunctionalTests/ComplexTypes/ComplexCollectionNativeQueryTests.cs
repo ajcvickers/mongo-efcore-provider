@@ -674,9 +674,23 @@ public class ComplexCollectionNativeQueryTests(TemporaryDatabaseFixture database
             NullElementRefusal, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("does not represent members as fields"));
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Marks.HasFlag(Mark.A))))), [], NotNative, Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"), Throws<MongoDB.Driver.Linq.ExpressionNotSupportedException>("Expression not supported"));
         // A primitive-collection leaf on an element: Contains has no native element-scope rendering ($in over an array field is
-        // query-dialect only) and the fallback's $in over the null element's missing array is a server error. Its size is native
+        // query-dialect only) and the fallback's $in over the null element's missing array is a server error that fails the whole
+        // query (#40), so Native refuses it at the gate; explicit DriverLinq runs the driver. Its size is native
         // since the EF-322c base (a null element's missing array reads empty, as the nested complex collection does).
-        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x"))))), [], NotNative, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"), Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x"))))), ["full", "mixed"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        // #40: a constant item is translated natively ($in over the array $ifNull'd to empty, so a null element's missing array
+        // is an empty list); the complement reads a null element as "does not contain".
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => !p.Labels.Contains("x"))))), ["mixed", "null"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.All(p => p.Labels.Contains("x"))))), ["full"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.All(p => !p.Labels.Contains("x"))))), ["null"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x") && p.City == "Oslo")))), ["full", "mixed"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("x") || p.Zip == 99)))), ["full", "mixed"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Count(p => p.Labels.Contains("x")) == 1))), ["full", "mixed"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains("nope"))))), [], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
+        // A captured string can be null at run time (where `{ f: null }` is not `list.Contains(null)`), so it is not translated:
+        // the fallback is refused like the other null-element shapes.
+        var captured = "x";
+        PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Contains(captured))))), [], NotNative, NullElementRefusal, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
         PerMode(Q(q => N(q.Where(h => h.Ps.Any(p => p.Labels.Count == 0)))), ["mixed", "null"], Serves, Serves, Throws<MongoDB.Driver.MongoCommandException>("Command aggregate failed"));
         // Sum over an element leaf: refused in every mode.
         PerMode(Q(q => q.OrderBy(h => h.Name).Select(h => h.Ps.Sum(p => p.Zip)).ToList().Select(x => x?.ToString() ?? "<null>")), [],

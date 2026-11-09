@@ -909,7 +909,7 @@ internal sealed partial class MongoExpressionTranslator
             // serializer, so it falls through to the $in arm and declines there.
             case MethodCallExpression call
                 when TryMatchContainsMethod(call, out var arrayReceiver, out var containsItem)
-                     && Unwrap(containsItem) is ConstantExpression
+                     && (Unwrap(containsItem) is ConstantExpression || NativeQueryParameter.TryGetQueryParameterName(Unwrap(containsItem), out _))
                      && TryResolveMember(Unwrap(arrayReceiver), out var arrayProperty, out var arrayFieldPath, out var arrayIsOuter)
                      && !arrayIsOuter
                      && arrayProperty.ClrType.TryGetEnumerableElementType() is not null:

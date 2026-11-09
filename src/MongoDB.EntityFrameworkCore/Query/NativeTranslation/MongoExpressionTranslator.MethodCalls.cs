@@ -961,13 +961,30 @@ internal sealed partial class MongoExpressionTranslator
     /// <paramref name="arrayProperty"/> itself as context would coerce the scalar to the whole collection type.
     /// <see langword="null"/> when that can't be done correctly (e.g. a whole-collection converter's serializer).
     /// </summary>
-    private static MongoConstantExpression? TranslateArrayContainsItem(Expression itemExpr, IProperty arrayProperty)
+    private static MongoExpression? TranslateArrayContainsItem(Expression itemExpr, IProperty arrayProperty)
     {
-        if (itemExpr is not ConstantExpression constant)
-            return null;
-
         var elementType = arrayProperty.ClrType.TryGetEnumerableElementType();
         if (elementType is null)
+            return null;
+
+        // A query parameter: only for an element type that cannot hold null and an item of exactly that type, so the value is
+        // never null at run time (`{ field: null }` also matches a missing field, which this arm doesn't reproduce, hence the
+        // constant case below declines null too). The placeholder serializes through the array's ELEMENT serializer.
+        if (NativeQueryParameter.TryGetQueryParameterName(itemExpr, out var parameterName))
+        {
+            if (itemExpr.Type != elementType || !elementType.IsValueType || Nullable.GetUnderlyingType(elementType) is not null)
+                return null;
+
+            var parameterArrayInfo = BsonSerializerFactory.GetPropertySerializationInfo(arrayProperty);
+            return parameterArrayInfo.Serializer is IBsonArraySerializer parameterArraySerializer
+                   && parameterArraySerializer.TryGetItemSerializationInfo(out var parameterItemInfo)
+                   && parameterItemInfo.Serializer.ValueType == elementType
+                ? new MongoParameterExpression(
+                    parameterName, forSerialization: null, valueType: itemExpr.Type, explicitSerializer: parameterItemInfo.Serializer)
+                : null;
+        }
+
+        if (itemExpr is not ConstantExpression constant)
             return null;
 
         var underlyingElementType = elementType.UnwrapNullableType();

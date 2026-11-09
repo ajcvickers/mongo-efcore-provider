@@ -42,6 +42,7 @@ public class ComplexElementNullGuardRefusalTests
         public bool Verified { get; set; }
         public DateTime When { get; set; }
         public DateTimeOffset Stamp { get; set; }
+        public List<int> Nums { get; set; } = [];
     }
 
     public class Route
@@ -94,6 +95,9 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["nested count compared with an element member", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) > s.Floor))), "a relational comparison"];
         // The guard-requiring shape sits INSIDE the nested lambda; the outer Finder visits its body.
         yield return ["relational inside a nested element lambda", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.Floor < s.Floor) >= 1))), "a relational comparison"];
+        // Contains over a primitive collection member of the element: a null element makes the driver's `$in` see a missing array (#40).
+        yield return ["member Contains (Enumerable)", Query(q => q.Where(r => r.Stops.Any(s => s.Nums.Contains(5)))), ComplexElementNullGuardRefusal.MemberContainsShape];
+        yield return ["member Contains (Queryable-style, array)", Query(q => q.Where(r => r.Stops.Any(s => s.Nums.ToArray().Contains(5)))), ComplexElementNullGuardRefusal.MemberContainsShape];
         // The collection itself compared with null (the driver's `{Stops: null}` also matches `[null]`).
         yield return ["collection == null", Query(q => q.Where(r => r.Stops == null)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
         yield return ["null != collection", Query(q => q.Where(r => null != r.Stops)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
