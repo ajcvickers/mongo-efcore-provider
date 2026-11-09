@@ -101,7 +101,7 @@ failure, tagged `// Fails: REGRESSION vs main: ...`, so any change is noticed. W
 | EF-X703 | **Fixed.** `CompositeKeyEndToEnd.Can_use_two_non_generated_integers_as_composite_key_end_to_end` could not query back a saved row. The discriminator is part of the composite key, so it is stored in `_id._t`, but the discriminator filter of a derived-type query targeted a top-level `_t` (`MongoDiscriminatorPredicate`). The test now calls `base`; regression test `CompositeKeyDiscriminatorTests` | 0 |
 | EF-X702 | `DateTimeOffsetTranslations.TimeOfDay` | Wrong data: the time of day is truncated to whole milliseconds | 1 |
 | EF-X701 | **Fixed.** `AdHocQueryFilters.Query_filter_with_context_accessor_with_constant` threw `NullReferenceException` while building the pipeline for an unset list member of the context (`Foo == 1 ? Baz.Contains(e.Bar) : ...`), even though the list's branch was not taken. `MongoPipelineFactory` now serializes an unset list parameter as BSON null; regression test `QueryFilterContextMemberTests` | 0 |
-| EF-X704 | `GuidTranslations.NewGuid` | Refused ("cannot be evaluated once per row on the server"); probably deliberate | 1 |
+| EF-X704 | **Deliberate, not a bug.** `GuidTranslations.NewGuid`: `Guid.NewGuid()` in a query is refused ("cannot be evaluated once per row on the server"), as for the other non-deterministic calls (EF-255). The test asserts the refusal without a `// Fails:` tag. No `$rand`-based translation is planned | 0 |
 | EF-X705 | `GearsOfWar`: `Group_by_with_aggregate_max_on_entity_type`, `Nav_rewrite_Distinct_with_convert`, `_anonymous`; `ComplexNavigationsSharedType`: one GroupJoin test | Only the exception type of an unsupported query changed (`FormatException` / `ArgumentException` instead of `InvalidOperationException`). `AGENTS.md` does not count this as a break | 8, 9, 10 |
 
 Changes that are *not* regressions: baseline-only MQL differences where the results are still correct (`$count` field name; the
@@ -318,7 +318,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X701 | **Fixed:** an unset list parameter (a context member used by a query filter) is serialized as BSON null instead of throwing `NullReferenceException` | 0 |
 | EF-X702 | **Regression vs `main`:** `DateTimeOffset.TimeOfDay` is truncated to whole milliseconds | 1 |
 | EF-X703 | **Fixed:** a derived-type query filtered on a top-level discriminator even when the discriminator is part of the composite key (`_id._t`) | 0 |
-| EF-X704 | **Regression vs `main` (probably deliberate):** `Guid.NewGuid()` in a query is refused (cannot be evaluated once per row) | 1 |
+| EF-X704 | **Deliberate (EF-255):** `Guid.NewGuid()` in a query is refused (cannot be evaluated once per row); the test asserts the refusal | 0 |
 | EF-X705 | **Regression vs `main` (exception type only):** an unsupported query now throws a different exception type | 5 |
 | EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
 | EF-X711 | EF11 only: xUnit v3 rejects a class that hides an inherited test with a `new` method ("has overloads"), so the hiding methods used on EF8 to EF10 for non-virtual upstream tests are not compiled on EF11 and the inherited tests that fail as base are skipped at run time (`Ef11TestSkips`); the reason names the ticket | 0 |

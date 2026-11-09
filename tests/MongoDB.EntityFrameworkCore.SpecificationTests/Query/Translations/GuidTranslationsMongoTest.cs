@@ -33,7 +33,7 @@ public class GuidTranslationsMongoTest : GuidTranslationsTestBase<MongoPinnedBas
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
     // <generated>
-    // Fails: REGRESSION vs main (likely deliberate): Guid.NewGuid cannot be evaluated once per row on the server, so the native translator refuses it EF-X704
+    // EF-255: Guid.NewGuid has no per-row server-side equivalent; the provider refuses it instead of baking one value into every row.
     public override Task NewGuid()
         => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NewGuid(), "Guid.NewGuid");
 
