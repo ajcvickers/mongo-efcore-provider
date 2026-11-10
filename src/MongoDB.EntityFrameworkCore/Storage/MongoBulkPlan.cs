@@ -76,6 +76,13 @@ internal sealed class MongoBulkPlan
 
     /// <summary>Builds the phase-1 read query yielding the target documents. <see langword="null"/> for single-command.</summary>
     public Func<QueryContext, IQueryable<BsonDocument>>? BuildTargetIdQuery { get; init; }
+
+    /// <summary>
+    /// Wraps a driver translation failure raised while the phase-1 query is first enumerated (the driver translates a LINQ query lazily,
+    /// when it runs) as EF's canonical non-query translation failure, so it reads like a failure from <see cref="BuildFilter"/> or
+    /// <see cref="BuildUpdate"/> rather than a raw driver exception. <see langword="null"/> for single-command.
+    /// </summary>
+    public Func<Exception, InvalidOperationException>? TranslationFailed { get; init; }
 }
 
 #endif

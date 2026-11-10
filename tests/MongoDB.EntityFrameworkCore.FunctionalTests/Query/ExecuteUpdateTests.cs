@@ -683,6 +683,24 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Equal(0, db.Entities.Count(o => o.Status == "x"));
     }
 #endif
+
+    // The update document is built before the transaction is opened. AutoTransactionBehavior.Never makes opening one impossible, so if
+    // the setter is checked first the message is about the setter, not about transactions. (The primary-key setter is rejected by the
+    // translator, so this pins the ordering rather than the executor-side build; the unit of hoisting itself is covered by the
+    // conformance suite.)
+    [Fact]
+    public void ExecuteUpdate_two_phase_with_an_invalid_setter_fails_before_a_transaction_is_needed()
+    {
+        using var db = CreateSeededContext();
+        db.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.OrderBy(o => o.Quantity).Take(1)
+                .ExecuteUpdate(s => s.SetProperty(o => o._id, ObjectId.GenerateNewId())));
+
+        Assert.Contains("primary key", ex.Message);
+        Assert.DoesNotContain("AutoTransactionBehavior", ex.Message);
+    }
 }
 
 #if EF9

@@ -146,55 +146,64 @@ internal static class MongoBulkOperationExecutor
         return checked((int)result.MatchedCount);
     }
 
+    // The phase-1 query and the update document are built BEFORE the transaction opens: an unsupported source or setter is a translation
+    // error and must be reported as one, not as a transaction problem (on a standalone deployment BeginTransaction fails first), and
+    // it should not cost a transaction round trip. Only the driver's own lazy translation of the phase-1 query is left for MaterializeIds.
     private static int ExecuteTwoPhaseDelete(QueryContext queryContext, MongoBulkPlan plan)
-        => RunInBulkTransaction(queryContext, () =>
+    {
+        var targetQuery = plan.BuildTargetIdQuery!(queryContext);
+
+        return RunInBulkTransaction(queryContext, () =>
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = MaterializeIds(plan.BuildTargetIdQuery!(queryContext));
+            var ids = MaterializeIds(plan, targetQuery);
             return ids.Count == 0 ? 0 : DeleteByIds(queryContext, plan, ids, stopwatch);
         });
+    }
 
     private static Task<int> ExecuteTwoPhaseDeleteAsync(QueryContext queryContext, MongoBulkPlan plan)
-        => RunInBulkTransactionAsync(queryContext, async () =>
+    {
+        var targetQuery = plan.BuildTargetIdQuery!(queryContext);
+
+        return RunInBulkTransactionAsync(queryContext, async () =>
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = await MaterializeIdsAsync(plan.BuildTargetIdQuery!(queryContext), queryContext.CancellationToken)
-                .ConfigureAwait(false);
+            var ids = await MaterializeIdsAsync(plan, targetQuery, queryContext.CancellationToken).ConfigureAwait(false);
             return ids.Count == 0 ? 0 : await DeleteByIdsAsync(queryContext, plan, ids, stopwatch).ConfigureAwait(false);
         });
+    }
 
     private static int ExecuteTwoPhaseUpdate(QueryContext queryContext, MongoBulkPlan plan)
-        => RunInBulkTransaction(queryContext, () =>
+    {
+        var targetQuery = plan.BuildTargetIdQuery!(queryContext);
+        var update = plan.BuildUpdate!(queryContext);
+
+        return RunInBulkTransaction(queryContext, () =>
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = MaterializeIds(plan.BuildTargetIdQuery!(queryContext));
-            if (ids.Count == 0)
-            {
-                return 0;
-            }
-
-            var update = plan.BuildUpdate!(queryContext);
-            return UpdateByIds(queryContext, plan, ids, update, stopwatch);
+            var ids = MaterializeIds(plan, targetQuery);
+            return ids.Count == 0 ? 0 : UpdateByIds(queryContext, plan, ids, update, stopwatch);
         });
+    }
 
     private static Task<int> ExecuteTwoPhaseUpdateAsync(QueryContext queryContext, MongoBulkPlan plan)
-        => RunInBulkTransactionAsync(queryContext, async () =>
+    {
+        var targetQuery = plan.BuildTargetIdQuery!(queryContext);
+        var update = plan.BuildUpdate!(queryContext);
+
+        return RunInBulkTransactionAsync(queryContext, async () =>
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = await MaterializeIdsAsync(plan.BuildTargetIdQuery!(queryContext), queryContext.CancellationToken)
-                .ConfigureAwait(false);
-            if (ids.Count == 0)
-            {
-                return 0;
-            }
-
-            var update = plan.BuildUpdate!(queryContext);
-            return await UpdateByIdsAsync(queryContext, plan, ids, update, stopwatch).ConfigureAwait(false);
+            var ids = await MaterializeIdsAsync(plan, targetQuery, queryContext.CancellationToken).ConfigureAwait(false);
+            return ids.Count == 0
+                ? 0
+                : await UpdateByIdsAsync(queryContext, plan, ids, update, stopwatch).ConfigureAwait(false);
         });
+    }
 
     private static int DeleteByIds(QueryContext queryContext, MongoBulkPlan plan, List<BsonValue> ids, Stopwatch stopwatch)
     {
@@ -274,29 +283,47 @@ internal static class MongoBulkOperationExecutor
         return checked((int)result.MatchedCount);
     }
 
-    private static List<BsonValue> MaterializeIds(IQueryable<BsonDocument> documents)
+    // The driver translates the phase-1 LINQ query lazily, when it is first enumerated, so a source it cannot translate surfaces here.
+    // ONLY ExpressionNotSupportedException is mapped to EF's canonical translation failure: this is an I/O site, so a broad filter
+    // would relabel cancellation and server or network errors (write conflicts, timeouts) as "could not be translated".
+    private static List<BsonValue> MaterializeIds(MongoBulkPlan plan, IQueryable<BsonDocument> documents)
     {
-        var ids = new List<BsonValue>();
-        foreach (var document in documents)
+        try
         {
-            ids.Add(document["_id"]);
-        }
+            var ids = new List<BsonValue>();
+            foreach (var document in documents)
+            {
+                ids.Add(document["_id"]);
+            }
 
-        return ids;
+            return ids;
+        }
+        catch (ExpressionNotSupportedException exception) when (plan.TranslationFailed != null)
+        {
+            throw plan.TranslationFailed(exception);
+        }
     }
 
-    private static async Task<List<BsonValue>> MaterializeIdsAsync(IQueryable<BsonDocument> documents, CancellationToken cancellationToken)
+    private static async Task<List<BsonValue>> MaterializeIdsAsync(
+        MongoBulkPlan plan, IQueryable<BsonDocument> documents, CancellationToken cancellationToken)
     {
-        var materialized = await IAsyncCursorSourceExtensions
-            .ToListAsync((IAsyncCursorSource<BsonDocument>)documents, cancellationToken).ConfigureAwait(false);
-
-        var ids = new List<BsonValue>(materialized.Count);
-        foreach (var document in materialized)
+        try
         {
-            ids.Add(document["_id"]);
-        }
+            var materialized = await IAsyncCursorSourceExtensions
+                .ToListAsync((IAsyncCursorSource<BsonDocument>)documents, cancellationToken).ConfigureAwait(false);
 
-        return ids;
+            var ids = new List<BsonValue>(materialized.Count);
+            foreach (var document in materialized)
+            {
+                ids.Add(document["_id"]);
+            }
+
+            return ids;
+        }
+        catch (ExpressionNotSupportedException exception) when (plan.TranslationFailed != null)
+        {
+            throw plan.TranslationFailed(exception);
+        }
     }
 
     // Both phases share one transaction (one snapshot). A user-opened transaction is joined and never committed here;

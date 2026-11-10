@@ -109,6 +109,10 @@ internal static class MongoBulkPlanBuilder
                     return BuildIdDocumentQuery<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
                 }
                 : null,
+            TranslationFailed = isTwoPhase
+                ? exception => NonQueryTranslationFailed(
+                    ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression), exception.Message, exception)
+                : null,
         };
     }
 

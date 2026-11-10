@@ -380,6 +380,41 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         ((MongoTransactionManager)db.Database.GetService<IDbContextTransactionManager>()).CurrentTransaction = null;
         Assert.Equal(3, db.Entities.Count());
     }
+
+    // Phase 1 is translated by the driver when its query is first enumerated, so a source that only fails there (a GroupBy subquery
+    // inside the Where) used to surface as a raw driver ExpressionNotSupportedException instead of EF's canonical translation failure.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_with_a_source_the_driver_cannot_translate_reports_a_translation_failure(bool async)
+    {
+        using var db = CreateSeededContext(
+            $"{nameof(ExecuteDelete_two_phase_with_a_source_the_driver_cannot_translate_reports_a_translation_failure)}_{async}");
+        var source = db.Entities.Where(o => db.Entities.GroupBy(x => x.Status).Count() > 1).OrderBy(o => o.Quantity).Take(1);
+
+        var ex = async
+            ? await Assert.ThrowsAsync<InvalidOperationException>(() => source.ExecuteDeleteAsync())
+            : Assert.Throws<InvalidOperationException>(() => source.ExecuteDelete());
+
+        Assert.Contains("could not be translated", ex.Message);
+        Assert.Equal(3, db.Entities.Count());
+    }
+
+    // The mapping is narrow on purpose: phase 1 is an I/O site, so cancellation must propagate as itself, not be relabelled as a
+    // translation failure.
+    [Fact]
+    public async Task ExecuteDelete_two_phase_cancellation_is_not_reported_as_a_translation_failure()
+    {
+        using var db = CreateSeededContext();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        var ex = await Record.ExceptionAsync(
+            () => db.Entities.OrderBy(o => o.Quantity).Take(1).ExecuteDeleteAsync(cancelled.Token));
+
+        Assert.IsAssignableFrom<OperationCanceledException>(ex);
+        Assert.Equal(3, db.Entities.Count());
+    }
 }
 
 #endif
