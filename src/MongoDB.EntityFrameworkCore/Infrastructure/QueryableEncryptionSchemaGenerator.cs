@@ -86,6 +86,12 @@ public static class QueryableEncryptionSchemaGenerator
 
         foreach (var navigation in entityType.GetNavigations())
         {
+            // The inverse navigation of an owned type points back at its owner, which can itself be owned; following it recurses forever.
+            if (navigation.IsOnDependent && navigation.ForeignKey.IsOwnership)
+            {
+                continue;
+            }
+
             var targetEntityType = navigation.TargetEntityType;
             if (targetEntityType.IsOwned())
             {
