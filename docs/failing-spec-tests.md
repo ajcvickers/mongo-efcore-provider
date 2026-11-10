@@ -224,7 +224,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X316 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) | 121 |
 | EF-X317 | `NullReferenceException` in JSON type round-trip (not triaged) | 60 |
 | EF-X318 | Bad JSON value does not throw on materialization | 0 |
-| EF-X319 | Concurrency token on an owned entity is rejected (Serialization) | 2 |
+| EF-X319 | Concurrency token on an owned entity is rejected (Serialization). The fixture drops the owned token (`FixExternalModel`) and seeds the F1 data itself, and `SerializationMongoTest` passes as the base | 0 |
 | EF-X320 | NetTopologySuite spatial types are not supported: the provider would own them. `SpatialQueryMongoFixture` stores them as well-known binary through a value converter so the data seeds and loads, but every spatial operation (area, distance, union, ...) is then rejected as not translatable | 82 |
 | EF-X321 | `DateOnly`/`TimeOnly`/`TimeSpan`/`DateTimeOffset` members and methods are not translated by the driver | 54 |
 | EF-X322 | `byte[]` is not supported as an array in LINQ | 4 |
@@ -721,7 +721,7 @@ classes. Failing tests assert today's failure through `SpecFails.Async/Sync` (Ut
 Counts are the number of overridden test methods carrying the tag (a method split across `#if` arms counts once). Where a theory only fails for some
 data rows (or depends on the machine time zone) the override uses `SpecFails.*SomeRows`, which accepts success or the expected failure.
 
-- **Fixture-level failures.** `CustomConverters`, `Serialization` and `Spatial` fail while the shared fixture seeds/builds its model (EF-X300, EF-X319, EF-X320).
+- **Fixture-level failures.** `CustomConverters`, `Serialization` and `Spatial` used to fail while the shared fixture seeded/built its model (EF-X300, EF-X319, EF-X320); their fixtures now work around the cause, so the tests run.
   The fixture swallows that exception so the tests run and each asserts its own failure; `ValueConvertersEndToEnd` fails the same way inside its single test.
 
 - **EF-X300** (`Unsupported ValueConverter for 'Nullable<...>' ... Null conversion must be left to EF Core`): value converters declared via `HasConversion` with inline
