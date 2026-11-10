@@ -227,6 +227,18 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             isSelfReferencing = propertySelector.Parameters.Any(p => value.ReferencesParameter(p));
         }
 
+        // A self-referencing value over an OfType<TDerived>() source: EF types the setter's lambda parameter as TDerived, but the value is
+        // rendered against the root entity type, so the parameter would stay free in the rendered expression and the driver fails with
+        // an opaque "Expression not supported: e." Refused with the real limitation instead. A constant setter is unaffected.
+        if (isSelfReferencing && propertySelector.Parameters[0].Type != entityType.ClrType)
+        {
+            AddTranslationErrorDetails(
+                ComplexTypeRefusals.BulkSelfReferencingSetterOverTypeFilter(
+                    $"{property.DeclaringType.DisplayName()}.{property.Name}", propertySelector.Parameters[0].Type.Name));
+            throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+                ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
+        }
+
         if (isSelfReferencing && property is IProperty scalar && scalar.GetTypeMapping().Converter != null)
         {
             AddTranslationErrorDetails(
@@ -474,6 +486,18 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             else if (MongoNonQueryExpression.IsPaging(method))
             {
                 strategy = MongoNonQueryExpression.BulkStrategy.TwoPhase;
+            }
+            else if (MongoNonQueryExpression.IsOfType(method))
+            {
+                // OfType<TDerived> narrows the affected set to one type of a hierarchy, which the read path expresses as a discriminator
+                // filter that only it knows how to build. Run two-phase so phase 1 reuses that translation, rather than synthesizing
+                // the filter in BuildFilter: getting that wrong on a delete destroys documents of the wrong type. OfType of the root
+                // type itself narrows nothing and stays single-command. Cast is NOT admitted: it only reshapes the shaper, and the
+                // driver cannot translate it, so admitting it would only trade this message for a driver exception.
+                if (method.GetGenericArguments()[0] != mongoQueryExpression.CollectionExpression.EntityType.ClrType)
+                {
+                    strategy = MongoNonQueryExpression.BulkStrategy.TwoPhase;
+                }
             }
             else
             {

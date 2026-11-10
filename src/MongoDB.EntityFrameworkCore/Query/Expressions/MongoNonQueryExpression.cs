@@ -126,6 +126,14 @@ internal sealed class MongoNonQueryExpression : Expression
     public static bool IsAffectedSetNeutral(MethodInfo method)
         => AffectedSetNeutralDefinitions.Contains(Definition(method));
 
+    /// <summary>
+    /// Whether this is the canonical <c>Queryable.OfType</c>. It NARROWS the affected set (to one type of a hierarchy), so it is never
+    /// affected-set-neutral. Unlike <c>Cast</c> it is a structural type swap the read path translates into a discriminator filter, which
+    /// is why a bulk operation over it runs two-phase: phase 1 is that read-path query.
+    /// </summary>
+    public static bool IsOfType(MethodInfo method)
+        => Definition(method) == QueryableMethods.OfType;
+
     /// <summary>Whether this is the canonical <c>Skip</c> or <c>Take</c>, which change the affected set in a way one server command cannot express.</summary>
     public static bool IsPaging(MethodInfo method)
     {
