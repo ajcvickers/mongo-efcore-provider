@@ -103,6 +103,18 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         mb.Entity<Employee>().HasOne(e => e.Manager).WithMany(e => e.DirectReports).HasForeignKey(e => e.ManagerId);
     };
 
+    // EF11 dropped the "with details" translation-failure message: the specific reason travels as the inner exception.
+    private static string WholeChain(Exception exception)
+    {
+        var messages = new List<string>();
+        for (var e = exception; e != null; e = e.InnerException)
+        {
+            messages.Add(e.Message);
+        }
+
+        return string.Join(" | ", messages);
+    }
+
     private SingleEntityDbContext<Order> CreateSeededContext([CallerMemberName] string? collectionName = null)
     {
         var collection = database.CreateCollection<Order>(collectionName);
@@ -584,7 +596,7 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o._id, ObjectId.GenerateNewId())));
 
-        Assert.Contains("primary key", ex.Message);
+        Assert.Contains("primary key", WholeChain(ex));
         Assert.Equal(3, db.Entities.Count());
     }
 
@@ -602,12 +614,12 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(a => a.Kind, "dog")));
-        Assert.Contains("discriminator", ex.Message);
+        Assert.Contains("discriminator", WholeChain(ex));
 
         // A query rooted on a derived type is guarded the same way.
         var derived = Assert.Throws<InvalidOperationException>(
             () => db.Entities.Where(a => a is Cat).ExecuteUpdate(s => s.SetProperty(a => a.Kind, "dog")));
-        Assert.Contains("discriminator", derived.Message);
+        Assert.Contains("discriminator", WholeChain(derived));
 
         var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
         Assert.Equal(1, raw.CountDocuments(new BsonDocument("_t", "cat"))); // the discriminator is stored as _t
@@ -698,8 +710,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
             () => db.Entities.OrderBy(o => o.Quantity).Take(1)
                 .ExecuteUpdate(s => s.SetProperty(o => o._id, ObjectId.GenerateNewId())));
 
-        Assert.Contains("primary key", ex.Message);
-        Assert.DoesNotContain("AutoTransactionBehavior", ex.Message);
+        Assert.Contains("primary key", WholeChain(ex));
+        Assert.DoesNotContain("AutoTransactionBehavior", WholeChain(ex));
     }
 }
 
