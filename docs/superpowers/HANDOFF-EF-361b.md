@@ -51,6 +51,23 @@ Task 9 (`FindProperty(MemberInfo)`, declaring-typed `SetProperty` match) is stil
   with a `BREAKING-CHANGES.md` entry for the two public constructor changes; latest releases are v10.0.5 / v9.1.5 / v8.4.5) are ported.
   Not yet ported from Task 5/23: payload-level assertions (`Command`, `LogSensitiveData`, `Elapsed > 0` for two-phase) need `DiagnosticSourceSpy`,
   which does not exist on `release`; Task 5's tests assert the rendered log message instead. Add the payload assertions with Task 23.
+- **Tasks 1-3** (test groundwork and narrowing) and **Phase 2, Tasks 7-12** are ported (commits `d9c5de04`..`ed4bfdc6`, plus `be0d8d0d`).
+  Decisions and findings worth knowing:
+  - Task 7 ships two guards (primary key, discriminator); concurrency-token setters stay permitted (positive test). Task 7's `GetSetElementKey` was
+    not ported: the primary-key guard makes its composite-key branch unreachable. Task 9 ships only the EF9 `SetProperty` declaring-type check
+    (duplicate setters stay last-wins; `FindProperty(MemberInfo)` not adopted, believed to be a thin wrapper over the name lookup, unverified).
+  - Task 8's motivating shape (a self-referencing navigation in a setter value) is already rejected by the translator on `release`
+    ("could not be translated"), so its guard is defence in depth; the functional test pins that the shape fails loudly and writes nothing.
+  - **Trap found in Task 11:** the phase-1 query binds the transaction's session when it is BUILT (`TranslateQuery` reads `CurrentTransaction`),
+    so building it before `BeginTransaction` makes phase 1 read outside the transaction. Counts and results cannot show it. Only the update
+    document is built before the transaction; `ExecuteDelete_two_phase_reads_its_target_ids_inside_the_transaction` checks the command's `txnNumber`.
+  - Task 12's test cancels from a `CommandSucceededEvent` hook AFTER phase 1 (a pre-cancelled token starts no transaction), using the extended
+    `CommandCapture`. Verified red with the old rollback token.
+  - EF11 drops the "with details" translation-failure message; the reason is in the inner exception, so tests read the whole chain.
+  - Full `/test-all --native` on `ed4bfdc6`: EF8/EF9/EF10 clean in both modes; EF11 only the two #63 spec tests, plus three ExecuteUpdate message
+    assertions fixed in `be0d8d0d`.
+  - Not ported: Task 11's try-split of `BeginTransaction` (pointless after Task 3's narrowing) and its `BuildFilter` loud-failure change (already on `release`).
+  - Next: Phase 4 classification (Tasks 13-15), widening `ClassifyBulkSource` in step with `BuildFilter`'s Where-only walk.
 - Known unrelated failure on one checkout: two EF11 `ConferencePlannerMongoTest` SpecFails wrappers, tracked in issue #63.
 
 ## Recorded decisions from the old work (do not re-litigate)
