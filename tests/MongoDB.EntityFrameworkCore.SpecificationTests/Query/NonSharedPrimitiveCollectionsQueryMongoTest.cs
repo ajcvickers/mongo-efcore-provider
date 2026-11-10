@@ -28,9 +28,6 @@ public class NonSharedPrimitiveCollectionsQueryMongoTest : NonSharedPrimitiveCol
     public NonSharedPrimitiveCollectionsQueryMongoTest(NonSharedFixture fixture)
         : base(fixture)
     {
-        // The class-level fixture would reuse the first test's (already seeded) test store for every test;
-        // give each test its own uniquely named database instead.
-        Fixture = null;
     }
 
 #endif
