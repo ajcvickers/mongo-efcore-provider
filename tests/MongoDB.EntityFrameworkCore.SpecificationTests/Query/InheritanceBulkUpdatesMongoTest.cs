@@ -103,7 +103,6 @@ public class InheritanceBulkUpdatesMongoTest : InheritanceBulkUpdatesTestBase<In
 
     public class InheritanceBulkUpdatesMongoFixture : InheritanceBulkUpdatesFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override ITestStoreFactory TestStoreFactory
@@ -117,8 +116,8 @@ public class InheritanceBulkUpdatesMongoTest : InheritanceBulkUpdatesTestBase<In
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
+            // EF-X201: a single-property key must be mapped to _id; the integer keys are generated on the client (EF-X205).
             MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
-            MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
         }
 
         public override async LifetimeTask InitializeAsync()
@@ -126,13 +125,7 @@ public class InheritanceBulkUpdatesMongoTest : InheritanceBulkUpdatesTestBase<In
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
-        }
-
-        public override Microsoft.EntityFrameworkCore.TestModels.InheritanceModel.InheritanceContext CreateContext()
-        {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
+            await base.InitializeAsync();
         }
 
         // The asserter begins a rolled-back transaction on one context and runs the bulk operation on a second;
