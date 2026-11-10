@@ -672,6 +672,37 @@ standalone deployments. Writing the primary key or discriminator corrupted docum
 If you depended on ordering or `Distinct` running in a transaction, open an explicit transaction around the call. If you subscribe to the
 events, expect more than one `Executing` event for a large two-phase operation and read the totals from `Executed`.
 
+### A non-nullable value read through a null or missing optional complex property now throws instead of reading `default`
+
+#### Old behavior
+
+In EF10, projecting a non-nullable value-type leaf through an optional complex property, for example
+`Select(c => c.Address!.Location.Lat)` or `Select(c => new { c.Name, c.Address!.Location.Lat })`, read `default(T)` (`0`) for a
+document whose `Address` element was null or absent.
+
+#### New behavior
+
+The query throws `InvalidOperationException` ("Nullable object must have a value."), as EF Core does for the same query over a
+null optional complex property. The same applies to a projected `Distinct` over such a leaf and to the `EF.Property` spelling.
+Rows whose `Address` is present are unaffected, and a nullable read of the leaf (`(double?)c.Address!.Location.Lat`) still
+returns `null` for the absent parent.
+
+This applies to the native translator. Explicit `MongoQueryMode.DriverLinq`, and a query the native translator declines, still
+read `default` because the driver deserializes the projection. Group keys and `Min`/`Max`/`Sum` over such a leaf are unchanged.
+
+Optional complex properties and their query support are not in the latest release (`v10.0.5.0`), so this changes only
+behavior of the unreleased complex type support.
+
+#### Why
+
+Reading `0` for data that is not there is a silently wrong answer, and it differs from EF Core's own contract (the
+`Select_value_type_property_on_null_associate_throws` conformance test).
+
+#### Mitigations
+
+Read the leaf as nullable, `(double?)c.Address!.Location.Lat`, or filter out rows with no parent first:
+`Where(c => c.Address != null)`.
+
 ## Breaking changes in 8.4.0 / 9.1.0 / 10.0.0
 
 ### The element name for discriminators may have changed

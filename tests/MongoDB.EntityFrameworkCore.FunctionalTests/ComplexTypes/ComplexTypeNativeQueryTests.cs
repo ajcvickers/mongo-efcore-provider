@@ -701,15 +701,11 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
             // orders the absent parent's null City first (Missing and Null match), and the native path no longer folds a
             // relational compare under an optional complex parent to {Address.City: {$lt: "c"}}; driver-LINQ answers [A].
             ["compare_gt"] = (q => q.Where(c => string.Compare(c.Address!.City, "c") > 0).OrderBy(c => c.Name).Select(c => c.Name), ["D"]),
-            ["anon_lat"] = (q => q.OrderBy(c => c.Name).Select(c => new { c.Name, c.Address!.Location.Lat }).ToList().Select(x => x.Name + ":" + x.Lat),
-                ["A:1", "D:3", "Missing:0", "Null:0"]),
-            ["bare_lat"] = (q => q.OrderBy(c => c.Name).Select(c => c.Address!.Location.Lat).ToList().Select(x => x.ToString()), ["1", "3", "0", "0"]),
             ["bare_city"] = (q => q.OrderBy(c => c.Name).Select(c => c.Address!.City).ToList().Select(x => x ?? "<null>"), ["a", "d", "<null>", "<null>"]),
             ["distinct_anon_city"] = (q => q.Select(c => new { c.Address!.City }).Distinct().ToList().Select(x => x.City ?? "<null>").OrderBy(x => x),
                 ["<null>", "a", "d"]),
             ["distinct_bare_city"] = (q => q.Select(c => c.Address!.City).Distinct().ToList().Select(x => x ?? "<null>").OrderBy(x => x),
                 ["<null>", "a", "d"]),
-            ["distinct_lat"] = (q => q.Select(c => c.Address!.Location.Lat).Distinct().ToList().Select(x => x.ToString()).OrderBy(x => x), ["0", "1", "3"]),
             ["sum_lat"] = (q => new[] { q.Sum(c => c.Address!.Location.Lat).ToString() }, ["4"]),
             ["max_lat"] = (q => new[] { q.Max(c => c.Address!.Location.Lat).ToString() }, ["3"]),
             ["min_lat"] = (q => new[] { q.Min(c => c.Address!.Location.Lat).ToString() }, ["0"]),
@@ -730,9 +726,6 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
                 .Select(c => new { c.Name, City = EF.Property<string>(EF.Property<ComplexAddress>(c, "Address"), "City") }).ToList()
                 .Select(x => x.Name + ":" + (x.City ?? "<null>")),
                 ["A:a", "D:d", "Missing:<null>", "Null:<null>"]),
-            ["efprop_hop_bare_lat"] = (q => q.OrderBy(c => c.Name)
-                .Select(c => new { EF.Property<ComplexAddress>(c, "Address").Location.Lat }).ToList().Select(x => x.Lat.ToString()),
-                ["1", "3", "0", "0"]),
             ["count_lat_lt"] = (q => new[] { q.Count(c => c.Address!.Location.Lat < 2).ToString() }, ["1"]),
         };
 
@@ -759,6 +752,48 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
         var (run, expected) = OptionalParentShapes[shape];
 
         NativeModeAssert.NativeAndExpected(m => Optional(collection, m, run), [.. expected]);
+    }
+
+    // EF throws "Nullable object must have a value." when a non-nullable value is read through a null optional complex
+    // property (EF spec test Select_value_type_property_on_null_associate_throws); a missing parent must not read as 0.
+    // Rows with a parent still read, and a nullable read of the same leaf is null. Explicit DriverLinq is unchanged: the driver
+    // deserializes the pushed-down projection and reads the absent leaf as default (see the characterization below).
+    [Theory]
+    [InlineData(MongoQueryMode.Native)]
+    [InlineData(MongoQueryMode.NativeOnly)]
+    public void Optional_parent_value_type_leaf_throws_for_a_missing_or_null_parent(MongoQueryMode mode)
+    {
+        var collection = SeedOptional(nameof(Optional_parent_value_type_leaf_throws_for_a_missing_or_null_parent) + mode);
+
+        var shapes = new Dictionary<string, Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<object>>>
+        {
+            ["bare"] = q => q.OrderBy(c => c.Name).Select(c => (object)c.Address!.Location.Lat),
+            ["named"] = q => q.OrderBy(c => c.Name).Select(c => new { c.Name, c.Address!.Location.Lat }),
+            ["distinct"] = q => q.Select(c => (object)c.Address!.Location.Lat).Distinct(),
+            ["efprop"] = q => q.OrderBy(c => c.Name)
+                .Select(c => new { EF.Property<ComplexAddress>(c, "Address").Location.Lat })
+        };
+
+        foreach (var (shape, query) in shapes)
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => Optional(collection, mode, query));
+            Assert.True(NullableValueMessage.Text == exception.Message, shape + ": " + exception.Message);
+        }
+
+        Assert.Equal([1.0, 3.0], Optional(collection, mode,
+            q => q.Where(c => c.Address != null).OrderBy(c => c.Name).Select(c => c.Address!.Location.Lat)));
+        Assert.Equal([1.0, 3.0, null, null], Optional(collection, mode,
+            q => q.OrderBy(c => c.Name).Select(c => (double?)c.Address!.Location.Lat)));
+    }
+
+    // Characterization, not a goal: explicit DriverLinq still reads the absent leaf as 0 (the driver's own deserialization).
+    [Fact]
+    public void Optional_parent_value_type_leaf_reads_default_under_explicit_DriverLinq()
+    {
+        var collection = SeedOptional(nameof(Optional_parent_value_type_leaf_reads_default_under_explicit_DriverLinq));
+
+        Assert.Equal([1.0, 3.0, 0.0, 0.0], Optional(collection, MongoQueryMode.DriverLinq,
+            q => q.OrderBy(c => c.Name).Select(c => c.Address!.Location.Lat)));
     }
 #endif
 
