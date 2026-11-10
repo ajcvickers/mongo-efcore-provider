@@ -41,7 +41,7 @@ ported suites were never exercised before, so their failures were invisible. A t
 stays green; it is a measure of the provider's gaps, not of broken tests. Methods that pass as the upstream base are not
 counted anywhere in this file. The bases still ignored are the complex type suites (separate work), the Associations suites,
 the Translations bases for Math, String, the Operators and Miscellaneous groups, `TypeTestBase`, the bulk-update suites for
-shapes the provider does not support, and the bases blocked by a concrete failure (`EF-X539`); the reason
+shapes the provider does not support; the reason
 sits next to each entry in `MongoComplianceTest.cs`.
 
 Ten largest tickets (distinct overridden methods, all EF versions):
@@ -295,7 +295,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X534 | Join key selector that is a sub-query: serializer cannot be created for MongoQuery | 7 |
 | EF-X535 | Skip/Take/Distinct between two cross-collection joins (Include/ThenInclude) not supported | 13 |
 | EF-X537 | Single/First over query results finds the wrong number of rows (duplicate or missing rows) | 0 |
-| EF-X539 | Many-to-many join entity type is configured as owned and cannot be queried as a DbSet (`Set<JoinOneToTwo>()` throws). `ManyToManyQueryTestBase<>` and `ManyToManyNoTrackingQueryTestBase<>` are ported on EF10 and EF11 and assert this failure; on EF8 and EF9 they stay ignored because the upstream constructor builds its expected data through the failing fixture | 200 |
+| EF-X539 | Many-to-many join entity types (`JoinOneToTwo` and the like) have no `DbSet` and are reached through navigations, so the provider owns them by convention and `Set<JoinOneToTwo>()` throws. `ManyToManyQueryMongoFixture` and `ManyToManyNoTrackingQueryMongoFixture` replace the convention (`MongoSpecModelHelpers.DoNotOwnTypes`) so the join types are independent entity types, and relax the unique indexes (EF-X207). The bases are now ported on EF8 to EF11 | 0 |
 | EF-X540 | Result mismatch whose assertion failure surfaces as TypeLoadException (xunit.assert version skew), hiding the wrong-result cause | 3 |
 | EF-X541 | Average/aggregate over a navigation without selector throws 'Operation is not valid due to the current state of the object' | 3 |
 | EF-X542 | Enum flags bitwise/closure typed as a different type: ConvertIntegralTypeToEnumSerializer lacks IHasRepresentationSerializer | 2 |

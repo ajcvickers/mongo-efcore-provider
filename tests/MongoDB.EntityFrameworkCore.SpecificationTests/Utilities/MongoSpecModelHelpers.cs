@@ -18,6 +18,9 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using MongoDB.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.ValueGeneration;
 using MongoDB.EntityFrameworkCore.Extensions;
 
@@ -160,6 +163,27 @@ public static class MongoSpecModelHelpers
     {
         configurationBuilder.Conventions.Add(_ => new MapKeysToElementIdConvention(generateIntKeys, dropOwnedConcurrencyTokens));
         return configurationBuilder;
+    }
+
+    /// <summary>
+    /// The provider owns, by convention, any non-generic type it reaches through a navigation that is not yet in the model. This
+    /// replaces that convention so the types selected by <paramref name="isEntityType"/> are independent entity types instead
+    /// (upstream models rely on a type with no <c>DbSet</c> being discovered through a navigation, then configured explicitly).
+    /// </summary>
+    public static ModelConfigurationBuilder DoNotOwnTypes(
+        this ModelConfigurationBuilder configurationBuilder, Func<Type, IConventionModel, bool> isEntityType)
+    {
+        configurationBuilder.Conventions.Replace<RelationshipDiscoveryConvention>(
+            sp => new SelectivelyOwningConvention(sp.GetRequiredService<ProviderConventionSetBuilderDependencies>(), isEntityType));
+        return configurationBuilder;
+    }
+
+    private sealed class SelectivelyOwningConvention(
+        ProviderConventionSetBuilderDependencies dependencies, Func<Type, IConventionModel, bool> isEntityType)
+        : MongoRelationshipDiscoveryConvention(dependencies)
+    {
+        protected override bool? ShouldBeOwned(Type targetType, IConventionModel model)
+            => isEntityType(targetType, model) ? false : base.ShouldBeOwned(targetType, model);
     }
 
     private sealed class MapKeysToElementIdConvention(bool generateIntKeys, bool dropOwnedConcurrencyTokens) : IModelFinalizingConvention

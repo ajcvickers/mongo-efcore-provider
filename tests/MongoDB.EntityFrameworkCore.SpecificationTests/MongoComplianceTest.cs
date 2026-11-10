@@ -40,12 +40,6 @@ public class MongoComplianceTest : ComplianceTestBase
         // Complex type inheritance is not supported; tracked in https://github.com/ajcvickers/mongo-efcore-provider/issues/22
         typeof(InheritanceComplexTypesQueryTestBase<>),
 #endif
-#if EF8 || EF9
-        // Blocked on EF8/EF9, EF-X539: the join entity is configured as owned, and the upstream test constructor builds its expected data
-        // through the fixture, so no test can be constructed. Ported for EF10+ (ManyToManyQueryMongoTest), where the failure is per test.
-        typeof(ManyToManyNoTrackingQueryTestBase<>),
-        typeof(ManyToManyQueryTestBase<>),
-#endif
         typeof(QueryTestBase<>),
 #if !EF11
         typeof(AdHocComplexTypeQueryTestBase), // Complex types: covered by the separate complex type work.

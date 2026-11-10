@@ -16,10 +16,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Metadata.Conventions;
-using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
-using MongoDB.EntityFrameworkCore.Metadata.Conventions;
 using MongoDB.EntityFrameworkCore.SpecificationTests.Utilities;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.TestUtilities;
@@ -508,8 +504,7 @@ ReferencedEntities.{ "$lookup" : { "from" : "PrincipalEntities", "let" : { "loca
 
             // A type deriving from an entity type that is reached through a navigation before it is in the model is owned by default, which
             // breaks the explicit one-to-one between BaseInheritanceRelationshipEntity and its derived type (EF-X538).
-            configurationBuilder.Conventions.Replace<RelationshipDiscoveryConvention>(
-                sp => new DerivedTypesAreNotOwnedConvention(sp.GetRequiredService<ProviderConventionSetBuilderDependencies>()));
+            configurationBuilder.DoNotOwnTypes((type, model) => model.GetEntityTypes().Any(e => e.FindOwnership() == null && type.IsSubclassOf(e.ClrType)));
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
@@ -518,15 +513,6 @@ ReferencedEntities.{ "$lookup" : { "from" : "PrincipalEntities", "let" : { "loca
 
             // EF-X207: a unique index on a nullable foreign key treats every null as a duplicate.
             modelBuilder.RelaxUniqueForeignKeyIndexes();
-        }
-
-        private sealed class DerivedTypesAreNotOwnedConvention(ProviderConventionSetBuilderDependencies dependencies)
-            : MongoRelationshipDiscoveryConvention(dependencies)
-        {
-            protected override bool? ShouldBeOwned(Type targetType, IConventionModel model)
-                => model.GetEntityTypes().Any(e => e.FindOwnership() == null && targetType.IsSubclassOf(e.ClrType))
-                    ? false
-                    : base.ShouldBeOwned(targetType, model);
         }
 
         public override Microsoft.EntityFrameworkCore.TestModels.InheritanceRelationshipsModel.InheritanceRelationshipsContext CreateContext()
