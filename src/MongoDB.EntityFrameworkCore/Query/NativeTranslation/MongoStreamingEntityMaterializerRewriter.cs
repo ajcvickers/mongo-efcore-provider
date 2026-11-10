@@ -652,6 +652,12 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
         {
             var target = navigation.TargetEntityType;
 
+            // The inverse of an ownership points back at the owner, which can itself be owned; following it recurses forever.
+            if (navigation.IsOnDependent && navigation.ForeignKey.IsOwnership)
+            {
+                continue;
+            }
+
             if (!target.IsOwned())
             {
                 // Non-owned references are planned one level deep, off the root only: a self-referential relationship (e.g. Staff.Manager)
