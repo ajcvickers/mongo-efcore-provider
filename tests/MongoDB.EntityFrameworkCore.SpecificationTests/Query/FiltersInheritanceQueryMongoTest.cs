@@ -169,7 +169,7 @@ Animals.{ "$match" : { "_t" : "Eagle", "_id" : 1000019 } }, { "$limit" : 1 }, { 
     private void AssertMqlIgnoringGeneratedKeys(params string[] expected)
     {
         static string Normalize(string mql)
-            => System.Text.RegularExpressions.Regex.Replace(mql, """_id" : 10[0-9]{5}(?![0-9])""", """_id" : <generated>""");
+            => System.Text.RegularExpressions.Regex.Replace(mql, """_id" : [1-9][0-9]{6,}(?![0-9])""", """_id" : <generated>""");
 
         var actual = Fixture.TestMqlLoggerFactory.MqlStatements.Select(Normalize).ToArray();
         Fixture.TestMqlLoggerFactory.Clear();
