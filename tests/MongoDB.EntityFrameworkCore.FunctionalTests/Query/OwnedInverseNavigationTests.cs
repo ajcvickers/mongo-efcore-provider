@@ -49,9 +49,6 @@ public class OwnedInverseNavigationTests(TemporaryDatabaseFixture database)
         public Branch Branch { get; set; } = null!;
     }
 
-    private static readonly MongoQueryMode[] AllModes =
-        [MongoQueryMode.Native, MongoQueryMode.DriverLinq, MongoQueryMode.NativeOnly];
-
     [Theory]
     [InlineData(MongoQueryMode.Native)]
     [InlineData(MongoQueryMode.DriverLinq)]
@@ -77,6 +74,54 @@ public class OwnedInverseNavigationTests(TemporaryDatabaseFixture database)
             Assert.Equal("NYC", shop.Branch.City);
             Assert.Equal("Main", shop.Branch.Address.Street);
             Assert.Same(shop.Branch, shop.Branch.Address.Branch);
+        }
+    }
+
+    public class Depot
+    {
+        public ObjectId Id { get; set; }
+        public Section Section { get; set; } = null!;
+    }
+
+    public class Section
+    {
+        public string Label { get; set; } = "";
+        public System.Collections.Generic.List<Bin> Bins { get; set; } = null!;
+    }
+
+    public class Bin
+    {
+        public int Number { get; set; }
+        public Section Section { get; set; } = null!;
+    }
+
+    [Theory]
+    [InlineData(MongoQueryMode.Native)]
+    [InlineData(MongoQueryMode.DriverLinq)]
+    [InlineData(MongoQueryMode.NativeOnly)]
+    public void Insert_and_query_with_inverse_navigation_from_owned_collection(MongoQueryMode mode)
+    {
+        var collection = database.CreateCollection<Depot>(values: mode);
+        Action<DbContextOptionsBuilder> options = b =>
+        {
+            b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+            new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
+        };
+        Action<ModelBuilder> model = mb => mb.Entity<Depot>().OwnsOne(
+            d => d.Section, s => s.OwnsMany(x => x.Bins, bin => bin.WithOwner(x => x.Section)));
+
+        using (var db = SingleEntityDbContext.Create(collection, modelBuilderAction: model, optionsBuilderAction: options))
+        {
+            db.Entities.Add(new Depot { Section = new Section { Label = "A", Bins = [new Bin { Number = 1 }, new Bin { Number = 2 }] } });
+            db.SaveChanges();
+        }
+
+        using (var db = SingleEntityDbContext.Create(collection, modelBuilderAction: model, optionsBuilderAction: options))
+        {
+            var depot = db.Entities.Single();
+            Assert.Equal("A", depot.Section.Label);
+            Assert.Equal([1, 2], depot.Section.Bins.Select(x => x.Number).OrderBy(x => x));
+            Assert.All(depot.Section.Bins, x => Assert.Same(depot.Section, x.Section));
         }
     }
 
