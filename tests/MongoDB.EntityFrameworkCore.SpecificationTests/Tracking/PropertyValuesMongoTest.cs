@@ -20,15 +20,21 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
 public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongoFixture fixture)
-    : PropertyValuesTestBase<PropertyValuesMongoTest.PropertyValuesMongoFixture>(fixture)
+    : PropertyValuesTestBase<PropertyValuesMongoTest.PropertyValuesMongoFixture>(fixture), IAsyncLifetime
 {
+    // The tests write to the shared database and there is no rollback, so which test sees which rows depends on the order they run in.
+    public async LifetimeTask InitializeAsync()
+        => await Fixture.ReseedAsync();
+
+    public LifetimeTask DisposeAsync()
+        => LifetimeTask.CompletedTask;
+
 #if EF11
     private readonly object? _ef11Skips = Ef11TestSkips.SkipIfListed("xUnit v3 (EF11) cannot hide this non-virtual upstream test; it fails here for the reasons in EF-X101 (see the New-method override on EF8 to EF10)", "Reload_when_entity_deleted_in_store_can_happen_for_any_state", "Store_values_really_are_store_values_not_current_or_original_values", "Store_values_really_are_store_values_not_current_or_original_values_async", "Values_can_be_reloaded_from_database_for_entity_in_any_state", "Reloading_optional_complex_property_with_null_does_not_throw");
 #endif
 
     public class PropertyValuesMongoFixture : PropertyValuesFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("PropertyValues");
@@ -40,374 +46,331 @@ public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongo
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override PoolableDbContext CreateContext()
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
         {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
+            base.ConfigureConventions(configurationBuilder);
+
+            // EF-X102: the provider owns, by convention, any type it reaches through a navigation that is not yet in the model, which breaks the
+            // upstream relationships; here every such type is an independent entity type.
+            configurationBuilder.DoNotOwnTypes((_, _) => true);
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
-            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: false);
+            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+            MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
+            modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
     }
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Complex_collection_current_values_can_be_accessed_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Complex_collection_current_values_can_be_accessed_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Complex_collection_current_values_can_be_accessed_as_a_property_dictionary();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Complex_collection_original_values_can_be_accessed_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Complex_collection_original_values_can_be_accessed_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Complex_collection_original_values_can_be_accessed_as_a_property_dictionary();
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+#if EF8 || EF9
     public override Task Complex_current_values_can_be_accessed_as_a_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Complex_current_values_can_be_accessed_as_a_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Complex_current_values_can_be_accessed_as_a_property_dictionary_using_IProperty();
+#else
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    public override Task Complex_current_values_can_be_accessed_as_a_property_dictionary_using_IProperty()
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Complex_current_values_can_be_accessed_as_a_property_dictionary_using_IProperty());
+#endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+#if EF8 || EF9
     public override Task Complex_original_values_can_be_accessed_as_a_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Complex_original_values_can_be_accessed_as_a_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Complex_original_values_can_be_accessed_as_a_property_dictionary_using_IProperty();
+#else
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    public override Task Complex_original_values_can_be_accessed_as_a_property_dictionary_using_IProperty()
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Complex_original_values_can_be_accessed_as_a_property_dictionary_using_IProperty());
+#endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Complex_store_values_can_be_accessed_as_a_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Complex_store_values_can_be_accessed_as_a_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Complex_store_values_can_be_accessed_as_a_property_dictionary_using_IProperty());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Complex_store_values_can_be_accessed_asynchronously_as_a_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Complex_store_values_can_be_accessed_asynchronously_as_a_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Complex_store_values_can_be_accessed_asynchronously_as_a_property_dictionary_using_IProperty());
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_cloned()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_cloned(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_cloned();
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_copied_from_a_non_generic_property_dictionary_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_copied_from_a_non_generic_property_dictionary_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_copied_from_a_non_generic_property_dictionary_into_an_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_copied_into_a_cloned_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_copied_into_a_cloned_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_copied_into_a_cloned_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_copied_into_a_non_generic_cloned_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_copied_into_a_non_generic_cloned_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_copied_into_a_non_generic_cloned_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_copied_into_an_object();
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_copied_to_object_using_ToObject()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_copied_to_object_using_ToObject(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_copied_to_object_using_ToObject();
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_read_and_set_for_an_object_in_the_Added_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_read_and_set_for_an_object_in_the_Added_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_read_and_set_for_an_object_in_the_Added_state();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_read_and_set_for_an_object_in_the_Modified_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_read_and_set_for_an_object_in_the_Modified_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_read_and_set_for_an_object_in_the_Modified_state();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_read_or_set_for_a_Detached_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_read_or_set_for_a_Detached_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_read_or_set_for_a_Detached_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_can_be_read_or_set_for_an_object_in_the_Deleted_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_can_be_read_or_set_for_an_object_in_the_Deleted_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_read_or_set_for_an_object_in_the_Deleted_state();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_DTO_object_missing_key_using_non_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_DTO_object_missing_key_using_non_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_DTO_object_missing_key_using_non_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_DTO_object_using_non_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_DTO_object_using_non_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_DTO_object_using_non_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_an_object_using_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_an_object_using_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_an_object_using_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_an_object_using_non_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_an_object_using_non_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_an_object_using_non_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_dictionary_some_missing()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_dictionary_some_missing(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_dictionary_some_missing();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_dictionary_typed_int()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_dictionary_typed_int(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_dictionary_typed_int();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_dictionary_typed_string()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_dictionary_typed_string(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_dictionary_typed_string();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_one_generic_dictionary_to_another_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_one_generic_dictionary_to_another_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_one_generic_dictionary_to_another_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Current_values_can_be_set_from_one_non_generic_dictionary_to_another_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Current_values_can_be_set_from_one_non_generic_dictionary_to_another_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_can_be_set_from_one_non_generic_dictionary_to_another_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Current_values_for_derived_object_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_for_derived_object_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Current_values_for_derived_object_can_be_copied_into_an_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Current_values_for_join_entity_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_for_join_entity_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Current_values_for_join_entity_can_be_copied_into_an_object());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task GetDatabaseValuesAsync_for_derived_entity_not_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.GetDatabaseValuesAsync_for_derived_entity_not_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.GetDatabaseValuesAsync_for_derived_entity_not_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task GetDatabaseValuesAsync_for_entity_not_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.GetDatabaseValuesAsync_for_entity_not_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.GetDatabaseValuesAsync_for_entity_not_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task GetDatabaseValuesAsync_for_the_wrong_type_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.GetDatabaseValuesAsync_for_the_wrong_type_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.GetDatabaseValuesAsync_for_the_wrong_type_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task GetDatabaseValues_for_derived_entity_not_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.GetDatabaseValues_for_derived_entity_not_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.GetDatabaseValues_for_derived_entity_not_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task GetDatabaseValues_for_entity_not_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.GetDatabaseValues_for_entity_not_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.GetDatabaseValues_for_entity_not_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task GetDatabaseValues_for_the_wrong_type_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.GetDatabaseValues_for_the_wrong_type_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.GetDatabaseValues_for_the_wrong_type_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task NonGeneric_GetDatabaseValuesAsync_for_derived_entity_not_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NonGeneric_GetDatabaseValuesAsync_for_derived_entity_not_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.NonGeneric_GetDatabaseValuesAsync_for_derived_entity_not_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task NonGeneric_GetDatabaseValuesAsync_for_entity_not_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NonGeneric_GetDatabaseValuesAsync_for_entity_not_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.NonGeneric_GetDatabaseValuesAsync_for_entity_not_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task NonGeneric_GetDatabaseValuesAsync_for_the_wrong_type_in_the_store_throws()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NonGeneric_GetDatabaseValuesAsync_for_the_wrong_type_in_the_store_throws(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.NonGeneric_GetDatabaseValuesAsync_for_the_wrong_type_in_the_store_throws();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task NonGeneric_GetDatabaseValues_for_derived_entity_not_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NonGeneric_GetDatabaseValues_for_derived_entity_not_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.NonGeneric_GetDatabaseValues_for_derived_entity_not_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task NonGeneric_GetDatabaseValues_for_entity_not_in_the_store_returns_null()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NonGeneric_GetDatabaseValues_for_entity_not_in_the_store_returns_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.NonGeneric_GetDatabaseValues_for_entity_not_in_the_store_returns_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task NonGeneric_GetDatabaseValues_for_the_wrong_type_in_the_store_throws()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.NonGeneric_GetDatabaseValues_for_the_wrong_type_in_the_store_throws(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.NonGeneric_GetDatabaseValues_for_the_wrong_type_in_the_store_throws();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Non_nullable_property_in_cloned_dictionary_cannot_be_set_to_null()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_nullable_property_in_cloned_dictionary_cannot_be_set_to_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Non_nullable_property_in_cloned_dictionary_cannot_be_set_to_null();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Non_nullable_property_in_current_values_results_in_conceptual_null(global::Microsoft.EntityFrameworkCore.ChangeTracking.CascadeTiming deleteOrphansTiming)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_nullable_property_in_current_values_results_in_conceptual_null(deleteOrphansTiming), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Non_nullable_property_in_current_values_results_in_conceptual_null(deleteOrphansTiming);
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Non_nullable_property_in_original_values_cannot_be_set_to_null_in_property_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_nullable_property_in_original_values_cannot_be_set_to_null_in_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Non_nullable_property_in_original_values_cannot_be_set_to_null_in_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Non_nullable_shadow_property_in_current_values_results_in_conceptual_null(global::Microsoft.EntityFrameworkCore.ChangeTracking.CascadeTiming deleteOrphansTiming)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_nullable_shadow_property_in_current_values_results_in_conceptual_null(deleteOrphansTiming), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Non_nullable_shadow_property_in_current_values_results_in_conceptual_null(deleteOrphansTiming);
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Non_nullable_shadow_property_in_original_values_cannot_be_set_to_null_in_property_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Non_nullable_shadow_property_in_original_values_cannot_be_set_to_null_in_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Non_nullable_shadow_property_in_original_values_cannot_be_set_to_null_in_property_dictionary();
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Nullable_complex_property_with_null_value_returns_null_when_using_ToObject()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Nullable_complex_property_with_null_value_returns_null_when_using_ToObject(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Nullable_complex_property_with_null_value_returns_null_when_using_ToObject();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_cloned()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_cloned(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_cloned();
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_copied_into_a_cloned_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_copied_into_a_cloned_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_copied_into_a_cloned_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_copied_into_a_non_generic_cloned_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_copied_into_a_non_generic_cloned_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_copied_into_a_non_generic_cloned_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_copied_into_an_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_copied_non_generic_property_dictionary_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_copied_non_generic_property_dictionary_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_copied_non_generic_property_dictionary_into_an_object();
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_copied_to_object_using_ToObject()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_copied_to_object_using_ToObject(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_copied_to_object_using_ToObject();
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_read_and_set_for_an_object_in_the_Deleted_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_read_and_set_for_an_object_in_the_Deleted_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_read_and_set_for_an_object_in_the_Deleted_state();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_read_and_set_for_an_object_in_the_Modified_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_read_and_set_for_an_object_in_the_Modified_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_read_and_set_for_an_object_in_the_Modified_state();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_read_or_set_for_a_Detached_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_read_or_set_for_a_Detached_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_read_or_set_for_a_Detached_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_can_be_read_or_set_for_an_object_in_the_Added_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_can_be_read_or_set_for_an_object_in_the_Added_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_read_or_set_for_an_object_in_the_Added_state();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_DTO_object_missing_key_using_non_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_DTO_object_missing_key_using_non_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_DTO_object_missing_key_using_non_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_DTO_object_using_non_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_DTO_object_using_non_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_DTO_object_using_non_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_an_object_using_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_an_object_using_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_an_object_using_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_an_object_using_non_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_an_object_using_non_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_an_object_using_non_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_dictionary_some_missing()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_dictionary_some_missing(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_dictionary_some_missing();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_dictionary_typed_int()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_dictionary_typed_int(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_dictionary_typed_int();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_dictionary_typed_string()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_dictionary_typed_string(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_dictionary_typed_string();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_one_generic_dictionary_to_another_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_one_generic_dictionary_to_another_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_one_generic_dictionary_to_another_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Original_values_can_be_set_from_one_non_generic_dictionary_to_another_generic_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Original_values_can_be_set_from_one_non_generic_dictionary_to_another_generic_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_can_be_set_from_one_non_generic_dictionary_to_another_generic_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Original_values_for_derived_object_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_for_derived_object_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Original_values_for_derived_object_can_be_copied_into_an_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Original_values_for_join_entity_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_for_join_entity_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Original_values_for_join_entity_can_be_copied_into_an_object());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Primary_key_in_current_values_cannot_be_changed_by_setting_values_from_another_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Primary_key_in_current_values_cannot_be_changed_by_setting_values_from_another_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Primary_key_in_current_values_cannot_be_changed_by_setting_values_from_another_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Primary_key_in_current_values_cannot_be_changed_by_setting_values_from_object()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Primary_key_in_current_values_cannot_be_changed_by_setting_values_from_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Primary_key_in_current_values_cannot_be_changed_by_setting_values_from_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Primary_key_in_current_values_cannot_be_changed_in_property_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Primary_key_in_current_values_cannot_be_changed_in_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Primary_key_in_current_values_cannot_be_changed_in_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Primary_key_in_original_values_cannot_be_changed_by_setting_values_from_another_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Primary_key_in_original_values_cannot_be_changed_by_setting_values_from_another_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Primary_key_in_original_values_cannot_be_changed_by_setting_values_from_another_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Primary_key_in_original_values_cannot_be_changed_by_setting_values_from_object()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Primary_key_in_original_values_cannot_be_changed_by_setting_values_from_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Primary_key_in_original_values_cannot_be_changed_by_setting_values_from_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Primary_key_in_original_values_cannot_be_changed_in_property_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Primary_key_in_original_values_cannot_be_changed_in_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Primary_key_in_original_values_cannot_be_changed_in_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+#if EF8 || EF9
     public override Task Properties_for_cloned_dictionary_returns_properties()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Properties_for_cloned_dictionary_returns_properties(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Properties_for_cloned_dictionary_returns_properties();
+#else
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    public override Task Properties_for_cloned_dictionary_returns_properties()
+        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Properties_for_cloned_dictionary_returns_properties());
+#endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+#if EF8 || EF9
     public override Task Properties_for_current_values_returns_properties()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Properties_for_current_values_returns_properties(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Properties_for_current_values_returns_properties();
+#else
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    public override Task Properties_for_current_values_returns_properties()
+        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Properties_for_current_values_returns_properties());
+#endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+#if EF8 || EF9
     public override Task Properties_for_original_values_returns_properties()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Properties_for_original_values_returns_properties(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Properties_for_original_values_returns_properties();
+#else
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    public override Task Properties_for_original_values_returns_properties()
+        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Properties_for_original_values_returns_properties());
+#endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Properties_for_store_values_returns_properties()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Properties_for_store_values_returns_properties(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Properties_for_store_values_returns_properties());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Properties_for_store_values_returns_properties_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Properties_for_store_values_returns_properties_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Properties_for_store_values_returns_properties_asynchronously());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Property_in_cloned_dictionary_cannot_be_set_to_instance_of_wrong_type()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Property_in_cloned_dictionary_cannot_be_set_to_instance_of_wrong_type(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Property_in_cloned_dictionary_cannot_be_set_to_instance_of_wrong_type();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Property_in_current_values_cannot_be_set_to_instance_of_wrong_type()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Property_in_current_values_cannot_be_set_to_instance_of_wrong_type(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Property_in_current_values_cannot_be_set_to_instance_of_wrong_type();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Property_in_original_values_cannot_be_set_to_instance_of_wrong_type()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Property_in_original_values_cannot_be_set_to_instance_of_wrong_type(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Property_in_original_values_cannot_be_set_to_instance_of_wrong_type();
 
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
@@ -418,321 +381,281 @@ public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongo
 #pragma warning restore xUnit1024, xUnit1003
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_current_values_can_be_accessed_as_a_non_generic_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_current_values_can_be_accessed_as_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_can_be_accessed_as_a_non_generic_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_current_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_current_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_current_values_can_be_accessed_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_current_values_can_be_accessed_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_can_be_accessed_as_a_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_current_values_can_be_accessed_as_a_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_current_values_can_be_accessed_as_a_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_can_be_accessed_as_a_property_dictionary_using_IProperty();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Scalar_current_values_can_be_set_using_a_non_generic_property_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Scalar_current_values_can_be_set_using_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_can_be_set_using_a_non_generic_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Scalar_current_values_can_be_set_using_a_property_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Scalar_current_values_can_be_set_using_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_can_be_set_using_a_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Scalar_current_values_can_be_set_using_a_property_dictionary_with_IProperty()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Scalar_current_values_can_be_set_using_a_property_dictionary_with_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_can_be_set_using_a_property_dictionary_with_IProperty();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_current_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_current_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_current_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_current_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_current_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_original_values_can_be_accessed_as_a_non_generic_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_original_values_can_be_accessed_as_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_can_be_accessed_as_a_non_generic_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_original_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_original_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_original_values_can_be_accessed_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_original_values_can_be_accessed_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_can_be_accessed_as_a_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_original_values_can_be_accessed_as_a_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_original_values_can_be_accessed_as_a_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_can_be_accessed_as_a_property_dictionary_using_IProperty();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Scalar_original_values_can_be_set_using_a_non_generic_property_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Scalar_original_values_can_be_set_using_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_can_be_set_using_a_non_generic_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Scalar_original_values_can_be_set_using_a_property_dictionary()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Scalar_original_values_can_be_set_using_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_can_be_set_using_a_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Scalar_original_values_can_be_set_using_a_property_dictionary_with_IProperty()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Scalar_original_values_can_be_set_using_a_property_dictionary_with_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_can_be_set_using_a_property_dictionary_with_IProperty();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_original_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_original_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_original_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_original_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_original_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Scalar_store_values_can_be_accessed_as_a_non_generic_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_can_be_accessed_as_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Scalar_store_values_can_be_accessed_as_a_non_generic_property_dictionary());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Scalar_store_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Scalar_store_values_can_be_accessed_as_a_non_generic_property_dictionary_using_IProperty());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Scalar_store_values_can_be_accessed_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_can_be_accessed_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Scalar_store_values_can_be_accessed_as_a_property_dictionary());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Scalar_store_values_can_be_accessed_as_a_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_can_be_accessed_as_a_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Scalar_store_values_can_be_accessed_as_a_property_dictionary_using_IProperty());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Scalar_store_values_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Scalar_store_values_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Scalar_store_values_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Scalar_store_values_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary_using_IProperty());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Scalar_store_values_can_be_accessed_asynchronously_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_can_be_accessed_asynchronously_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Scalar_store_values_can_be_accessed_asynchronously_as_a_property_dictionary());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Scalar_store_values_can_be_accessed_asynchronously_as_a_property_dictionary_using_IProperty()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_can_be_accessed_asynchronously_as_a_property_dictionary_using_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Scalar_store_values_can_be_accessed_asynchronously_as_a_property_dictionary_using_IProperty());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_store_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_store_values_of_a_derived_object_can_be_accessed_as_a_non_generic_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_store_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_store_values_of_a_derived_object_can_be_accessed_as_a_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_store_values_of_a_derived_object_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_of_a_derived_object_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_store_values_of_a_derived_object_can_be_accessed_asynchronously_as_a_non_generic_property_dictionary();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Scalar_store_values_of_a_derived_object_can_be_accessed_asynchronously_as_a_property_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Scalar_store_values_of_a_derived_object_can_be_accessed_asynchronously_as_a_property_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Scalar_store_values_of_a_derived_object_can_be_accessed_asynchronously_as_a_property_dictionary();
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void SetValues_throws_for_complex_collection_with_non_dictionary_item()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.SetValues_throws_for_complex_collection_with_non_dictionary_item(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.SetValues_throws_for_complex_collection_with_non_dictionary_item();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void SetValues_throws_for_complex_collection_with_non_list_value()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.SetValues_throws_for_complex_collection_with_non_list_value(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.SetValues_throws_for_complex_collection_with_non_list_value();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void SetValues_throws_for_complex_property_with_non_dictionary_value()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.SetValues_throws_for_complex_property_with_non_dictionary_value(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.SetValues_throws_for_complex_property_with_non_dictionary_value();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void SetValues_throws_for_nested_complex_collection_with_non_dictionary_item()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.SetValues_throws_for_nested_complex_collection_with_non_dictionary_item(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.SetValues_throws_for_nested_complex_collection_with_non_dictionary_item();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void SetValues_throws_for_nested_complex_collection_with_non_list_value()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.SetValues_throws_for_nested_complex_collection_with_non_list_value(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.SetValues_throws_for_nested_complex_collection_with_non_list_value();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_complex_collection_current_values_from_DTO_with_complex_metadata_access_works()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_complex_collection_current_values_from_DTO_with_complex_metadata_access_works(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_complex_collection_current_values_from_DTO_with_complex_metadata_access_works();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_complex_collection_current_values_from_dictionary_with_nulls_works()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_complex_collection_current_values_from_dictionary_with_nulls_works(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_complex_collection_current_values_from_dictionary_with_nulls_works();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_complex_collection_current_values_from_dictionary_works()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_complex_collection_current_values_from_dictionary_works(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_complex_collection_current_values_from_dictionary_works();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_complex_collection_current_values_from_object_with_nulls_works()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_complex_collection_current_values_from_object_with_nulls_works(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_complex_collection_current_values_from_object_with_nulls_works();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_complex_collection_original_values_from_dictionary_with_nulls_works()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_complex_collection_original_values_from_dictionary_with_nulls_works(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_complex_collection_original_values_from_dictionary_with_nulls_works();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_complex_collection_original_values_from_object_with_nulls_works()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_complex_collection_original_values_from_object_with_nulls_works(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_complex_collection_original_values_from_object_with_nulls_works();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_complex_collection_values_from_DTO_with_nulls_works()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_complex_collection_values_from_DTO_with_nulls_works(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_complex_collection_values_from_DTO_with_nulls_works();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_complex_collection_values_from_object_works()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_complex_collection_values_from_object_works(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_complex_collection_values_from_object_works();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Setting_current_values_from_cloned_values_sets_nullable_complex_property_to_null()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_current_values_from_cloned_values_sets_nullable_complex_property_to_null(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Setting_current_values_from_cloned_values_sets_nullable_complex_property_to_null();
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override void Setting_store_values_does_not_change_current_or_original_values()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Setting_store_values_does_not_change_current_or_original_values(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.Throws<global::System.FormatException>(() => base.Setting_store_values_does_not_change_current_or_original_values());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Shadow_property_in_current_values_cannot_be_set_to_instance_of_wrong_type()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Shadow_property_in_current_values_cannot_be_set_to_instance_of_wrong_type(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Shadow_property_in_current_values_cannot_be_set_to_instance_of_wrong_type();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Shadow_property_in_original_values_cannot_be_set_to_instance_of_wrong_type()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Shadow_property_in_original_values_cannot_be_set_to_instance_of_wrong_type(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Shadow_property_in_original_values_cannot_be_set_to_instance_of_wrong_type();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_asynchronously_into_a_non_generic_cloned_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_asynchronously_into_a_non_generic_cloned_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_asynchronously_into_a_non_generic_cloned_dictionary());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_asynchronously_non_generic_property_dictionary_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_asynchronously_non_generic_property_dictionary_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_asynchronously_non_generic_property_dictionary_into_an_object());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_into_a_cloned_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_into_a_cloned_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_into_a_cloned_dictionary());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_into_a_cloned_dictionary_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_into_a_cloned_dictionary_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_into_a_cloned_dictionary_asynchronously());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_into_a_non_generic_cloned_dictionary()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_into_a_non_generic_cloned_dictionary(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_into_a_non_generic_cloned_dictionary());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_into_an_object());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_into_an_object_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_into_an_object_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_into_an_object_asynchronously());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_non_generic_property_dictionary_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_non_generic_property_dictionary_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_non_generic_property_dictionary_into_an_object());
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_to_object_using_ToObject()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_to_object_using_ToObject(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_to_object_using_ToObject());
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_copied_to_object_using_ToObject_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_copied_to_object_using_ToObject_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_copied_to_object_using_ToObject_asynchronously());
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_and_set_for_an_object_in_the_Deleted_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Deleted_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Deleted_state());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_and_set_for_an_object_in_the_Deleted_state_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Deleted_state_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Deleted_state_asynchronously());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_and_set_for_an_object_in_the_Modified_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Modified_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Modified_state());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_and_set_for_an_object_in_the_Modified_state_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Modified_state_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Modified_state_asynchronously());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_and_set_for_an_object_in_the_Unchanged_state_asynchronously());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_or_set_for_a_Detached_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_or_set_for_a_Detached_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_or_set_for_a_Detached_object());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_or_set_for_a_Detached_object_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_or_set_for_a_Detached_object_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_or_set_for_a_Detached_object_asynchronously());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_or_set_for_an_object_in_the_Added_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_or_set_for_an_object_in_the_Added_state(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_or_set_for_an_object_in_the_Added_state());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Serialization/format error while translating or materializing EF-X602
     public override Task Store_values_can_be_read_or_set_for_an_object_in_the_Added_state_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_can_be_read_or_set_for_an_object_in_the_Added_state_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Store_values_can_be_read_or_set_for_an_object_in_the_Added_state_asynchronously());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Store_values_for_derived_object_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_for_derived_object_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Store_values_for_derived_object_can_be_copied_into_an_object();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Store_values_for_derived_object_can_be_copied_into_an_object_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_for_derived_object_can_be_copied_into_an_object_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Store_values_for_derived_object_can_be_copied_into_an_object_asynchronously();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Store_values_for_join_entity_can_be_copied_into_an_object()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_for_join_entity_can_be_copied_into_an_object(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_for_join_entity_can_be_copied_into_an_object());
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Store_values_for_join_entity_can_be_copied_into_an_object_asynchronously()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_for_join_entity_can_be_copied_into_an_object_asynchronously(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Store_values_for_join_entity_can_be_copied_into_an_object_asynchronously());
 
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
@@ -752,32 +675,26 @@ public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongo
 #pragma warning restore xUnit1024, xUnit1003
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Using_bad_IProperty_instances_throws()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Using_bad_IProperty_instances_throws(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Using_bad_IProperty_instances_throws();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Using_bad_IProperty_instances_throws_derived()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Using_bad_IProperty_instances_throws_derived(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Using_bad_IProperty_instances_throws_derived();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Using_bad_property_names_throws()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Using_bad_property_names_throws(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Using_bad_property_names_throws();
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Using_bad_property_names_throws_derived()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Using_bad_property_names_throws_derived(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Using_bad_property_names_throws_derived();
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Using_complex_property_value_not_list_throws()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Using_complex_property_value_not_list_throws(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Using_complex_property_value_not_list_throws();
 #endif
 
 #if (EF10 || EF11)
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Using_non_collection_complex_property_throws()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Using_non_collection_complex_property_throws(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Using_non_collection_complex_property_throws();
 #endif
 
 #if !EF11
@@ -790,12 +707,11 @@ public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongo
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: Argument exception while translating or materializing EF-X603
     public override Task Values_can_be_reloaded_from_database_for_entity_in_any_state_with_inheritance(global::Microsoft.EntityFrameworkCore.EntityState state, bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Values_can_be_reloaded_from_database_for_entity_in_any_state_with_inheritance(state, async), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => SpecFails.ThrowsAsync<global::System.ArgumentException>(() => base.Values_can_be_reloaded_from_database_for_entity_in_any_state_with_inheritance(state, async));
 #endif
 
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Values_in_cloned_dictionary_can_be_set_with_IProperty()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Values_in_cloned_dictionary_can_be_set_with_IProperty(), "The instance of entity type 'VirtualTeam' cannot be tracked because another instance with ");
+        => base.Values_in_cloned_dictionary_can_be_set_with_IProperty();
 }

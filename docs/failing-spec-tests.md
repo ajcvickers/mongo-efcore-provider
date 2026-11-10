@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 5,167 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,678 |
-| ... active in the EF8 build | 1,064 | 2,753 |
-| ... active in the EF9 build | 1,141 | 3,298 |
-| ... active in the EF10 build | 882 | 3,460 |
-| ... active in the EF11 build | not measured | 3,487 |
+| `// Fails:` tag lines | 1,206 | 5,047 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,558 |
+| ... active in the EF8 build | 1,064 | 2,651 |
+| ... active in the EF9 build | 1,141 | 3,196 |
+| ... active in the EF10 build | 882 | 3,340 |
+| ... active in the EF11 build | not measured | 3,367 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 60 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -49,12 +49,12 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 | Ticket | Methods | Subject |
 | --- | --- | --- |
 | EF-X526 | 792 | Query shape (navigation/projection/set operation) not translated |
-| EF-X101 | 171 | Entities added without an explicit key get Id 0 (no int/long key generation), so tracking/saving them ... |
+| EF-X101 | 8 | Entities added without an explicit key get Id 0 (no int/long key generation), so tracking/saving them ... |
 | EF-X530 | 238 | Wrong results compared with the reference (client) evaluation |
 | EF-216 | 245 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
 | EF-X102 | 8 | Relationship discovery between root entity types fails at model build (Unable to determine the relatio... |
 | EF-X527 | 185 | Expression not supported by the driver LINQ translator |
-| EF-X600 | 222 | Query translates natively but returns different data than the expected result  |
+| EF-X600 | 225 | Query translates natively but returns different data than the expected result  |
 | EF-149 | 147 | GroupBy translation is severely limited; most non-trivial group-by shapes fail to translate. |
 | EF-X001 | 137 | Sub-query selection across DbSets is not translated |
 | EF-X316 | 121 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) |
@@ -246,7 +246,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X215 | `UseSeeding`/`UseAsyncSeeding` delegates are not run by `EnsureCreated`; ported fixture seeds explicitly | 0 |
 | EF-X216 | Materialization interception creates the base proxy type for derived-type documents (`DriverProxy` instead of `TestDriver`) | 1 |
 | EF-X217 | Keyless query type maps to its own (empty) collection; relational tests map it to a view/SQL query over another table | 1 |
-| EF-X101 | Entities added without an explicit key get `Id` 0 (no `int`/`long` key generation), so tracking/saving them collides on the same key | 171 |
+| EF-X101 | Entities added without an explicit key get `Id` 0 (no `int`/`long` key generation), so tracking/saving them collides on the same key | 8 |
 | EF-X102 | Relationship discovery between root entity types fails at model build (`Unable to determine the relationship represented by navigation`) | 8 |
 | EF-X103 | No value generator for `int`/`long`/enum/value-converted keys (`NotSupportedException` on `Add`) | 31 |
 | EF-X104 | Dependent key is null because the principal key (`string`/`Uri`/`Guid` wrapper) was not generated | 4 |
@@ -306,11 +306,11 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
 | EF-X538 | A type that derives from an entity type, and is first reached through a navigation before it is in the model (the base type's navigation to its derived type, with no `DbSet` for the derived type), is owned by convention. That breaks the explicit one-to-one between the two ("the dependent side could not be determined"). `InheritanceRelationshipsQueryMongoFixture` replaces the convention so such a type is not owned; the default is unchanged, because making it the provider default also changes the model of `GraphUpdates` | 0 |
 | EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
-| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 222 |
+| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 225 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
-| EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 5 |
-| EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 66 |
-| EF-X604 | `InvalidOperationException` from query execution or materialization | 103 |
+| EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 38 |
+| EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 67 |
+| EF-X604 | `InvalidOperationException` from query execution or materialization | 109 |
 | EF-X605 | Other unexpected exception from query execution | 94 |
 | EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
 | EF-X701 | **Fixed:** an unset list parameter (a context member used by a query filter, or a null captured list) is serialized as an empty list instead of throwing `NullReferenceException` | 0 |
@@ -846,8 +846,8 @@ upstream models to `_id` (otherwise model validation rejects every model) with a
 `RelaxUniqueForeignKeyIndexes` drop the uniqueness that MongoDB cannot honour for `null` (EF-X207); `DoNotOwnTypes` stops relationship discovery
 owning types that the tests model as entities (EF-X102/EF-X538/EF-X539); and the fixtures that run tests which write reseed the database before each
 test, because MongoDB has no transaction rollback to undo them. `InitFailureGuard` is still available for a fixture whose model/seed/store
-creation fails (it re-throws that failure from the first `CreateContext()`), but no tracking fixture needs it any more except `ProxyGraphUpdates`
-and `PropertyValues`, which are still blocked at the fixture level. A few upstream tests are `public` but not `virtual` (e.g. `PropertyValuesTestBase.Reload_when_entity_deleted_in_store_can_happen_for_any_state`),
+creation fails (it re-throws that failure from the first `CreateContext()`); no ported fixture needs it now. `ProxyGraphUpdates` additionally registers
+the EF proxy services and uses lazy-loading and change-tracking proxies. A few upstream tests are `public` but not `virtual` (e.g. `PropertyValuesTestBase.Reload_when_entity_deleted_in_store_can_happen_for_any_state`),
 so they cannot be overridden; where they fail they are hidden by a `new` method with `Skip` carrying the ticket id.
 
 ### EF-X101 — Entities added without a key get `Id` 0, so tracking/saving collides
