@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
@@ -72,15 +73,20 @@ internal sealed class MongoNonQueryExpression : Expression
     public IReadOnlyList<Setter> Setters { get; }
     public BulkStrategy Strategy { get; }
 
+    private static readonly string[] BulkOperatorNames = ["ExecuteDelete", "ExecuteDeleteAsync", "ExecuteUpdate", "ExecuteUpdateAsync"];
+
     /// <summary>
     /// Unwraps the leading ExecuteDelete / ExecuteUpdate marker call (declared on
     /// <see cref="EntityFrameworkQueryableExtensions"/>) from a captured method chain, returning the underlying
     /// source query (e.g. <c>root.Where(...)</c>). EF captures the full chain including the bulk operator as the
     /// <see cref="MongoQueryExpression.CapturedExpression"/>; walkers that scope the operation need only the source.
+    /// Only the four bulk operators are unwrapped: other methods on that type (AsNoTracking, IgnoreQueryFilters, TagWith, ...) stay in
+    /// the chain so the classifier can see and reject them rather than having them silently discarded.
     /// </summary>
     public static Expression? UnwrapBulkOperator(Expression? capturedExpression)
-        => capturedExpression is MethodCallExpression { Method.DeclaringType: var declaringType } call
+        => capturedExpression is MethodCallExpression { Method: { DeclaringType: var declaringType, Name: var name } } call
            && declaringType == typeof(EntityFrameworkQueryableExtensions)
+           && Array.IndexOf(BulkOperatorNames, name) >= 0
             ? call.Arguments[0]
             : capturedExpression;
 
