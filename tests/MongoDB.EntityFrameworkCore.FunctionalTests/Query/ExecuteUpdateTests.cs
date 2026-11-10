@@ -21,6 +21,9 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+#if EF9
+using Microsoft.EntityFrameworkCore.Query;
+#endif
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
@@ -666,6 +669,29 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         using var check = SingleEntityDbContext.Create(collection, ConfigureEmployeeModel);
         Assert.Equal(1, check.Entities.Single(e => e._id == managerId).Rank);
     }
+
+#if EF9
+    [Fact]
+    public void ExecuteUpdate_does_not_treat_a_user_defined_SetProperty_extension_as_a_setter()
+    {
+        using var db = CreateSeededContext();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty("Status", "x")));
+
+        Assert.Contains("at least one 'SetProperty'", ex.Message);
+        Assert.Equal(0, db.Entities.Count(o => o.Status == "x"));
+    }
+#endif
 }
+
+#if EF9
+// Same name as the real SetProperty, but not the SetPropertyCalls<T> instance method.
+internal static class UserSetPropertyExtensions
+{
+    public static SetPropertyCalls<T> SetProperty<T>(this SetPropertyCalls<T> calls, string name, string value)
+        => calls;
+}
+#endif
 
 #endif

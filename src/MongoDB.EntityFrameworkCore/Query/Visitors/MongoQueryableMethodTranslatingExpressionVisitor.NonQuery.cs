@@ -68,7 +68,10 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         var body = setPropertyCalls.Body;
         // Built outer-to-inner: s.SetProperty(a).SetProperty(b) parses as (s.SetProperty(a)).SetProperty(b), so walk Object
         // inward, inserting at the front to preserve the authored order.
-        while (body is MethodCallExpression { Method.Name: "SetProperty" } call)
+        // Matched on the declaring type as well as the name, so a user-defined method that happens to be called SetProperty is not
+        // consumed as a setter (it falls through to the "at least one SetProperty" rejection below).
+        while (body is MethodCallExpression { Method: { Name: "SetProperty", DeclaringType: { IsGenericType: true } declaringType } } call
+               && declaringType.GetGenericTypeDefinition() == typeof(SetPropertyCalls<>))
         {
             var selector = call.Arguments[0].UnwrapLambdaFromQuote();
             // For the self-referencing SetProperty overload the value arg is a quoted Func<T,TProp>
