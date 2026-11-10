@@ -607,20 +607,19 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
 #if EF10 || EF11
     public override async Task Project_nullable_struct_complex_type_via_optional_navigation(bool async)
     {
-#if EF10 || EF11
-        // Fails: Driver-LINQ fallback returns different rows (NativeOnly refuses) #41
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_nullable_struct_complex_type_via_optional_navigation(async),
-            // Native serves different rows (a wrong answer); NativeOnly refuses cleanly.
-            MongoSpecTestHelpers.IsNativeOnly ? null : typeof(global::Xunit.Sdk.TrueException));
-#else
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_nullable_struct_complex_type_via_optional_navigation(async));
+            return;
+        }
+
         await base.Project_nullable_struct_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
-ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
+ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
-    
-#endif
     }
 #endif
 

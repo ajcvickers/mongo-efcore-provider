@@ -173,6 +173,15 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     private static readonly ConstructorInfo SequenceContainsNoElementsConstructorInfo =
         typeof(InvalidOperationException).GetConstructor([typeof(string)])!;
 
+    // EF lifts a complex struct to Nullable<struct> by wrapping it in a Convert, and drops the null test of `x.Nav != null ? x.Nav.Value : null`
+    // because the value is null whenever the navigation is. Read the value as lifted, so an absent ancestor reads null, not the default struct.
+    protected override Expression VisitUnary(UnaryExpression node)
+        => node is { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Operand: ComplexValueProjectionExpression complexValue }
+           && complexValue.Type.IsValueType
+           && node.Type == typeof(Nullable<>).MakeGenericType(complexValue.Type)
+            ? BuildComplexValue(complexValue, node.Type)
+            : base.VisitUnary(node);
+
     protected override Expression VisitExtension(Expression extensionExpression)
     {
         switch (extensionExpression)
@@ -1291,7 +1300,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     /// among its ancestors (EF10), or a navigation that is not a required dependent-side reference. The value is then
     /// null when the ancestor is, as EF's null propagation expects, rather than "missing for a required property".
     /// </summary>
-    private Expression BuildComplexValue(ComplexValueProjectionExpression complexValue)
+    private Expression BuildComplexValue(ComplexValueProjectionExpression complexValue, Type? liftedType = null)
     {
         var complexProperty = complexValue.ComplexProperty;
         var element = ReadComplexValueElement(complexValue);
@@ -1316,20 +1325,22 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         // A struct: through an optional COMPLEX property it has no null to propagate unless the type is lifted, so a
         // non-nullable struct keeps the strict read (throws when missing); through a navigation (a join side that did not
         // match) EF reads the absent entity's value as the default struct.
-        var lifted = Nullable.GetUnderlyingType(complexValue.Type) == complexProperty.ClrType;
+        // A Convert to Nullable<struct> over it (liftedType) lifts it, so an absent ancestor reads null.
+        var lifted = liftedType != null || Nullable.GetUnderlyingType(complexValue.Type) == complexProperty.ClrType;
         if (lifted || viaNavigation && complexValue.Type == complexProperty.ClrType)
         {
+            var resultType = liftedType ?? complexValue.Type;
             var stored = Expression.Variable(typeof(BsonValue), "storedComplexValue");
             return Expression.Block(
-                complexValue.Type,
+                resultType,
                 [stored],
                 Expression.Assign(stored, element),
                 Expression.Condition(
                     Expression.OrElse(
                         Expression.Equal(stored, Expression.Constant(null, typeof(BsonValue))),
                         Expression.Property(stored, nameof(BsonValue.IsBsonNull))),
-                    Expression.Default(complexValue.Type),
-                    ComplexTypeMaterializationBuilder.Build(complexProperty, stored).ConvertIfRequired(complexValue.Type)));
+                    Expression.Default(resultType),
+                    ComplexTypeMaterializationBuilder.Build(complexProperty, stored).ConvertIfRequired(resultType)));
         }
 
         return ComplexTypeMaterializationBuilder.Build(complexProperty, element).ConvertIfRequired(complexValue.Type);
