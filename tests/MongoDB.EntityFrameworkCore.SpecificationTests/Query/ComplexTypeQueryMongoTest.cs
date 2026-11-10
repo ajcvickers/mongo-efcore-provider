@@ -33,41 +33,93 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
     public override async Task Projecting_complex_property_does_not_auto_include_owned_types()
     {
         await base.Projecting_complex_property_does_not_auto_include_owned_types();
+
+        AssertMql(
+            """
+EntityType.{ "$project" : { "Complex" : "$Complex", "_id" : 0 } }
+""");
     }
 
     public override async Task Complex_type_equals_parameter_with_nested_types_with_property_of_same_name()
     {
         await base.Complex_type_equals_parameter_with_nested_types_with_property_of_same_name();
+
+        AssertMql(
+            """
+EntityType.{ "$match" : { "$or" : [{ "$and" : [{ "$expr" : false }, { "ComplexContainer" : null }] }, { "$and" : [{ "$expr" : true }, { "ComplexContainer.Id" : 1 }, { "$or" : [{ "$and" : [{ "$expr" : false }, { "ComplexContainer.Containee1" : null }] }, { "$and" : [{ "$expr" : true }, { "ComplexContainer.Containee1.Id" : 2 }] }] }, { "$or" : [{ "$and" : [{ "$expr" : false }, { "ComplexContainer.Containee2" : null }] }, { "$and" : [{ "$expr" : true }, { "ComplexContainer.Containee2.Id" : 3 }] }] }] }] } }, { "$limit" : 2 }
+""");
     }
 
     public override async Task Non_optional_complex_type_with_all_nullable_properties_via_left_join()
     {
         await base.Non_optional_complex_type_with_all_nullable_properties_via_left_join();
+
+        AssertMql(
+            """
+Parent.{ "$limit" : 2 }, { "$lookup" : { "from" : "Child", "localField" : "_id", "foreignField" : "ParentId", "as" : "_lookup_Children" } }
+""");
     }
 
     public override async Task Nullable_complex_type_with_discriminator_and_shadow_property()
     {
         await base.Nullable_complex_type_with_discriminator_and_shadow_property();
+
+        AssertMql(
+            """
+EntityType.
+""");
     }
 
     public override async Task Optional_complex_type_with_discriminator()
     {
         await base.Optional_complex_type_with_discriminator();
+
+        AssertMql(
+            """
+EntityType.{ "$match" : { "AllOptionalsComplexType" : null } }, { "$limit" : 2 }
+""",
+            //
+            """
+EntityType.
+""");
     }
 
     public override async Task Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip()
     {
         await base.Nullable_complex_type_with_discriminator_update_non_null_entity_roundtrip();
+
+        AssertMql(
+            """
+EntityType.{ "$limit" : 2 }
+""",
+            //
+            """
+EntityType.{ "$limit" : 2 }
+""");
     }
 
     public override async Task Non_optional_complex_type_with_all_nullable_properties()
     {
         await base.Non_optional_complex_type_with_all_nullable_properties();
+
+        AssertMql(
+            """
+EntityType.{ "$limit" : 2 }
+""");
     }
 
     public override async Task Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
     {
         await base.Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip();
+
+        AssertMql(
+            """
+EntityType.{ "$limit" : 2 }
+""",
+            //
+            """
+EntityType.{ "$limit" : 2 }
+""");
     }
 
     public override async Task Can_query_by_alternate_key_on_complex_type_property()
@@ -97,6 +149,12 @@ public class ComplexTypeQueryMongoTest : ComplexTypeQueryTestBase<ComplexTypeQue
     public override async Task Nullable_complex_type_with_discriminator_set_to_null()
     {
         await base.Nullable_complex_type_with_discriminator_set_to_null();
+
+        // The query embeds a Guid key generated per run, so Guid values are normalized before comparing.
+        AssertMqlIgnoringGuids(
+            """
+EntityType.{ "$match" : { "_id" : { "$binary" : { "base64" : "fejqUgYURjy2/6Hzdm188w==", "subType" : "04" } } } }, { "$limit" : 2 }
+""");
     }
 
     public override async Task Can_save_batch_swapping_alternate_key_values_on_complex_type_property()
@@ -823,6 +881,8 @@ ValuedCustomer.{ "$project" : { "_v" : "$ShippingAddress.AddressLine1", "_id" : 
     public override async Task Same_complex_type_projected_twice_with_pushdown_as_part_of_another_projection(bool async)
     {
         await base.Same_complex_type_projected_twice_with_pushdown_as_part_of_another_projection(async);
+
+        AssertMql();
     }
 
 #if !EF8
@@ -945,6 +1005,17 @@ Customer.
     }
 #endif
 
+
+    private void AssertMqlIgnoringGuids(params string[] expected)
+    {
+        static string Normalize(string mql)
+            => System.Text.RegularExpressions.Regex.Replace(
+                mql, """\{ "base64" : "[^"]*", "subType" : "04" \}""", """{ "base64" : <guid>, "subType" : "04" }""");
+
+        var actual = Fixture.TestMqlLoggerFactory.MqlStatements.Select(Normalize).ToArray();
+        Fixture.TestMqlLoggerFactory.Clear();
+        Assert.Equal(expected.Select(Normalize).ToArray(), actual);
+    }
 
     private void AssertMql(params string[] expected)
         => Fixture.TestMqlLoggerFactory.AssertBaseline(expected);
