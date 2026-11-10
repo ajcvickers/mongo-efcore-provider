@@ -42,19 +42,25 @@ public class MongoBulkDeleteEventData : EventData
     /// For a two-phase bulk delete — the number of documents identified in phase one to be deleted by
     /// <c>_id</c>; <see langword="null" /> for a single-command bulk delete.
     /// </param>
+    /// <param name="strategy">
+    /// The execution strategy used for this operation: <c>SingleCommand</c> for a single server command, or
+    /// <c>TwoPhase</c> for an id-collecting read followed by a write by <c>_id</c>.
+    /// </param>
     public MongoBulkDeleteEventData(
         EventDefinitionBase eventDefinition,
         Func<EventDefinitionBase, EventData, string> messageGenerator,
         TimeSpan elapsed,
         CollectionNamespace collectionNamespace,
         long deleteCount,
-        long? targetCount)
+        long? targetCount,
+        string strategy)
         : base(eventDefinition, messageGenerator)
     {
         Elapsed = elapsed;
         CollectionNamespace = collectionNamespace;
         DeleteCount = deleteCount;
         TargetCount = targetCount;
+        Strategy = strategy;
     }
 
     /// <summary>
@@ -77,6 +83,12 @@ public class MongoBulkDeleteEventData : EventData
     /// <c>_id</c>; <see langword="null" /> for a single-command bulk delete.
     /// </summary>
     public long? TargetCount { get; }
+
+    /// <summary>
+    /// The execution strategy used for this operation: <c>SingleCommand</c> for a single server command, or
+    /// <c>TwoPhase</c> for an id-collecting read followed by a write by <c>_id</c>.
+    /// </summary>
+    public string Strategy { get; }
 }
 
 #endif

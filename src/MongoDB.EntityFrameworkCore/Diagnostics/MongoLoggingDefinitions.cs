@@ -29,11 +29,9 @@ internal class MongoLoggingDefinitions : LoggingDefinitions
 
 #if !EF8
     public EventDefinitionBase? LogExecutingBulkDelete;
-    public EventDefinitionBase? LogExecutingBulkDeleteTwoPhase;
     public EventDefinitionBase? LogExecutedBulkDelete;
 
     public EventDefinitionBase? LogExecutingBulkUpdate;
-    public EventDefinitionBase? LogExecutingBulkUpdateTwoPhase;
     public EventDefinitionBase? LogExecutedBulkUpdate;
 #endif
 

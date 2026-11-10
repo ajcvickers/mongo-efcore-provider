@@ -377,7 +377,43 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var executedMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutedBulkUpdate);
         Assert.Contains("Executed Bulk Update", executedMessage);
         Assert.Contains($"Collection='{collection.CollectionNamespace}'", executedMessage);
+        Assert.Contains("Matched=2", executedMessage);
         Assert.Contains("Modified=2", executedMessage);
+        Assert.Contains("Strategy=SingleCommand", executingMessage);
+        Assert.Contains("Targets=-", executingMessage);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_event_reports_both_matched_and_modified_counts(bool async)
+    {
+        var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
+        var collection = database.CreateCollection<Order>(
+            nameof(ExecuteUpdate_event_reports_both_matched_and_modified_counts), async);
+
+        using (var seedDb = SingleEntityDbContext.Create(collection, ConfigureModel))
+        {
+            seedDb.AddRange(
+                new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = 10 },
+                new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = 20 });
+            seedDb.SaveChanges();
+        }
+
+        using var db = SingleEntityDbContext.Create(collection, loggerFactory, ConfigureModel);
+
+        // Both documents match, but the write changes nothing: matched is 2, modified is 0.
+        var updated = async
+            ? await db.Entities.Where(o => o.Status == "open")
+                .ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, "open"))
+            : db.Entities.Where(o => o.Status == "open")
+                .ExecuteUpdate(s => s.SetProperty(o => o.Status, "open"));
+
+        Assert.Equal(2, updated);
+
+        var executedMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutedBulkUpdate);
+        Assert.Contains("Matched=2", executedMessage);
+        Assert.Contains("Modified=0", executedMessage);
     }
 
     [Fact]
@@ -453,8 +489,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var executingMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkUpdate);
         Assert.Contains("Executing Bulk Update", executingMessage);
         Assert.Contains($"Collection='{collection.CollectionNamespace}'", executingMessage);
-        Assert.Contains("two-phase", executingMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("2 target(s)", executingMessage);
+        Assert.Contains("Strategy=TwoPhase", executingMessage);
+        Assert.Contains("Targets=2", executingMessage);
     }
 
     [Theory]

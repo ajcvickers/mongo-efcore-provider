@@ -69,11 +69,13 @@ internal static class MongoBulkOperationExecutor
 
         var updateLogger = GetUpdateLogger(queryContext);
         var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace);
+        updateLogger.ExecutingBulkDelete(
+            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null);
 
         var result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
 
-        updateLogger.ExecutedBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount);
+        updateLogger.ExecutedBulkDelete(
+            stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount, plan.Strategy.ToString());
         return checked((int)result.DeletedCount);
     }
 
@@ -84,14 +86,16 @@ internal static class MongoBulkOperationExecutor
 
         var updateLogger = GetUpdateLogger(queryContext);
         var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace);
+        updateLogger.ExecutingBulkDelete(
+            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null);
 
         var cancellationToken = queryContext.CancellationToken;
         var result = session == null
             ? await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false)
             : await collection.DeleteManyAsync(session, filter, options: null, cancellationToken).ConfigureAwait(false);
 
-        updateLogger.ExecutedBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount);
+        updateLogger.ExecutedBulkDelete(
+            stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount, plan.Strategy.ToString());
         return checked((int)result.DeletedCount);
     }
 
@@ -103,13 +107,15 @@ internal static class MongoBulkOperationExecutor
 
         var updateLogger = GetUpdateLogger(queryContext);
         var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace);
+        updateLogger.ExecutingBulkUpdate(
+            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null);
 
         var result = session == null
             ? collection.UpdateMany(filter, update)
             : collection.UpdateMany(session, filter, update);
 
-        updateLogger.ExecutedBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, result.ModifiedCount);
+        updateLogger.ExecutedBulkUpdate(
+            stopwatch.Elapsed, collection.CollectionNamespace, result.MatchedCount, result.ModifiedCount, plan.Strategy.ToString());
         return checked((int)result.MatchedCount);
     }
 
@@ -121,14 +127,16 @@ internal static class MongoBulkOperationExecutor
 
         var updateLogger = GetUpdateLogger(queryContext);
         var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace);
+        updateLogger.ExecutingBulkUpdate(
+            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null);
 
         var cancellationToken = queryContext.CancellationToken;
         var result = session == null
             ? await collection.UpdateManyAsync(filter, update, options: null, cancellationToken).ConfigureAwait(false)
             : await collection.UpdateManyAsync(session, filter, update, options: null, cancellationToken).ConfigureAwait(false);
 
-        updateLogger.ExecutedBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, result.ModifiedCount);
+        updateLogger.ExecutedBulkUpdate(
+            stopwatch.Elapsed, collection.CollectionNamespace, result.MatchedCount, result.ModifiedCount, plan.Strategy.ToString());
         return checked((int)result.MatchedCount);
     }
 
@@ -181,11 +189,13 @@ internal static class MongoBulkOperationExecutor
 
         var updateLogger = GetUpdateLogger(queryContext);
         var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, ids.Count);
+        updateLogger.ExecutingBulkDelete(
+            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count);
 
         var result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
 
-        updateLogger.ExecutedBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount);
+        updateLogger.ExecutedBulkDelete(
+            stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount, plan.Strategy.ToString());
         return checked((int)result.DeletedCount);
     }
 
@@ -196,14 +206,16 @@ internal static class MongoBulkOperationExecutor
 
         var updateLogger = GetUpdateLogger(queryContext);
         var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, ids.Count);
+        updateLogger.ExecutingBulkDelete(
+            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count);
 
         var cancellationToken = queryContext.CancellationToken;
         var result = session == null
             ? await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false)
             : await collection.DeleteManyAsync(session, filter, options: null, cancellationToken).ConfigureAwait(false);
 
-        updateLogger.ExecutedBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount);
+        updateLogger.ExecutedBulkDelete(
+            stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount, plan.Strategy.ToString());
         return checked((int)result.DeletedCount);
     }
 
@@ -214,13 +226,15 @@ internal static class MongoBulkOperationExecutor
 
         var updateLogger = GetUpdateLogger(queryContext);
         var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, ids.Count);
+        updateLogger.ExecutingBulkUpdate(
+            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count);
 
         var result = session == null
             ? collection.UpdateMany(filter, update)
             : collection.UpdateMany(session, filter, update);
 
-        updateLogger.ExecutedBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, result.ModifiedCount);
+        updateLogger.ExecutedBulkUpdate(
+            stopwatch.Elapsed, collection.CollectionNamespace, result.MatchedCount, result.ModifiedCount, plan.Strategy.ToString());
         return checked((int)result.MatchedCount);
     }
 
@@ -231,14 +245,16 @@ internal static class MongoBulkOperationExecutor
 
         var updateLogger = GetUpdateLogger(queryContext);
         var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, ids.Count);
+        updateLogger.ExecutingBulkUpdate(
+            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count);
 
         var cancellationToken = queryContext.CancellationToken;
         var result = session == null
             ? await collection.UpdateManyAsync(filter, update, options: null, cancellationToken).ConfigureAwait(false)
             : await collection.UpdateManyAsync(session, filter, update, options: null, cancellationToken).ConfigureAwait(false);
 
-        updateLogger.ExecutedBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, result.ModifiedCount);
+        updateLogger.ExecutedBulkUpdate(
+            stopwatch.Elapsed, collection.CollectionNamespace, result.MatchedCount, result.ModifiedCount, plan.Strategy.ToString());
         return checked((int)result.MatchedCount);
     }
 

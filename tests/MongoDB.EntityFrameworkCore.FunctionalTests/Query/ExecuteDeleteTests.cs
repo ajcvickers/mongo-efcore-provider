@@ -280,8 +280,8 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         var executingMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete);
         Assert.Contains("Executing Bulk Delete", executingMessage);
         Assert.Contains($"Collection='{collection.CollectionNamespace}'", executingMessage);
-        Assert.Contains("two-phase", executingMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("2 target(s)", executingMessage);
+        Assert.Contains("Strategy=TwoPhase", executingMessage);
+        Assert.Contains("Targets=2", executingMessage);
     }
 
     [Fact]

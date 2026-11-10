@@ -37,10 +37,18 @@ public class MongoBulkUpdateEventData : EventData
     /// <param name="messageGenerator">A delegate that generates a log message for this event.</param>
     /// <param name="elapsed">The time elapsed since the command was sent to the database.</param>
     /// <param name="collectionNamespace">The <see cref="CollectionNamespace"/> being operated upon.</param>
-    /// <param name="modifyCount">The number of documents modified by this bulk update operation.</param>
+    /// <param name="modifyCount">The number of documents whose stored values actually changed.</param>
+    /// <param name="matchedCount">
+    /// The number of documents matched by the operation's filter — the value returned to the caller;
+    /// <paramref name="modifyCount"/> is the genuinely-modified subset.
+    /// </param>
     /// <param name="targetCount">
     /// For a two-phase bulk update — the number of documents identified in phase one to be updated by
     /// <c>_id</c>; <see langword="null" /> for a single-command bulk update.
+    /// </param>
+    /// <param name="strategy">
+    /// The execution strategy used for this operation: <c>SingleCommand</c> for a single server command, or
+    /// <c>TwoPhase</c> for an id-collecting read followed by a write by <c>_id</c>.
     /// </param>
     public MongoBulkUpdateEventData(
         EventDefinitionBase eventDefinition,
@@ -48,13 +56,17 @@ public class MongoBulkUpdateEventData : EventData
         TimeSpan elapsed,
         CollectionNamespace collectionNamespace,
         long modifyCount,
-        long? targetCount)
+        long matchedCount,
+        long? targetCount,
+        string strategy)
         : base(eventDefinition, messageGenerator)
     {
         Elapsed = elapsed;
         CollectionNamespace = collectionNamespace;
         ModifyCount = modifyCount;
+        MatchedCount = matchedCount;
         TargetCount = targetCount;
+        Strategy = strategy;
     }
 
     /// <summary>
@@ -68,15 +80,27 @@ public class MongoBulkUpdateEventData : EventData
     public CollectionNamespace CollectionNamespace { get; }
 
     /// <summary>
-    /// The number of documents modified by this bulk update operation.
+    /// The number of documents whose stored values actually changed.
     /// </summary>
     public long ModifyCount { get; }
+
+    /// <summary>
+    /// The number of documents matched by the operation's filter. This is the value returned to the caller of
+    /// <c>ExecuteUpdate</c>; <see cref="ModifyCount"/> is the genuinely-modified subset.
+    /// </summary>
+    public long MatchedCount { get; }
 
     /// <summary>
     /// For a two-phase bulk update — the number of documents identified in phase one to be updated by
     /// <c>_id</c>; <see langword="null" /> for a single-command bulk update.
     /// </summary>
     public long? TargetCount { get; }
+
+    /// <summary>
+    /// The execution strategy used for this operation: <c>SingleCommand</c> for a single server command, or
+    /// <c>TwoPhase</c> for an id-collecting read followed by a write by <c>_id</c>.
+    /// </summary>
+    public string Strategy { get; }
 }
 
 #endif
