@@ -21,11 +21,17 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
 public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture fixture)
-    : OptimisticConcurrencyTestBase<OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture, byte[]>(fixture)
+    : OptimisticConcurrencyTestBase<OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture, byte[]>(fixture), IAsyncLifetime
 {
+    // The tests write to the shared database and there is no rollback, so which test sees which rows depends on the order they run in.
+    public async LifetimeTask InitializeAsync()
+        => await Fixture.ReseedAsync();
+
+    public LifetimeTask DisposeAsync()
+        => LifetimeTask.CompletedTask;
+
     public class OptimisticConcurrencyMongoFixture : F1FixtureBase<byte[]>
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("OptimisticConcurrency");
@@ -37,7 +43,7 @@ public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.Optim
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override ITestStoreFactory TestStoreFactory
@@ -46,140 +52,141 @@ public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.Optim
         public override TestHelpers TestHelpers
             => MongoTestHelpers.Instance;
 
-        public override F1Context CreateContext()
+        // The F1 model is built outside the normal pipeline (UseModel), so OnModelCreating is not part of it.
+        protected override void BuildModelExternal(ModelBuilder modelBuilder)
         {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
+            base.BuildModelExternal(modelBuilder);
+
+            // EF-X201: single-property keys must be mapped to _id. EF-X214: concurrency tokens are supported only on the document root.
+            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+            modelBuilder.FixExternalModel(dropOwnedConcurrencyTokens: true);
+
+            // EF-X207: a unique index on a nullable foreign key treats every null as a duplicate.
+            MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
+            modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
+        // From EF9 the F1 data is added through UseSeeding / UseAsyncSeeding, which the provider's EnsureCreated does not run, so seed it here.
+#if !EF8
+        protected override async Task SeedAsync(F1Context context)
         {
-            base.OnModelCreating(modelBuilder, context);
-            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: false);
+            F1Context.AddSeedData(context);
+            await context.SaveChangesAsync();
         }
+#endif
     }
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Adding_the_same_entity_twice_results_in_DbUpdateException()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Adding_the_same_entity_twice_results_in_DbUpdateException(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Adding_the_same_entity_twice_results_in_DbUpdateException());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: Include of a skip navigation is not supported EF-X110
     public override Task Attempting_to_add_same_relationship_twice_for_many_to_many_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Attempting_to_add_same_relationship_twice_for_many_to_many_results_in_independent_association_exception(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Attempting_to_add_same_relationship_twice_for_many_to_many_results_in_independent_association_exception(), "Including navigation");
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: Include of a skip navigation is not supported EF-X110
     public override Task Attempting_to_delete_same_relationship_twice_for_many_to_many_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Attempting_to_delete_same_relationship_twice_for_many_to_many_results_in_independent_association_exception(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Attempting_to_delete_same_relationship_twice_for_many_to_many_results_in_independent_association_exception(), "Including navigation");
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: NullReferenceException during query execution or materialization EF-X529
     public override Task Calling_GetDatabaseValues_on_owned_entity_works(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_GetDatabaseValues_on_owned_entity_works(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Calling_GetDatabaseValues_on_owned_entity_works(async));
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_a_Deleted_entity_makes_the_entity_unchanged(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_a_Deleted_entity_makes_the_entity_unchanged(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_a_Deleted_entity_makes_the_entity_unchanged(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_a_Deleted_entity_that_is_not_in_database_detaches_it(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_a_Deleted_entity_that_is_not_in_database_detaches_it(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_a_Deleted_entity_that_is_not_in_database_detaches_it(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_a_Detached_entity_makes_the_entity_unchanged(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_a_Detached_entity_makes_the_entity_unchanged(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_a_Detached_entity_makes_the_entity_unchanged(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_a_Detached_entity_that_is_not_in_database_detaches_it(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_a_Detached_entity_that_is_not_in_database_detaches_it(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_a_Detached_entity_that_is_not_in_database_detaches_it(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_a_Modified_entity_makes_the_entity_unchanged(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_a_Modified_entity_makes_the_entity_unchanged(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_a_Modified_entity_makes_the_entity_unchanged(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_a_Modified_entity_that_is_not_in_database_detaches_it(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_a_Modified_entity_that_is_not_in_database_detaches_it(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_a_Modified_entity_that_is_not_in_database_detaches_it(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_an_Added_entity_that_is_not_in_database_is_no_op(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_an_Added_entity_that_is_not_in_database_is_no_op(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_an_Added_entity_that_is_not_in_database_is_no_op(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_an_Added_entity_that_was_saved_elsewhere_makes_the_entity_unchanged(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_an_Added_entity_that_was_saved_elsewhere_makes_the_entity_unchanged(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_an_Added_entity_that_was_saved_elsewhere_makes_the_entity_unchanged(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_an_Unchanged_entity_makes_the_entity_unchanged(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_an_Unchanged_entity_makes_the_entity_unchanged(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_an_Unchanged_entity_makes_the_entity_unchanged(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
     public override Task Calling_Reload_on_an_Unchanged_entity_that_is_not_in_database_detaches_it(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_an_Unchanged_entity_that_is_not_in_database_detaches_it(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => base.Calling_Reload_on_an_Unchanged_entity_that_is_not_in_database_detaches_it(async);
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Calling_Reload_on_owned_entity_works(bool async)
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Calling_Reload_on_owned_entity_works(async), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Calling_Reload_on_owned_entity_works(async));
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Change_in_independent_association_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Change_in_independent_association_results_in_independent_association_exception(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_results_in_independent_association_exception());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the query returns no rows where the base expects data (not yet triaged) EF-X600
     public override Task Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the query returns no rows where the base expects data (not yet triaged) EF-X600
     public override Task Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override void Nullable_client_side_concurrency_token_can_be_used()
-        => SpecFails.Throws<global::System.NotSupportedException>(() => base.Nullable_client_side_concurrency_token_can_be_used(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.Throws(() => base.Nullable_client_side_concurrency_token_can_be_used());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Simple_concurrency_exception_can_be_resolved_with_client_values()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Simple_concurrency_exception_can_be_resolved_with_client_values(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_client_values());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Simple_concurrency_exception_can_be_resolved_with_new_values()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Simple_concurrency_exception_can_be_resolved_with_new_values(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_new_values());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
     public override Task Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the query returns no rows where the base expects data (not yet triaged) EF-X600
     public override Task Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException());
 
-    // Fails: Concurrency token on an owned entity property is rejected at model validation EF-X111
+    // Fails: the query returns no rows where the base expects data (not yet triaged) EF-X600
     public override Task Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync<global::System.NotSupportedException>(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "Property 'Latitude' on entity type 'Location' is configured as a concurrency token, but it");
+        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values());
 }
