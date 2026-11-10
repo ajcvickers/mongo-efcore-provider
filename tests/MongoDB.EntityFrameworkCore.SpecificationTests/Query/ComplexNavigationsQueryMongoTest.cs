@@ -45,6 +45,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Entity_equality_empty(bool async)
     {
         await base.Entity_equality_empty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_inner._id" : 0 } }
+""");
     }
 #endif
 
@@ -52,6 +57,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Key_equality_when_sentinel_ef_property(bool async)
     {
         await base.Key_equality_when_sentinel_ef_property(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2._id" : 0 } }
+""");
     }
 #endif
 
@@ -59,6 +69,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Key_equality_using_property_method_required(bool async)
     {
         await base.Key_equality_using_property_method_required(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Required_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2._id" : { "$gt" : 7 } } }
+""");
     }
 #endif
 
@@ -107,6 +122,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Key_equality_navigation_converted_to_FK(bool async)
     {
         await base.Key_equality_navigation_converted_to_FK(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_outer.Level1_Required_Id", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_inner._id" : 1 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -147,6 +167,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Navigation_key_access_optional_comparison(bool async)
     {
         await base.Navigation_key_access_optional_comparison(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "OneToOne_Optional_PK_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_PK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_PK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_PK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Optional_PK_Inverse2._id" : { "$gt" : 5 } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -176,6 +201,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Simple_level1_level2_GroupBy_Count(bool async)
     {
         await base.Simple_level1_level2_GroupBy_Count(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "_id", "as" : "_lookup_Level2" } }, { "$set" : { "_lookup_Level2" : { "$arrayElemAt" : ["$_lookup_Level2", 0] } } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "_id", "as" : "_lookup_Level3" } }, { "$set" : { "_lookup_Level3" : { "$arrayElemAt" : ["$_lookup_Level3", 0] } } }, { "$group" : { "_id" : "$_lookup_Level3.Name", "_v" : { "$sum" : 1 } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Simple_level1_level2_GroupBy_Count(bool async)
@@ -202,6 +232,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Navigation_key_access_required_comparison(bool async)
     {
         await base.Navigation_key_access_required_comparison(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "_id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_PK_Inverse2" } }, { "$match" : { "_lookup_OneToOne_Required_PK_Inverse2.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToOne_Required_PK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_PK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_PK_Inverse2._id" : { "$gt" : 5 } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -215,6 +250,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Navigation_inside_method_call_translated_to_join2(bool async)
     {
         await base.Navigation_inside_method_call_translated_to_join2(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse3.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse3", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse3.Name" : { "$regularExpression" : { "pattern" : "^L", "options" : "s" } } } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -277,6 +317,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Join_navigation_in_outer_selector_translated_to_extra_join(bool async)
     {
         await base.Join_navigation_in_outer_selector_translated_to_extra_join(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_lookup_Level2._id", "foreignField" : "_id", "as" : "_lookup_Level2_1" } }, { "$match" : { "_lookup_Level2_1.0" : { "$exists" : true } } }, { "$set" : { "_lookup_Level2_1" : { "$arrayElemAt" : ["$_lookup_Level2_1", 0] } } }, { "$project" : { "Id1" : "$_id", "Id2" : "$_lookup_Level2_1._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -298,6 +343,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Join_navigation_in_outer_selector_translated_to_extra_join_nested2(bool async)
     {
         await base.Join_navigation_in_outer_selector_translated_to_extra_join_nested2(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse3.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse2", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Optional_FK_Inverse2._id", "foreignField" : "_id", "as" : "_lookup_Level1" } }, { "$match" : { "_lookup_Level1.0" : { "$exists" : true } } }, { "$set" : { "_lookup_Level1" : { "$arrayElemAt" : ["$_lookup_Level1", 0] } } }, { "$project" : { "Id3" : "$_id", "Id1" : "$_lookup_Level1._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -383,6 +433,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional1(bool async)
     {
         await base.Select_nav_prop_reference_optional1(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -390,6 +445,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional1_via_DefaultIfEmpty(bool async)
     {
         await base.Select_nav_prop_reference_optional1_via_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -397,6 +457,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional2(bool async)
     {
         await base.Select_nav_prop_reference_optional2(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -404,6 +469,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional2_via_DefaultIfEmpty(bool async)
     {
         await base.Select_nav_prop_reference_optional2_via_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -411,6 +481,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional3(bool async)
     {
         await base.Select_nav_prop_reference_optional3(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse2", 0] } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Optional_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -418,6 +493,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_nav_prop_reference_optional1(bool async)
     {
         await base.Where_nav_prop_reference_optional1(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "$or" : [{ "_lookup_Level2.Name" : "L2 05" }, { "_lookup_Level2.Name" : "L2 07" }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -431,6 +511,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_nav_prop_reference_optional2(bool async)
     {
         await base.Where_nav_prop_reference_optional2(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "$or" : [{ "_lookup_Level2.Name" : "L2 05" }, { "_lookup_Level2.Name" : { "$ne" : "L2 42" } }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -476,6 +561,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_multiple_nav_prop_reference_optional_compared_to_null2(bool async)
     {
         await base.Where_multiple_nav_prop_reference_optional_compared_to_null2(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse3" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Optional_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Optional_FK_Inverse2" : null } }
+""");
     }
 #endif
 
@@ -491,6 +581,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_multiple_nav_prop_reference_optional_compared_to_null4(bool async)
     {
         await base.Where_multiple_nav_prop_reference_optional_compared_to_null4(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse3" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Optional_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ne" : null } } }
+""");
     }
 #endif
 
@@ -506,18 +601,33 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_multiple_nav_prop_reference_required(bool async)
     {
         await base.Select_multiple_nav_prop_reference_required(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Required_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Required_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level3._id", "_id" : 0 } }
+""");
     }
 #endif
 
     public override async Task Select_multiple_nav_prop_reference_required2(bool async)
     {
         await base.Select_multiple_nav_prop_reference_required2(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse3.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse2", 0] } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Required_FK_Inverse2._id", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Select_multiple_nav_prop_optional_required(bool async)
     {
         await base.Select_multiple_nav_prop_optional_required(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Required_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level3._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -557,6 +667,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_complex_predicate_with_with_nav_prop_and_OrElse2(bool async)
     {
         await base.Where_complex_predicate_with_with_nav_prop_and_OrElse2(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Required_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level3" : { "$ifNull" : ["$_lookup_Level3", null] } } }, { "$match" : { "$or" : [{ "_lookup_Level3.Name" : "L3 05" }, { "_lookup_Level2.Name" : { "$ne" : "L2 05" } }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -572,6 +687,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_complex_predicate_with_with_nav_prop_and_OrElse4(bool async)
     {
         await base.Where_complex_predicate_with_with_nav_prop_and_OrElse4(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse3", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse3" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse3", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse3" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse3", null] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$match" : { "$or" : [{ "_lookup_OneToOne_Optional_FK_Inverse3.Name" : { "$ne" : "L2 05" } }, { "_lookup_OneToOne_Optional_FK_Inverse2.Name" : "L1 05" }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -585,6 +705,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Complex_navigations_with_predicate_projected_into_anonymous_type2(bool async)
     {
         await base.Complex_navigations_with_predicate_projected_into_anonymous_type2(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse3", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse2", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$match" : { "$and" : [{ "$expr" : { "$ne" : ["$_lookup_OneToOne_Required_FK_Inverse2", "$_lookup_OneToOne_Optional_FK_Inverse2"] } }, { "_lookup_OneToOne_Optional_FK_Inverse2._id" : { "$ne" : 7 } }] } }, { "$project" : { "Name" : "$Name", "_id" : "$_lookup_OneToOne_Optional_FK_Inverse2._id" } }
+""");
     }
 #endif
 
@@ -592,6 +717,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Optional_navigation_projected_into_DTO(bool async)
     {
         await base.Optional_navigation_projected_into_DTO(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_id" : "$_v._outer._id", "Name" : "$_v._outer.Name", "Inner" : { "$cond" : { "if" : { "$ne" : ["$_v._inner", null] }, "then" : { "_id" : "$_v._inner._id", "Name" : "$_v._inner.Name" }, "else" : null } } } }
+""");
     }
 #endif
 
@@ -599,6 +729,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task OrderBy_nav_prop_reference_optional(bool async)
     {
         await base.OrderBy_nav_prop_reference_optional(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "_lookup_Level2.Name" : 1, "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -606,6 +741,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task OrderBy_nav_prop_reference_optional_via_DefaultIfEmpty(bool async)
     {
         await base.OrderBy_nav_prop_reference_optional_via_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "_lookup_Level2.Name" : 1, "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -613,6 +753,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Sum(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Sum(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_v" : { "$sum" : "$_v._inner.Level1_Required_Id" } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 #endif
 
@@ -628,6 +773,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Max(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Max(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_max" : { "$max" : { "_v" : "$_v._inner.Level1_Required_Id" } } } }, { "$replaceRoot" : { "newRoot" : "$_max" } }
+""");
     }
 #endif
 
@@ -635,6 +785,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Average(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Average(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_v" : { "$avg" : "$_v._inner.Level1_Required_Id" } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 #endif
 
@@ -642,6 +797,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Average_with_identity_selector(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Average_with_identity_selector(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_v" : { "$avg" : "$_v._inner.Level1_Required_Id" } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 #endif
 
@@ -649,6 +809,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Average_without_selector(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Average_without_selector(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2.Level1_Required_Id", "_id" : 0 } }, { "$group" : { "_id" : null, "v" : { "$avg" : "$_v" } } }
+""");
     }
 #endif
 
@@ -656,6 +821,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_via_DefaultIfEmpty(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_via_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_v" : { "$sum" : { "$cond" : { "if" : { "$eq" : ["$_v._inner", null] }, "then" : 0, "else" : "$_v._inner.Level1_Required_Id" } } } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 #endif
 
@@ -743,6 +913,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multiple_SelectMany_calls(bool async)
     {
         await base.Multiple_SelectMany_calls(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "OneToMany_Optional_Inverse2Id", "as" : "_lookup_OneToMany_Optional1" } }, { "$unwind" : { "path" : "$_lookup_OneToMany_Optional1", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_OneToMany_Optional1._id", "foreignField" : "OneToMany_Optional_Inverse3Id", "as" : "_lookup_OneToMany_Optional2" } }, { "$unwind" : { "path" : "$_lookup_OneToMany_Optional2", "preserveNullAndEmptyArrays" : false } }, { "$replaceRoot" : { "newRoot" : "$_lookup_OneToMany_Optional2" } }
+""");
     }
 #else
     public override async Task Multiple_SelectMany_calls(bool async)
@@ -838,6 +1013,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access_subquery(bool async)
     {
         await base.Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access_subquery(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse3", "preserveNullAndEmptyArrays" : false } }, { "$sort" : { "_lookup_OneToOne_Required_FK_Inverse3._id" : 1 } }, { "$limit" : 10 }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse2", "preserveNullAndEmptyArrays" : false } }, { "$project" : { "_v" : "$_lookup_OneToOne_Required_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Order_by_key_of_projected_navigation_doesnt_get_optimized_into_FK_access_subquery(bool async)
@@ -850,6 +1030,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Order_by_key_of_anonymous_type_projected_navigation_doesnt_get_optimized_into_FK_access_subquery(bool async)
     {
         await base.Order_by_key_of_anonymous_type_projected_navigation_doesnt_get_optimized_into_FK_access_subquery(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse3.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse3", 0] } } }, { "$sort" : { "_lookup_OneToOne_Required_FK_Inverse3._id" : 1 } }, { "$limit" : 10 }, { "$project" : { "_v" : "$_lookup_OneToOne_Required_FK_Inverse3.Name", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -863,22 +1048,42 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Projection_select_correct_table_from_subquery_when_materialization_is_not_required(bool async)
     {
         await base.Projection_select_correct_table_from_subquery_when_materialization_is_not_required(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2.Name" : "L1 03" } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 3 }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_select_correct_table_with_anonymous_projection_in_subquery(bool async)
     {
         await base.Projection_select_correct_table_with_anonymous_projection_in_subquery(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse2", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_OneToOne_Required_FK_Inverse2._id", "foreignField" : "Level2_Required_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : false } }, { "$sort" : { "_lookup_OneToOne_Required_FK_Inverse2._id" : 1 } }, { "$limit" : 3 }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_select_correct_table_in_subquery_when_materialization_is_not_required_in_multiple_joins(bool async)
     {
         await base.Projection_select_correct_table_in_subquery_when_materialization_is_not_required_in_multiple_joins(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse2", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_OneToOne_Required_FK_Inverse2._id", "foreignField" : "Level2_Required_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : false } }, { "$sort" : { "_lookup_OneToOne_Required_FK_Inverse2._id" : 1 } }, { "$limit" : 3 }, { "$project" : { "_v" : "$_lookup_OneToOne_Required_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Where_predicate_on_optional_reference_navigation(bool async)
     {
         await base.Where_predicate_on_optional_reference_navigation(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Required_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : "L2 03" } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 3 }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -915,36 +1120,50 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multiple_required_navigations_with_Include(bool async)
     {
         await base.Multiple_required_navigations_with_Include(async);
+
+        AssertMql();
     }
 
     public override async Task Multiple_required_navigation_using_multiple_selects_with_Include(bool async)
     {
         await base.Multiple_required_navigation_using_multiple_selects_with_Include(async);
+
+        AssertMql();
     }
 
     public override async Task Multiple_required_navigation_with_string_based_Include(bool async)
     {
         await base.Multiple_required_navigation_with_string_based_Include(async);
+
+        AssertMql();
     }
 
     public override async Task Multiple_required_navigation_with_EF_Property_Include(bool async)
     {
         await base.Multiple_required_navigation_with_EF_Property_Include(async);
+
+        AssertMql();
     }
 
     public override async Task Multiple_required_navigation_using_multiple_selects_with_string_based_Include(bool async)
     {
         await base.Multiple_required_navigation_using_multiple_selects_with_string_based_Include(async);
+
+        AssertMql();
     }
 
     public override async Task Multiple_required_navigation_using_multiple_selects_with_EF_Property_Include(bool async)
     {
         await base.Multiple_required_navigation_using_multiple_selects_with_EF_Property_Include(async);
+
+        AssertMql();
     }
 
     public override async Task Optional_navigation_with_Include(bool async)
     {
         await base.Optional_navigation_with_Include(async);
+
+        AssertMql();
     }
 
     public override async Task SelectMany_with_navigation_and_explicit_DefaultIfEmpty(bool async)
@@ -1093,6 +1312,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Manually_created_left_join_propagates_nullability_to_navigations(bool async)
     {
         await base.Manually_created_left_join_propagates_nullability_to_navigations(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_Level2.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2.Name" : { "$ne" : "L3 02" } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Required_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1100,6 +1324,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Optional_navigation_propagates_nullability_to_manually_created_left_join1(bool async)
     {
         await base.Optional_navigation_propagates_nullability_to_manually_created_left_join1(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_lookup_Level2.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_Level2_1" } }, { "$set" : { "_lookup_Level2_1" : { "$arrayElemAt" : ["$_lookup_Level2_1", 0] } } }, { "$project" : { "Id1" : "$_lookup_Level2._id", "Id2" : "$_lookup_Level2_1._id", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Optional_navigation_propagates_nullability_to_manually_created_left_join1(bool async)
@@ -1185,6 +1414,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_inner(bool async)
     {
         await base.GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_inner(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_Level2.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Optional_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1192,6 +1426,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_on_a_subquery_containing_another_GroupJoin_with_orderby_on_inner_sequence_projecting_inner(bool async)
     {
         await base.GroupJoin_on_a_subquery_containing_another_GroupJoin_with_orderby_on_inner_sequence_projecting_inner(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_Level2.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Optional_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1199,6 +1438,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_on_left_side_being_a_subquery(bool async)
     {
         await base.GroupJoin_on_left_side_being_a_subquery(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "_lookup_Level2.Name" : 1, "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 2 }, { "$project" : { "Id" : "$_id", "Brand" : "$_lookup_Level2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1253,6 +1497,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_without_DefaultIfEmpty(bool async)
     {
         await base.GroupJoin_without_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : false } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 
     public override async Task GroupJoin_with_subquery_on_inner(bool async)
@@ -1271,6 +1520,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Optional_navigation_in_subquery_with_unrelated_projection(bool async)
     {
         await base.Optional_navigation_in_subquery_with_unrelated_projection(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 15 }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1278,6 +1532,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Explicit_GroupJoin_in_subquery_with_unrelated_projection(bool async)
     {
         await base.Explicit_GroupJoin_in_subquery_with_unrelated_projection(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 15 }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1285,6 +1544,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Explicit_GroupJoin_in_subquery_with_unrelated_projection2(bool async)
     {
         await base.Explicit_GroupJoin_in_subquery_with_unrelated_projection2(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$unset" : ["_lookup_Level2"] }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$project" : { "_id" : "$_id" } }
+""");
     }
 #endif
 
@@ -1292,6 +1556,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Explicit_GroupJoin_in_subquery_with_unrelated_projection3(bool async)
     {
         await base.Explicit_GroupJoin_in_subquery_with_unrelated_projection3(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$group" : { "_id" : { "_v" : "$_id", "_v__isMissing" : { "$eq" : [{ "$type" : "$_id" }, "missing"] } } } }, { "$project" : { "_v" : { "$cond" : { "if" : "$_id._v__isMissing", "then" : "$$REMOVE", "else" : "$_id._v" } }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1299,6 +1568,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Explicit_GroupJoin_in_subquery_with_unrelated_projection4(bool async)
     {
         await base.Explicit_GroupJoin_in_subquery_with_unrelated_projection4(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$sort" : { "_v" : 1 } }, { "$limit" : 20 }
+""");
     }
 #endif
 
@@ -1317,6 +1591,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_on_multilevel_reference_in_subquery_with_outer_projection(bool async)
     {
         await base.Where_on_multilevel_reference_in_subquery_with_outer_projection(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "OneToMany_Required_Inverse3Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Required_Inverse3" } }, { "$unwind" : { "path" : "$_lookup_OneToMany_Required_Inverse3", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToMany_Required_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse2", "preserveNullAndEmptyArrays" : false } }, { "$match" : { "$or" : [{ "_lookup_OneToOne_Required_FK_Inverse2.Name" : "L1 10" }, { "_lookup_OneToOne_Required_FK_Inverse2.Name" : "L1 01" }] } }, { "$sort" : { "Level2_Required_Id" : 1 } }, { "$skip" : 0 }, { "$limit" : 10 }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 
 #if !EF11
@@ -1344,12 +1623,22 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Navigation_with_same_navigation_compared_to_null(bool async)
     {
         await base.Navigation_with_same_navigation_compared_to_null(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_outer.OneToMany_Required_Inverse2Id", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$match" : { "Inner.Name" : { "$ne" : "L1 07" }, "Inner" : { "$ne" : null } } }, { "$project" : { "_v" : "$Outer._id", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Multi_level_navigation_compared_to_null(bool async)
     {
         await base.Multi_level_navigation_compared_to_null(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "OneToMany_Optional_Inverse3Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Optional_Inverse3" } }, { "$set" : { "_lookup_OneToMany_Optional_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToMany_Optional_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToMany_Optional_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$ne" : null } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1357,18 +1646,33 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multi_level_navigation_with_same_navigation_compared_to_null(bool async)
     {
         await base.Multi_level_navigation_with_same_navigation_compared_to_null(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "OneToMany_Optional_Inverse3Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Optional_Inverse3" } }, { "$set" : { "_lookup_OneToMany_Optional_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToMany_Optional_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToMany_Optional_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2.Name" : { "$ne" : "L1 07" }, "_lookup_OneToOne_Required_FK_Inverse2" : { "$ne" : null } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
     public override async Task Navigations_compared_to_each_other1(bool async)
     {
         await base.Navigations_compared_to_each_other1(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_outer.OneToMany_Required_Inverse2Id", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$match" : { "$expr" : { "$eq" : ["$Inner", "$Inner"] } } }, { "$project" : { "_v" : "$Outer.Name", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Navigations_compared_to_each_other2(bool async)
     {
         await base.Navigations_compared_to_each_other2(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "OneToOne_Optional_PK_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_PK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_PK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_PK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_PK_Inverse2", null] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "OneToMany_Required_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Required_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToMany_Required_Inverse2", "preserveNullAndEmptyArrays" : false } }, { "$match" : { "$expr" : { "$eq" : ["$_lookup_OneToMany_Required_Inverse2", "$_lookup_OneToOne_Optional_PK_Inverse2"] } } }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1376,6 +1680,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Navigations_compared_to_each_other3(bool async)
     {
         await base.Navigations_compared_to_each_other3(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelThree", "localField" : "_id", "foreignField" : "OneToMany_Optional_Inverse3Id", "as" : "_lookup_OneToMany_Optional2" } }, { "$match" : { "_lookup_OneToMany_Optional2.0" : { "$exists" : true } } }, { "$project" : { "Name" : "$Name", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Navigations_compared_to_each_other3(bool async)
@@ -1404,6 +1713,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Level4_Include(bool async)
     {
         await base.Level4_Include(async);
+
+        AssertMql();
     }
 
 #if (EF10 || EF11)
@@ -1461,6 +1772,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Entries_for_detached_entities_are_removed(bool async)
     {
         await base.Entries_for_detached_entities_are_removed(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -1495,6 +1811,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task String_include_multiple_derived_navigation_with_same_name_and_same_type(bool async)
     {
         await base.String_include_multiple_derived_navigation_with_same_name_and_same_type(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$lookup" : { "from" : "InheritanceLeafOne", "localField" : "_id", "foreignField" : "SameTypeReference_InheritanceDerived2Id", "as" : "_lookup_InheritanceLeaf1_1" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf1_1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf1_1" : { "$ifNull" : ["$_lookup_InheritanceLeaf1_1", null] } } }, { "$lookup" : { "from" : "InheritanceLeafOne", "localField" : "_id", "foreignField" : "SameTypeReference_InheritanceDerived1Id", "as" : "_lookup_InheritanceLeaf1" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf1" : { "$ifNull" : ["$_lookup_InheritanceLeaf1", null] } } }
+""");
     }
 #endif
 
@@ -1502,6 +1823,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task String_include_multiple_derived_navigation_with_same_name_and_different_type(bool async)
     {
         await base.String_include_multiple_derived_navigation_with_same_name_and_different_type(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$lookup" : { "from" : "InheritanceLeafTwo", "localField" : "_id", "foreignField" : "DifferentTypeReference_InheritanceDerived2Id", "as" : "_lookup_InheritanceLeaf2" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf2" : { "$ifNull" : ["$_lookup_InheritanceLeaf2", null] } } }, { "$lookup" : { "from" : "InheritanceLeafOne", "localField" : "_id", "foreignField" : "DifferentTypeReference_InheritanceDerived1Id", "as" : "_lookup_InheritanceLeaf1" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf1" : { "$ifNull" : ["$_lookup_InheritanceLeaf1", null] } } }
+""");
     }
 #endif
 
@@ -1509,6 +1835,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task String_include_multiple_derived_navigation_with_same_name_and_different_type_nested_also_includes_partially_matching_navigation_chains(bool async)
     {
         await base.String_include_multiple_derived_navigation_with_same_name_and_different_type_nested_also_includes_partially_matching_navigation_chains(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$lookup" : { "from" : "InheritanceLeafTwo", "localField" : "_id", "foreignField" : "DifferentTypeReference_InheritanceDerived2Id", "as" : "_lookup_InheritanceLeaf2" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf2" : { "$ifNull" : ["$_lookup_InheritanceLeaf2", null] } } }, { "$lookup" : { "from" : "InheritanceLeafOne", "localField" : "_id", "foreignField" : "DifferentTypeReference_InheritanceDerived1Id", "as" : "_lookup_InheritanceLeaf1" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf1" : { "$ifNull" : ["$_lookup_InheritanceLeaf1", null] } } }, { "$lookup" : { "from" : "InheritanceTwo", "localField" : "_lookup_InheritanceLeaf2._id", "foreignField" : "InheritanceLeaf2Id", "as" : "_lookup_InheritanceLeaf2._lookup_BaseCollection" } }
+""");
     }
 #endif
 
@@ -1542,6 +1873,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Nav_rewrite_doesnt_apply_null_protection_for_function_arguments(bool async)
     {
         await base.Nav_rewrite_doesnt_apply_null_protection_for_function_arguments(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "OneToOne_Optional_PK_Inverse2Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2" : { "$ne" : null } } }, { "$project" : { "_v" : { "$max" : ["$_lookup_Level2.Level1_Required_Id", 7] }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1674,6 +2010,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Include17(bool async)
     {
         await base.Include17(async);
+
+        AssertMql();
     }
 
 #if (EF10 || EF11)
@@ -1744,6 +2082,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Include18(bool async)
     {
         await base.Include18(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$sort" : { "_id" : 1 } }, { "$limit" : 10 }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2_1" } }, { "$unwind" : { "path" : "$_lookup_Level2_1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2_1" : { "$ifNull" : ["$_lookup_Level2_1", null] } } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "OneToOne_Optional_PK_Inverse2Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }
+""");
     }
 #endif
 
@@ -1756,6 +2099,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Include_with_all_method_include_gets_ignored(bool async)
     {
         await base.Include_with_all_method_include_gets_ignored(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$match" : { "Name" : "Foo" } }, { "$limit" : 1 }
+""");
     }
 
 #if (EF10 || EF11)
@@ -1806,6 +2154,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Null_check_removal_applied_recursively(bool async)
     {
         await base.Null_check_removal_applied_recursively(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Optional_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelFour", "localField" : "_lookup_Level3._id", "foreignField" : "OneToOne_Optional_PK_Inverse4Id", "as" : "_lookup_Level4" } }, { "$unwind" : { "path" : "$_lookup_Level4", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level4.Name" : "L4 01" } }
+""");
     }
 #endif
 
@@ -1813,6 +2166,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Null_check_different_structure_does_not_remove_null_checks(bool async)
     {
         await base.Null_check_different_structure_does_not_remove_null_checks(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Optional_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level3" : { "$ifNull" : ["$_lookup_Level3", null] } } }, { "$lookup" : { "from" : "LevelFour", "localField" : "_lookup_Level3._id", "foreignField" : "OneToOne_Optional_PK_Inverse4Id", "as" : "_lookup_Level4" } }, { "$unwind" : { "path" : "$_lookup_Level4", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level4" : { "$ifNull" : ["$_lookup_Level4", null] } } }, { "$match" : { "$expr" : { "$eq" : [{ "$cond" : { "if" : { "$eq" : ["$_lookup_Level2", null] }, "then" : null, "else" : { "$cond" : { "if" : { "$eq" : ["$_lookup_Level3", null] }, "then" : null, "else" : "$_lookup_Level4.Name" } } } }, "L4 01"] } } }
+""");
     }
 #endif
 
@@ -1849,6 +2207,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Sum_with_selector_cast_using_as(bool async)
     {
         await base.Sum_with_selector_cast_using_as(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_v" : "$_id", "_id" : 0 } }, { "$group" : { "_id" : null, "_v" : { "$sum" : "$_v" } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 
     public override async Task Sum_with_filter_with_include_selector_cast_using_as(bool async)
@@ -1861,6 +2224,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_with_joined_where_clause_cast_using_as(bool async)
     {
         await base.Select_with_joined_where_clause_cast_using_as(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "$expr" : { "$eq" : [{ "$add" : ["$_outer._id", 7] }, "$_inner._id"] } } }
+""");
     }
 #endif
 
@@ -1880,6 +2248,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Contains_over_optional_navigation_with_null_constant(bool async)
     {
         await base.Contains_over_optional_navigation_with_null_constant(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$match" : { "_lookup_Level2" : null } }, { "$limit" : 1 }, { "$project" : { "_id" : 0, "_v" : null } }
+""");
     }
 #endif
 
@@ -1887,6 +2260,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Contains_over_optional_navigation_with_null_parameter(bool async)
     {
         await base.Contains_over_optional_navigation_with_null_parameter(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$match" : { "_lookup_Level2" : null } }, { "$limit" : 1 }, { "$project" : { "_id" : 0, "_v" : null } }
+""");
     }
 #endif
 
@@ -1918,6 +2296,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupBy_aggregate_where_required_relationship(bool async)
     {
         await base.GroupBy_aggregate_where_required_relationship(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "OneToMany_Required_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Required_Inverse2" } }, { "$match" : { "_lookup_OneToMany_Required_Inverse2.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToMany_Required_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToMany_Required_Inverse2", 0] } } }, { "$group" : { "_id" : "$_lookup_OneToMany_Required_Inverse2._id", "Max" : { "$max" : "$_id" } } }, { "$project" : { "Key" : "$_id", "Max" : "$Max", "_id" : 0 } }, { "$match" : { "$expr" : { "$ne" : ["$Max", 2] } } }
+""");
     }
 #else
     public override async Task GroupBy_aggregate_where_required_relationship(bool async)
@@ -1931,6 +2314,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupBy_aggregate_where_required_relationship_2(bool async)
     {
         await base.GroupBy_aggregate_where_required_relationship_2(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "OneToMany_Required_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Required_Inverse2" } }, { "$match" : { "_lookup_OneToMany_Required_Inverse2.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToMany_Required_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToMany_Required_Inverse2", 0] } } }, { "$group" : { "_id" : "$_lookup_OneToMany_Required_Inverse2._id", "Max" : { "$max" : "$_id" } } }, { "$project" : { "Key" : "$_id", "Max" : "$Max", "_id" : 0 } }, { "$match" : { "$or" : [{ "$expr" : { "$lt" : ["$Max", 2] } }, { "$expr" : { "$gt" : ["$Max", 2] } }] } }
+""");
     }
 #else
     public override async Task GroupBy_aggregate_where_required_relationship_2(bool async)
@@ -1944,6 +2332,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Member_over_null_check_ternary_and_nested_dto_type(bool async)
     {
         await base.Member_over_null_check_ternary_and_nested_dto_type(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$sort" : { "_v._inner.Name" : 1, "_v._outer._id" : 1 } }, { "$project" : { "_id" : "$_v._outer._id", "Name" : "$_v._outer.Name", "Level2" : { "$cond" : { "if" : { "$eq" : ["$_v._inner", null] }, "then" : null, "else" : { "_id" : "$_v._inner._id", "Name" : "$_v._inner.Name" } } } } }
+""");
     }
 #endif
 
@@ -1965,6 +2358,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multiple_conditionals_in_projection(bool async)
     {
         await base.Multiple_conditionals_in_projection(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_id", "foreignField" : "Level2_Optional_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level3" : { "$ifNull" : ["$_lookup_Level3", null] } } }, { "$project" : { "_id" : "$_id", "Name" : "$_lookup_Level3.Name", "Level2" : { "$cond" : { "if" : { "$eq" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] }, "then" : null, "else" : { "_id" : 0, "Name" : null } } } } }
+""");
     }
 #endif
 
@@ -2000,6 +2398,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Collection_FirstOrDefault_property_accesses_in_projection(bool async)
     {
         await base.Collection_FirstOrDefault_property_accesses_in_projection(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$match" : { "_id" : { "$lt" : 3 } } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "OneToMany_Optional_Inverse2Id", "pipeline" : [{ "$match" : { "Name" : "L2 02" } }, { "$limit" : 1 }], "as" : "_lookup_OneToMany_Optional1" } }, { "$unwind" : { "path" : "$_lookup_OneToMany_Optional1", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "Id" : "$_id", "Pushdown" : "$_lookup_OneToMany_Optional1.Name", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Collection_FirstOrDefault_property_accesses_in_projection(bool async)
@@ -2036,6 +2439,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Complex_query_with_let_collection_SelectMany(bool async)
     {
         await base.Complex_query_with_let_collection_SelectMany(async);
+
+        AssertMql();
     }
 
     public override async Task SelectMany_without_collection_selector_returning_queryable(bool async)
@@ -2047,6 +2452,8 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_projecting_queryable_followed_by_SelectMany(bool async)
     {
         await base.Select_projecting_queryable_followed_by_SelectMany(async);
+
+        AssertMql();
     }
 
     public override async Task Join_with_result_selector_returning_queryable_throws_validation_error(bool async)
@@ -2058,61 +2465,115 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_projecting_queryable_followed_by_Join(bool async)
     {
         await base.Select_projecting_queryable_followed_by_Join(async);
+
+        AssertMql();
     }
 
     public override async Task Select_projecting_queryable_in_anonymous_projection_followed_by_Join(bool async)
     {
         await base.Select_projecting_queryable_in_anonymous_projection_followed_by_Join(async);
+
+        AssertMql();
     }
 
     public override async Task Project_shadow_properties1(bool async)
     {
         await base.Project_shadow_properties1(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "Id" : "$_id", "OneToOne_Optional_Self1Id" : "$OneToOne_Optional_Self1Id", "OneToMany_Required_Self_Inverse1Id" : "$OneToMany_Required_Self_Inverse1Id", "OneToMany_Optional_Self_Inverse1Id" : "$OneToMany_Optional_Self_Inverse1Id", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties2(bool async)
     {
         await base.Project_shadow_properties2(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$project" : { "Id" : "$_id", "OneToOne_Optional_PK_Inverse2Id" : "$OneToOne_Optional_PK_Inverse2Id", "OneToMany_Required_Inverse2Id" : "$OneToMany_Required_Inverse2Id", "OneToMany_Optional_Inverse2Id" : "$OneToMany_Optional_Inverse2Id", "OneToOne_Optional_Self2Id" : "$OneToOne_Optional_Self2Id", "OneToMany_Required_Self_Inverse2Id" : "$OneToMany_Required_Self_Inverse2Id", "OneToMany_Optional_Self_Inverse2Id" : "$OneToMany_Optional_Self_Inverse2Id", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties3(bool async)
     {
         await base.Project_shadow_properties3(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$project" : { "Id" : "$_id", "OneToOne_Optional_PK_Inverse3Id" : "$OneToOne_Optional_PK_Inverse3Id", "OneToMany_Required_Inverse3Id" : "$OneToMany_Required_Inverse3Id", "OneToMany_Optional_Inverse3Id" : "$OneToMany_Optional_Inverse3Id", "OneToOne_Optional_Self3Id" : "$OneToOne_Optional_Self3Id", "OneToMany_Required_Self_Inverse3Id" : "$OneToMany_Required_Self_Inverse3Id", "OneToMany_Optional_Self_Inverse3Id" : "$OneToMany_Optional_Self_Inverse3Id", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties4(bool async)
     {
         await base.Project_shadow_properties4(async);
+
+        AssertMql(
+            """
+LevelFour.{ "$project" : { "Id" : "$_id", "OneToOne_Optional_PK_Inverse4Id" : "$OneToOne_Optional_PK_Inverse4Id", "OneToMany_Required_Inverse4Id" : "$OneToMany_Required_Inverse4Id", "OneToMany_Optional_Inverse4Id" : "$OneToMany_Optional_Inverse4Id", "OneToOne_Optional_Self4Id" : "$OneToOne_Optional_Self4Id", "OneToMany_Required_Self_Inverse4Id" : "$OneToMany_Required_Self_Inverse4Id", "OneToMany_Optional_Self_Inverse4Id" : "$OneToMany_Optional_Self_Inverse4Id", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties5(bool async)
     {
         await base.Project_shadow_properties5(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$project" : { "Id" : "$_id", "InheritanceBase2Id" : "$InheritanceBase2Id", "InheritanceBase2Id1" : "$InheritanceBase2Id1", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties6(bool async)
     {
         await base.Project_shadow_properties6(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$match" : { "_t" : "InheritanceDerived1" } }, { "$project" : { "Id" : "$_id", "InheritanceBase2Id" : "$InheritanceBase2Id", "InheritanceBase2Id1" : "$InheritanceBase2Id1", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties7(bool async)
     {
         await base.Project_shadow_properties7(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$match" : { "_t" : "InheritanceDerived2" } }, { "$project" : { "Id" : "$_id", "InheritanceBase2Id" : "$InheritanceBase2Id", "InheritanceBase2Id1" : "$InheritanceBase2Id1", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties8(bool async)
     {
         await base.Project_shadow_properties8(async);
+
+        AssertMql(
+            """
+InheritanceTwo.{ "$project" : { "Id" : "$_id", "InheritanceLeaf2Id" : "$InheritanceLeaf2Id", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties9(bool async)
     {
         await base.Project_shadow_properties9(async);
+
+        AssertMql(
+            """
+InheritanceLeafOne.{ "$project" : { "Id" : "$_id", "DifferentTypeReference_InheritanceDerived1Id" : "$DifferentTypeReference_InheritanceDerived1Id", "InheritanceDerived1Id" : "$InheritanceDerived1Id", "InheritanceDerived1Id1" : "$InheritanceDerived1Id1", "InheritanceDerived2Id" : "$InheritanceDerived2Id", "SameTypeReference_InheritanceDerived1Id" : "$SameTypeReference_InheritanceDerived1Id", "SameTypeReference_InheritanceDerived2Id" : "$SameTypeReference_InheritanceDerived2Id", "_id" : 0 } }
+""");
     }
 
     public override async Task Project_shadow_properties10(bool async)
     {
         await base.Project_shadow_properties10(async);
+
+        AssertMql(
+            """
+InheritanceLeafTwo.{ "$project" : { "Id" : "$_id", "DifferentTypeReference_InheritanceDerived2Id" : "$DifferentTypeReference_InheritanceDerived2Id", "InheritanceDerived2Id" : "$InheritanceDerived2Id", "_id" : 0 } }
+""");
     }
 
     public override async Task Prune_does_not_throw_null_ref(bool async)
@@ -2125,6 +2586,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_SelectMany_DefaultIfEmpty_with_predicate_using_closure(bool async)
     {
         await base.GroupJoin_SelectMany_DefaultIfEmpty_with_predicate_using_closure(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "pipeline" : [{ "$match" : { "_id" : { "$ne" : 10 } } }], "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "Id1" : "$_id", "Id2" : "$_lookup_Level2._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2132,6 +2598,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_SelectMany_with_predicate_using_closure(bool async)
     {
         await base.GroupJoin_SelectMany_with_predicate_using_closure(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "pipeline" : [{ "$match" : { "_id" : { "$ne" : 10 } } }], "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : false } }, { "$project" : { "Id1" : "$_id", "Id2" : "$_lookup_Level2._id", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupJoin_SelectMany_with_predicate_using_closure(bool async)
@@ -2153,6 +2624,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_SelectMany_with_predicate_using_closure_nested(bool async)
     {
         await base.GroupJoin_SelectMany_with_predicate_using_closure_nested(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "pipeline" : [{ "$match" : { "_id" : { "$ne" : 10 } } }], "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Optional_Id", "pipeline" : [{ "$match" : { "_id" : { "$ne" : 20 } } }], "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : false } }, { "$project" : { "Id1" : "$_id", "Id2" : "$_lookup_Level2._id", "Id3" : "$_lookup_Level3._id", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupJoin_SelectMany_with_predicate_using_closure_nested(bool async)
@@ -2174,6 +2650,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_SelectMany_with_predicate_using_closure_nested_same_param(bool async)
     {
         await base.GroupJoin_SelectMany_with_predicate_using_closure_nested_same_param(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "pipeline" : [{ "$match" : { "_id" : { "$ne" : 10 } } }], "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Optional_Id", "pipeline" : [{ "$match" : { "_id" : { "$ne" : 10 } } }], "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : false } }, { "$project" : { "Id1" : "$_id", "Id2" : "$_lookup_Level2._id", "Id3" : "$_lookup_Level3._id", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupJoin_SelectMany_with_predicate_using_closure_nested_same_param(bool async)
@@ -2187,6 +2668,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multiple_optional_navs_should_not_deadlock(bool async)
     {
         await base.Multiple_optional_navs_should_not_deadlock(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "OneToMany_Optional_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Optional_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToMany_Optional_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToMany_Optional_Inverse2" : { "$ifNull" : ["$_lookup_OneToMany_Optional_Inverse2", null] } } }, { "$match" : { "$or" : [{ "_lookup_OneToMany_Optional_Inverse2" : { "$ne" : null }, "_lookup_OneToMany_Optional_Inverse2.Name" : { "$regularExpression" : { "pattern" : "L1\\ 01", "options" : "s" } } }, { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ne" : null }, "_lookup_OneToOne_Optional_FK_Inverse2.Name" : { "$regularExpression" : { "pattern" : "L1\\ 01", "options" : "s" } } }] } }, { "$count" : "_v" }
+""");
     }
 #endif
 
@@ -2234,6 +2720,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Entity_equality_empty(bool async)
     {
         await base.Entity_equality_empty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_inner._id" : 0 } }
+""");
     }
 #endif
 
@@ -2241,6 +2732,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Key_equality_when_sentinel_ef_property(bool async)
     {
         await base.Key_equality_when_sentinel_ef_property(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2._id" : 0 } }
+""");
     }
 #endif
 
@@ -2248,6 +2744,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Key_equality_using_property_method_required(bool async)
     {
         await base.Key_equality_using_property_method_required(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Required_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2._id" : { "$gt" : 7 } } }
+""");
     }
 #endif
 
@@ -2295,6 +2796,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Navigation_key_access_optional_comparison(bool async)
     {
         await base.Navigation_key_access_optional_comparison(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "OneToOne_Optional_PK_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_PK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_PK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_PK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Optional_PK_Inverse2._id" : { "$gt" : 5 } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2390,6 +2896,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Join_navigation_in_outer_selector_translated_to_extra_join(bool async)
     {
         await base.Join_navigation_in_outer_selector_translated_to_extra_join(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_lookup_Level2._id", "foreignField" : "_id", "as" : "_lookup_Level2_1" } }, { "$match" : { "_lookup_Level2_1.0" : { "$exists" : true } } }, { "$set" : { "_lookup_Level2_1" : { "$arrayElemAt" : ["$_lookup_Level2_1", 0] } } }, { "$project" : { "Id1" : "$_id", "Id2" : "$_lookup_Level2_1._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2397,6 +2908,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Join_navigation_in_outer_selector_translated_to_extra_join_nested2(bool async)
     {
         await base.Join_navigation_in_outer_selector_translated_to_extra_join_nested2(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse3.0" : { "$exists" : true } } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse2", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Optional_FK_Inverse2._id", "foreignField" : "_id", "as" : "_lookup_Level1" } }, { "$match" : { "_lookup_Level1.0" : { "$exists" : true } } }, { "$set" : { "_lookup_Level1" : { "$arrayElemAt" : ["$_lookup_Level1", 0] } } }, { "$project" : { "Id3" : "$_id", "Id1" : "$_lookup_Level1._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2476,6 +2992,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional1(bool async)
     {
         await base.Select_nav_prop_reference_optional1(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2483,6 +3004,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional1_via_DefaultIfEmpty(bool async)
     {
         await base.Select_nav_prop_reference_optional1_via_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2490,6 +3016,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional2(bool async)
     {
         await base.Select_nav_prop_reference_optional2(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2497,6 +3028,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional2_via_DefaultIfEmpty(bool async)
     {
         await base.Select_nav_prop_reference_optional2_via_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2504,6 +3040,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_nav_prop_reference_optional3(bool async)
     {
         await base.Select_nav_prop_reference_optional3(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse2", 0] } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Optional_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2511,6 +3052,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_nav_prop_reference_optional1(bool async)
     {
         await base.Where_nav_prop_reference_optional1(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "$or" : [{ "_lookup_Level2.Name" : "L2 05" }, { "_lookup_Level2.Name" : "L2 07" }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2518,6 +3064,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_nav_prop_reference_optional2(bool async)
     {
         await base.Where_nav_prop_reference_optional2(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "$or" : [{ "_lookup_Level2.Name" : "L2 05" }, { "_lookup_Level2.Name" : { "$ne" : "L2 42" } }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2557,6 +3108,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_multiple_nav_prop_reference_optional_compared_to_null2(bool async)
     {
         await base.Where_multiple_nav_prop_reference_optional_compared_to_null2(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse3" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Optional_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Optional_FK_Inverse2" : null } }
+""");
     }
 #endif
 
@@ -2572,6 +3128,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_multiple_nav_prop_reference_optional_compared_to_null4(bool async)
     {
         await base.Where_multiple_nav_prop_reference_optional_compared_to_null4(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse3" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Optional_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Optional_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ne" : null } } }
+""");
     }
 #endif
 
@@ -2587,6 +3148,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_multiple_nav_prop_reference_required(bool async)
     {
         await base.Select_multiple_nav_prop_reference_required(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Required_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Required_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level3._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2594,6 +3160,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_multiple_nav_prop_optional_required(bool async)
     {
         await base.Select_multiple_nav_prop_optional_required(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Required_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level3._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2609,6 +3180,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_complex_predicate_with_with_nav_prop_and_OrElse2(bool async)
     {
         await base.Where_complex_predicate_with_with_nav_prop_and_OrElse2(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Required_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level3" : { "$ifNull" : ["$_lookup_Level3", null] } } }, { "$match" : { "$or" : [{ "_lookup_Level3.Name" : "L3 05" }, { "_lookup_Level2.Name" : { "$ne" : "L2 05" } }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2624,6 +3200,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_complex_predicate_with_with_nav_prop_and_OrElse4(bool async)
     {
         await base.Where_complex_predicate_with_with_nav_prop_and_OrElse4(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse3", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse3" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse3", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse3" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse3", null] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$match" : { "$or" : [{ "_lookup_OneToOne_Optional_FK_Inverse3.Name" : { "$ne" : "L2 05" } }, { "_lookup_OneToOne_Optional_FK_Inverse2.Name" : "L1 05" }] } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2631,6 +3212,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Complex_navigations_with_predicate_projected_into_anonymous_type2(bool async)
     {
         await base.Complex_navigations_with_predicate_projected_into_anonymous_type2(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "Level2_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse3" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse3", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Required_FK_Inverse2", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToOne_Required_FK_Inverse3.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$match" : { "$and" : [{ "$expr" : { "$ne" : ["$_lookup_OneToOne_Required_FK_Inverse2", "$_lookup_OneToOne_Optional_FK_Inverse2"] } }, { "_lookup_OneToOne_Optional_FK_Inverse2._id" : { "$ne" : 7 } }] } }, { "$project" : { "Name" : "$Name", "_id" : "$_lookup_OneToOne_Optional_FK_Inverse2._id" } }
+""");
     }
 #endif
 
@@ -2638,6 +3224,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Optional_navigation_projected_into_DTO(bool async)
     {
         await base.Optional_navigation_projected_into_DTO(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_id" : "$_v._outer._id", "Name" : "$_v._outer.Name", "Inner" : { "$cond" : { "if" : { "$ne" : ["$_v._inner", null] }, "then" : { "_id" : "$_v._inner._id", "Name" : "$_v._inner.Name" }, "else" : null } } } }
+""");
     }
 #endif
 
@@ -2645,6 +3236,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task OrderBy_nav_prop_reference_optional(bool async)
     {
         await base.OrderBy_nav_prop_reference_optional(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "_lookup_Level2.Name" : 1, "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2652,6 +3248,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task OrderBy_nav_prop_reference_optional_via_DefaultIfEmpty(bool async)
     {
         await base.OrderBy_nav_prop_reference_optional_via_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "_lookup_Level2.Name" : 1, "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2659,6 +3260,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Sum(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Sum(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_v" : { "$sum" : "$_v._inner.Level1_Required_Id" } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2674,6 +3280,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Max(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Max(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_max" : { "$max" : { "_v" : "$_v._inner.Level1_Required_Id" } } } }, { "$replaceRoot" : { "newRoot" : "$_max" } }
+""");
     }
 #endif
 
@@ -2681,6 +3292,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Average(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Average(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_v" : { "$avg" : "$_v._inner.Level1_Required_Id" } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2688,6 +3304,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Average_with_identity_selector(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Average_with_identity_selector(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_v" : { "$avg" : "$_v._inner.Level1_Required_Id" } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2695,6 +3316,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_Average_without_selector(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_Average_without_selector(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Level2.Level1_Required_Id", "_id" : 0 } }, { "$group" : { "_id" : null, "v" : { "$avg" : "$_v" } } }
+""");
     }
 #endif
 
@@ -2702,6 +3328,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Result_operator_nav_prop_reference_optional_via_DefaultIfEmpty(bool async)
     {
         await base.Result_operator_nav_prop_reference_optional_via_DefaultIfEmpty(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$group" : { "_id" : null, "_v" : { "$sum" : { "$cond" : { "if" : { "$eq" : ["$_v._inner", null] }, "then" : 0, "else" : "$_v._inner.Level1_Required_Id" } } } } }, { "$project" : { "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2741,6 +3372,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Where_predicate_on_optional_reference_navigation(bool async)
     {
         await base.Where_predicate_on_optional_reference_navigation(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Required_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : "L2 03" } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 3 }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2764,6 +3400,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Manually_created_left_join_propagates_nullability_to_navigations(bool async)
     {
         await base.Manually_created_left_join_propagates_nullability_to_navigations(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_Level2.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2.Name" : { "$ne" : "L3 02" } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Required_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2843,6 +3484,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_inner(bool async)
     {
         await base.GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_inner(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_Level2.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Optional_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2850,6 +3496,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_on_a_subquery_containing_another_GroupJoin_with_orderby_on_inner_sequence_projecting_inner(bool async)
     {
         await base.GroupJoin_on_a_subquery_containing_another_GroupJoin_with_orderby_on_inner_sequence_projecting_inner(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 2 }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_Level2.Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$project" : { "_v" : "$_lookup_OneToOne_Optional_FK_Inverse2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2857,6 +3508,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_on_left_side_being_a_subquery(bool async)
     {
         await base.GroupJoin_on_left_side_being_a_subquery(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "_lookup_Level2.Name" : 1, "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 2 }, { "$project" : { "Id" : "$_id", "Brand" : "$_lookup_Level2.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2888,6 +3544,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Optional_navigation_in_subquery_with_unrelated_projection(bool async)
     {
         await base.Optional_navigation_in_subquery_with_unrelated_projection(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 15 }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2895,6 +3556,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Explicit_GroupJoin_in_subquery_with_unrelated_projection(bool async)
     {
         await base.Explicit_GroupJoin_in_subquery_with_unrelated_projection(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$limit" : 15 }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2902,6 +3568,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Explicit_GroupJoin_in_subquery_with_unrelated_projection2(bool async)
     {
         await base.Explicit_GroupJoin_in_subquery_with_unrelated_projection2(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$unset" : ["_lookup_Level2"] }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$project" : { "_id" : "$_id" } }
+""");
     }
 #endif
 
@@ -2909,6 +3580,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Explicit_GroupJoin_in_subquery_with_unrelated_projection3(bool async)
     {
         await base.Explicit_GroupJoin_in_subquery_with_unrelated_projection3(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$group" : { "_id" : { "_v" : "$_id", "_v__isMissing" : { "$eq" : [{ "$type" : "$_id" }, "missing"] } } } }, { "$project" : { "_v" : { "$cond" : { "if" : "$_id._v__isMissing", "then" : "$$REMOVE", "else" : "$_id._v" } }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2916,6 +3592,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Explicit_GroupJoin_in_subquery_with_unrelated_projection4(bool async)
     {
         await base.Explicit_GroupJoin_in_subquery_with_unrelated_projection4(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$match" : { "_lookup_Level2.Name" : { "$ne" : "Foo" } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$sort" : { "_v" : 1 } }, { "$limit" : 20 }
+""");
     }
 #endif
 
@@ -2931,6 +3612,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multi_level_navigation_compared_to_null(bool async)
     {
         await base.Multi_level_navigation_compared_to_null(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "OneToMany_Optional_Inverse3Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Optional_Inverse3" } }, { "$set" : { "_lookup_OneToMany_Optional_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToMany_Optional_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToMany_Optional_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$ne" : null } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2938,6 +3624,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multi_level_navigation_with_same_navigation_compared_to_null(bool async)
     {
         await base.Multi_level_navigation_with_same_navigation_compared_to_null(async);
+
+        AssertMql(
+            """
+LevelThree.{ "$lookup" : { "from" : "LevelTwo", "localField" : "OneToMany_Optional_Inverse3Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Optional_Inverse3" } }, { "$set" : { "_lookup_OneToMany_Optional_Inverse3" : { "$arrayElemAt" : ["$_lookup_OneToMany_Optional_Inverse3", 0] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "_lookup_OneToMany_Optional_Inverse3.Level1_Required_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Required_FK_Inverse2" } }, { "$set" : { "_lookup_OneToOne_Required_FK_Inverse2" : { "$arrayElemAt" : ["$_lookup_OneToOne_Required_FK_Inverse2", 0] } } }, { "$match" : { "_lookup_OneToOne_Required_FK_Inverse2.Name" : { "$ne" : "L1 07" }, "_lookup_OneToOne_Required_FK_Inverse2" : { "$ne" : null } } }, { "$project" : { "_v" : "$_id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2945,6 +3636,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Navigations_compared_to_each_other2(bool async)
     {
         await base.Navigations_compared_to_each_other2(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "OneToOne_Optional_PK_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_PK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_PK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_PK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_PK_Inverse2", null] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "OneToMany_Required_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Required_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToMany_Required_Inverse2", "preserveNullAndEmptyArrays" : false } }, { "$match" : { "$expr" : { "$eq" : ["$_lookup_OneToMany_Required_Inverse2", "$_lookup_OneToOne_Optional_PK_Inverse2"] } } }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2984,6 +3680,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task String_include_multiple_derived_navigation_with_same_name_and_same_type(bool async)
     {
         await base.String_include_multiple_derived_navigation_with_same_name_and_same_type(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$lookup" : { "from" : "InheritanceLeafOne", "localField" : "_id", "foreignField" : "SameTypeReference_InheritanceDerived2Id", "as" : "_lookup_InheritanceLeaf1_1" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf1_1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf1_1" : { "$ifNull" : ["$_lookup_InheritanceLeaf1_1", null] } } }, { "$lookup" : { "from" : "InheritanceLeafOne", "localField" : "_id", "foreignField" : "SameTypeReference_InheritanceDerived1Id", "as" : "_lookup_InheritanceLeaf1" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf1" : { "$ifNull" : ["$_lookup_InheritanceLeaf1", null] } } }
+""");
     }
 #endif
 
@@ -2991,6 +3692,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task String_include_multiple_derived_navigation_with_same_name_and_different_type(bool async)
     {
         await base.String_include_multiple_derived_navigation_with_same_name_and_different_type(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$lookup" : { "from" : "InheritanceLeafTwo", "localField" : "_id", "foreignField" : "DifferentTypeReference_InheritanceDerived2Id", "as" : "_lookup_InheritanceLeaf2" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf2" : { "$ifNull" : ["$_lookup_InheritanceLeaf2", null] } } }, { "$lookup" : { "from" : "InheritanceLeafOne", "localField" : "_id", "foreignField" : "DifferentTypeReference_InheritanceDerived1Id", "as" : "_lookup_InheritanceLeaf1" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf1" : { "$ifNull" : ["$_lookup_InheritanceLeaf1", null] } } }
+""");
     }
 #endif
 
@@ -2998,6 +3704,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task String_include_multiple_derived_navigation_with_same_name_and_different_type_nested_also_includes_partially_matching_navigation_chains(bool async)
     {
         await base.String_include_multiple_derived_navigation_with_same_name_and_different_type_nested_also_includes_partially_matching_navigation_chains(async);
+
+        AssertMql(
+            """
+InheritanceOne.{ "$lookup" : { "from" : "InheritanceLeafTwo", "localField" : "_id", "foreignField" : "DifferentTypeReference_InheritanceDerived2Id", "as" : "_lookup_InheritanceLeaf2" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf2" : { "$ifNull" : ["$_lookup_InheritanceLeaf2", null] } } }, { "$lookup" : { "from" : "InheritanceLeafOne", "localField" : "_id", "foreignField" : "DifferentTypeReference_InheritanceDerived1Id", "as" : "_lookup_InheritanceLeaf1" } }, { "$unwind" : { "path" : "$_lookup_InheritanceLeaf1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_InheritanceLeaf1" : { "$ifNull" : ["$_lookup_InheritanceLeaf1", null] } } }, { "$lookup" : { "from" : "InheritanceTwo", "localField" : "_lookup_InheritanceLeaf2._id", "foreignField" : "InheritanceLeaf2Id", "as" : "_lookup_InheritanceLeaf2._lookup_BaseCollection" } }
+""");
     }
 #endif
 
@@ -3013,6 +3724,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Nav_rewrite_doesnt_apply_null_protection_for_function_arguments(bool async)
     {
         await base.Nav_rewrite_doesnt_apply_null_protection_for_function_arguments(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "OneToOne_Optional_PK_Inverse2Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level2" : { "$ne" : null } } }, { "$project" : { "_v" : { "$max" : ["$_lookup_Level2.Level1_Required_Id", 7] }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -3204,6 +3920,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Include18(bool async)
     {
         await base.Include18(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$sort" : { "_id" : 1 } }, { "$limit" : 10 }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2_1" } }, { "$unwind" : { "path" : "$_lookup_Level2_1", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2_1" : { "$ifNull" : ["$_lookup_Level2_1", null] } } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "OneToOne_Optional_PK_Inverse2Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }
+""");
     }
 #endif
 
@@ -3227,6 +3948,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Null_check_removal_applied_recursively(bool async)
     {
         await base.Null_check_removal_applied_recursively(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Optional_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "LevelFour", "localField" : "_lookup_Level3._id", "foreignField" : "OneToOne_Optional_PK_Inverse4Id", "as" : "_lookup_Level4" } }, { "$unwind" : { "path" : "$_lookup_Level4", "preserveNullAndEmptyArrays" : true } }, { "$match" : { "_lookup_Level4.Name" : "L4 01" } }
+""");
     }
 #endif
 
@@ -3234,6 +3960,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Null_check_different_structure_does_not_remove_null_checks(bool async)
     {
         await base.Null_check_different_structure_does_not_remove_null_checks(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_lookup_Level2._id", "foreignField" : "Level2_Optional_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level3" : { "$ifNull" : ["$_lookup_Level3", null] } } }, { "$lookup" : { "from" : "LevelFour", "localField" : "_lookup_Level3._id", "foreignField" : "OneToOne_Optional_PK_Inverse4Id", "as" : "_lookup_Level4" } }, { "$unwind" : { "path" : "$_lookup_Level4", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level4" : { "$ifNull" : ["$_lookup_Level4", null] } } }, { "$match" : { "$expr" : { "$eq" : [{ "$cond" : { "if" : { "$eq" : ["$_lookup_Level2", null] }, "then" : null, "else" : { "$cond" : { "if" : { "$eq" : ["$_lookup_Level3", null] }, "then" : null, "else" : "$_lookup_Level4.Name" } } } }, "L4 01"] } } }
+""");
     }
 #endif
 
@@ -3273,6 +4004,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Select_with_joined_where_clause_cast_using_as(bool async)
     {
         await base.Select_with_joined_where_clause_cast_using_as(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "$expr" : { "$eq" : [{ "$add" : ["$_outer._id", 7] }, "$_inner._id"] } } }
+""");
     }
 #endif
 
@@ -3280,6 +4016,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Contains_over_optional_navigation_with_null_constant(bool async)
     {
         await base.Contains_over_optional_navigation_with_null_constant(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$match" : { "_lookup_Level2" : null } }, { "$limit" : 1 }, { "$project" : { "_id" : 0, "_v" : null } }
+""");
     }
 #endif
 
@@ -3287,6 +4028,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Contains_over_optional_navigation_with_null_parameter(bool async)
     {
         await base.Contains_over_optional_navigation_with_null_parameter(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level2" : { "$ifNull" : ["$_lookup_Level2", null] } } }, { "$match" : { "_lookup_Level2" : null } }, { "$limit" : 1 }, { "$project" : { "_id" : 0, "_v" : null } }
+""");
     }
 #endif
 
@@ -3294,6 +4040,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Member_over_null_check_ternary_and_nested_dto_type(bool async)
     {
         await base.Member_over_null_check_ternary_and_nested_dto_type(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_outer._id", "foreignField" : "Level1_Optional_Id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$sort" : { "_v._inner.Name" : 1, "_v._outer._id" : 1 } }, { "$project" : { "_id" : "$_v._outer._id", "Name" : "$_v._outer.Name", "Level2" : { "$cond" : { "if" : { "$eq" : ["$_v._inner", null] }, "then" : null, "else" : { "_id" : "$_v._inner._id", "Name" : "$_v._inner.Name" } } } } }
+""");
     }
 #endif
 
@@ -3309,6 +4060,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multiple_conditionals_in_projection(bool async)
     {
         await base.Multiple_conditionals_in_projection(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$lookup" : { "from" : "LevelThree", "localField" : "_id", "foreignField" : "Level2_Optional_Id", "as" : "_lookup_Level3" } }, { "$unwind" : { "path" : "$_lookup_Level3", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Level3" : { "$ifNull" : ["$_lookup_Level3", null] } } }, { "$project" : { "_id" : "$_id", "Name" : "$_lookup_Level3.Name", "Level2" : { "$cond" : { "if" : { "$eq" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] }, "then" : null, "else" : { "_id" : 0, "Name" : null } } } } }
+""");
     }
 #endif
 
@@ -3316,6 +4072,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task GroupJoin_SelectMany_DefaultIfEmpty_with_predicate_using_closure(bool async)
     {
         await base.GroupJoin_SelectMany_DefaultIfEmpty_with_predicate_using_closure(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "Level1_Optional_Id", "pipeline" : [{ "$match" : { "_id" : { "$ne" : 10 } } }], "as" : "_lookup_Level2" } }, { "$unwind" : { "path" : "$_lookup_Level2", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "Id1" : "$_id", "Id2" : "$_lookup_Level2._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -3339,6 +4100,11 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
     public override async Task Multiple_optional_navs_should_not_deadlock(bool async)
     {
         await base.Multiple_optional_navs_should_not_deadlock(async);
+
+        AssertMql(
+            """
+LevelTwo.{ "$lookup" : { "from" : "LevelOne", "localField" : "Level1_Optional_Id", "foreignField" : "_id", "as" : "_lookup_OneToOne_Optional_FK_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToOne_Optional_FK_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ifNull" : ["$_lookup_OneToOne_Optional_FK_Inverse2", null] } } }, { "$lookup" : { "from" : "LevelOne", "localField" : "OneToMany_Optional_Inverse2Id", "foreignField" : "_id", "as" : "_lookup_OneToMany_Optional_Inverse2" } }, { "$unwind" : { "path" : "$_lookup_OneToMany_Optional_Inverse2", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_OneToMany_Optional_Inverse2" : { "$ifNull" : ["$_lookup_OneToMany_Optional_Inverse2", null] } } }, { "$match" : { "$or" : [{ "_lookup_OneToMany_Optional_Inverse2" : { "$ne" : null }, "_lookup_OneToMany_Optional_Inverse2.Name" : { "$regularExpression" : { "pattern" : "L1\\ 01", "options" : "s" } } }, { "_lookup_OneToOne_Optional_FK_Inverse2" : { "$ne" : null }, "_lookup_OneToOne_Optional_FK_Inverse2.Name" : { "$regularExpression" : { "pattern" : "L1\\ 01", "options" : "s" } } }] } }, { "$count" : "_v" }
+""");
     }
 #endif
 
@@ -3357,6 +4123,9 @@ public class ComplexNavigationsQueryMongoTest : ComplexNavigationsQueryTestBase<
         await SpecFails.ThrowsAsync(() => base.Distinct_take_without_orderby(async), "could not be translated");
     }
 #endif
+
+    private void AssertMql(params string[] expected)
+        => Fixture.TestMqlLoggerFactory.AssertBaseline(expected);
 
     public class ComplexNavigationsQueryMongoFixture : ComplexNavigationsQueryFixtureBase
     {

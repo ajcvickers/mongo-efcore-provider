@@ -162,6 +162,8 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     public override async Task Queryable_in_subquery_works_when_final_projection_is_List(bool async)
     {
         await base.Queryable_in_subquery_works_when_final_projection_is_List(async);
+
+        AssertMql();
     }
 
     public override async Task Complex_query_with_let_collection_projection_FirstOrDefault_with_ToList_on_inner_and_outer(bool async)
@@ -509,11 +511,15 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     public override async Task Include_after_Select(bool async)
     {
         await base.Include_after_Select(async);
+
+        AssertMql();
     }
 
     public override async Task Include_after_SelectMany_and_reference_navigation(bool async)
     {
         await base.Include_after_SelectMany_and_reference_navigation(async);
+
+        AssertMql();
     }
 
     public override async Task Include_after_SelectMany(bool async)
@@ -731,11 +737,15 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     public override async Task Filtered_include_different_filter_set_on_same_navigation_twice(bool async)
     {
         await base.Filtered_include_different_filter_set_on_same_navigation_twice(async);
+
+        AssertMql();
     }
 
     public override async Task Filtered_include_different_filter_set_on_same_navigation_twice_multi_level(bool async)
     {
         await base.Filtered_include_different_filter_set_on_same_navigation_twice_multi_level(async);
+
+        AssertMql();
     }
 
     public override async Task Filtered_include_same_filter_set_on_same_navigation_twice(bool async)
@@ -811,6 +821,8 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     public override async Task Filtered_include_include_parameter_used_inside_filter_throws(bool async)
     {
         await base.Filtered_include_include_parameter_used_inside_filter_throws(async);
+
+        AssertMql();
     }
 
     public override async Task Filtered_include_outer_parameter_used_inside_filter(bool async)
@@ -822,16 +834,25 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     public override async Task Filtered_include_is_considered_loaded(bool async)
     {
         await base.Filtered_include_is_considered_loaded(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$lookup" : { "from" : "LevelTwo", "let" : { "localField" : "$_id" }, "pipeline" : [{ "$match" : { "$expr" : { "$eq" : ["$OneToMany_Optional_Inverse2Id", "$$localField"] } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_OneToMany_Optional1" } }
+""");
     }
 
     public override async Task Filtered_include_with_Distinct_throws(bool async)
     {
         await base.Filtered_include_with_Distinct_throws(async);
+
+        AssertMql();
     }
 
     public override async Task Filtered_include_calling_methods_directly_on_parameter_throws(bool async)
     {
         await base.Filtered_include_calling_methods_directly_on_parameter_throws(async);
+
+        AssertMql();
     }
 
     public override async Task Filtered_include_Take_with_another_Take_on_top_level(bool async)
@@ -998,6 +1019,11 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     public override async Task Collection_projection_over_GroupBy_over_parameter(bool async)
     {
         await base.Collection_projection_over_GroupBy_over_parameter(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$match" : { "Name" : { "$in" : ["L1 01", "L1 02"] } } }, { "$group" : { "_id" : "$Date", "__agg0" : { "$push" : "$_id" } } }, { "$project" : { "Key" : "$_id", "Ids" : "$__agg0", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Collection_projection_over_GroupBy_over_parameter(bool async)
@@ -1010,11 +1036,15 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     public override async Task SelectMany_over_conditional_null_source(bool async)
     {
         await base.SelectMany_over_conditional_null_source(async);
+
+        AssertMql();
     }
 
     public override async Task SelectMany_over_conditional_empty_source(bool async)
     {
         await base.SelectMany_over_conditional_empty_source(async);
+
+        AssertMql();
     }
 
     public override async Task Include_partially_added_before_Where_and_then_build_upon(bool async)
@@ -1167,6 +1197,11 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
     public override async Task Project_collection_and_nested_conditional(bool async)
     {
         await base.Project_collection_and_nested_conditional(async);
+
+        AssertMql(
+            """
+LevelOne.{ "$sort" : { "_id" : 1 } }, { "$match" : { "$expr" : { "$eq" : [{ "$cond" : { "if" : { "$eq" : ["$_id", 1] }, "then" : { "$literal" : "01" }, "else" : { "$cond" : { "if" : { "$eq" : ["$_id", 2] }, "then" : { "$literal" : "02" }, "else" : { "$cond" : { "if" : { "$eq" : ["$_id", 3] }, "then" : { "$literal" : "03" }, "else" : { "$literal" : null } } } } } } }, { "$literal" : "02" }] } } }, { "$lookup" : { "from" : "LevelTwo", "localField" : "_id", "foreignField" : "OneToMany_Optional_Inverse2Id", "pipeline" : [{ "$sort" : { "_id" : 1 } }], "as" : "_lookup_Level2_OneToMany_Optional_Inverse2Id__id_f1" } }, { "$project" : { "Collection" : "$_lookup_Level2_OneToMany_Optional_Inverse2Id__id_f1", "Condition" : { "$cond" : { "if" : { "$eq" : ["$_id", 1] }, "then" : { "$literal" : "01" }, "else" : { "$cond" : { "if" : { "$eq" : ["$_id", 2] }, "then" : { "$literal" : "02" }, "else" : { "$cond" : { "if" : { "$eq" : ["$_id", 3] }, "then" : { "$literal" : "03" }, "else" : { "$literal" : null } } } } } } }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1337,6 +1372,9 @@ public class ComplexNavigationsCollectionsQueryMongoTest : ComplexNavigationsCol
         await SpecFails.EitherAsync(() => base.Filtered_include_context_accessed_inside_filter(async), "Failure");
     }
 #endif
+
+    private void AssertMql(params string[] expected)
+        => Fixture.TestMqlLoggerFactory.AssertBaseline(expected);
 
     public class ComplexNavigationsCollectionsQueryMongoFixture : ComplexNavigationsQueryFixtureBase
     {
