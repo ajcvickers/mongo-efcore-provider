@@ -41,7 +41,7 @@ ported suites were never exercised before, so their failures were invisible. A t
 stays green; it is a measure of the provider's gaps, not of broken tests. Methods that pass as the upstream base are not
 counted anywhere in this file. The bases still ignored are the complex type suites (separate work), the Associations suites,
 the Translations bases for Math, String, the Operators and Miscellaneous groups, `TypeTestBase`, the bulk-update suites for
-shapes the provider does not support, and the bases blocked by a concrete failure (`EF-X538`, `EF-X539`); the reason
+shapes the provider does not support, and the bases blocked by a concrete failure (`EF-X539`); the reason
 sits next to each entry in `MongoComplianceTest.cs`.
 
 Ten largest tickets (distinct overridden methods, all EF versions):
@@ -71,7 +71,7 @@ individually); expect them to split once someone looks at the individual failure
 > prose, such as `post-EF-117`, are not counted. Earlier figures in this file used an unknown mixture of rules and have all
 > been replaced. A count of 0 means no test is tagged: either the bug is fixed (the row is kept for history), or the
 > ticket describes a workaround that the ported fixtures apply in their model (`EF-X201`, `X207`, `X211`, `X214`, `X215`,
-> `X304`) or a base that could not be ported (`EF-X538`).
+> `X304`) or a base that could not be ported.
 
 > If you fix one of these bugs, search for the ticket id in the spec-tests
 > project — the corresponding overrides need to be updated (drop the
@@ -304,7 +304,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X545 | Model validation: cannot determine the relationship represented by a navigation | 4 |
 | EF-X546 | Filter on a nested DTO via an interface: serializer value type mismatch | 1 |
 | EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
-| EF-X538 | `InheritanceRelationshipsQueryTestBase<>` (ported with `InitFailureGuard`): model validation fails in the fixture (the dependent side of a 1:1 between a base type and its derived type cannot be determined, although the upstream model calls `HasForeignKey<Derived>` explicitly), so every test asserts that failure | 48 |
+| EF-X538 | A type that derives from an entity type, and is first reached through a navigation before it is in the model (the base type's navigation to its derived type, with no `DbSet` for the derived type), is owned by convention. That breaks the explicit one-to-one between the two ("the dependent side could not be determined"). `InheritanceRelationshipsQueryMongoFixture` replaces the convention so such a type is not owned; the default is unchanged, because making it the provider default also changes the model of `GraphUpdates` | 0 |
 | EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
 | EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 171 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
