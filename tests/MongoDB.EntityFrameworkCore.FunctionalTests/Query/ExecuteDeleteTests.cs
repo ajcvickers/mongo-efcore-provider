@@ -18,10 +18,14 @@
 using System;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using MongoDB.Bson;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Storage;
 using Xunit;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
@@ -343,6 +347,38 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Equal(2, deleted);
         var remaining = db.Entities.Single();
         Assert.Equal(30, remaining.Quantity);
+    }
+
+    // Not a MongoTransaction, so it carries no session: joined as-is, both phases would run outside any transaction.
+    private sealed class NotAMongoTransaction : IDbContextTransaction
+    {
+        public Guid TransactionId { get; } = Guid.NewGuid();
+        public void Commit() { }
+        public void Rollback() { }
+        public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RollbackAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_with_a_foreign_ambient_transaction_throws_rather_than_running_unprotected(bool async)
+    {
+        // One collection per row: the helper names it from the method, and both rows share a method.
+        using var db = CreateSeededContext($"{nameof(ExecuteDelete_two_phase_with_a_foreign_ambient_transaction_throws_rather_than_running_unprotected)}_{async}");
+        ((MongoTransactionManager)db.Database.GetService<IDbContextTransactionManager>()).CurrentTransaction = new NotAMongoTransaction();
+
+        var ex = async
+            ? await Assert.ThrowsAsync<InvalidOperationException>(() => db.Entities.OrderBy(o => o.Quantity).Take(1).ExecuteDeleteAsync())
+            : Assert.Throws<InvalidOperationException>(() => db.Entities.OrderBy(o => o.Quantity).Take(1).ExecuteDelete());
+
+        Assert.Contains("MongoDB transaction", ex.Message);
+
+        // Nothing was deleted: the guard fires before either phase runs.
+        ((MongoTransactionManager)db.Database.GetService<IDbContextTransactionManager>()).CurrentTransaction = null;
+        Assert.Equal(3, db.Entities.Count());
     }
 }
 

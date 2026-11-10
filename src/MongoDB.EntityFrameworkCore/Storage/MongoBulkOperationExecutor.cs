@@ -308,6 +308,8 @@ internal static class MongoBulkOperationExecutor
         var database = queryContext.Context.Database;
         if (database.CurrentTransaction != null)
         {
+            // Joined, never committed: the caller owns it. Validated first so neither phase can run outside a transaction.
+            RequireBulkSession(database);
             return body();
         }
 
@@ -351,6 +353,8 @@ internal static class MongoBulkOperationExecutor
         var database = queryContext.Context.Database;
         if (database.CurrentTransaction != null)
         {
+            // Joined, never committed: the caller owns it. Validated first so neither phase can run outside a transaction.
+            RequireBulkSession(database);
             return await body().ConfigureAwait(false);
         }
 
@@ -390,6 +394,17 @@ internal static class MongoBulkOperationExecutor
             }
         }
     }
+
+    // Two-phase correctness depends on phase 1 and phase 2 sharing one transaction: phase 2 filters on _id alone and never
+    // re-evaluates the user's predicate, so isolation is what stops it acting on a document that no longer matches. The session is
+    // read from CurrentTransaction with an `as MongoTransaction` cast (GetBulkCollectionAndSession), which yields null for any other
+    // IDbContextTransaction, and a null session means both phases quietly run outside the transaction. Fail closed instead.
+    private static IClientSessionHandle RequireBulkSession(DatabaseFacade database)
+        => (database.CurrentTransaction as MongoTransaction)?.Session
+           ?? throw new InvalidOperationException(
+               "This bulk delete or update requires a MongoDB transaction, but the ambient transaction on this DbContext is not a "
+               + "MongoDB transaction with an active session. Open the transaction with Database.BeginTransaction() on a "
+               + "MongoDB-backed context.");
 
     private static void SafeRollback(IDbContextTransaction transaction)
     {
