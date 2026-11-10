@@ -606,13 +606,14 @@ Shapers and projections:
   `LookupPipelineKind.DiscriminatorNarrowed` is write-once; native for a top-level collection Include only. Reference
   navigations, renamed-to-avoid-collision lookups and correlated reducers still decline.
 - **Primitive collections, dictionaries and composite-key `Contains` are query-dialect only**, except `arrayField.Contains(item)`
-  (`MongoArrayContainsExpression`), which also has an aggregation form `{$in: [item, {$ifNull: [<array>, []]}]}` (negation wraps `$not`; the
-  `$ifNull` matters because `$in` over a missing array is a server error, and a NULL complex element reads every member as missing, #40).
-  The item is a constant or a query parameter (exactly the element type), serialized through the array's ELEMENT serializer; a
-  converted/whole-collection-serialized array declines. Outside a complex element scope (which always renders in the aggregation
-  dialect, `ScopeField` NullSafe) the item must be unable to be null (a null constant, a string or nullable parameter decline): the query
-  dialect's `{f: null}` also matches a missing field. Inside one, `$in: [null, array]` is exactly `list.Contains(null)`, so null-capable
-  items are translated.
+  (`MongoArrayContainsExpression`), which also has an aggregation form `{$in: [item, {$ifNull: [<array>, []]}]}` (negation wraps `$not`).
+  The `$ifNull` matters: `$in` over a missing array is a server error, and a NULL complex element reads every member as missing (#40).
+  - The item is a constant or a query parameter of exactly the element type, serialized through the array's ELEMENT serializer. A
+    converted or whole-collection-serialized array declines.
+  - Outside a complex element scope the item must be unable to be null (a null constant, a string or nullable parameter decline),
+    because the query dialect's `{f: null}` also matches a missing field.
+  - Inside one (always the aggregation dialect, `ScopeField` NullSafe) `$in: [null, array]` is exactly `list.Contains(null)`, so
+    null-capable items are translated.
   - `Any()`/`Count()`/`Length` over a primitive-collection PROPERTY reuse the owned size forms
     (`TryResolvePrimitiveCollectionPath`); a missing/null array counts as empty. `Any(pred)`/`All(pred)` stay declined.
   - A string-keyed dictionary entry is the sub-field `<dict>.<key>` (`MongoDictionaryEntryExpression`, serialized by the
