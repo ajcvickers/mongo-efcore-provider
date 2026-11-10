@@ -225,7 +225,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X317 | `NullReferenceException` in JSON type round-trip (not triaged) | 60 |
 | EF-X318 | Bad JSON value does not throw on materialization | 0 |
 | EF-X319 | Concurrency token on an owned entity is rejected (Serialization) | 2 |
-| EF-X320 | NetTopologySuite spatial types are not supported | 90 |
+| EF-X320 | NetTopologySuite spatial types are not supported: the provider would own them. `SpatialQueryMongoFixture` stores them as well-known binary through a value converter so the data seeds and loads, but every spatial operation (area, distance, union, ...) is then rejected as not translatable | 82 |
 | EF-X321 | `DateOnly`/`TimeOnly`/`TimeSpan`/`DateTimeOffset` members and methods are not translated by the driver | 54 |
 | EF-X322 | `byte[]` is not supported as an array in LINQ | 4 |
 | EF-X323 | Translated `byte[]` pipeline is rejected by the server | 2 |
