@@ -251,7 +251,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X103 | No value generator for `int`/`long`/enum/value-converted keys (`NotSupportedException` on `Add`) | 31 |
 | EF-X104 | Dependent key is null because the principal key (`string`/`Uri`/`Guid` wrapper) was not generated | 4 |
 | EF-X105 | Bulk write fails with a duplicate `_id` when saving entities that rely on default `int` keys | 32 |
-| EF-X106 | Unique index build fails on null/missing values (`createIndexes` duplicate `null`) | 5 |
+| EF-X106 | Unique index build fails on null/missing values (`createIndexes` duplicate `null`). `NullKeysMongoFixture` relaxes the indexes (`RelaxNullableUniqueIndexes`, `RelaxUniqueForeignKeyIndexes`), so the `NullKeys` tests run | 0 |
 | EF-X107 | Entity types used by the test are missing from the model (`entity type '...' was not found`) | 8 |
 | EF-X108 | Store-generated/computed value and update semantics differ (no database defaults, computed columns or generated keys) | 8 |
 | EF-X110 | `Include` of a skip (many-to-many) navigation is not supported | 31 |
