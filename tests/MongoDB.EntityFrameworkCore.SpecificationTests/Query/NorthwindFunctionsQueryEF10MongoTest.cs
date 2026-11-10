@@ -35,11 +35,25 @@ public class NorthwindFunctionsQueryMongoTest : NorthwindFunctionsQueryTestBase<
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-    public override Task Client_evaluation_of_uncorrelated_method_call(bool async)
-        => base.Client_evaluation_of_uncorrelated_method_call(async);
+    public override async Task Client_evaluation_of_uncorrelated_method_call(bool async)
+    {
+        await base.Client_evaluation_of_uncorrelated_method_call(async);
 
-    public override Task Order_by_length_twice(bool async)
-        => base.Order_by_length_twice(async);
+        AssertMql(
+            """
+OrderDetails.{ "$match" : { "UnitPrice" : { "$lt" : { "$numberDecimal" : "7" } }, "_id.ProductID" : { "$gt" : 10 } } }
+""");
+    }
+
+    public override async Task Order_by_length_twice(bool async)
+    {
+        await base.Order_by_length_twice(async);
+
+        AssertMql(
+            """
+Customers.{ "$set" : { "__sort0" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$_id", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$_id" } } }, "__sort1" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$_id", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$_id" } } } } }, { "$sort" : { "__sort0" : 1, "__sort1" : 1, "_id" : 1 } }, { "$unset" : ["__sort0", "__sort1"] }
+""");
+    }
 
     // Fails: Cross-document navigation access issue EF-216
     public override Task Order_by_length_twice_followed_by_projection_of_naked_collection_navigation(bool async)
@@ -61,15 +75,32 @@ public class NorthwindFunctionsQueryMongoTest : NorthwindFunctionsQueryTestBase<
     public override Task Sum_over_truncate_works_correctly_in_projection_2(bool async)
         => SpecFails.ThrowsAsync(() => base.Sum_over_truncate_works_correctly_in_projection_2(async));
 
-    public override Task Where_functions_nested(bool async)
-        => base.Where_functions_nested(async);
+    public override async Task Where_functions_nested(bool async)
+    {
+        await base.Where_functions_nested(async);
+
+        AssertMql(
+            """
+Customers.{ "$match" : { "$expr" : { "$eq" : [{ "$pow" : [{ "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$_id", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$_id" } } }, 2.0] }, 25.0] } } }
+""");
+    }
 
     // Fails: MongoDB DateTimeKind handling EF-X006 (depends on the time zone: passes in UTC) EF-X720
     public override Task Static_equals_nullable_datetime_compared_to_non_nullable(bool async)
         => SpecFails.EitherAsync(() => base.Static_equals_nullable_datetime_compared_to_non_nullable(async));
 
-    public override Task Static_equals_int_compared_to_long(bool async)
-        => base.Static_equals_int_compared_to_long(async);
+    public override async Task Static_equals_int_compared_to_long(bool async)
+    {
+        await base.Static_equals_int_compared_to_long(async);
+
+        AssertMql(
+            """
+Orders.{ "$match" : { "_id" : { "$type" : -1 } } }
+""");
+    }
+
+    private void AssertMql(params string[] expected)
+        => Fixture.TestMqlLoggerFactory.AssertBaseline(expected);
 
     protected override void ClearLog()
         => Fixture.TestMqlLoggerFactory.Clear();
