@@ -68,6 +68,22 @@ Task 9 (`FindProperty(MemberInfo)`, declaring-typed `SetProperty` match) is stil
     assertions fixed in `be0d8d0d`.
   - Not ported: Task 11's try-split of `BeginTransaction` (pointless after Task 3's narrowing) and its `BuildFilter` loud-failure change (already on `release`).
   - Next: Phase 4 classification (Tasks 13-15), widening `ClassifyBulkSource` in step with `BuildFilter`'s Where-only walk.
+- **Phase 4, Tasks 13-15** (classification) are ported (`858322be`, `8fc88544`, `c4a5fc5a`). Decisions and findings:
+  - One predicate set, `MongoNonQueryExpression.IsWhere/IsAffectedSetNeutral/IsPaging/IsOfType`, is consulted by BOTH `ClassifyBulkSource` and
+    `MongoBulkPlanBuilder.BuildFilter` and matches canonical `QueryableMethods` definitions (Task 14). `BuildFilter` steps over the neutral
+    operators and still THROWS on anything else, so a classification miss cannot silently widen a delete. OfType/Cast/Skip/Take must never be
+    added to the neutral set (a unit test asserts it).
+  - Ordering and `Distinct` alone are single-command (Task 13). Only `Skip`/`Take` and `OfType<TDerived>` are two-phase.
+  - `OfType<TDerived>` is two-phase so phase 1 reuses the read path's discriminator filter; a test pins from the command stream that phase 1
+    carries `_t` and phase 2 acts only on those ids. `OfType<Root>` stays single-command. A derived `DbSet` works (EF narrows it to OfType).
+  - **`Cast` stays rejected** (as on the old branch): it only reshapes the shaper and the driver cannot translate it. Reversible, nothing depends on it.
+  - A self-referencing setter over an `OfType` source is refused with a clear message (the lambda parameter is typed as the derived type but the
+    value is rendered against the root).
+  - Task 14 changes no reachable behaviour (EF rejects the other overloads, and rewrites `Order()` to `OrderBy(x => x)`, before provider code).
+  - The two-phase error messages no longer enumerate their triggers (they had gone stale three times).
+  - Six `Inheritance*BulkUpdatesMongoTest` wrappers (EF-X016) now pass and call `base`. **For Task 25:** `docs/failing-spec-tests.md` still counts
+    them and says `OfType` is not translated for bulk; also re-check `MongoComplianceTest.IgnoredTestBases` (Task 20) and the README atomicity wording.
+  - Next: Phase 5 performance (Tasks 16-19). Task 19 must port the FIXED cache design from the ledger, not the plan's original.
 - Known unrelated failure on one checkout: two EF11 `ConferencePlannerMongoTest` SpecFails wrappers, tracked in issue #63.
 
 ## Recorded decisions from the old work (do not re-litigate)
