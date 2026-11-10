@@ -24,6 +24,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using MongoDB.Bson;
+using MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 using MongoDB.EntityFrameworkCore.Diagnostics;
 using MongoDB.EntityFrameworkCore.Storage;
 using Xunit;
@@ -414,6 +415,81 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
 
         Assert.IsAssignableFrom<OperationCanceledException>(ex);
         Assert.Equal(3, db.Entities.Count());
+    }
+
+    // Cancelling AFTER phase 1 has succeeded: a token cancelled before the first command means no transaction is ever started
+    // server-side, so there would be nothing to abort. The cancel fires from the aggregate's CommandSucceededEvent, which the driver raises
+    // synchronously on the receive path before phase 1's result unwinds, so phase 2 then observes a cancelled token and the operation fails
+    // with the transaction open. Cleanup must still send abortTransaction, and the server must acknowledge it; with the caller's cancelled
+    // token passed to the rollback the driver drops the command before it reaches the wire and the transaction lingers.
+    [Fact]
+    public async Task ExecuteDeleteAsync_two_phase_cancelled_after_phase_1_still_aborts_the_transaction_on_the_wire()
+    {
+        var collection = database.CreateCollection<Order>();
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureModel))
+        {
+            seed.AddRange(
+                new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = 10 },
+                new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = 20 },
+                new Order { _id = ObjectId.GenerateNewId(), Status = "closed", Quantity = 30 });
+            seed.SaveChanges();
+        }
+
+        using var cts = new CancellationTokenSource();
+        var cancelled = 0;
+        using var capture = new CommandCapture(
+            database,
+            e =>
+            {
+                if (e.CommandName == "aggregate" && Interlocked.Exchange(ref cancelled, 1) == 0)
+                {
+                    cts.Cancel();
+                }
+            });
+
+        using (var db = SingleEntityDbContext.Create(capture.Collection(collection), ConfigureModel))
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDeleteAsync(cts.Token));
+        }
+
+        Assert.True(capture.Named("abortTransaction").Count == 1, $"Commands sent: {string.Join(", ", capture.Names())}");
+        Assert.Equal(1, capture.SucceededCount("abortTransaction"));
+
+        // And nothing was deleted.
+        using var check = SingleEntityDbContext.Create(collection, ConfigureModel);
+        Assert.Equal(3, check.Entities.Count());
+    }
+
+    // Phase 2 filters on _id alone and never re-evaluates the predicate, so isolation is what keeps it from acting on a document that no
+    // longer matches. That only holds if phase 1 reads INSIDE the transaction: the phase-1 query binds the transaction's session when it
+    // is built, so building it before the transaction starts (it was, briefly, hoisted there) silently reads outside it. Counts and
+    // results cannot tell the difference, so this checks the command itself.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_reads_its_target_ids_inside_the_transaction(bool async)
+    {
+        var collection = database.CreateCollection<Order>($"{nameof(ExecuteDelete_two_phase_reads_its_target_ids_inside_the_transaction)}_{async}");
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureModel))
+        {
+            seed.AddRange(
+                new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = 10 },
+                new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = 20 });
+            seed.SaveChanges();
+        }
+
+        using var capture = new CommandCapture(database);
+        using var db = SingleEntityDbContext.Create(capture.Collection(collection), ConfigureModel);
+
+        var deleted = async
+            ? await db.Entities.OrderBy(o => o.Quantity).Take(1).ExecuteDeleteAsync()
+            : db.Entities.OrderBy(o => o.Quantity).Take(1).ExecuteDelete();
+
+        Assert.Equal(1, deleted);
+        var phase1 = Assert.Single(capture.Named("aggregate"));
+        Assert.True(phase1.Contains("txnNumber"), $"The phase-1 read ran outside the transaction. Its fields: {string.Join(", ", phase1.Names)}");
+        Assert.True(Assert.Single(capture.Named("delete")).Contains("txnNumber"), "The phase-2 delete ran outside the transaction.");
     }
 }
 

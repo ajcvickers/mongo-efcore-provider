@@ -146,59 +146,53 @@ internal static class MongoBulkOperationExecutor
         return checked((int)result.MatchedCount);
     }
 
-    // The phase-1 query and the update document are built BEFORE the transaction opens: an unsupported source or setter is a translation
-    // error and must be reported as one, not as a transaction problem (on a standalone deployment BeginTransaction fails first), and
-    // it should not cost a transaction round trip. Only the driver's own lazy translation of the phase-1 query is left for MaterializeIds.
+    // The update document is built BEFORE the transaction opens: an unsupported setter is a translation error and must be reported as
+    // one, not as a transaction problem (on a standalone deployment BeginTransaction fails first), and it should not cost a transaction
+    // round trip. The phase-1 query must NOT be: it binds the transaction's session when it is built (TranslateQuery reads
+    // CurrentTransaction), so built ahead of BeginTransaction it would read outside the transaction. The driver's lazy translation of it
+    // is mapped to the canonical translation failure where it is enumerated (MaterializeIds).
     private static int ExecuteTwoPhaseDelete(QueryContext queryContext, MongoBulkPlan plan)
-    {
-        var targetQuery = plan.BuildTargetIdQuery!(queryContext);
-
-        return RunInBulkTransaction(queryContext, () =>
+        => RunInBulkTransaction(queryContext, () =>
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = MaterializeIds(plan, targetQuery);
+            var ids = MaterializeIds(plan, plan.BuildTargetIdQuery!(queryContext));
             return ids.Count == 0 ? 0 : DeleteByIds(queryContext, plan, ids, stopwatch);
         });
-    }
 
     private static Task<int> ExecuteTwoPhaseDeleteAsync(QueryContext queryContext, MongoBulkPlan plan)
-    {
-        var targetQuery = plan.BuildTargetIdQuery!(queryContext);
-
-        return RunInBulkTransactionAsync(queryContext, async () =>
+        => RunInBulkTransactionAsync(queryContext, async () =>
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = await MaterializeIdsAsync(plan, targetQuery, queryContext.CancellationToken).ConfigureAwait(false);
+            var ids = await MaterializeIdsAsync(plan, plan.BuildTargetIdQuery!(queryContext), queryContext.CancellationToken)
+                .ConfigureAwait(false);
             return ids.Count == 0 ? 0 : await DeleteByIdsAsync(queryContext, plan, ids, stopwatch).ConfigureAwait(false);
         });
-    }
 
     private static int ExecuteTwoPhaseUpdate(QueryContext queryContext, MongoBulkPlan plan)
     {
-        var targetQuery = plan.BuildTargetIdQuery!(queryContext);
         var update = plan.BuildUpdate!(queryContext);
 
         return RunInBulkTransaction(queryContext, () =>
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = MaterializeIds(plan, targetQuery);
+            var ids = MaterializeIds(plan, plan.BuildTargetIdQuery!(queryContext));
             return ids.Count == 0 ? 0 : UpdateByIds(queryContext, plan, ids, update, stopwatch);
         });
     }
 
     private static Task<int> ExecuteTwoPhaseUpdateAsync(QueryContext queryContext, MongoBulkPlan plan)
     {
-        var targetQuery = plan.BuildTargetIdQuery!(queryContext);
         var update = plan.BuildUpdate!(queryContext);
 
         return RunInBulkTransactionAsync(queryContext, async () =>
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = await MaterializeIdsAsync(plan, targetQuery, queryContext.CancellationToken).ConfigureAwait(false);
+            var ids = await MaterializeIdsAsync(plan, plan.BuildTargetIdQuery!(queryContext), queryContext.CancellationToken)
+                .ConfigureAwait(false);
             return ids.Count == 0
                 ? 0
                 : await UpdateByIdsAsync(queryContext, plan, ids, update, stopwatch).ConfigureAwait(false);
@@ -403,7 +397,7 @@ internal static class MongoBulkOperationExecutor
         {
             if (transaction != null)
             {
-                await SafeRollbackAsync(transaction, cancellationToken).ConfigureAwait(false);
+                await SafeRollbackAsync(transaction).ConfigureAwait(false);
             }
 
             if (IsTransactionsUnsupported(exception))
@@ -435,14 +429,32 @@ internal static class MongoBulkOperationExecutor
 
     private static void SafeRollback(IDbContextTransaction transaction)
     {
-        try { transaction.Rollback(); }
-        catch { /* a failed/standalone transaction may not be rollback-able; the original error wins */ }
+        try
+        {
+            transaction.Rollback();
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            // A failed or non-transactional session may not be rollback-able; the original error wins. An uncommitted transaction is
+            // never durable, so the worst case is that the server reclaims it at transactionLifetimeLimitSeconds.
+        }
     }
 
-    private static async Task SafeRollbackAsync(IDbContextTransaction transaction, CancellationToken cancellationToken)
+    // Deliberately takes no CancellationToken: this runs on the failure path, and when the failure IS cancellation, passing the
+    // caller's already-cancelled token means the abortTransaction command is dropped before it reaches the wire (the driver's
+    // pre-flight cancellation check short-circuits the write) while the driver still marks the transaction Aborted client-side, which
+    // also disables its own dispose-time retry. The transaction then looks cleaned up locally but was never aborted on the server, and
+    // lingers, holding locks, until transactionLifetimeLimitSeconds. Cleanup must not observe the caller's cancellation.
+    private static async Task SafeRollbackAsync(IDbContextTransaction transaction)
     {
-        try { await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false); }
-        catch { /* see SafeRollback */ }
+        try
+        {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            // See SafeRollback.
+        }
     }
 
     private static InvalidOperationException NoAutoTransactionError()
