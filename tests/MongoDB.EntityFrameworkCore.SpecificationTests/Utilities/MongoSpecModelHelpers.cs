@@ -234,7 +234,9 @@ public static class MongoSpecModelHelpers
         : MongoRelationshipDiscoveryConvention(dependencies)
     {
         protected override bool? ShouldBeOwned(Type targetType, IConventionModel model)
-            => isEntityType(targetType, model) ? false : base.ShouldBeOwned(targetType, model);
+            => !model.IsOwned(targetType) && !targetType.IsDefined(typeof(OwnedAttribute), inherit: false) && isEntityType(targetType, model)
+                ? false
+                : base.ShouldBeOwned(targetType, model);
     }
 
     private sealed class MapKeysToElementIdConvention(bool generateIntKeys, bool dropOwnedConcurrencyTokens) : IModelFinalizingConvention
