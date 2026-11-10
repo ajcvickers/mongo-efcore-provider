@@ -53,8 +53,7 @@ public class QueryFilterFuncletizationMongoTest : QueryFilterFuncletizationTestB
 
     public override void DbContext_list_is_parameterized()
     {
-        // Fails: NullReferenceException for a query filter using a DbContext list parameter EF-X524
-        SpecFails.Throws(() => base.DbContext_list_is_parameterized(), "NullReferenceException");
+        base.DbContext_list_is_parameterized();
     }
 
     public override void DbContext_property_chain_is_parameterized()

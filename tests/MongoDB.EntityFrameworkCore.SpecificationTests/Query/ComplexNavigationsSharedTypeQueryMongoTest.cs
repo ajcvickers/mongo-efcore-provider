@@ -3073,8 +3073,8 @@ public class ComplexNavigationsSharedTypeQueryMongoTest : ComplexNavigationsShar
 #if EF8 || EF9
     public override async Task GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(bool async)
     {
-        // Fails: REGRESSION vs main (exception type only): an unsupported query now throws ArgumentException instead of InvalidOperationException EF-X705
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(async), "Exception type was not an exact match");
+        // Fails: an unsupported query throws ArgumentException where the upstream test expects InvalidOperationException; the exception type of an unsupported query is not contract EF-X705
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method(async), "typeof(System.ArgumentException)");
     }
 #endif
 

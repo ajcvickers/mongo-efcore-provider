@@ -201,8 +201,7 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
 
     public override async Task Query_filter_with_context_accessor_with_constant(bool async)
     {
-        // Fails: REGRESSION vs main: a query filter that reads a context member throws NullReferenceException EF-X701
-        await SpecFails.ThrowsAsync<global::System.NullReferenceException>(() => base.Query_filter_with_context_accessor_with_constant(async));
+        await base.Query_filter_with_context_accessor_with_constant(async);
     }
 
 #if (EF10 || EF11)

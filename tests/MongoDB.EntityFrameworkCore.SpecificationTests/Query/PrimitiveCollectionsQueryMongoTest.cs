@@ -500,8 +500,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
 #if (EF10 || EF11)
     public override async Task Parameter_collection_null_Contains()
     {
-        // Fails: NullReferenceException for Contains of a null item EF-X503
-        await SpecFails.ThrowsAsync(() => base.Parameter_collection_null_Contains(), "NullReferenceException");
+        await base.Parameter_collection_null_Contains();
     }
 #endif
 
@@ -1564,8 +1563,7 @@ public class PrimitiveCollectionsQueryMongoTest : PrimitiveCollectionsQueryTestB
 #if EF8 || EF9
     public override async Task Parameter_collection_null_Contains(bool async)
     {
-        // Fails: NullReferenceException for Contains of a null item EF-X503
-        await SpecFails.ThrowsAsync(() => base.Parameter_collection_null_Contains(async), "NullReferenceException");
+        await base.Parameter_collection_null_Contains(async);
     }
 #endif
 

@@ -3302,8 +3302,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 
     public override async Task Group_by_with_aggregate_max_on_entity_type(bool async)
     {
-        // Fails: REGRESSION vs main (exception type only): an unsupported query now throws FormatException instead of InvalidOperationException EF-X705
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Group_by_with_aggregate_max_on_entity_type(async), "Exception type was not an exact match");
+        // Fails: an unsupported query throws FormatException where the upstream test expects InvalidOperationException; the exception type of an unsupported query is not contract EF-X705
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Group_by_with_aggregate_max_on_entity_type(async), "typeof(System.FormatException)");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -5443,16 +5443,16 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
 #if EF8 || EF9
     public override async Task Nav_rewrite_Distinct_with_convert()
     {
-        // Fails: REGRESSION vs main (exception type only): an unsupported query now throws a different exception type EF-X705
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Nav_rewrite_Distinct_with_convert(), "Exception type was not an exact match");
+        // Fails: an unsupported query throws ArgumentException where the upstream test expects InvalidOperationException; the exception type of an unsupported query is not contract EF-X705
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Nav_rewrite_Distinct_with_convert(), "typeof(System.ArgumentException)");
     }
 #endif
 
 #if EF8 || EF9
     public override async Task Nav_rewrite_Distinct_with_convert_anonymous()
     {
-        // Fails: REGRESSION vs main (exception type only): an unsupported query now throws a different exception type EF-X705
-        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Nav_rewrite_Distinct_with_convert_anonymous(), "Exception type was not an exact match");
+        // Fails: an unsupported query throws ArgumentException where the upstream test expects InvalidOperationException; the exception type of an unsupported query is not contract EF-X705
+        await SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Nav_rewrite_Distinct_with_convert_anonymous(), "typeof(System.ArgumentException)");
     }
 #endif
 
