@@ -245,7 +245,8 @@ CustomerGroup.{ "$lookup" : { "from" : "Customer", "localField" : "RequiredCusto
         }
 
 #if EF8 || EF9
-        // Fails: Projection through an optional navigation throws NullReferenceException on EF8/EF9 #41
+        // EF-side limitation (not a provider bug, #41): on EF8/EF9 the test's own expected query / sorter dereferences the null
+        // associate and throws NullReferenceException before results are compared; the provider returns the null row correctly.
         await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_complex_type_via_optional_navigation(async), typeof(NullReferenceException));
 #else
         await base.Project_complex_type_via_optional_navigation(async);
@@ -571,7 +572,8 @@ ValuedCustomerGroup.{ "$lookup" : { "from" : "ValuedCustomer", "localField" : "R
         }
 
 #if EF8 || EF9
-        // Fails: Projection through an optional navigation throws NullReferenceException on EF8/EF9 #41
+        // EF-side limitation (not a provider bug, #41): on EF8/EF9 the test's own expected query / sorter dereferences the null
+        // associate and throws NullReferenceException before results are compared; the provider returns the null row correctly.
         await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_struct_complex_type_via_optional_navigation(async), typeof(NullReferenceException));
 #else
         await base.Project_struct_complex_type_via_optional_navigation(async);
@@ -990,7 +992,8 @@ Customer.{ "$match" : { "ShippingAddress.Country.Code" : "DE" } }
     public override async Task Complex_type_equals_null(bool async)
     {
 #if EF8 || EF9
-        // Fails: Not supported yet #35
+        // EF-side limitation (not a provider bug, #41): EF8/EF9 complex types are required, so `ComplexProperty == null` matches
+        // nothing and both the expected and actual results are empty; the test lacks assertEmpty and EF reports "no results".
         await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_null(async), typeof(InvalidOperationException), "Query returned no results");
 #else
         await base.Complex_type_equals_null(async);
