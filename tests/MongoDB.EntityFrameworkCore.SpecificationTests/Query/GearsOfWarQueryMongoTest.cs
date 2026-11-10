@@ -34,6 +34,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Entity_equality_empty(bool async)
     {
         await base.Entity_equality_empty(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : null, "_id.SquadId" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -47,6 +52,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task ToString_string_property_projection(bool async)
     {
         await base.ToString_string_property_projection(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "_v" : { "$toString" : "$Name" }, "_id" : 0 } }
+""");
     }
 
     public override async Task ToString_boolean_property_non_nullable(bool async)
@@ -89,6 +99,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task ToString_enum_contains(bool async)
     {
         await base.ToString_enum_contains(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$gte" : [{ "$indexOfCP" : [{ "$toString" : "$Difficulty" }, "Med"] }, 0] } } }, { "$project" : { "_v" : "$CodeName", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -103,6 +118,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_multiple_one_to_one_and_one_to_many_self_reference(bool async)
     {
         await base.Include_multiple_one_to_one_and_one_to_many_self_reference(async);
+
+        AssertMql();
     }
 
 #if (EF10 || EF11)
@@ -116,41 +133,75 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_multiple_one_to_one_and_one_to_one_and_one_to_many(bool async)
     {
         await base.Include_multiple_one_to_one_and_one_to_one_and_one_to_many(async);
+
+        AssertMql();
     }
 
     public override async Task Include_multiple_circular(bool async)
     {
         await base.Include_multiple_circular(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$match" : { "_lookup_CityOfBirth.0" : { "$exists" : true } } }, { "$set" : { "_lookup_CityOfBirth" : { "$arrayElemAt" : ["$_lookup_CityOfBirth", 0] } } }, { "$lookup" : { "from" : "Gears", "localField" : "_lookup_CityOfBirth._id", "foreignField" : "AssignedCityName", "as" : "_lookup_CityOfBirth._lookup_StationedGears" } }
+""");
     }
 
     public override async Task Include_multiple_circular_with_filter(bool async)
     {
         await base.Include_multiple_circular_with_filter(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : "Marcus" } }, { "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$match" : { "_lookup_CityOfBirth.0" : { "$exists" : true } } }, { "$set" : { "_lookup_CityOfBirth" : { "$arrayElemAt" : ["$_lookup_CityOfBirth", 0] } } }, { "$lookup" : { "from" : "Gears", "localField" : "_lookup_CityOfBirth._id", "foreignField" : "AssignedCityName", "as" : "_lookup_CityOfBirth._lookup_StationedGears" } }
+""");
     }
 
     public override async Task Include_using_alternate_key(bool async)
     {
         await base.Include_using_alternate_key(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : "Marcus" } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }
+""");
     }
 
     public override async Task Include_multiple_include_then_include(bool async)
     {
         await base.Include_multiple_include_then_include(async);
+
+        AssertMql();
     }
 
     public override async Task Include_navigation_on_derived_type(bool async)
     {
         await base.Include_navigation_on_derived_type(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }
+""");
     }
 
     public override async Task String_based_Include_navigation_on_derived_type(bool async)
     {
         await base.String_based_Include_navigation_on_derived_type(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }
+""");
     }
 
     public override async Task EF_Property_based_Include_navigation_on_derived_type(bool async)
     {
         await base.EF_Property_based_Include_navigation_on_derived_type(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -164,6 +215,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_join_reference1(bool async)
     {
         await base.Include_with_join_reference1(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$unwind" : { "path" : "$_lookup_CityOfBirth", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "Tags", "let" : { "k0" : { "$ifNull" : ["$_id.SquadId", null] }, "k1" : { "$ifNull" : ["$_id.Nickname", null] } }, "pipeline" : [{ "$match" : { "$expr" : { "$and" : [{ "$eq" : [{ "$ifNull" : ["$GearSquadId", null] }, "$$k0"] }, { "$eq" : [{ "$ifNull" : ["$GearNickName", null] }, "$$k1"] }] } } }], "as" : "_lookup_CogTag" } }, { "$unwind" : { "path" : "$_lookup_CogTag", "preserveNullAndEmptyArrays" : false } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -184,6 +240,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_join_collection1(bool async)
     {
         await base.Include_with_join_collection1(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Tags", "let" : { "k0" : { "$ifNull" : ["$_id.SquadId", null] }, "k1" : { "$ifNull" : ["$_id.Nickname", null] } }, "pipeline" : [{ "$match" : { "$expr" : { "$and" : [{ "$eq" : [{ "$ifNull" : ["$GearSquadId", null] }, "$$k0"] }, { "$eq" : [{ "$ifNull" : ["$GearNickName", null] }, "$$k1"] }] } } }], "as" : "_lookup_CogTag" } }, { "$unwind" : { "path" : "$_lookup_CogTag", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }
+""");
     }
 #else
     public override async Task Include_with_join_collection1(bool async)
@@ -226,6 +287,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_join_multi_level(bool async)
     {
         await base.Include_with_join_multi_level(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$unwind" : { "path" : "$_lookup_CityOfBirth", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "Tags", "let" : { "k0" : { "$ifNull" : ["$_id.SquadId", null] }, "k1" : { "$ifNull" : ["$_id.Nickname", null] } }, "pipeline" : [{ "$match" : { "$expr" : { "$and" : [{ "$eq" : [{ "$ifNull" : ["$GearSquadId", null] }, "$$k0"] }, { "$eq" : [{ "$ifNull" : ["$GearNickName", null] }, "$$k1"] }] } } }], "as" : "_lookup_CogTag" } }, { "$unwind" : { "path" : "$_lookup_CogTag", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "Gears", "localField" : "_lookup_CityOfBirth._id", "foreignField" : "AssignedCityName", "as" : "_lookup_CityOfBirth._lookup_StationedGears" } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -252,6 +318,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_join_and_inheritance2(bool async)
     {
         await base.Include_with_join_and_inheritance2(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$lookup" : { "from" : "Tags", "let" : { "k0" : { "$ifNull" : ["$_id.SquadId", null] }, "k1" : { "$ifNull" : ["$_id.Nickname", null] } }, "pipeline" : [{ "$match" : { "$expr" : { "$and" : [{ "$eq" : [{ "$ifNull" : ["$GearSquadId", null] }, "$$k0"] }, { "$eq" : [{ "$ifNull" : ["$GearNickName", null] }, "$$k1"] }] } } }], "as" : "_lookup_CogTag" } }, { "$unwind" : { "path" : "$_lookup_CogTag", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }
+""");
     }
 #else
     public override async Task Include_with_join_and_inheritance2(bool async)
@@ -271,6 +342,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_nested_navigation_in_order_by(bool async)
     {
         await base.Include_with_nested_navigation_in_order_by(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Gears", "localField" : "OwnerFullName", "foreignField" : "FullName", "as" : "_lookup_Owner" } }, { "$unwind" : { "path" : "$_lookup_Owner", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Owner" : { "$ifNull" : ["$_lookup_Owner", null] } } }, { "$match" : { "_lookup_Owner._id.Nickname" : { "$ne" : "Paduk" } } }, { "$lookup" : { "from" : "Cities", "localField" : "_lookup_Owner.CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$unwind" : { "path" : "$_lookup_CityOfBirth", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_CityOfBirth" : { "$ifNull" : ["$_lookup_CityOfBirth", null] } } }, { "$sort" : { "_lookup_CityOfBirth._id" : 1, "_id" : 1 } }
+""");
     }
 #endif
 
@@ -278,6 +354,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_count_subquery_without_collision(bool async)
     {
         await base.Where_count_subquery_without_collision(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$match" : { "_lookup_Weapons.1" : { "$exists" : true }, "_lookup_Weapons.2" : { "$exists" : false } } }
+""");
     }
 #else
     public override async Task Where_count_subquery_without_collision(bool async)
@@ -291,6 +372,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_any_subquery_without_collision(bool async)
     {
         await base.Where_any_subquery_without_collision(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$match" : { "_lookup_Weapons.0" : { "$exists" : true } } }
+""");
     }
 #else
     public override async Task Where_any_subquery_without_collision(bool async)
@@ -303,6 +389,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_inverted_boolean(bool async)
     {
         await base.Select_inverted_boolean(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "IsAutomatic" : true } }, { "$project" : { "Id" : "$_id", "Manual" : { "$not" : ["$IsAutomatic"] }, "_id" : 0 } }
+""");
     }
 
 #if EF9 || (EF10 || EF11)
@@ -316,87 +407,188 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_comparison_with_null(bool async)
     {
         await base.Select_comparison_with_null(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "AmmunitionType" : 1 } }, { "$project" : { "Id" : "$_id", "Cartridge" : { "$eq" : [{ "$ifNull" : ["$AmmunitionType", null] }, { "$literal" : 1 }] }, "_id" : 0 } }
+""",
+            //
+            """
+Weapons.{ "$match" : { "AmmunitionType" : null } }, { "$project" : { "Id" : "$_id", "Cartridge" : { "$eq" : [{ "$ifNull" : ["$AmmunitionType", null] }, { "$literal" : null }] }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_null_parameter(bool async)
     {
         await base.Select_null_parameter(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "AmmoType" : { "$literal" : 1 }, "_id" : 0 } }
+""",
+            //
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "AmmoType" : { "$literal" : null }, "_id" : 0 } }
+""",
+            //
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "AmmoType" : { "$literal" : 2 }, "_id" : 0 } }
+""",
+            //
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "AmmoType" : { "$literal" : null }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_ternary_operation_with_boolean(bool async)
     {
         await base.Select_ternary_operation_with_boolean(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "Num" : { "$cond" : { "if" : "$IsAutomatic", "then" : { "$literal" : 1 }, "else" : { "$literal" : 0 } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_ternary_operation_with_inverted_boolean(bool async)
     {
         await base.Select_ternary_operation_with_inverted_boolean(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "Num" : { "$cond" : { "if" : { "$not" : ["$IsAutomatic"] }, "then" : { "$literal" : 1 }, "else" : { "$literal" : 0 } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_ternary_operation_with_has_value_not_null(bool async)
     {
         await base.Select_ternary_operation_with_has_value_not_null(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "$and" : [{ "AmmunitionType" : { "$ne" : null } }, { "AmmunitionType" : 1 }] } }, { "$project" : { "Id" : "$_id", "IsCartridge" : { "$cond" : { "if" : { "$and" : [{ "$ne" : [{ "$ifNull" : ["$AmmunitionType", null] }, null] }, { "$eq" : ["$AmmunitionType", 1] }] }, "then" : { "$literal" : "Yes" }, "else" : { "$literal" : "No" } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_ternary_operation_multiple_conditions(bool async)
     {
         await base.Select_ternary_operation_multiple_conditions(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "IsCartridge" : { "$cond" : { "if" : { "$and" : [{ "$eq" : ["$AmmunitionType", 2] }, { "$eq" : ["$SynergyWithId", 1] }] }, "then" : { "$literal" : "Yes" }, "else" : { "$literal" : "No" } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_ternary_operation_multiple_conditions_2(bool async)
     {
         await base.Select_ternary_operation_multiple_conditions_2(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "IsCartridge" : { "$cond" : { "if" : { "$and" : [{ "$not" : ["$IsAutomatic"] }, { "$eq" : ["$SynergyWithId", 1] }] }, "then" : { "$literal" : "Yes" }, "else" : { "$literal" : "No" } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_multiple_conditions(bool async)
     {
         await base.Select_multiple_conditions(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "IsCartridge" : { "$and" : [{ "$not" : ["$IsAutomatic"] }, { "$eq" : ["$SynergyWithId", 1] }] }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_nested_ternary_operations(bool async)
     {
         await base.Select_nested_ternary_operations(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "Id" : "$_id", "IsManualCartridge" : { "$cond" : { "if" : { "$not" : ["$IsAutomatic"] }, "then" : { "$cond" : { "if" : { "$eq" : ["$AmmunitionType", 1] }, "then" : { "$literal" : "ManualCartridge" }, "else" : { "$literal" : "Manual" } } }, "else" : { "$literal" : "Auto" } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Null_propagation_optimization1(bool async)
     {
         await base.Null_propagation_optimization1(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "LeaderNickname" : "Marcus" } }
+""");
     }
 
     public override async Task Null_propagation_optimization2(bool async)
     {
         await base.Null_propagation_optimization2(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$eq" : [{ "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$literal" : null }, "else" : { "$regexMatch" : { "input" : "$LeaderNickname", "regex" : { "$regularExpression" : { "pattern" : "us$", "options" : "s" } } } } } }, true] } } }
+""");
     }
 
     public override async Task Null_propagation_optimization3(bool async)
     {
         await base.Null_propagation_optimization3(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$eq" : [{ "$cond" : { "if" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$regexMatch" : { "input" : "$LeaderNickname", "regex" : { "$regularExpression" : { "pattern" : "us$", "options" : "s" } } } }, "else" : { "$literal" : null } } }, true] } } }
+""");
     }
 
     public override async Task Null_propagation_optimization4(bool async)
     {
         await base.Null_propagation_optimization4(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$eq" : [{ "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$literal" : null }, "else" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$LeaderNickname" } } } } }, 5] } } }
+""");
     }
 
     public override async Task Null_propagation_optimization5(bool async)
     {
         await base.Null_propagation_optimization5(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$eq" : [{ "$cond" : { "if" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$LeaderNickname" } } }, "else" : { "$literal" : null } } }, 5] } } }
+""");
     }
 
     public override async Task Null_propagation_optimization6(bool async)
     {
         await base.Null_propagation_optimization6(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$eq" : [{ "$cond" : { "if" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$LeaderNickname" } } }, "else" : { "$literal" : null } } }, 5] } } }
+""");
     }
 
     public override async Task Select_null_propagation_optimization7(bool async)
     {
         await base.Select_null_propagation_optimization7(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$concat" : [{ "$ifNull" : ["$LeaderNickname", ""] }, { "$ifNull" : ["$LeaderNickname", ""] }] }, "else" : { "$literal" : null } } }, "_id" : 0 } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Select_null_propagation_optimization8(bool async)
     {
         await base.Select_null_propagation_optimization8(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : ["$$ROOT", null] }, "then" : { "$concat" : [{ "$ifNull" : ["$LeaderNickname", ""] }, { "$ifNull" : ["$LeaderNickname", ""] }] }, "else" : { "$literal" : null } } }, "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_null_propagation_optimization8(bool async)
@@ -409,11 +601,21 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_propagation_optimization9(bool async)
     {
         await base.Select_null_propagation_optimization9(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$FullName", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$FullName" } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_null_propagation_negative1(bool async)
     {
         await base.Select_null_propagation_negative1(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$eq" : [{ "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$_id.Nickname", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$_id.Nickname" } } }, 5] }, "else" : { "$literal" : null } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_null_propagation_negative2(bool async)
@@ -449,11 +651,21 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_propagation_negative6(bool async)
     {
         await base.Select_null_propagation_negative6(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$ne" : [{ "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$LeaderNickname" } } }, { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$LeaderNickname" } } }] }, "else" : { "$literal" : null } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Select_null_propagation_negative7(bool async)
     {
         await base.Select_null_propagation_negative7(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$eq" : ["$LeaderNickname", "$LeaderNickname"] }, "else" : { "$literal" : null } } }, "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -467,6 +679,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_propagation_negative9(bool async)
     {
         await base.Select_null_propagation_negative9(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "then" : { "$ifNull" : [{ "$eq" : [{ "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$_id.Nickname", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$_id.Nickname" } } }, 5] }, { "$literal" : false }] }, "else" : { "$literal" : null } } }, "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -488,36 +705,83 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_conditional_with_anonymous_type_and_null_constant(bool async)
     {
         await base.Select_conditional_with_anonymous_type_and_null_constant(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$project" : { "_v" : { "$ne" : [{ "$ifNull" : ["$LeaderNickname", null] }, null] }, "_cr0" : "$HasSoulPatch", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_conditional_with_anonymous_types(bool async)
     {
         await base.Select_conditional_with_anonymous_types(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : ["$LeaderNickname", null] }, "then" : { "Name" : "$_id.Nickname" }, "else" : { "Name" : "$FullName" } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Where_conditional_equality_1(bool async)
     {
         await base.Where_conditional_equality_1(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$match" : { "$or" : [{ "LeaderNickname" : { "$not" : { "$ne" : null } } }, { "HasSoulPatch" : null }] } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 
     public override async Task Where_conditional_equality_2(bool async)
     {
         await base.Where_conditional_equality_2(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$match" : { "$or" : [{ "LeaderNickname" : null }, { "HasSoulPatch" : null }] } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 
+#if EF11
     public override async Task Where_conditional_equality_3(bool async)
     {
         await base.Where_conditional_equality_3(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$match" : { "$or" : [{ "LeaderNickname" : { "$not" : { "$ne" : null } } }, { }] } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
+#else
+    public override async Task Where_conditional_equality_3(bool async)
+    {
+        await base.Where_conditional_equality_3(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$match" : { "$or" : [{ "LeaderNickname" : { "$not" : { "$ne" : null } } }, { "$expr" : { "$eq" : [null, null] } }] } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
+    }
+#endif
 
     public override async Task Select_coalesce_with_anonymous_types(bool async)
     {
         await base.Select_coalesce_with_anonymous_types(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$project" : { "_v" : { "$ifNull" : [{ "Name" : "$LeaderNickname" }, { "Name" : "$FullName" }] }, "_id" : 0 } }
+""");
     }
 
     public override async Task Where_coalesce_with_anonymous_types(bool async)
     {
         await base.Where_coalesce_with_anonymous_types(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$ne" : [{ "$ifNull" : [{ "Name" : "$LeaderNickname" }, { "Name" : "$FullName" }] }, null] } } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 
     public override async Task Where_compare_anonymous_types(bool async)
@@ -529,11 +793,21 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_member_access_on_anonymous_type(bool async)
     {
         await base.Where_member_access_on_anonymous_type(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "LeaderNickname" : "Marcus" } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 
     public override async Task Where_compare_anonymous_types_with_uncorrelated_members(bool async)
     {
         await base.Where_compare_anonymous_types_with_uncorrelated_members(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id" : { "$type" : -1 } } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -560,6 +834,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_Navigation_Null_Coalesce_To_Clr_Type(bool async)
     {
         await base.Optional_Navigation_Null_Coalesce_To_Clr_Type(async);
+
+        AssertMql(
+            """
+Weapons.{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }, { "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$project" : { "IsAutomatic" : { "$ifNull" : ["$_lookup_SynergyWith.IsAutomatic", { "$literal" : false }] }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -663,6 +942,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Concat_with_count(bool async)
     {
         await base.Concat_with_count(async);
+
+        AssertMql(
+            """
+Gears.{ "$unionWith" : { "coll" : "Gears", "pipeline" : [] } }, { "$count" : "v" }
+""");
     }
 #else
     public override async Task Concat_with_count(bool async)
@@ -675,16 +959,31 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Concat_scalars_with_count(bool async)
     {
         await base.Concat_scalars_with_count(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }, { "$unionWith" : { "coll" : "Gears", "pipeline" : [{ "$project" : { "_v" : "$FullName", "_id" : 0 } }] } }, { "$count" : "_v" }
+""");
     }
 
     public override async Task Concat_anonymous_with_count(bool async)
     {
         await base.Concat_anonymous_with_count(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "Gear" : "$$ROOT", "Name" : "$_id.Nickname", "_id" : 0 } }, { "$unionWith" : { "coll" : "Gears", "pipeline" : [{ "$project" : { "Gear" : "$$ROOT", "Name" : "$FullName", "_id" : 0 } }] } }, { "$count" : "_v" }
+""");
     }
 
     public override async Task Concat_with_scalar_projection(bool async)
     {
         await base.Concat_with_scalar_projection(async);
+
+        AssertMql(
+            """
+Gears.{ "$unionWith" : { "coll" : "Gears", "pipeline" : [] } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_navigation_with_concat_and_count(bool async)
@@ -745,6 +1044,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Conditional_Navigation_With_Trivial_Member_Access(bool async)
     {
         await base.Conditional_Navigation_With_Trivial_Member_Access(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$unwind" : { "path" : "$_lookup_CityOfBirth", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "Cities", "localField" : "AssignedCityName", "foreignField" : "_id", "as" : "_lookup_AssignedCity" } }, { "$unwind" : { "path" : "$_lookup_AssignedCity", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_AssignedCity" : { "$ifNull" : ["$_lookup_AssignedCity", null] } } }, { "$match" : { "$expr" : { "$ne" : [{ "$let" : { "vars" : { "this" : { "$cond" : { "if" : { "$ne" : ["$_lookup_AssignedCity", null] }, "then" : "$_lookup_AssignedCity", "else" : "$_lookup_CityOfBirth" } } }, "in" : "$$this._id" } }, "Ephyra"] } } }, { "$project" : { "Nickname" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -752,6 +1056,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Conditional_Navigation_With_Member_Access_On_Same_Type(bool async)
     {
         await base.Conditional_Navigation_With_Member_Access_On_Same_Type(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$unwind" : { "path" : "$_lookup_CityOfBirth", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "Cities", "localField" : "AssignedCityName", "foreignField" : "_id", "as" : "_lookup_AssignedCity" } }, { "$unwind" : { "path" : "$_lookup_AssignedCity", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_AssignedCity" : { "$ifNull" : ["$_lookup_AssignedCity", null] } } }, { "$match" : { "$expr" : { "$eq" : [{ "$let" : { "vars" : { "this" : { "$cond" : { "if" : { "$ne" : ["$_lookup_AssignedCity", null] }, "then" : "$_lookup_AssignedCity", "else" : "$_lookup_CityOfBirth" } } }, "in" : "$$this.Nation" } }, "Tyrus"] } } }, { "$project" : { "Nickname" : "$_id.Nickname", "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -783,6 +1092,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupJoin_Composite_Key(bool async)
     {
         await base.GroupJoin_Composite_Key(async);
+
+        AssertMql(
+            """
+Tags.{ "$lookup" : { "from" : "Gears", "let" : { "k0" : { "$ifNull" : ["$GearNickName", null] }, "k1" : { "$ifNull" : ["$GearSquadId", null] } }, "pipeline" : [{ "$match" : { "$expr" : { "$and" : [{ "$eq" : [{ "$ifNull" : ["$_id.Nickname", null] }, "$$k0"] }, { "$eq" : [{ "$ifNull" : ["$_id.SquadId", null] }, "$$k1"] }] } } }], "as" : "_lookup_Gear" } }, { "$unwind" : { "path" : "$_lookup_Gear", "preserveNullAndEmptyArrays" : false } }
+""");
     }
 #else
     public override async Task GroupJoin_Composite_Key(bool async)
@@ -817,6 +1131,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Join_with_order_by_without_skip_or_take_nested(bool async)
     {
         await base.Join_with_order_by_without_skip_or_take_nested(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "as" : "_lookup_Members" } }, { "$unwind" : { "path" : "$_lookup_Members", "preserveNullAndEmptyArrays" : false } }, { "$lookup" : { "from" : "Weapons", "localField" : "_lookup_Members.FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$unwind" : { "path" : "$_lookup_Weapons", "preserveNullAndEmptyArrays" : false } }, { "$project" : { "Name" : "$_lookup_Weapons.Name", "FullName" : "$_lookup_Members.FullName", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -838,27 +1157,52 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Non_unicode_string_literal_is_used_for_non_unicode_column(bool async)
     {
         await base.Non_unicode_string_literal_is_used_for_non_unicode_column(async);
+
+        AssertMql(
+            """
+Cities.{ "$match" : { "Location" : "Unknown" } }
+""");
     }
 
     public override async Task Non_unicode_string_literal_is_used_for_non_unicode_column_right(bool async)
     {
         await base.Non_unicode_string_literal_is_used_for_non_unicode_column_right(async);
+
+        AssertMql(
+            """
+Cities.{ "$match" : { "Location" : "Unknown" } }
+""");
     }
 
     public override async Task Non_unicode_parameter_is_used_for_non_unicode_column(bool async)
     {
         await base.Non_unicode_parameter_is_used_for_non_unicode_column(async);
+
+        AssertMql(
+            """
+Cities.{ "$match" : { "Location" : "Unknown" } }
+""");
     }
 
     public override async Task Non_unicode_string_literals_in_contains_is_used_for_non_unicode_column(bool async)
     {
         await base.Non_unicode_string_literals_in_contains_is_used_for_non_unicode_column(async);
+
+        AssertMql(
+            """
+Cities.{ "$match" : { "Location" : { "$in" : ["Unknown", "Jacinto's location", "Ephyra's location"] } } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Non_unicode_string_literals_is_used_for_non_unicode_column_with_subquery(bool async)
     {
         await base.Non_unicode_string_literals_is_used_for_non_unicode_column_with_subquery(async);
+
+        AssertMql(
+            """
+Cities.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "CityOfBirthName", "as" : "_lookup_BornGears" } }, { "$match" : { "$and" : [{ "Location" : "Unknown" }, { "$expr" : { "$eq" : [{ "$size" : { "$filter" : { "input" : { "$ifNull" : ["$_lookup_BornGears", []] }, "as" : "e", "cond" : { "$eq" : ["$$e._id.Nickname", { "$literal" : "Paduk" }] } } } }, 1] } }] } }
+""");
     }
 #else
     public override async Task Non_unicode_string_literals_is_used_for_non_unicode_column_with_subquery(bool async)
@@ -871,22 +1215,42 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Non_unicode_string_literals_is_used_for_non_unicode_column_in_subquery(bool async)
     {
         await base.Non_unicode_string_literals_is_used_for_non_unicode_column_in_subquery(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$match" : { "_lookup_CityOfBirth.0" : { "$exists" : true } } }, { "$set" : { "_lookup_CityOfBirth" : { "$arrayElemAt" : ["$_lookup_CityOfBirth", 0] } } }, { "$match" : { "_id.Nickname" : "Marcus", "_lookup_CityOfBirth.Location" : "Jacinto's location" } }
+""");
     }
 
     public override async Task Non_unicode_string_literals_is_used_for_non_unicode_column_with_contains(bool async)
     {
         await base.Non_unicode_string_literals_is_used_for_non_unicode_column_with_contains(async);
+
+        AssertMql(
+            """
+Cities.{ "$match" : { "Location" : { "$regularExpression" : { "pattern" : "Jacinto", "options" : "s" } } } }
+""");
     }
 
     public override async Task Unicode_string_literals_is_used_for_non_unicode_column_with_concat(bool async)
     {
         await base.Unicode_string_literals_is_used_for_non_unicode_column_with_concat(async);
+
+        AssertMql(
+            """
+Cities.{ "$match" : { "$expr" : { "$regexMatch" : { "input" : { "$concat" : [{ "$ifNull" : ["$Location", ""] }, { "$literal" : "Added" }] }, "regex" : { "$regularExpression" : { "pattern" : "Add", "options" : "s" } } } } } }
+""");
     }
 
 #if (EF10 || EF11)
     public override void Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result1()
     {
         base.Include_on_GroupJoin_SelectMany_DefaultIfEmpty_with_coalesce_result1();
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Gears", "localField" : "_outer.LeaderNickname", "foreignField" : "_id.Nickname", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$sort" : { "_outer._id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "_outer.FullName", "foreignField" : "OwnerFullName", "as" : "_outer._lookup_Weapons" } }
+""");
     }
 #endif
 
@@ -1101,11 +1465,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_navigation_type_compensation_works_with_skip(bool async)
     {
         await base.Optional_navigation_type_compensation_works_with_skip(async);
+
+        AssertMql();
     }
 
     public override async Task Optional_navigation_type_compensation_works_with_take(bool async)
     {
         await base.Optional_navigation_type_compensation_works_with_take(async);
+
+        AssertMql();
     }
 
     public override async Task Select_correlated_filtered_collection(bool async)
@@ -1123,12 +1491,19 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_correlated_filtered_collection_returning_queryable_throws(bool async)
     {
         await base.Select_correlated_filtered_collection_returning_queryable_throws(async);
+
+        AssertMql();
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Select_correlated_filtered_collection_works_with_caching(bool async)
     {
         await base.Select_correlated_filtered_collection_works_with_caching(async);
+
+        AssertMql(
+            """
+Tags.{ "$sort" : { "Note" : 1 } }, { "$lookup" : { "from" : "Gears", "localField" : "GearNickName", "foreignField" : "_id.Nickname", "as" : "_lookup_Gear__id_Nickname_GearNickName" } }, { "$project" : { "_lookup_Gear__id_Nickname_GearNickName" : "$_lookup_Gear__id_Nickname_GearNickName", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_correlated_filtered_collection_works_with_caching(bool async)
@@ -1183,6 +1558,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Orderby_added_for_client_side_GroupJoin_composite_dependent_to_principal_LOJ_when_incomplete_key_is_used(bool async)
     {
         await base.Orderby_added_for_client_side_GroupJoin_composite_dependent_to_principal_LOJ_when_incomplete_key_is_used(async);
+
+        AssertMql();
     }
 
 #if (EF10 || EF11)
@@ -1221,6 +1598,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task FirstOrDefault_with_manually_created_groupjoin_is_translated_to_sql(bool async)
     {
         await base.FirstOrDefault_with_manually_created_groupjoin_is_translated_to_sql(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "as" : "_lookup_Members" } }, { "$unwind" : { "path" : "$_lookup_Members", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Members" : { "$ifNull" : ["$_lookup_Members", null] } } }, { "$match" : { "Name" : "Kilo" } }, { "$limit" : 1 }
+""");
     }
 #endif
 
@@ -1249,21 +1631,41 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Contains_with_local_nullable_guid_list_closure(bool async)
     {
         await base.Contains_with_local_nullable_guid_list_closure(async);
+
+        AssertMql(
+            """
+Tags.{ "$match" : { "_id" : { "$in" : [{ "$binary" : { "base64" : "3zb0k0Y/QSOD+WsTXe63ug==", "subType" : "04" } }, { "$binary" : { "base64" : "I8vPm84URc+q+iwmZ+v90w==", "subType" : "04" } }, { "$binary" : { "base64" : "qxuC14jbQr2hMn7vmqaK9A==", "subType" : "04" } }] } } }
+""");
     }
 
     public override async Task Unnecessary_include_doesnt_get_added_complex_when_projecting_EF_Property(bool async)
     {
         await base.Unnecessary_include_doesnt_get_added_complex_when_projecting_EF_Property(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "Rank" : 1 } }, { "$match" : { "HasSoulPatch" : true } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
     public override async Task Multiple_order_bys_are_properly_lifted_from_subquery_created_by_include(bool async)
     {
         await base.Multiple_order_bys_are_properly_lifted_from_subquery_created_by_include(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "FullName" : 1 } }, { "$match" : { "HasSoulPatch" : { "$ne" : true } } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
     public override async Task Order_by_is_properly_lifted_from_subquery_with_same_order_by_in_the_outer_query(bool async)
     {
         await base.Order_by_is_properly_lifted_from_subquery_with_same_order_by_in_the_outer_query(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "FullName" : 1 } }, { "$match" : { "HasSoulPatch" : { "$ne" : true } } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -1289,24 +1691,44 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Subquery_containing_join_projecting_main_from_clause_gets_lifted(bool async)
     {
         await base.Subquery_containing_join_projecting_main_from_clause_gets_lifted(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Tags", "localField" : "_id.Nickname", "foreignField" : "GearNickName", "as" : "_lookup_Tag" } }, { "$unwind" : { "path" : "$_lookup_Tag", "preserveNullAndEmptyArrays" : false } }, { "$set" : { "__sort0" : "$_id.Nickname" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Subquery_containing_left_join_projecting_main_from_clause_gets_lifted(bool async)
     {
         await base.Subquery_containing_left_join_projecting_main_from_clause_gets_lifted(async);
+
+        AssertMql(
+            """
+Gears.{ "$set" : { "__sort0" : "$_id.Nickname" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$lookup" : { "from" : "Tags", "localField" : "_id.Nickname", "foreignField" : "GearNickName", "as" : "_lookup_Tag" } }, { "$unwind" : { "path" : "$_lookup_Tag", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 #endif
 
     public override async Task Subquery_containing_join_gets_lifted_clashing_names(bool async)
     {
         await base.Subquery_containing_join_gets_lifted_clashing_names(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Tags", "localField" : "_outer._id.Nickname", "foreignField" : "GearNickName", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$sort" : { "Inner.Note" : 1 } }, { "$match" : { "Inner.GearNickName" : { "$ne" : "Cole Train" } } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Tags", "localField" : "_outer.Outer._id.Nickname", "foreignField" : "GearNickName", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$sort" : { "Outer.Outer._id.Nickname" : 1, "Inner._id" : 1 } }, { "$project" : { "_v" : "$Outer.Outer._id.Nickname", "_id" : 0 } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Subquery_created_by_include_gets_lifted_nested(bool async)
     {
         await base.Subquery_created_by_include_gets_lifted_nested(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$sort" : { "Rank" : 1 } }, { "$match" : { "_lookup_Weapons" : { "$ne" : null, "$not" : { "$size" : 0 } } } }, { "$match" : { "$nor" : [{ "$expr" : "$HasSoulPatch" }] } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$unwind" : { "path" : "$_lookup_CityOfBirth", "preserveNullAndEmptyArrays" : false } }
+""");
     }
 #else
     public override async Task Subquery_created_by_include_gets_lifted_nested(bool async)
@@ -1325,31 +1747,61 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Subquery_with_result_operator_is_not_lifted(bool async)
     {
         await base.Subquery_with_result_operator_is_not_lifted(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "HasSoulPatch" : { "$ne" : true } } }, { "$sort" : { "FullName" : 1 } }, { "$limit" : 2 }, { "$sort" : { "Rank" : 1 } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
     public override async Task Skip_with_orderby_followed_by_orderBy_is_pushed_down(bool async)
     {
         await base.Skip_with_orderby_followed_by_orderBy_is_pushed_down(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "HasSoulPatch" : { "$ne" : true } } }, { "$sort" : { "FullName" : 1 } }, { "$skip" : 1 }, { "$sort" : { "Rank" : 1 } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
     public override async Task Take_without_orderby_followed_by_orderBy_is_pushed_down1(bool async)
     {
         await base.Take_without_orderby_followed_by_orderBy_is_pushed_down1(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "HasSoulPatch" : { "$ne" : true } } }, { "$limit" : 999 }, { "$sort" : { "Rank" : 1 } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
     public override async Task Take_without_orderby_followed_by_orderBy_is_pushed_down2(bool async)
     {
         await base.Take_without_orderby_followed_by_orderBy_is_pushed_down2(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "HasSoulPatch" : { "$ne" : true } } }, { "$limit" : 999 }, { "$sort" : { "Rank" : 1 } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
     public override async Task Take_without_orderby_followed_by_orderBy_is_pushed_down3(bool async)
     {
         await base.Take_without_orderby_followed_by_orderBy_is_pushed_down3(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "HasSoulPatch" : { "$ne" : true } } }, { "$limit" : 999 }, { "$sort" : { "FullName" : 1, "Rank" : 1 } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
     public override async Task Select_length_of_string_property(bool async)
     {
         await base.Select_length_of_string_property(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "Name" : "$Name", "Length" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$Name", null] }, null] }, "then" : null, "else" : { "$strLenCP" : "$Name" } } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Client_method_on_collection_navigation_in_predicate(bool async)
@@ -1373,37 +1825,66 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Client_method_on_collection_navigation_in_additional_from_clause(bool async)
     {
         await base.Client_method_on_collection_navigation_in_additional_from_clause(async);
+
+        AssertMql();
     }
 
     public override async Task Client_method_on_collection_navigation_in_outer_join_key(bool async)
     {
         await base.Client_method_on_collection_navigation_in_outer_join_key(async);
+
+        AssertMql();
     }
 
     public override async Task Member_access_on_derived_entity_using_cast(bool async)
     {
         await base.Member_access_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "Name" : "$Name", "Eradicated" : "$Eradicated", "_id" : 0 } }
+""");
     }
 
     public override async Task Member_access_on_derived_materialized_entity_using_cast(bool async)
     {
         await base.Member_access_on_derived_materialized_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }
+""");
     }
 
     public override async Task Member_access_on_derived_entity_using_cast_and_let(bool async)
     {
         await base.Member_access_on_derived_entity_using_cast_and_let(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "Name" : "$Name", "Eradicated" : "$Eradicated", "_id" : 0 } }
+""");
     }
 
     public override async Task Property_access_on_derived_entity_using_cast(bool async)
     {
         await base.Property_access_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "Name" : "$Name", "Eradicated" : "$Eradicated", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Navigation_access_on_derived_entity_using_cast(bool async)
     {
         await base.Navigation_access_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "Name" : "$_v._outer.Name", "Threat" : "$_v._inner.ThreatLevel", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1411,6 +1892,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_access_on_derived_materialized_entity_using_cast(bool async)
     {
         await base.Navigation_access_on_derived_materialized_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1418,6 +1904,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_access_via_EFProperty_on_derived_entity_using_cast(bool async)
     {
         await base.Navigation_access_via_EFProperty_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "Name" : "$_v._outer.Name", "Threat" : "$_v._inner.ThreatLevel", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1425,6 +1916,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_access_fk_on_derived_entity_using_cast(bool async)
     {
         await base.Navigation_access_fk_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "Name" : "$_v._outer.Name", "CommanderName" : "$_v._inner._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -1432,6 +1928,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Collection_navigation_access_on_derived_entity_using_cast(bool async)
     {
         await base.Collection_navigation_access_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_id", "foreignField" : "LocustHordeId", "as" : "_lookup_LocustLeader_LocustHordeId__id" } }, { "$project" : { "Name" : "$Name", "LeadersCount" : { "$size" : { "$ifNull" : ["$_lookup_LocustLeader_LocustHordeId__id", []] } }, "_id" : 0 } }
+""");
     }
 #else
     public override async Task Collection_navigation_access_on_derived_entity_using_cast(bool async)
@@ -1459,12 +1960,22 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_on_derived_entity_with_cast(bool async)
     {
         await base.Include_on_derived_entity_with_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Cities", "localField" : "CapitalName", "foreignField" : "_id", "as" : "_lookup_Capital" } }, { "$set" : { "_lookup_Capital" : { "$arrayElemAt" : ["$_lookup_Capital", 0] } } }
+""");
     }
 #endif
 
     public override async Task Distinct_on_subquery_doesnt_get_lifted(bool async)
     {
         await base.Distinct_on_subquery_doesnt_get_lifted(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$project" : { "HasSoulPatch" : "$HasSoulPatch", "_id" : 0 } }
+""");
     }
 
     public override async Task Cast_result_operator_on_subquery_is_properly_lifted_to_a_convert(bool async)
@@ -1495,6 +2006,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Contains_on_nullable_array_produces_correct_sql(bool async)
     {
         await base.Contains_on_nullable_array_produces_correct_sql(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "AssignedCityName", "foreignField" : "_id", "as" : "_lookup_AssignedCity" } }, { "$set" : { "_lookup_AssignedCity" : { "$arrayElemAt" : ["$_lookup_AssignedCity", 0] } } }, { "$match" : { "_id.SquadId" : { "$lt" : 2 }, "_lookup_AssignedCity._id" : { "$in" : ["Ephyra", null] } } }
+""");
     }
 #endif
 
@@ -1510,6 +2026,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_conditional_with_inheritance(bool async)
     {
         await base.Select_null_conditional_with_inheritance(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : ["$CommanderName", null] }, "then" : "$CommanderName", "else" : null } }, "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_null_conditional_with_inheritance(bool async)
@@ -1523,6 +2044,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_conditional_with_inheritance_negative(bool async)
     {
         await base.Select_null_conditional_with_inheritance_negative(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : ["$CommanderName", null] }, "then" : "$Eradicated", "else" : null } }, "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_null_conditional_with_inheritance_negative(bool async)
@@ -1609,21 +2135,41 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_collection_on_derived_type_using_string(bool async)
     {
         await base.Include_collection_on_derived_type_using_string(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }
+""");
     }
 
     public override async Task Include_collection_on_derived_type_using_EF_Property(bool async)
     {
         await base.Include_collection_on_derived_type_using_EF_Property(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }
+""");
     }
 
     public override async Task Include_collection_on_derived_type_using_lambda(bool async)
     {
         await base.Include_collection_on_derived_type_using_lambda(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }
+""");
     }
 
     public override async Task Include_collection_on_derived_type_using_lambda_with_soft_cast(bool async)
     {
         await base.Include_collection_on_derived_type_using_lambda_with_soft_cast(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -1659,6 +2205,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task ThenInclude_reference_on_derived_after_derived_collection(bool async)
     {
         await base.ThenInclude_reference_on_derived_after_derived_collection(async);
+
+        AssertMql(
+            """
+Factions.{ "$lookup" : { "from" : "LocustLeaders", "let" : { "localField" : "$_id" }, "pipeline" : [{ "$match" : { "$expr" : { "$eq" : ["$LocustHordeId", "$$localField"] } } }, { "$lookup" : { "from" : "Gears", "localField" : "DefeatedByNickname", "foreignField" : "_id.Nickname", "as" : "_lookup_DefeatedBy" } }, { "$unwind" : { "path" : "$_lookup_DefeatedBy", "preserveNullAndEmptyArrays" : true } }], "as" : "_lookup_Leaders" } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -1678,6 +2229,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_collection_and_invalid_navigation_using_string_throws(bool async)
     {
         await base.Include_collection_and_invalid_navigation_using_string_throws(async);
+
+        AssertMql();
     }
 
 #if (EF10 || EF11)
@@ -1692,6 +2245,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_naked_navigation_with_ToList(bool async)
     {
         await base.Correlated_collections_naked_navigation_with_ToList(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapon_OwnerFullName_FullName" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName" : "$_lookup_Weapon_OwnerFullName_FullName", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collections_naked_navigation_with_ToList(bool async)
@@ -1704,6 +2262,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_naked_navigation_with_ToList_followed_by_projecting_count(bool async)
     {
         await base.Correlated_collections_naked_navigation_with_ToList_followed_by_projecting_count(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$project" : { "_v" : { "$size" : "$_lookup_Weapons" }, "_id" : 0 } }
+""");
     }
 
     public override async Task Correlated_collections_naked_navigation_with_ToArray(bool async)
@@ -1716,6 +2279,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_basic_projection(bool async)
     {
         await base.Correlated_collections_basic_projection(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "$or" : [{ "IsAutomatic" : true }, { "Name" : { "$ne" : "foo" } }] } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collections_basic_projection(bool async)
@@ -1729,6 +2297,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_basic_projection_explicit_to_list(bool async)
     {
         await base.Correlated_collections_basic_projection_explicit_to_list(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "$or" : [{ "IsAutomatic" : true }, { "Name" : { "$ne" : "foo" } }] } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collections_basic_projection_explicit_to_list(bool async)
@@ -1748,6 +2321,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_basic_projection_ordered(bool async)
     {
         await base.Correlated_collections_basic_projection_ordered(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "$or" : [{ "IsAutomatic" : true }, { "Name" : { "$ne" : "foo" } }] } }, { "$sort" : { "Name" : -1 } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collections_basic_projection_ordered(bool async)
@@ -1767,6 +2345,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_basic_projecting_single_property(bool async)
     {
         await base.Correlated_collections_basic_projecting_single_property(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "$or" : [{ "IsAutomatic" : true }, { "Name" : { "$ne" : "foo" } }] } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collections_basic_projecting_single_property(bool async)
@@ -1780,6 +2363,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_basic_projecting_constant(bool async)
     {
         await base.Correlated_collections_basic_projecting_constant(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "$or" : [{ "IsAutomatic" : true }, { "Name" : { "$ne" : "foo" } }] } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collections_basic_projecting_constant(bool async)
@@ -1793,6 +2381,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_basic_projecting_constant_bool(bool async)
     {
         await base.Correlated_collections_basic_projecting_constant_bool(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "$or" : [{ "IsAutomatic" : true }, { "Name" : { "$ne" : "foo" } }] } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collections_basic_projecting_constant_bool(bool async)
@@ -1842,6 +2435,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collections_same_collection_projected_multiple_times(bool async)
     {
         await base.Correlated_collections_same_collection_projected_multiple_times(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "IsAutomatic" : true } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "FullName" : "$FullName", "First" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "Second" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collections_same_collection_projected_multiple_times(bool async)
@@ -2020,6 +2618,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collection_with_top_level_Count(bool async)
     {
         await base.Correlated_collection_with_top_level_Count(async);
+
+        AssertMql(
+            """
+Gears.{ "$count" : "v" }
+""");
     }
 
     public override async Task Correlated_collection_with_top_level_Last_with_orderby_on_outer(bool async)
@@ -2032,6 +2635,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Correlated_collection_with_top_level_Last_with_order_by_on_inner(bool async)
     {
         await base.Correlated_collection_with_top_level_Last_with_order_by_on_inner(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "FullName" : -1 } }, { "$limit" : 1 }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$sort" : { "Name" : 1 } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Correlated_collection_with_top_level_Last_with_order_by_on_inner(bool async)
@@ -2067,18 +2675,33 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_required_navigation_on_derived_type(bool async)
     {
         await base.Select_required_navigation_on_derived_type(async);
+
+        AssertMql(
+            """
+LocustLeaders.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustHighCommands", "localField" : "_outer.HighCommandId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.Name", "_id" : 0 } }
+""");
     }
 #endif
 
     public override async Task Select_required_navigation_on_the_same_type_with_cast(bool async)
     {
         await base.Select_required_navigation_on_the_same_type_with_cast(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$match" : { "_lookup_CityOfBirth.0" : { "$exists" : true } } }, { "$set" : { "_lookup_CityOfBirth" : { "$arrayElemAt" : ["$_lookup_CityOfBirth", 0] } } }, { "$project" : { "_v" : "$_lookup_CityOfBirth._id", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Where_required_navigation_on_derived_type(bool async)
     {
         await base.Where_required_navigation_on_derived_type(async);
+
+        AssertMql(
+            """
+LocustLeaders.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustHighCommands", "localField" : "_outer.HighCommandId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "$expr" : "$_inner.IsOperational" } }
+""");
     }
 #endif
 
@@ -2103,6 +2726,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_concat(bool async)
     {
         await base.Include_with_concat(async);
+
+        AssertMql();
     }
 
 #if (EF10 || EF11)
@@ -2117,18 +2742,33 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Order_by_entity_qsre(bool async)
     {
         await base.Order_by_entity_qsre(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "AssignedCityName", "foreignField" : "_id", "as" : "_lookup_AssignedCity" } }, { "$set" : { "_lookup_AssignedCity" : { "$arrayElemAt" : ["$_lookup_AssignedCity", 0] } } }, { "$set" : { "__sort0" : "$_id.Nickname" } }, { "$sort" : { "_lookup_AssignedCity._id" : 1, "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$FullName", "_id" : 0 } }
+""");
     }
 #endif
 
     public override async Task Order_by_entity_qsre_with_inheritance(bool async)
     {
         await base.Order_by_entity_qsre_with_inheritance(async);
+
+        AssertMql(
+            """
+LocustLeaders.{ "$match" : { "_t" : "LocustCommander" } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustHighCommands", "localField" : "_outer.HighCommandId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$sort" : { "Inner._id" : 1, "Outer._id" : 1 } }, { "$project" : { "_v" : "$Outer._id", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Order_by_entity_qsre_composite_key(bool async)
     {
         await base.Order_by_entity_qsre_composite_key(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Gears", "localField" : "OwnerFullName", "foreignField" : "FullName", "as" : "_lookup_Owner" } }, { "$unwind" : { "path" : "$_lookup_Owner", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "_lookup_Owner._id.Nickname" : 1, "_lookup_Owner._id.SquadId" : 1, "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2136,6 +2776,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Order_by_entity_qsre_with_other_orderbys(bool async)
     {
         await base.Order_by_entity_qsre_with_other_orderbys(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$unwind" : { "path" : "$_lookup_SynergyWith", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_SynergyWith" : { "$ifNull" : ["$_lookup_SynergyWith", null] } } }, { "$lookup" : { "from" : "Gears", "localField" : "OwnerFullName", "foreignField" : "FullName", "as" : "_lookup_Owner" } }, { "$unwind" : { "path" : "$_lookup_Owner", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Owner" : { "$ifNull" : ["$_lookup_Owner", null] } } }, { "$sort" : { "IsAutomatic" : 1, "_lookup_Owner._id.Nickname" : -1, "_lookup_Owner._id.SquadId" : -1, "_lookup_SynergyWith._id" : 1, "Name" : 1 } }
+""");
     }
 #endif
 
@@ -2204,12 +2849,19 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Streaming_correlated_collection_issue_11403_returning_ordered_enumerable_throws(bool async)
     {
         await base.Streaming_correlated_collection_issue_11403_returning_ordered_enumerable_throws(async);
+
+        AssertMql();
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Streaming_correlated_collection_issue_11403(bool async)
     {
         await base.Streaming_correlated_collection_issue_11403(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$limit" : 1 }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "IsAutomatic" : { "$ne" : true } } }, { "$sort" : { "_id" : 1 } }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Streaming_correlated_collection_issue_11403(bool async)
@@ -2223,6 +2875,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Project_one_value_type_from_empty_collection(bool async)
     {
         await base.Project_one_value_type_from_empty_collection(async);
+
+        AssertMql(
+            """
+Squads.{ "$match" : { "Name" : "Kilo" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "SquadId" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Project_one_value_type_from_empty_collection(bool async)
@@ -2236,6 +2893,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Project_one_value_type_converted_to_nullable_from_empty_collection(bool async)
     {
         await base.Project_one_value_type_converted_to_nullable_from_empty_collection(async);
+
+        AssertMql(
+            """
+Squads.{ "$match" : { "Name" : "Kilo" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "SquadId" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Project_one_value_type_converted_to_nullable_from_empty_collection(bool async)
@@ -2249,6 +2911,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Project_one_value_type_with_client_projection_from_empty_collection(bool async)
     {
         await base.Project_one_value_type_with_client_projection_from_empty_collection(async);
+
+        AssertMql(
+            """
+Squads.{ "$match" : { "Name" : "Kilo" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "SquadId" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Project_one_value_type_with_client_projection_from_empty_collection(bool async)
@@ -2268,6 +2935,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_subquery_projecting_single_constant_int(bool async)
     {
         await base.Select_subquery_projecting_single_constant_int(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "Gear" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_projecting_single_constant_int(bool async)
@@ -2281,6 +2953,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_subquery_projecting_single_constant_string(bool async)
     {
         await base.Select_subquery_projecting_single_constant_string(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "Gear" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_projecting_single_constant_string(bool async)
@@ -2294,6 +2971,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_subquery_projecting_single_constant_bool(bool async)
     {
         await base.Select_subquery_projecting_single_constant_bool(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "Gear" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_projecting_single_constant_bool(bool async)
@@ -2307,6 +2989,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_subquery_projecting_single_constant_inside_anonymous(bool async)
     {
         await base.Select_subquery_projecting_single_constant_inside_anonymous(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "Gear" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_projecting_single_constant_inside_anonymous(bool async)
@@ -2320,6 +3007,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_subquery_projecting_multiple_constants_inside_anonymous(bool async)
     {
         await base.Select_subquery_projecting_multiple_constants_inside_anonymous(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "Gear" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_projecting_multiple_constants_inside_anonymous(bool async)
@@ -2332,6 +3024,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_order_by_constant(bool async)
     {
         await base.Include_with_order_by_constant(async);
+
+        AssertMql(
+            """
+Squads.{ "$set" : { "__sort0" : { "$literal" : 42 } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "as" : "_lookup_Members" } }
+""");
     }
 
     public override async Task Correlated_collection_order_by_constant(bool async)
@@ -2344,6 +3041,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_subquery_projecting_single_constant_null_of_non_mapped_type(bool async)
     {
         await base.Select_subquery_projecting_single_constant_null_of_non_mapped_type(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "Gear" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_projecting_single_constant_null_of_non_mapped_type(bool async)
@@ -2357,6 +3059,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_subquery_projecting_single_constant_of_non_mapped_type(bool async)
     {
         await base.Select_subquery_projecting_single_constant_of_non_mapped_type(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }, { "$limit" : 1 }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$project" : { "Name" : "$Name", "Gear" : "$_lookup_Gear__id_SquadId__id_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_projecting_single_constant_of_non_mapped_type(bool async)
@@ -2376,6 +3083,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_collection_OrderBy_aggregate(bool async)
     {
         await base.Include_collection_OrderBy_aggregate(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }, { "$set" : { "__sort0" : { "$size" : { "$ifNull" : ["$_lookup_Weapons", []] } } } }, { "$sort" : { "__sort0" : 1, "_id.Nickname" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #else
     public override async Task Include_collection_OrderBy_aggregate(bool async)
@@ -2389,6 +3101,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_collection_with_complex_OrderBy2(bool async)
     {
         await base.Include_collection_with_complex_OrderBy2(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Weapons", []] }, "as" : "e", "in" : { "k" : "$$e._id", "m" : "$$e.IsAutomatic" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$lt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : 1, "_id.Nickname" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #else
     public override async Task Include_collection_with_complex_OrderBy2(bool async)
@@ -2402,6 +3119,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_collection_with_complex_OrderBy3(bool async)
     {
         await base.Include_collection_with_complex_OrderBy3(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "LeaderNickname", "as" : "_lookup_Reports" } }, { "$set" : { "__sort0" : { "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Weapons", []] }, "as" : "e", "in" : { "k" : "$$e._id", "m" : "$$e.IsAutomatic" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$lt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } } } }, { "$sort" : { "__sort0" : 1, "_id.Nickname" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #else
     public override async Task Include_collection_with_complex_OrderBy3(bool async)
@@ -2432,12 +3154,22 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Cast_to_derived_type_after_OfType_works(bool async)
     {
         await base.Cast_to_derived_type_after_OfType_works(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Select_subquery_boolean(bool async)
     {
         await base.Select_subquery_boolean(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_boolean(bool async)
@@ -2481,6 +3213,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_subquery_boolean_empty(bool async)
     {
         await base.Select_subquery_boolean_empty(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "Name" : "BFG" } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Select_subquery_boolean_empty(bool async)
@@ -2562,6 +3299,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Double_order_by_on_nullable_bool_coming_from_optional_navigation(bool async)
     {
         await base.Double_order_by_on_nullable_bool_coming_from_optional_navigation(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$sort" : { "_lookup_SynergyWith.IsAutomatic" : 1, "_lookup_SynergyWith._id" : 1 } }
+""");
     }
 #endif
 
@@ -2577,23 +3319,43 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Double_order_by_on_is_null(bool async)
     {
         await base.Double_order_by_on_is_null(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$eq" : [{ "$ifNull" : ["$_lookup_SynergyWith.Name", null] }, null] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
     public override async Task Double_order_by_on_string_compare(bool async)
     {
         await base.Double_order_by_on_string_compare(async);
+
+        AssertMql(
+            """
+Weapons.{ "$set" : { "__sort0" : { "$eq" : [{ "$cmp" : ["$Name", { "$literal" : "Marcus' Lancer" }] }, 0] } } }, { "$sort" : { "__sort0" : 1, "_id" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 
     public override async Task Double_order_by_binary_expression(bool async)
     {
         await base.Double_order_by_binary_expression(async);
+
+        AssertMql(
+            """
+Weapons.{ "$set" : { "__sort0" : { "$add" : ["$_id", 2] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "Binary" : { "$add" : ["$_id", 2] }, "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task String_compare_with_null_conditional_argument(bool async)
     {
         await base.String_compare_with_null_conditional_argument(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$eq" : [{ "$cmp" : ["$_lookup_SynergyWith.Name", { "$literal" : "Marcus' Lancer" }] }, 0] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -2601,6 +3363,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task String_compare_with_null_conditional_argument2(bool async)
     {
         await base.String_compare_with_null_conditional_argument2(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$eq" : [{ "$cmp" : [{ "$literal" : "Marcus' Lancer" }, "$_lookup_SynergyWith.Name"] }, 0] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -2608,6 +3375,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task String_concat_with_null_conditional_argument(bool async)
     {
         await base.String_concat_with_null_conditional_argument(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$concat" : [{ "$ifNull" : ["$_lookup_SynergyWith.Name", ""] }, { "$toString" : 5 }] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -2615,6 +3387,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task String_concat_with_null_conditional_argument2(bool async)
     {
         await base.String_concat_with_null_conditional_argument2(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$concat" : [{ "$ifNull" : ["$_lookup_SynergyWith.Name", ""] }, { "$literal" : "Marcus' Lancer" }] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -2622,6 +3399,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task String_concat_nullable_expressions_are_coalesced(bool async)
     {
         await base.String_concat_nullable_expressions_are_coalesced(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$concat" : [{ "$ifNull" : ["$FullName", ""] }, { "$ifNull" : [null, ""] }, { "$ifNull" : ["$LeaderNickname", ""] }, { "$ifNull" : [{ "$toString" : null }, ""] }] }, "_id" : 0 } }
+""");
     }
 #else
     public override async Task String_concat_nullable_expressions_are_coalesced(bool async)
@@ -2641,6 +3423,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_Property_Include_Select_Average(bool async)
     {
         await base.GroupBy_Property_Include_Select_Average(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : "$Rank", "_v" : { "$avg" : "$_id.SquadId" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_Property_Include_Select_Average(bool async)
@@ -2654,6 +3441,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_Property_Include_Select_Sum(bool async)
     {
         await base.GroupBy_Property_Include_Select_Sum(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : "$Rank", "_v" : { "$sum" : "$_id.SquadId" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_Property_Include_Select_Sum(bool async)
@@ -2667,6 +3459,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_Property_Include_Select_Count(bool async)
     {
         await base.GroupBy_Property_Include_Select_Count(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : "$Rank", "_v" : { "$sum" : 1 } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_Property_Include_Select_Count(bool async)
@@ -2680,6 +3477,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_Property_Include_Select_LongCount(bool async)
     {
         await base.GroupBy_Property_Include_Select_LongCount(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : "$Rank", "_v" : { "$sum" : 1 } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_Property_Include_Select_LongCount(bool async)
@@ -2693,6 +3495,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_Property_Include_Select_Max(bool async)
     {
         await base.GroupBy_Property_Include_Select_Max(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : "$Rank", "_v" : { "$max" : "$_id.SquadId" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_Property_Include_Select_Max(bool async)
@@ -2706,6 +3513,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_Property_Include_Select_Min(bool async)
     {
         await base.GroupBy_Property_Include_Select_Min(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : "$Rank", "_v" : { "$min" : "$_id.SquadId" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_Property_Include_Select_Min(bool async)
@@ -2719,6 +3531,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_Property_Include_Aggregate_with_anonymous_selector(bool async)
     {
         await base.GroupBy_Property_Include_Aggregate_with_anonymous_selector(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : "$_id.Nickname", "c" : { "$sum" : 1 } } }, { "$sort" : { "_id" : 1 } }, { "$project" : { "Key" : "$_id", "c" : "$c", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_Property_Include_Aggregate_with_anonymous_selector(bool async)
@@ -2759,6 +3576,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_collection_with_Cast_to_base(bool async)
     {
         await base.Include_collection_with_Cast_to_base(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -2784,6 +3606,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task OrderBy_same_expression_containing_IsNull_correctly_deduplicates_the_ordering(bool async)
     {
         await base.OrderBy_same_expression_containing_IsNull_correctly_deduplicates_the_ordering(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_id" : 0, "_document" : "$$ROOT", "_key1" : { "$ne" : [{ "$cond" : { "if" : { "$ne" : ["$LeaderNickname", null] }, "then" : { "$eq" : [{ "$strLenCP" : "$_id.Nickname" }, 5] }, "else" : null } }, null] }, "_key2" : { "$ne" : [{ "$cond" : { "if" : { "$ne" : ["$LeaderNickname", null] }, "then" : { "$eq" : [{ "$strLenCP" : "$_id.Nickname" }, 5] }, "else" : null } }, null] } } }, { "$sort" : { "_key1" : 1, "_key2" : 1 } }, { "$replaceRoot" : { "newRoot" : "$_document" } }, { "$project" : { "_v" : { "$cond" : { "if" : { "$ne" : ["$LeaderNickname", null] }, "then" : { "$eq" : [{ "$strLenCP" : "$_id.Nickname" }, 5] }, "else" : null } }, "_id" : 0 } }
+""");
     }
 
     public override async Task GetValueOrDefault_in_projection(bool async)
@@ -2838,6 +3665,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Query_with_complex_let_containing_ordering_and_filter_projecting_firstOrDefault_element_of_let(bool async)
     {
         await base.Query_with_complex_let_containing_ordering_and_filter_projecting_firstOrDefault_element_of_let(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Dom" } } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$match" : { "IsAutomatic" : true } }, { "$sort" : { "AmmunitionType" : -1 } }, { "$limit" : 1 }], "as" : "_lookup_Weapons" } }, { "$unwind" : { "path" : "$_lookup_Weapons", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "Nickname" : "$_id.Nickname", "WeaponName" : "$_lookup_Weapons.Name", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Query_with_complex_let_containing_ordering_and_filter_projecting_firstOrDefault_element_of_let(bool async)
@@ -2949,6 +3781,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Anonymous_projection_take_followed_by_projecting_single_element_from_collection_navigation(bool async)
     {
         await base.Anonymous_projection_take_followed_by_projecting_single_element_from_collection_navigation(async);
+
+        AssertMql(
+            """
+Gears.{ "$limit" : 25 }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "pipeline" : [{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }], "as" : "_lookup_Weapon_OwnerFullName_FullName_f1" } }, { "$project" : { "_lookup_Weapon_OwnerFullName_FullName_f1" : "$_lookup_Weapon_OwnerFullName_FullName_f1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Anonymous_projection_take_followed_by_projecting_single_element_from_collection_navigation(bool async)
@@ -2973,6 +3810,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task DateTimeOffsetNow_minus_timespan(bool async)
     {
         await base.DateTimeOffsetNow_minus_timespan(async);
+
+        // No AssertMql: the query embeds the current time, so the MQL changes on every run.
     }
 
 #if (EF10 || EF11)
@@ -2987,6 +3826,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Left_join_projection_using_coalesce_tracking(bool async)
     {
         await base.Left_join_projection_using_coalesce_tracking(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Gears", "localField" : "_outer.LeaderNickname", "foreignField" : "_id.Nickname", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -2994,6 +3838,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Left_join_projection_using_conditional_tracking(bool async)
     {
         await base.Left_join_projection_using_conditional_tracking(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Gears", "localField" : "_outer.LeaderNickname", "foreignField" : "_id.Nickname", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -3060,17 +3909,32 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Join_with_inner_being_a_subquery_projecting_single_property(bool async)
     {
         await base.Join_with_inner_being_a_subquery_projecting_single_property(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "_id.Nickname", "as" : "_lookup_Gear" } }, { "$unwind" : { "path" : "$_lookup_Gear", "preserveNullAndEmptyArrays" : false } }
+""");
     }
 
     public override async Task Join_with_inner_being_a_subquery_projecting_anonymous_type_with_single_property(bool async)
     {
         await base.Join_with_inner_being_a_subquery_projecting_anonymous_type_with_single_property(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Gears", "localField" : "_id.Nickname", "foreignField" : "_id.Nickname", "as" : "_lookup_Gear" } }, { "$unwind" : { "path" : "$_lookup_Gear", "preserveNullAndEmptyArrays" : false } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Navigation_based_on_complex_expression1(bool async)
     {
         await base.Navigation_based_on_complex_expression1(async);
+
+        AssertMql(
+            """
+Factions.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_outer._t" : "LocustHorde", "_inner" : { "$ne" : null } } }
+""");
     }
 #endif
 
@@ -3078,6 +3942,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_based_on_complex_expression2(bool async)
     {
         await base.Navigation_based_on_complex_expression2(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_inner" : { "$ne" : null } } }
+""");
     }
 #endif
 
@@ -3085,6 +3954,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_based_on_complex_expression3(bool async)
     {
         await base.Navigation_based_on_complex_expression3(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -3121,6 +3995,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_datetimeoffset_comparison_in_projection(bool async)
     {
         await base.Select_datetimeoffset_comparison_in_projection(async);
+
+        // No AssertMql: the query embeds the current time, so the MQL changes on every run.
     }
 
     public override async Task OfType_in_subquery_works(bool async)
@@ -3132,6 +4008,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Nullable_bool_comparison_is_translated_to_server(bool async)
     {
         await base.Nullable_bool_comparison_is_translated_to_server(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$project" : { "IsEradicated" : { "$eq" : ["$Eradicated", true] }, "_id" : 0 } }
+""");
     }
 
     public override async Task Accessing_reference_navigation_collection_composition_generates_single_query(bool async)
@@ -3163,22 +4044,33 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_after_select_with_cast_throws(bool async)
     {
         await base.Include_after_select_with_cast_throws(async);
+
+        AssertMql();
     }
 
     public override async Task Include_after_select_with_entity_projection_throws(bool async)
     {
         await base.Include_after_select_with_entity_projection_throws(async);
+
+        AssertMql();
     }
 
     public override async Task Include_after_select_anonymous_projection_throws(bool async)
     {
         await base.Include_after_select_anonymous_projection_throws(async);
+
+        AssertMql();
     }
 
 #if (EF10 || EF11)
     public override async Task Include_after_Select_throws(bool async)
     {
         await base.Include_after_Select_throws(async);
+
+        AssertMql(
+            """
+Factions.{ "$lookup" : { "from" : "Cities", "localField" : "CapitalName", "foreignField" : "_id", "as" : "_lookup_Capital" } }, { "$set" : { "_lookup_Capital" : { "$arrayElemAt" : ["$_lookup_Capital", 0] } } }
+""");
     }
 #endif
 
@@ -3191,6 +4083,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Query_reusing_parameter_doesnt_declare_duplicate_parameter(bool async)
     {
         await base.Query_reusing_parameter_doesnt_declare_duplicate_parameter(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$group" : { "_id" : "$$ROOT" } }, { "$replaceRoot" : { "newRoot" : "$_id" } }, { "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "FullName" : 1 } }
+""");
     }
 
     public override async Task Query_reusing_parameter_with_inner_query_doesnt_declare_duplicate_parameter(bool async)
@@ -3203,6 +4100,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Query_reusing_parameter_with_inner_query_expression_doesnt_declare_duplicate_parameter(bool async)
     {
         await base.Query_reusing_parameter_with_inner_query_expression_doesnt_declare_duplicate_parameter(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "$and" : [{ "_id.SquadId" : 1 }, { "_id.SquadId" : 1 }] } }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$match" : { "_lookup_Gear__id_SquadId__id_f1.0" : { "$exists" : true } } }
+""");
     }
 #else
     public override async Task Query_reusing_parameter_with_inner_query_expression_doesnt_declare_duplicate_parameter(bool async)
@@ -3250,6 +4152,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Left_join_with_GroupBy_with_composite_group_key(bool async)
     {
         await base.Left_join_with_GroupBy_with_composite_group_key(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Tags", "localField" : "_id.Nickname", "foreignField" : "GearNickName", "as" : "_lookup_Tag" } }, { "$unwind" : { "path" : "$_lookup_Tag", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "Squads", "localField" : "_id.SquadId", "foreignField" : "_id", "as" : "_lookup_Squad" } }, { "$match" : { "_lookup_Squad.0" : { "$exists" : true } } }, { "$set" : { "_lookup_Squad" : { "$arrayElemAt" : ["$_lookup_Squad", 0] } } }, { "$group" : { "_id" : { "CityOfBirthName" : { "$ifNull" : ["$CityOfBirthName", null] }, "HasSoulPatch" : "$HasSoulPatch" } } }, { "$project" : { "CityOfBirthName" : "$_id.CityOfBirthName", "HasSoulPatch" : "$_id.HasSoulPatch", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Left_join_with_GroupBy_with_composite_group_key(bool async)
@@ -3263,6 +4170,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_with_boolean_grouping_key(bool async)
     {
         await base.GroupBy_with_boolean_grouping_key(async);
+
+        AssertMql(
+            """
+Gears.{ "$group" : { "_id" : { "CityOfBirthName" : { "$ifNull" : ["$CityOfBirthName", null] }, "HasSoulPatch" : "$HasSoulPatch", "IsMarcus" : { "$eq" : ["$_id.Nickname", { "$literal" : "Marcus" }] } }, "Count" : { "$sum" : 1 } } }, { "$project" : { "CityOfBirthName" : "$_id.CityOfBirthName", "HasSoulPatch" : "$_id.HasSoulPatch", "IsMarcus" : "$_id.IsMarcus", "Count" : "$Count", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_with_boolean_grouping_key(bool async)
@@ -3351,11 +4263,21 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_null_parameter_is_not_null(bool async)
     {
         await base.Select_null_parameter_is_not_null(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$literal" : false }, "_id" : 0 } }
+""");
     }
 
     public override async Task Where_null_parameter_is_not_null(bool async)
     {
         await base.Where_null_parameter_is_not_null(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : false } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -3375,11 +4297,33 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task OrderBy_Contains_empty_list(bool async)
     {
         await base.OrderBy_Contains_empty_list(async);
+
+        AssertMql(
+            """
+Gears.{ "$set" : { "__sort0" : { "$in" : ["$_id.SquadId", { "$literal" : [] }] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 
     public override async Task Where_with_enum_flags_parameter(bool async)
     {
         await base.Where_with_enum_flags_parameter(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$eq" : [{ "$bitAnd" : ["$Rank", 1] }, 1] } } }
+""",
+            //
+            """
+Gears.{ "$match" : { "$expr" : { "$eq" : [{ "$bitAnd" : ["$Rank", null] }, null] } } }
+""",
+            //
+            """
+Gears.{ "$match" : { "$expr" : { "$ne" : [{ "$bitOr" : ["$Rank", 2] }, 2] } } }
+""",
+            //
+            """
+Gears.{ "$match" : { "$expr" : { "$ne" : [{ "$bitOr" : ["$Rank", null] }, null] } } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -3393,6 +4337,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Conditional_expression_with_test_being_simplified_to_constant_simple(bool isAsync)
     {
         await base.Conditional_expression_with_test_being_simplified_to_constant_simple(isAsync);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$HasSoulPatch", null] }, { "$literal" : true }] }, "then" : { "$literal" : true }, "else" : { "$eq" : [{ "$ifNull" : ["$CityOfBirthName", null] }, { "$literal" : null }] } } } } }
+""");
     }
 
     public override async Task Conditional_expression_with_test_being_simplified_to_constant_complex(bool isAsync)
@@ -3404,21 +4353,89 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Bitwise_operation_with_non_null_parameter_optimizes_null_checks(bool async)
     {
         await base.Bitwise_operation_with_non_null_parameter_optimizes_null_checks(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "Rank" : { "$bitsAnySet" : 134 } } }
+""",
+            //
+            """
+Gears.{ "$project" : { "_v" : { "$eq" : [{ "$bitOr" : ["$Rank", 134] }, 134] }, "_id" : 0 } }
+""",
+            //
+            """
+Gears.{ "$project" : { "_v" : { "$eq" : [{ "$bitOr" : ["$Rank", "$Rank", 134, "$Rank", 134] }, 134] }, "_id" : 0 } }
+""");
     }
 
     public override async Task Bitwise_operation_with_null_arguments(bool async)
     {
         await base.Bitwise_operation_with_null_arguments(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "$expr" : { "$eq" : [{ "$bitAnd" : ["$AmmunitionType", 1] }, null] } } }
+""",
+            //
+            """
+Weapons.{ "$match" : { "$expr" : { "$eq" : [{ "$bitOr" : ["$AmmunitionType", 2] }, null] } } }
+""",
+            //
+            """
+Weapons.{ "$match" : { "$expr" : { "$eq" : [{ "$bitOr" : ["$AmmunitionType", 2] }, null] } } }
+""",
+            //
+            """
+Weapons.{ "$match" : { "$expr" : { "$eq" : [{ "$bitAnd" : ["$AmmunitionType", null] }, null] } } }
+""",
+            //
+            """
+Weapons.{ "$match" : { "$expr" : { "$ne" : [{ "$bitAnd" : ["$AmmunitionType", 2] }, 0] } } }
+""",
+            //
+            """
+Weapons.{ "$match" : { "$expr" : { "$eq" : [{ "$bitAnd" : ["$AmmunitionType", 1] }, 1] } } }
+""");
     }
 
+#if EF8
     public override async Task Logical_operation_with_non_null_parameter_optimizes_null_checks(bool async)
     {
         await base.Logical_operation_with_non_null_parameter_optimizes_null_checks(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$ne" : [{ "$and" : ["$HasSoulPatch", true] }, { "$literal" : true }] } } }
+""",
+            //
+            """
+Gears.{ "$match" : { "$expr" : { "$ne" : [{ "$or" : ["$HasSoulPatch", false] }, { "$literal" : false }] } } }
+""");
     }
+#else
+    public override async Task Logical_operation_with_non_null_parameter_optimizes_null_checks(bool async)
+    {
+        await base.Logical_operation_with_non_null_parameter_optimizes_null_checks(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "HasSoulPatch" : { "$ne" : true } } }
+""",
+            //
+            """
+Gears.{ "$match" : { "HasSoulPatch" : { "$ne" : false } } }
+""");
+    }
+#endif
 
     public override async Task Cast_OfType_works_correctly(bool async)
     {
         await base.Cast_OfType_works_correctly(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "_t" : "Officer" } }, { "$project" : { "FullName" : "$FullName", "_id" : 0 } }
+""");
     }
 
     public override async Task Join_inner_source_custom_projection_followed_by_filter(bool async)
@@ -3437,27 +4454,52 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task OrderBy_bool_coming_from_optional_navigation(bool async)
     {
         await base.OrderBy_bool_coming_from_optional_navigation(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$sort" : { "_lookup_SynergyWith.IsAutomatic" : 1 } }
+""");
     }
 #endif
 
     public override async Task DateTimeOffset_Date_returns_datetime(bool async)
     {
         await base.DateTimeOffset_Date_returns_datetime(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$gte" : [{ "$dateTrunc" : { "date" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } }, "unit" : "day" } }, { "$date" : { "$numberLong" : "-62098963200000" } }] } } }
+""");
     }
 
     public override async Task Conditional_with_conditions_evaluating_to_false_gets_optimized(bool async)
     {
         await base.Conditional_with_conditions_evaluating_to_false_gets_optimized(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$and" : [{ "$eq" : [{ "$ifNull" : ["$_id.Nickname", null] }, null] }, { "$ne" : [{ "$ifNull" : ["$_id.Nickname", null] }, null] }] }, "then" : "$CityOfBirthName", "else" : "$FullName" } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Conditional_with_conditions_evaluating_to_true_gets_optimized(bool async)
     {
         await base.Conditional_with_conditions_evaluating_to_true_gets_optimized(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$cond" : { "if" : { "$or" : [{ "$eq" : [{ "$ifNull" : ["$_id.Nickname", null] }, null] }, { "$ne" : [{ "$ifNull" : ["$_id.Nickname", null] }, null] }] }, "then" : "$CityOfBirthName", "else" : "$FullName" } }, "_id" : 0 } }
+""");
     }
 
     public override async Task Projecting_required_string_column_compared_to_null_parameter(bool async)
     {
         await base.Projecting_required_string_column_compared_to_null_parameter(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_v" : { "$eq" : [{ "$ifNull" : ["$_id.Nickname", null] }, { "$literal" : null }] }, "_id" : 0 } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -3491,16 +4533,28 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Checked_context_with_cast_does_not_fail(bool isAsync)
     {
         await base.Checked_context_with_cast_does_not_fail(isAsync);
+
+        AssertMql(
+            """
+LocustLeaders.{ "$match" : { "ThreatLevel" : { "$gte" : 5 } } }
+""");
     }
 
     public override async Task Checked_context_with_addition_does_not_fail(bool isAsync)
     {
         await base.Checked_context_with_addition_does_not_fail(isAsync);
+
+        AssertMql(
+            """
+LocustLeaders.{ "$match" : { "$expr" : { "$lte" : [{ "$toLong" : "$ThreatLevel" }, { "$add" : [5, { "$toLong" : "$ThreatLevel" }] }] } } }
+""");
     }
 
     public override async Task Checked_context_throws_on_client_evaluation(bool isAsync)
     {
         await base.Checked_context_throws_on_client_evaluation(isAsync);
+
+        AssertMql();
     }
 
     public override async Task Contains_on_collection_of_byte_subquery(bool async)
@@ -3554,12 +4608,22 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Enum_closure_typed_as_underlying_type_generates_correct_parameter_type(bool async)
     {
         await base.Enum_closure_typed_as_underlying_type_generates_correct_parameter_type(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "AmmunitionType" : 1 } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Enum_flags_closure_typed_as_underlying_type_generates_correct_parameter_type(bool async)
     {
         await base.Enum_flags_closure_typed_as_underlying_type_generates_correct_parameter_type(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$eq" : [{ "$bitAnd" : [133, "$Rank"] }, "$Rank"] } } }
+""");
     }
 #else
     public override async Task Enum_flags_closure_typed_as_underlying_type_generates_correct_parameter_type(bool async)
@@ -3578,12 +4642,22 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Constant_enum_with_same_underlying_value_as_previously_parameterized_int(bool async)
     {
         await base.Constant_enum_with_same_underlying_value_as_previously_parameterized_int(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$limit" : 1 }, { "$project" : { "_v" : { "$bitAnd" : ["$Rank", 1] }, "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)
     public override async Task Enum_array_contains(bool async)
     {
         await base.Enum_array_contains(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$match" : { "_lookup_SynergyWith" : { "$ne" : null }, "_lookup_SynergyWith.AmmunitionType" : { "$in" : [null, 1] } } }
+""");
     }
 #endif
 
@@ -3591,6 +4665,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Coalesce_with_non_root_evaluatable_Convert(bool async)
     {
         await base.Coalesce_with_non_root_evaluatable_Convert(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "Rank" : 1 } }
+""");
     }
 #endif
 
@@ -3647,11 +4726,21 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task CompareTo_used_with_non_unicode_string_column_and_constant(bool async)
     {
         await base.CompareTo_used_with_non_unicode_string_column_and_constant(async);
+
+        AssertMql(
+            """
+Cities.{ "$match" : { "$expr" : { "$eq" : [{ "$cmp" : ["$Location", { "$literal" : "Unknown" }] }, 0] } } }
+""");
     }
 
     public override async Task Coalesce_used_with_non_unicode_string_column_and_constant(bool async)
     {
         await base.Coalesce_used_with_non_unicode_string_column_and_constant(async);
+
+        AssertMql(
+            """
+Cities.{ "$project" : { "_v" : { "$ifNull" : ["$Location", { "$literal" : "Unknown" }] }, "_id" : 0 } }
+""");
     }
 
     public override async Task Groupby_anonymous_type_with_navigations_followed_up_by_anonymous_projection_and_orderby(bool async)
@@ -3712,6 +4801,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task FirstOrDefault_over_int_compared_to_zero(bool async)
     {
         await base.FirstOrDefault_over_int_compared_to_zero(async);
+
+        AssertMql(
+            """
+Squads.{ "$match" : { "Name" : "Delta" } }, { "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "pipeline" : [{ "$match" : { "HasSoulPatch" : true } }], "as" : "_lookup_Gear__id_SquadId__id_f1" } }, { "$match" : { "$expr" : { "$ne" : [{ "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Gear__id_SquadId__id_f1", []] }, "as" : "e", "in" : { "k" : "$$e.FullName", "m" : "$$e._id.SquadId" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$lt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } }, 0] } } }, { "$project" : { "Name" : "$Name", "_id" : 0 } }
+""");
     }
 #else
     public override async Task FirstOrDefault_over_int_compared_to_zero(bool async)
@@ -3730,6 +4824,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Accessing_derived_property_using_hard_and_soft_cast(bool async)
     {
         await base.Accessing_derived_property_using_hard_and_soft_cast(async);
+
+        AssertMql(
+            """
+LocustLeaders.{ "$match" : { "_t" : "LocustCommander", "HighCommandId" : { "$ne" : 0 } } }
+""",
+            //
+            """
+LocustLeaders.{ "$match" : { "_t" : "LocustCommander", "HighCommandId" : { "$ne" : 0 } } }
+""");
     }
 
     public override async Task Cast_to_derived_followed_by_include_and_FirstOrDefault(bool async)
@@ -3754,6 +4857,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task GroupBy_Select_sum(bool async)
     {
         await base.GroupBy_Select_sum(async);
+
+        AssertMql(
+            """
+Missions.{ "$group" : { "_id" : "$CodeName", "_v" : { "$sum" : "$Rating" } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_Select_sum(bool async)
@@ -3766,6 +4874,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Sum_with_no_data_nullable_double(bool async)
     {
         await base.Sum_with_no_data_nullable_double(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "CodeName" : "Operation Foobar" } }, { "$project" : { "Rating" : "$Rating", "_id" : 0 } }, { "$group" : { "_id" : null, "v" : { "$sum" : "$Rating" } } }
+""");
     }
 
     public override async Task FirstOrDefault_on_empty_collection_of_DateTime_in_subquery(bool async)
@@ -3777,6 +4890,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Project_shadow_properties(bool async)
     {
         await base.Project_shadow_properties(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "Nickname" : "$_id.Nickname", "AssignedCityName" : "$AssignedCityName", "_id" : 0 } }
+""");
     }
 
     public override async Task Composite_key_entity_equal(bool async)
@@ -4014,28 +5132,53 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Basic_query_gears(bool async)
     {
         await base.Basic_query_gears(async);
+
+        AssertMql(
+            """
+Gears.
+""");
     }
 
     public override async Task Include_on_entity_that_is_not_present_in_final_projection_but_uses_TypeIs_instead(bool async)
     {
         await base.Include_on_entity_that_is_not_present_in_final_projection_but_uses_TypeIs_instead(async);
+
+        AssertMql(
+            """
+Gears.
+""");
     }
 
     public override async Task Comparison_with_value_converted_subclass(bool async)
     {
         await base.Comparison_with_value_converted_subclass(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "ServerAddress" : "127.0.0.1" } }
+""");
     }
 
 #if EF9 || (EF10 || EF11)
     public override async Task Project_equality_with_value_converted_property(bool async)
     {
         await base.Project_equality_with_value_converted_property(async);
+
+        AssertMql(
+            """
+Missions.{ "$project" : { "_v" : { "$eq" : ["$Difficulty", "Unknown"] }, "_id" : 0 } }
+""");
     }
 #endif
 
     public override async Task Contains_on_readonly_enumerable(bool async)
     {
         await base.Contains_on_readonly_enumerable(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "AmmunitionType" : { "$in" : [1] } } }
+""");
     }
 
 #if (EF10 || EF11)
@@ -4071,21 +5214,41 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_equals_method_on_nullable_with_object_overload(bool async)
     {
         await base.Where_equals_method_on_nullable_with_object_overload(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "Rating" : null } }
+""");
     }
 
     public override async Task Where_bool_column_and_Contains(bool async)
     {
         await base.Where_bool_column_and_Contains(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$and" : [{ "HasSoulPatch" : true }, { "HasSoulPatch" : { "$in" : [false, true] } }] } }
+""");
     }
 
     public override async Task Where_bool_column_or_Contains(bool async)
     {
         await base.Where_bool_column_or_Contains(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$and" : [{ "HasSoulPatch" : true }, { "HasSoulPatch" : { "$in" : [false, true] } }] } }
+""");
     }
 
     public override async Task Enum_matching_take_value_gets_different_type_mapping(bool async)
     {
         await base.Enum_matching_take_value_gets_different_type_mapping(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.Nickname" : 1 } }, { "$limit" : 1 }, { "$project" : { "_v" : { "$bitAnd" : ["$Rank", 1] }, "_id" : 0 } }
+""");
     }
 
     public override async Task Where_subquery_equality_to_null_with_composite_key(bool async)
@@ -4172,6 +5335,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Nav_expansion_with_member_pushdown_inside_Contains_argument(bool async)
     {
         await base.Nav_expansion_with_member_pushdown_inside_Contains_argument(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }, { "$match" : { "$expr" : { "$in" : [{ "$let" : { "vars" : { "best" : { "$reduce" : { "input" : { "$map" : { "input" : { "$ifNull" : ["$_lookup_Weapons", []] }, "as" : "e", "in" : { "k" : "$$e._id", "m" : "$$e.Name" } } }, "initialValue" : null, "in" : { "$cond" : [{ "$or" : [{ "$eq" : ["$$value", null] }, { "$lt" : ["$$this.k", "$$value.k"] }] }, "$$this", "$$value"] } } } }, "in" : { "$ifNull" : ["$$best.m", null] } } }, { "$literal" : ["Marcus' Lancer", "Dom's Gnasher"] }] } } }
+""");
     }
 #else
     public override async Task Nav_expansion_with_member_pushdown_inside_Contains_argument(bool async)
@@ -4190,27 +5358,40 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Nav_expansion_inside_Skip_correlated_to_source(bool async)
     {
         await base.Nav_expansion_inside_Skip_correlated_to_source(async);
+
+        AssertMql();
     }
 
     public override async Task Nav_expansion_inside_Take_correlated_to_source(bool async)
     {
         await base.Nav_expansion_inside_Take_correlated_to_source(async);
+
+        AssertMql();
     }
 
     public override async Task Nav_expansion_with_member_pushdown_inside_Take_correlated_to_source(bool async)
     {
         await base.Nav_expansion_with_member_pushdown_inside_Take_correlated_to_source(async);
+
+        AssertMql();
     }
 
     public override async Task Nav_expansion_inside_ElementAt_correlated_to_source(bool async)
     {
         await base.Nav_expansion_inside_ElementAt_correlated_to_source(async);
+
+        AssertMql();
     }
 
 #if EF9 || (EF10 || EF11)
     public override async Task Include_one_to_many_on_composite_key_then_orderby_key_properties(bool async)
     {
         await base.Include_one_to_many_on_composite_key_then_orderby_key_properties(async);
+
+        AssertMql(
+            """
+Gears.{ "$sort" : { "_id.SquadId" : 1, "_id.Nickname" : 1 } }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapons" } }
+""");
     }
 #endif
 
@@ -4282,6 +5463,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task ToString_guid_property_projection(bool async)
     {
         await base.ToString_guid_property_projection(async);
+
+        AssertMql(
+            """
+Tags.{ "$project" : { "A" : "$GearNickName", "B" : { "$toString" : "$_id" }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -4329,6 +5515,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_with_nested_navigation_in_order_by(bool async)
     {
         await base.Include_with_nested_navigation_in_order_by(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Gears", "localField" : "OwnerFullName", "foreignField" : "FullName", "as" : "_lookup_Owner" } }, { "$unwind" : { "path" : "$_lookup_Owner", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Owner" : { "$ifNull" : ["$_lookup_Owner", null] } } }, { "$match" : { "_lookup_Owner._id.Nickname" : { "$ne" : "Paduk" } } }, { "$lookup" : { "from" : "Cities", "localField" : "_lookup_Owner.CityOfBirthName", "foreignField" : "_id", "as" : "_lookup_CityOfBirth" } }, { "$unwind" : { "path" : "$_lookup_CityOfBirth", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_CityOfBirth" : { "$ifNull" : ["$_lookup_CityOfBirth", null] } } }, { "$sort" : { "_lookup_CityOfBirth._id" : 1, "_id" : 1 } }
+""");
     }
 #endif
 
@@ -4336,6 +5527,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_enum(bool async)
     {
         await base.Where_enum(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "Rank" : 4 } }
+""");
     }
 #endif
 
@@ -4343,6 +5539,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_nullable_enum_with_constant(bool async)
     {
         await base.Where_nullable_enum_with_constant(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "AmmunitionType" : 1 } }
+""");
     }
 #endif
 
@@ -4350,6 +5551,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_nullable_enum_with_null_constant(bool async)
     {
         await base.Where_nullable_enum_with_null_constant(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "AmmunitionType" : null } }
+""");
     }
 #endif
 
@@ -4357,6 +5563,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_nullable_enum_with_non_nullable_parameter(bool async)
     {
         await base.Where_nullable_enum_with_non_nullable_parameter(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "AmmunitionType" : 1 } }
+""");
     }
 #endif
 
@@ -4364,6 +5575,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_nullable_enum_with_nullable_parameter(bool async)
     {
         await base.Where_nullable_enum_with_nullable_parameter(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "AmmunitionType" : 1 } }
+""",
+            //
+            """
+Weapons.{ "$match" : { "AmmunitionType" : null } }
+""");
     }
 #endif
 
@@ -4371,6 +5591,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_bitwise_and_enum(bool async)
     {
         await base.Where_bitwise_and_enum(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$gt" : [{ "$bitAnd" : ["$Rank", 2] }, 0] } } }
+""",
+            //
+            """
+Gears.{ "$match" : { "Rank" : { "$bitsAllSet" : 2 } } }
+""");
     }
 #endif
 
@@ -4386,6 +5615,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_bitwise_and_nullable_enum_with_constant(bool async)
     {
         await base.Where_bitwise_and_nullable_enum_with_constant(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "$expr" : { "$gt" : [{ "$bitAnd" : ["$AmmunitionType", 1] }, 0] } } }
+""");
     }
 #endif
 
@@ -4393,6 +5627,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_bitwise_and_nullable_enum_with_null_constant(bool async)
     {
         await base.Where_bitwise_and_nullable_enum_with_null_constant(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "$expr" : { "$gt" : [{ "$bitAnd" : ["$AmmunitionType", null] }, 0] } } }
+""");
     }
 #endif
 
@@ -4400,6 +5639,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_bitwise_and_nullable_enum_with_non_nullable_parameter(bool async)
     {
         await base.Where_bitwise_and_nullable_enum_with_non_nullable_parameter(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "$expr" : { "$gt" : [{ "$bitAnd" : ["$AmmunitionType", 1] }, 0] } } }
+""");
     }
 #endif
 
@@ -4407,6 +5651,15 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_bitwise_and_nullable_enum_with_nullable_parameter(bool async)
     {
         await base.Where_bitwise_and_nullable_enum_with_nullable_parameter(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "$expr" : { "$gt" : [{ "$bitAnd" : ["$AmmunitionType", 1] }, 0] } } }
+""",
+            //
+            """
+Weapons.{ "$match" : { "$expr" : { "$gt" : [{ "$bitAnd" : ["$AmmunitionType", null] }, 0] } } }
+""");
     }
 #endif
 
@@ -4414,6 +5667,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_bitwise_or_enum(bool async)
     {
         await base.Where_bitwise_or_enum(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "$expr" : { "$gt" : [{ "$bitOr" : ["$Rank", 2] }, 0] } } }
+""");
     }
 #endif
 
@@ -4421,6 +5679,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Bitwise_projects_values_in_select(bool async)
     {
         await base.Bitwise_projects_values_in_select(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "Rank" : { "$bitsAllSet" : 2 } } }, { "$project" : { "BitwiseTrue" : { "$eq" : [{ "$bitAnd" : ["$Rank", 2] }, 2] }, "BitwiseFalse" : { "$eq" : [{ "$bitAnd" : ["$Rank", 2] }, 4] }, "BitwiseValue" : { "$bitAnd" : ["$Rank", 2] }, "_id" : 0 } }, { "$limit" : 1 }
+""");
     }
 #endif
 
@@ -4460,6 +5723,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_enum_has_flag_with_non_nullable_parameter(bool async)
     {
         await base.Where_enum_has_flag_with_non_nullable_parameter(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "Rank" : { "$bitsAllSet" : 2 } } }
+""");
     }
 #endif
 
@@ -4467,6 +5735,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_has_flag_with_nullable_parameter(bool async)
     {
         await base.Where_has_flag_with_nullable_parameter(async);
+
+        AssertMql(
+            """
+Gears.{ "$match" : { "Rank" : { "$bitsAllSet" : 2 } } }
+""");
     }
 #endif
 
@@ -4538,6 +5811,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Optional_Navigation_Null_Coalesce_To_Clr_Type(bool async)
     {
         await base.Optional_Navigation_Null_Coalesce_To_Clr_Type(async);
+
+        AssertMql(
+            """
+Weapons.{ "$sort" : { "_id" : 1 } }, { "$limit" : 1 }, { "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$project" : { "IsAutomatic" : { "$ifNull" : ["$_lookup_SynergyWith.IsAutomatic", { "$literal" : false }] }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -4852,6 +6130,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_now(bool async)
     {
         await base.Where_datetimeoffset_now(async);
+
+        // No AssertMql: the query embeds the current time, so the MQL changes on every run.
     }
 #endif
 
@@ -4859,6 +6139,8 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_utcnow(bool async)
     {
         await base.Where_datetimeoffset_utcnow(async);
+
+        // No AssertMql: the query embeds the current time, so the MQL changes on every run.
     }
 #endif
 
@@ -4866,6 +6148,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_date_component(bool async)
     {
         await base.Where_datetimeoffset_date_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$gt" : [{ "$dateTrunc" : { "date" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } }, "unit" : "day" } }, { "$date" : { "$numberLong" : "-62135596800000" } }] } } }
+""");
     }
 #endif
 
@@ -4873,6 +6160,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_year_component(bool async)
     {
         await base.Where_datetimeoffset_year_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$eq" : [{ "$year" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } } }, 2] } } }
+""");
     }
 #endif
 
@@ -4880,6 +6172,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_month_component(bool async)
     {
         await base.Where_datetimeoffset_month_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$eq" : [{ "$month" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } } }, 1] } } }
+""");
     }
 #endif
 
@@ -4887,6 +6184,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_dayofyear_component(bool async)
     {
         await base.Where_datetimeoffset_dayofyear_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$eq" : [{ "$dayOfYear" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } } }, 2] } } }
+""");
     }
 #endif
 
@@ -4894,6 +6196,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_day_component(bool async)
     {
         await base.Where_datetimeoffset_day_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$eq" : [{ "$dayOfMonth" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } } }, 2] } } }
+""");
     }
 #endif
 
@@ -4901,6 +6208,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_hour_component(bool async)
     {
         await base.Where_datetimeoffset_hour_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$eq" : [{ "$hour" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } } }, 10] } } }
+""");
     }
 #endif
 
@@ -4908,6 +6220,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_minute_component(bool async)
     {
         await base.Where_datetimeoffset_minute_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$eq" : [{ "$minute" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } } }, 0] } } }
+""");
     }
 #endif
 
@@ -4915,6 +6232,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_second_component(bool async)
     {
         await base.Where_datetimeoffset_second_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$eq" : [{ "$second" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } } }, 0] } } }
+""");
     }
 #endif
 
@@ -4922,6 +6244,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_millisecond_component(bool async)
     {
         await base.Where_datetimeoffset_millisecond_component(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "$expr" : { "$eq" : [{ "$millisecond" : { "$dateAdd" : { "startDate" : "$Timeline.DateTime", "unit" : "minute", "amount" : "$Timeline.Offset" } } }, 0] } } }
+""");
     }
 #endif
 
@@ -4985,6 +6312,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_datetimeoffset_milliseconds_parameter_and_constant(bool async)
     {
         await base.Where_datetimeoffset_milliseconds_parameter_and_constant(async);
+
+        AssertMql(
+            """
+Missions.{ "$match" : { "Timeline" : { "DateTime" : { "$date" : { "$numberLong" : "-2145799799876" } }, "Ticks" : 599898024001234567, "Offset" : 90 } } }, { "$count" : "v" }
+""");
     }
 #endif
 
@@ -5024,6 +6356,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task FirstOrDefault_with_manually_created_groupjoin_is_translated_to_sql(bool async)
     {
         await base.FirstOrDefault_with_manually_created_groupjoin_is_translated_to_sql(async);
+
+        AssertMql(
+            """
+Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "as" : "_lookup_Members" } }, { "$unwind" : { "path" : "$_lookup_Members", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Members" : { "$ifNull" : ["$_lookup_Members", null] } } }, { "$match" : { "Name" : "Kilo" } }, { "$limit" : 1 }
+""");
     }
 #endif
 
@@ -5055,6 +6392,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Subquery_containing_left_join_projecting_main_from_clause_gets_lifted(bool async)
     {
         await base.Subquery_containing_left_join_projecting_main_from_clause_gets_lifted(async);
+
+        AssertMql(
+            """
+Gears.{ "$set" : { "__sort0" : "$_id.Nickname" } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$lookup" : { "from" : "Tags", "localField" : "_id.Nickname", "foreignField" : "GearNickName", "as" : "_lookup_Tag" } }, { "$unwind" : { "path" : "$_lookup_Tag", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_id.Nickname", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5062,6 +6404,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_access_on_derived_entity_using_cast(bool async)
     {
         await base.Navigation_access_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "Name" : "$_v._outer.Name", "Threat" : "$_v._inner.ThreatLevel", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5069,6 +6416,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_access_on_derived_materialized_entity_using_cast(bool async)
     {
         await base.Navigation_access_on_derived_materialized_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5076,6 +6428,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_access_via_EFProperty_on_derived_entity_using_cast(bool async)
     {
         await base.Navigation_access_via_EFProperty_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "Name" : "$_v._outer.Name", "Threat" : "$_v._inner.ThreatLevel", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5083,6 +6440,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_access_fk_on_derived_entity_using_cast(bool async)
     {
         await base.Navigation_access_fk_on_derived_entity_using_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "Name" : 1 } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "Name" : "$_v._outer.Name", "CommanderName" : "$_v._inner._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5106,6 +6468,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_on_derived_entity_with_cast(bool async)
     {
         await base.Include_on_derived_entity_with_cast(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Cities", "localField" : "CapitalName", "foreignField" : "_id", "as" : "_lookup_Capital" } }, { "$set" : { "_lookup_Capital" : { "$arrayElemAt" : ["$_lookup_Capital", 0] } } }
+""");
     }
 #endif
 
@@ -5113,6 +6480,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Contains_on_nullable_array_produces_correct_sql(bool async)
     {
         await base.Contains_on_nullable_array_produces_correct_sql(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "AssignedCityName", "foreignField" : "_id", "as" : "_lookup_AssignedCity" } }, { "$set" : { "_lookup_AssignedCity" : { "$arrayElemAt" : ["$_lookup_AssignedCity", 0] } } }, { "$match" : { "_id.SquadId" : { "$lt" : 2 }, "_lookup_AssignedCity._id" : { "$in" : ["Ephyra", null] } } }
+""");
     }
 #endif
 
@@ -5248,6 +6620,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Select_required_navigation_on_derived_type(bool async)
     {
         await base.Select_required_navigation_on_derived_type(async);
+
+        AssertMql(
+            """
+LocustLeaders.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustHighCommands", "localField" : "_outer.HighCommandId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5255,6 +6632,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Where_required_navigation_on_derived_type(bool async)
     {
         await base.Where_required_navigation_on_derived_type(async);
+
+        AssertMql(
+            """
+LocustLeaders.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustHighCommands", "localField" : "_outer.HighCommandId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "$expr" : "$_inner.IsOperational" } }
+""");
     }
 #endif
 
@@ -5270,6 +6652,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Order_by_entity_qsre(bool async)
     {
         await base.Order_by_entity_qsre(async);
+
+        AssertMql(
+            """
+Gears.{ "$lookup" : { "from" : "Cities", "localField" : "AssignedCityName", "foreignField" : "_id", "as" : "_lookup_AssignedCity" } }, { "$set" : { "_lookup_AssignedCity" : { "$arrayElemAt" : ["$_lookup_AssignedCity", 0] } } }, { "$set" : { "__sort0" : "$_id.Nickname" } }, { "$sort" : { "_lookup_AssignedCity._id" : 1, "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$FullName", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5277,6 +6664,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Order_by_entity_qsre_composite_key(bool async)
     {
         await base.Order_by_entity_qsre_composite_key(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Gears", "localField" : "OwnerFullName", "foreignField" : "FullName", "as" : "_lookup_Owner" } }, { "$unwind" : { "path" : "$_lookup_Owner", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "__sort0" : "$_id" } }, { "$sort" : { "_lookup_Owner._id.Nickname" : 1, "_lookup_Owner._id.SquadId" : 1, "__sort0" : 1 } }, { "$unset" : ["__sort0"] }, { "$project" : { "_v" : "$Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5284,6 +6676,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Order_by_entity_qsre_with_other_orderbys(bool async)
     {
         await base.Order_by_entity_qsre_with_other_orderbys(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$unwind" : { "path" : "$_lookup_SynergyWith", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_SynergyWith" : { "$ifNull" : ["$_lookup_SynergyWith", null] } } }, { "$lookup" : { "from" : "Gears", "localField" : "OwnerFullName", "foreignField" : "FullName", "as" : "_lookup_Owner" } }, { "$unwind" : { "path" : "$_lookup_Owner", "preserveNullAndEmptyArrays" : true } }, { "$set" : { "_lookup_Owner" : { "$ifNull" : ["$_lookup_Owner", null] } } }, { "$sort" : { "IsAutomatic" : 1, "_lookup_Owner._id.Nickname" : -1, "_lookup_Owner._id.SquadId" : -1, "_lookup_SynergyWith._id" : 1, "Name" : 1 } }
+""");
     }
 #endif
 
@@ -5323,6 +6720,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Double_order_by_on_nullable_bool_coming_from_optional_navigation(bool async)
     {
         await base.Double_order_by_on_nullable_bool_coming_from_optional_navigation(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$sort" : { "_lookup_SynergyWith.IsAutomatic" : 1, "_lookup_SynergyWith._id" : 1 } }
+""");
     }
 #endif
 
@@ -5338,6 +6740,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Double_order_by_on_is_null(bool async)
     {
         await base.Double_order_by_on_is_null(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$eq" : [{ "$ifNull" : ["$_lookup_SynergyWith.Name", null] }, null] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -5345,6 +6752,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task String_compare_with_null_conditional_argument(bool async)
     {
         await base.String_compare_with_null_conditional_argument(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$eq" : [{ "$cmp" : ["$_lookup_SynergyWith.Name", { "$literal" : "Marcus' Lancer" }] }, 0] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -5352,6 +6764,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task String_compare_with_null_conditional_argument2(bool async)
     {
         await base.String_compare_with_null_conditional_argument2(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$eq" : [{ "$cmp" : [{ "$literal" : "Marcus' Lancer" }, "$_lookup_SynergyWith.Name"] }, 0] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -5359,6 +6776,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task String_concat_with_null_conditional_argument(bool async)
     {
         await base.String_concat_with_null_conditional_argument(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$concat" : [{ "$ifNull" : ["$_lookup_SynergyWith.Name", ""] }, { "$toString" : 5 }] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -5366,6 +6788,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task String_concat_with_null_conditional_argument2(bool async)
     {
         await base.String_concat_with_null_conditional_argument2(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$set" : { "__sort0" : { "$concat" : [{ "$ifNull" : ["$_lookup_SynergyWith.Name", ""] }, { "$literal" : "Marcus' Lancer" }] } } }, { "$sort" : { "__sort0" : 1 } }, { "$unset" : ["__sort0"] }
+""");
     }
 #endif
 
@@ -5373,6 +6800,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Time_of_day_datetimeoffset(bool async)
     {
         await base.Time_of_day_datetimeoffset(async);
+
+        AssertMql(
+            """
+Missions.{ "$project" : { "_v" : { "$mod" : ["$Timeline.Ticks", 864000000000] }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5412,6 +6844,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Filter_with_new_Guid(bool async)
     {
         await base.Filter_with_new_Guid(async);
+
+        AssertMql(
+            """
+Tags.{ "$match" : { "_id" : { "$binary" : { "base64" : "3zb0k0Y/QSOD+WsTXe63ug==", "subType" : "04" } } } }
+""");
     }
 #endif
 
@@ -5491,6 +6928,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Left_join_projection_using_coalesce_tracking(bool async)
     {
         await base.Left_join_projection_using_coalesce_tracking(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Gears", "localField" : "_outer.LeaderNickname", "foreignField" : "_id.Nickname", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5498,6 +6940,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Left_join_projection_using_conditional_tracking(bool async)
     {
         await base.Left_join_projection_using_conditional_tracking(async);
+
+        AssertMql(
+            """
+Gears.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Gears", "localField" : "_outer.LeaderNickname", "foreignField" : "_id.Nickname", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5505,6 +6952,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_based_on_complex_expression1(bool async)
     {
         await base.Navigation_based_on_complex_expression1(async);
+
+        AssertMql(
+            """
+Factions.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_outer._t" : "LocustHorde", "_inner" : { "$ne" : null } } }
+""");
     }
 #endif
 
@@ -5512,6 +6964,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_based_on_complex_expression2(bool async)
     {
         await base.Navigation_based_on_complex_expression2(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$match" : { "_inner" : { "$ne" : null } } }
+""");
     }
 #endif
 
@@ -5519,6 +6976,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Navigation_based_on_complex_expression3(bool async)
     {
         await base.Navigation_based_on_complex_expression3(async);
+
+        AssertMql(
+            """
+Factions.{ "$match" : { "_t" : "LocustHorde" } }, { "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "LocustLeaders", "localField" : "_outer.CommanderName", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -5550,6 +7012,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Include_after_Select_throws(bool async)
     {
         await base.Include_after_Select_throws(async);
+
+        AssertMql(
+            """
+Factions.{ "$lookup" : { "from" : "Cities", "localField" : "CapitalName", "foreignField" : "_id", "as" : "_lookup_Capital" } }, { "$set" : { "_lookup_Capital" : { "$arrayElemAt" : ["$_lookup_Capital", 0] } } }
+""");
     }
 #endif
 
@@ -5613,6 +7080,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task OrderBy_bool_coming_from_optional_navigation(bool async)
     {
         await base.OrderBy_bool_coming_from_optional_navigation(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$sort" : { "_lookup_SynergyWith.IsAutomatic" : 1 } }
+""");
     }
 #endif
 
@@ -5708,6 +7180,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Enum_array_contains(bool async)
     {
         await base.Enum_array_contains(async);
+
+        AssertMql(
+            """
+Weapons.{ "$lookup" : { "from" : "Weapons", "localField" : "SynergyWithId", "foreignField" : "_id", "as" : "_lookup_SynergyWith" } }, { "$set" : { "_lookup_SynergyWith" : { "$arrayElemAt" : ["$_lookup_SynergyWith", 0] } } }, { "$match" : { "_lookup_SynergyWith" : { "$ne" : null }, "_lookup_SynergyWith.AmmunitionType" : { "$in" : [null, 1] } } }
+""");
     }
 #endif
 
@@ -6123,6 +7600,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Coalesce_operator_in_predicate(bool async)
     {
         await base.Coalesce_operator_in_predicate(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "$expr" : { "$ifNull" : ["$IsAutomatic", false] } } }
+""");
     }
 #endif
 
@@ -6130,6 +7612,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Coalesce_operator_in_predicate_with_other_conditions(bool async)
     {
         await base.Coalesce_operator_in_predicate_with_other_conditions(async);
+
+        AssertMql(
+            """
+Weapons.{ "$match" : { "$and" : [{ "AmmunitionType" : 1 }, { "$expr" : { "$ifNull" : ["$IsAutomatic", false] } }] } }
+""");
     }
 #endif
 
@@ -6137,6 +7624,11 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
     public override async Task Coalesce_operator_in_projection_with_other_conditions(bool async)
     {
         await base.Coalesce_operator_in_projection_with_other_conditions(async);
+
+        AssertMql(
+            """
+Weapons.{ "$project" : { "_v" : { "$and" : [{ "$eq" : ["$AmmunitionType", 1] }, { "$ifNull" : ["$IsAutomatic", false] }] }, "_id" : 0 } }
+""");
     }
 #endif
 
@@ -6171,6 +7663,9 @@ public class GearsOfWarQueryMongoTest : GearsOfWarQueryTestBase<GearsOfWarQueryM
         await SpecFails.ThrowsAsync(() => base.Navigation_based_on_complex_expression6(async), "TypeLoadException");
     }
 #endif
+
+    private void AssertMql(params string[] expected)
+        => Fixture.TestMqlLoggerFactory.AssertBaseline(expected);
 
     public class GearsOfWarQueryMongoFixture : GearsOfWarQueryFixtureBase
     {
