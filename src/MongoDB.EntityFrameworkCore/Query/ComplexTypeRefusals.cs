@@ -74,6 +74,14 @@ internal static class ComplexTypeRefusals
            + $"properties and whole complex properties. The setter target '{setterTarget}' is not a mapped scalar "
            + $"property of '{entityTypeName}'.";
 
+    internal static string BulkSetterTargetIsPrimaryKey(string entityTypeName, string propertyName)
+        => $"The property '{entityTypeName}.{propertyName}' cannot be updated by a bulk update because it is part of the primary key, "
+           + "which maps to the immutable '_id' element.";
+
+    internal static string BulkSetterTargetIsDiscriminator(string entityTypeName, string propertyName)
+        => $"The property '{entityTypeName}.{propertyName}' cannot be updated by a bulk update because it is the type discriminator; "
+           + "changing it would change the entity type of the stored document.";
+
     internal static string BulkSetterPathsOverlap(string earlierPath, string path, string entityTypeName)
         => $"ExecuteUpdate cannot set both '{earlierPath}' and '{path}' of '{entityTypeName}': "
            + "one is stored inside the other, and MongoDB rejects an update that sets both. Set either the whole value "

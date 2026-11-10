@@ -55,6 +55,36 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         mb.Entity<Order>().Property(e => e.Status).HasElementName("state");
     };
 
+    private class VersionedOrder
+    {
+        public ObjectId _id { get; set; }
+        public string Status { get; set; } = null!;
+        public byte[] Version { get; set; } = null!;
+    }
+
+    private static readonly Action<ModelBuilder> ConfigureVersionedModel = mb =>
+    {
+        mb.Entity<VersionedOrder>().Property(e => e.Version).IsRowVersion();
+    };
+
+    private abstract class Animal
+    {
+        public ObjectId _id { get; set; }
+        public string Kind { get; set; } = null!;
+        public string Name { get; set; } = null!;
+    }
+
+    private class Cat : Animal;
+
+    private class Dog : Animal;
+
+    private static readonly Action<ModelBuilder> ConfigureHierarchyModel = mb =>
+    {
+        mb.Entity<Animal>().HasDiscriminator(a => a.Kind).HasValue<Cat>("cat").HasValue<Dog>("dog");
+        mb.Entity<Cat>();
+        mb.Entity<Dog>();
+    };
+
     private SingleEntityDbContext<Order> CreateSeededContext([CallerMemberName] string? collectionName = null)
     {
         var collection = database.CreateCollection<Order>(collectionName);
@@ -526,6 +556,66 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Contains("Began transaction", startedMessage);
         var committedMessage = spyLogger.GetLogMessageByEventId(MongoEventId.TransactionCommitted);
         Assert.Contains("Committed transaction", committedMessage);
+    }
+
+    [Fact]
+    public void ExecuteUpdate_targeting_the_primary_key_throws_a_translation_failure()
+    {
+        using var db = CreateSeededContext();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o._id, ObjectId.GenerateNewId())));
+
+        Assert.Contains("primary key", ex.Message);
+        Assert.Equal(3, db.Entities.Count());
+    }
+
+    [Fact]
+    public void ExecuteUpdate_targeting_the_discriminator_throws_a_translation_failure_and_writes_nothing()
+    {
+        var collection = database.CreateCollection<Animal>();
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureHierarchyModel))
+        {
+            seed.AddRange(new Cat { _id = ObjectId.GenerateNewId(), Name = "Tom" }, new Dog { _id = ObjectId.GenerateNewId(), Name = "Rex" });
+            seed.SaveChanges();
+        }
+
+        using var db = SingleEntityDbContext.Create(collection, ConfigureHierarchyModel);
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty(a => a.Kind, "dog")));
+        Assert.Contains("discriminator", ex.Message);
+
+        // A query rooted on a derived type is guarded the same way.
+        var derived = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.Where(a => a is Cat).ExecuteUpdate(s => s.SetProperty(a => a.Kind, "dog")));
+        Assert.Contains("discriminator", derived.Message);
+
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
+        Assert.Equal(1, raw.CountDocuments(new BsonDocument("_t", "cat"))); // the discriminator is stored as _t
+        Assert.Equal(1, raw.CountDocuments(new BsonDocument("_t", "dog")));
+    }
+
+    [Fact]
+    public void ExecuteUpdate_can_set_a_concurrency_token()
+    {
+        // A bulk update neither checks nor protects concurrency tokens, so setting one explicitly is a supported use.
+        var collection = database.CreateCollection<VersionedOrder>();
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureVersionedModel))
+        {
+            seed.Add(new VersionedOrder { _id = ObjectId.GenerateNewId(), Status = "open" });
+            seed.SaveChanges();
+        }
+
+        var newVersion = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+        using (var db = SingleEntityDbContext.Create(collection, ConfigureVersionedModel))
+        {
+            Assert.Equal(1, db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Version, newVersion)));
+        }
+
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName)
+            .Find(FilterDefinition<BsonDocument>.Empty).Single();
+        Assert.Equal(newVersion, raw["Version"].AsBsonBinaryData.Bytes);
     }
 }
 

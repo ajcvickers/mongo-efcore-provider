@@ -124,6 +124,14 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         }
     }
 
+    [DoesNotReturn]
+    private void RejectSetterTarget(MongoQueryExpression mongoQueryExpression, string details)
+    {
+        AddTranslationErrorDetails(details);
+        throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+            ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
+    }
+
     /// <summary>
     /// Parses a <c>SetProperty(selector, value)</c> into a <see cref="MongoNonQueryExpression.Setter"/>. The selector must
     /// target a mapped root scalar property; anything else produces EF's canonical non-query translation failure.
@@ -177,6 +185,27 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                 ComplexTypeRefusals.BulkSetterTargetNotMapped(ExpressionShapePrinter.Print(propertySelector.Body), entityType.DisplayName()));
             throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
                 ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
+        }
+
+        // Reject setters on fields the provider owns. Without these guards a bulk update can rewrite a document's type (the
+        // discriminator maps to _t, so the model could no longer materialize it) or attempt an immutable-_id write that only fails at
+        // the server as a raw driver exception. Concurrency tokens are deliberately NOT rejected: a bulk update neither checks nor
+        // protects them, and setting one explicitly is a supported use.
+        if (property is IProperty target)
+        {
+            if (target.IsPrimaryKey())
+            {
+                RejectSetterTarget(
+                    mongoQueryExpression,
+                    ComplexTypeRefusals.BulkSetterTargetIsPrimaryKey(target.DeclaringType.DisplayName(), target.Name));
+            }
+
+            if (target == entityType.FindDiscriminatorProperty())
+            {
+                RejectSetterTarget(
+                    mongoQueryExpression,
+                    ComplexTypeRefusals.BulkSetterTargetIsDiscriminator(target.DeclaringType.DisplayName(), target.Name));
+            }
         }
 
         // EF9 self-referencing: value is a quoted Func<T,TProp> lambda; unwrap and detect a reference to its parameter.
