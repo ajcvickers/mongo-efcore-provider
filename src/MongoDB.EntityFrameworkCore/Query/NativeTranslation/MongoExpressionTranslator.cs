@@ -909,16 +909,18 @@ internal sealed partial class MongoExpressionTranslator
             // serializer, so it falls through to the $in arm and declines there.
             case MethodCallExpression call
                 when TryMatchContainsMethod(call, out var arrayReceiver, out var containsItem)
-                     && Unwrap(containsItem) is ConstantExpression
+                     && (Unwrap(containsItem) is ConstantExpression || NativeQueryParameter.TryGetQueryParameterName(Unwrap(containsItem), out _))
                      && TryResolveMember(Unwrap(arrayReceiver), out var arrayProperty, out var arrayFieldPath, out var arrayIsOuter)
                      && !arrayIsOuter
                      && arrayProperty.ClrType.TryGetEnumerableElementType() is not null:
             {
-                var itemNode = TranslateArrayContainsItem(Unwrap(containsItem), arrayProperty);
+                // A NullSafe field is a complex element scope, which always renders in the aggregation dialect, where `$in` of a
+                // null item is exactly `list.Contains(null)`; the query dialect's `{ field: null }` is not (it matches a missing field).
+                var arrayFieldExpr = ScopeField(arrayProperty, arrayFieldPath);
+                var itemNode = TranslateArrayContainsItem(Unwrap(containsItem), arrayProperty, allowNull: arrayFieldExpr.NullSafe);
                 if (itemNode is null)
                     return null; // e.g. a value-converted array, or a CLR/element type mismatch — decline.
 
-                var arrayFieldExpr = ScopeField(arrayProperty, arrayFieldPath);
                 return new MongoArrayContainsExpression(arrayFieldExpr, itemNode, negated: false);
             }
 

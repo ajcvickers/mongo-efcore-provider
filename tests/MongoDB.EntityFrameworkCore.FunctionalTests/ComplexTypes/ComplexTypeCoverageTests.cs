@@ -318,11 +318,18 @@ public class ComplexTypeCoverageTests(TemporaryDatabaseFixture database) : IClas
             return db.Entities.Where(h => h.Many.Any(m => m.Nums.Contains(5))).Select(h => h.Name).ToList();
         }
 
-        Assert.Equal(["has"], Run(MongoQueryMode.Native));
-        Assert.Equal(["has"], Run(MongoQueryMode.DriverLinq));
+        // #40: translated natively ($in over the array coalesced to empty), so every mode serves the data.
+        foreach (var mode in AllModes)
+        {
+            Assert.Equal(["has"], Run(mode));
+        }
 
-        // The native translator does not translate a primitive-collection Contains inside an element scope, so NativeOnly refuses it.
-        Assert.Throws<NativeTranslationNotSupportedException>(() => Run(MongoQueryMode.NativeOnly));
+        // A null element reads its members as missing, so the driver's `$in` fails the WHOLE query; the native modes read a
+        // missing array as empty and are unaffected (the full oracle comparison is ComplexElementArrayContainsTests).
+        Raw(collection).InsertOne(new BsonDocument { { "_id", ObjectId.GenerateNewId() }, { "Name", "nullelem" }, { "Many", new BsonArray { BsonNull.Value } } });
+        Assert.Equal(["has"], Run(MongoQueryMode.Native));
+        Assert.Equal(["has"], Run(MongoQueryMode.NativeOnly));
+        Assert.Throws<MongoCommandException>(() => Run(MongoQueryMode.DriverLinq));
     }
 
     // ── A query filter that reads a complex leaf ────────────────────────────────────────────────────────────────

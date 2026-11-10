@@ -85,6 +85,12 @@ internal static class ComplexElementNullGuardRefusal
     internal const string CollectionNullCheckShape = "a comparison of the collection with null";
 
     /// <summary>
+    /// The <see cref="Find"/> shape for <c>Contains</c> over a primitive collection member of a complex element
+    /// (<c>m.Nums.Contains(5)</c>): over a null element the driver's <c>$in</c> gets a missing array and fails the query.
+    /// </summary>
+    internal const string MemberContainsShape = "a membership test over a collection member of the element";
+
+    /// <summary>
     /// The first null-guard-requiring shape in a complex element scope of <paramref name="captured"/>, or
     /// <see langword="null"/>. Exposed for unit tests.
     /// </summary>
@@ -334,6 +340,18 @@ internal static class ComplexElementNullGuardRefusal
                 && FindComplexElementRead(sequence) is null)
             {
                 Found = ("a membership test of a member value in a local collection", _complexElementCollections[containsElement]);
+                return node;
+            }
+
+            // `s.Nums.Contains(x)`: the SEQUENCE is a primitive collection member of the element. A null element reads the
+            // member as MISSING, and the driver's `$in` over a missing array is a server error that fails the whole query
+            // (not just the null row), so the fallback is refused rather than made unusable by one null element.
+            if (!strict && _complexElementCollections.Count > 0 && node.Method.Name == nameof(Enumerable.Contains)
+                && TryGetContainsOperands(node, out var memberSequence, out _)
+                && memberSequence.RemoveConvert() is not ParameterExpression
+                && FindComplexElementRead(memberSequence) is { } sequenceElement)
+            {
+                Found = (MemberContainsShape, _complexElementCollections[sequenceElement]);
                 return node;
             }
 

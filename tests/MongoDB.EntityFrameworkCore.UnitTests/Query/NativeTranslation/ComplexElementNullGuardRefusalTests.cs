@@ -42,6 +42,7 @@ public class ComplexElementNullGuardRefusalTests
         public bool Verified { get; set; }
         public DateTime When { get; set; }
         public DateTimeOffset Stamp { get; set; }
+        public List<int> Nums { get; set; } = [];
     }
 
     public class Route
@@ -94,6 +95,9 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["nested count compared with an element member", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.City == s.City) > s.Floor))), "a relational comparison"];
         // The guard-requiring shape sits INSIDE the nested lambda; the outer Finder visits its body.
         yield return ["relational inside a nested element lambda", Query(q => q.Where(r => r.Stops.Any(s => r.Stops.Count(s2 => s2.Floor < s.Floor) >= 1))), "a relational comparison"];
+        // Contains over a primitive collection member of the element: a null element makes the driver's `$in` see a missing array (#40).
+        yield return ["member Contains (Enumerable)", Query(q => q.Where(r => r.Stops.Any(s => s.Nums.Contains(5)))), ComplexElementNullGuardRefusal.MemberContainsShape];
+        yield return ["member Contains (Queryable-style, array)", Query(q => q.Where(r => r.Stops.Any(s => s.Nums.ToArray().Contains(5)))), ComplexElementNullGuardRefusal.MemberContainsShape];
         // The collection itself compared with null (the driver's `{Stops: null}` also matches `[null]`).
         yield return ["collection == null", Query(q => q.Where(r => r.Stops == null)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
         yield return ["null != collection", Query(q => q.Where(r => null != r.Stops)), ComplexElementNullGuardRefusal.CollectionNullCheckShape];
@@ -193,6 +197,9 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["root relational over a complex-collection count", Query(q => q.Where(r => r.Stops.Count < 3))];
         yield return ["OWNED element relational", Query(q => q.Where(r => r.Owned.Any(s => s.When.AddDays(1).Year < 2030)))];
         yield return ["OWNED element == null", Query(q => q.Where(r => r.Owned.Any(s => s.Note == null)))];
+        // Negative controls for the member-Contains arm (#40): an OWNED element (not keyed) and a complex element's list not tested for membership.
+        yield return ["OWNED element member Contains (only complex collections are keyed)", Query(q => q.Where(r => r.Owned.Any(s => s.Nums.Contains(5))))];
+        yield return ["complex element member Any() (no membership test)", Query(q => q.Where(r => r.Stops.Any(s => s.Nums.Any())))];
         yield return ["relational on the root inside the element lambda only", Query(q => q.Where(r => r.Stops.Any(s => r.Departs < DateTime.UnixEpoch)))];
         yield return ["Contains of the element itself (member-wise equality, not a leaf)", Query(q => q.Where(r => r.Stops.Any(s => new List<Stop>().Contains(s))))];
         // A relational over a COUNT whose nested lambda merely reads the element (`s.City`, an equality): the compared

@@ -87,6 +87,7 @@ internal static class MongoAggregationExpressionRenderer
             MongoFilteredSizeExpression filtered => RenderFilteredSize(filtered, placeholders, elementVariable),
             MongoMappedArrayReduceExpression mappedReduce => RenderMappedArrayReduce(mappedReduce, placeholders, elementVariable),
             MongoInExpression inExpr => RenderIn(inExpr, placeholders, elementVariable),
+            MongoArrayContainsExpression arrayContains => RenderArrayContains(arrayContains, placeholders, elementVariable),
             MongoComputedInExpression computedIn => RenderComputedIn(computedIn, placeholders, elementVariable),
             MongoUnaryExpression unary => RenderUnary(unary, placeholders, elementVariable),
             MongoConvertExpression convert
@@ -194,6 +195,7 @@ internal static class MongoAggregationExpressionRenderer
             MongoMappedArrayReduceExpression mappedReduce => CanRender(mappedReduce.ElementExpression)
                 && (mappedReduce.ResultExpression is null || CanRender(mappedReduce.ResultExpression)),
             MongoInExpression inExpr => MongoValueRenderer.IsRenderableInValues(inExpr.Values),
+            MongoArrayContainsExpression arrayContains => arrayContains.Value is MongoConstantExpression or MongoParameterExpression,
             MongoComputedInExpression computedIn
                 => CanRender(computedIn.Needle) && MongoValueRenderer.IsRenderableInValues(computedIn.Values),
             // A bare-field operand must be default-serialized, matching RenderUnary's render-time guard.
@@ -832,6 +834,19 @@ internal static class MongoAggregationExpressionRenderer
         var needle = Render(inExpr.Field, placeholders, elementVariable);
         var haystack = new BsonDocument("$literal", MongoValueRenderer.RenderInValues(inExpr.Values, placeholders));
         return NotIf(inExpr.Negated, new BsonDocument("$in", new BsonArray { needle, haystack }));
+    }
+
+    // arrayField.Contains(value): { $in: [value, { $ifNull: [<array>, []] }] }; negation wraps in $not. The array is $ifNull'd to
+    // empty because aggregation $in over a missing/null array is a server error that fails the whole query, and inside a
+    // complex collection's element scope a NULL element (EF10 writes one as BSON null) reads every member as missing. An
+    // empty array contains nothing, as an absent list does in the query dialect's `{ field: value }` (whose `$ne` complement
+    // is true for a missing field, as the `$not` here is). The value is never null (the translator declines a null item).
+    private static BsonValue RenderArrayContains(
+        MongoArrayContainsExpression contains, PlaceholderTable placeholders, string? elementVariable)
+    {
+        var array = IfNull(FieldRef(contains.Field.ElementName, elementVariable), new BsonArray());
+        var value = RenderBranch(contains.Value, placeholders, elementVariable);
+        return NotIf(contains.Negated, new BsonDocument("$in", new BsonArray { value, array }));
     }
 
     // Computed-needle variant of RenderIn.

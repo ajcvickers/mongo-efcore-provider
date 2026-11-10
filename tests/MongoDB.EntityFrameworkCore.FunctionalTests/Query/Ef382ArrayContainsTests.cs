@@ -106,6 +106,41 @@ public class Ef382ArrayContainsTests(TemporaryDatabaseFixture database) : IClass
         Assert.Equal(["A", "C"], labels);
     }
 
+    // #40: a captured value of a type that cannot be null is translated too (serialized through the element serializer);
+    // a captured string can be null at run time, so it is not (it falls back as before).
+
+    [Fact]
+    public void Array_field_contains_a_captured_non_nullable_value_goes_native_and_returns_correct_rows()
+    {
+        var collection = Seed(nameof(Array_field_contains_a_captured_non_nullable_value_goes_native_and_returns_correct_rows));
+        var code = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var other = CodeB;
+
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.NativeOnly })
+        {
+            using var db = CreateContext(collection, mode);
+            Assert.Equal(["A", "C"], db.Entities.Where(e => e.Codes.Contains(code)).OrderBy(e => e.Label).Select(e => e.Label).ToList());
+            Assert.Equal(["B"], db.Entities.Where(e => !e.Codes.Contains(code)).OrderBy(e => e.Label).Select(e => e.Label).ToList());
+            Assert.Equal(["A", "B"], db.Entities.Where(e => e.Codes.Contains(other)).OrderBy(e => e.Label).Select(e => e.Label).ToList());
+        }
+    }
+
+    [Fact]
+    public void Array_field_contains_a_captured_string_still_falls_back()
+    {
+        var collection = Seed(nameof(Array_field_contains_a_captured_string_still_falls_back));
+        var tag = "keep";
+
+        using (var native = CreateContext(collection, MongoQueryMode.Native))
+        {
+            Assert.Equal(["A", "C"], native.Entities.Where(e => e.Tags.Contains(tag)).OrderBy(e => e.Label).Select(e => e.Label).ToList());
+        }
+
+        using var nativeOnly = CreateContext(collection, MongoQueryMode.NativeOnly);
+        Assert.Throws<NativeTranslationNotSupportedException>(
+            () => nativeOnly.Entities.Where(e => e.Tags.Contains(tag)).Select(e => e.Label).ToList());
+    }
+
     [Fact]
     public void Values_contains_field_is_unaffected_and_still_goes_native_as_in()
     {
@@ -230,6 +265,7 @@ public class Ef382ArrayContainsTests(TemporaryDatabaseFixture database) : IClass
     {
         public string Heading { get; set; } = "";
         public List<string> Tags { get; set; } = [];
+        public List<int> Scores { get; set; } = [];
     }
 
     private static readonly Action<ModelBuilder> QuantifierModel =
@@ -307,49 +343,33 @@ public class Ef382ArrayContainsTests(TemporaryDatabaseFixture database) : IClass
         Assert.Equal(expected, actual);
     }
 
-    // MongoArrayContainsExpression has only a query-dialect rendering; the aggregation renderer refuses it
-    // (on purpose: $eq over an array is whole-array equality, not membership). These pin how the two
-    // aggregation-dialect positions reached via TranslateOperand's Contains routing handle it — differently.
+    // MongoArrayContainsExpression has a query-dialect rendering ({ field: value }) and an aggregation-dialect one
+    // ({ $in: [value, { $ifNull: [<array>, []] }] }, #40): $eq over an array is whole-array equality, not membership, so
+    // the aggregation form is $in. These pin the two aggregation-dialect positions reached via TranslateOperand's Contains
+    // routing (a computed sort key and a filtered count's element predicate), which used to decline.
 
     [Fact]
-    public void Array_contains_as_a_computed_sort_key_declines_cleanly()
+    public void Array_contains_as_a_computed_sort_key_is_native()
     {
-        // Computed sort key: TryTranslateComputedSortKey gates on MongoAggregationExpressionRenderer.CanRender,
-        // which is false here, so this is a translate-time decline: falls back under Native, throws under
-        // NativeOnly.
-        var collection = Seed(nameof(Array_contains_as_a_computed_sort_key_declines_cleanly));
+        var collection = Seed(nameof(Array_contains_as_a_computed_sort_key_is_native));
 
-        using var native = CreateContext(collection, MongoQueryMode.Native);
-        var labels = native.Entities
-            .OrderBy(e => e.Tags.Contains("keep"))
-            .ThenBy(e => e.Label)
-            .Select(e => e.Label)
-            .ToList();
-
-        Assert.Equal(["B", "A", "C"], labels);
-
-        using var nativeOnly = CreateContext(collection, MongoQueryMode.NativeOnly);
-        var ex = Assert.Throws<NativeTranslationNotSupportedException>(
-            () => nativeOnly.Entities
-                .OrderBy(e => e.Tags.Contains("keep"))
-                .ThenBy(e => e.Label)
-                .Select(e => e.Label)
-                .ToList());
-        // The message is the gate's "forbids the driver-LINQ fallback" one (a translate-time decline), not the
-        // renderer's "does not support node type" throw; that contrast with the count position below is the point.
-        Assert.Contains("MongoQueryMode.NativeOnly forbids the driver-LINQ fallback", ex.Message);
-        Assert.DoesNotContain("MongoAggregationExpressionRenderer", ex.Message);
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.NativeOnly })
+        {
+            using var db = CreateContext(collection, mode);
+            Assert.Equal(
+                ["B", "A", "C"],
+                db.Entities.OrderBy(e => e.Tags.Contains("keep")).ThenBy(e => e.Label).Select(e => e.Label).ToList());
+            Assert.Equal(
+                ["A", "C", "B"],
+                db.Entities.OrderByDescending(e => e.Tags.Contains("keep")).ThenBy(e => e.Label).Select(e => e.Label).ToList());
+        }
     }
 
     [Fact]
-    public void Array_contains_as_a_filtered_count_element_predicate_declines_at_render_time()
+    public void Array_contains_as_a_filtered_count_element_predicate_is_native()
     {
-        // Filtered count's element predicate: this position is intentionally gate-free (a translate-time null
-        // there would hard-fail the whole leaf in every mode — see RenderUnary's remarks), so the node reaches the
-        // renderer and throws NativeTranslationNotSupportedException at render time. TryBuildPipeline catches that
-        // when mode != NativeOnly, so Native falls back gracefully and only NativeOnly throws.
         var collectionName = TemporaryDatabaseFixtureBase.CreateCollectionName(
-            nameof(Array_contains_as_a_filtered_count_element_predicate_declines_at_render_time))
+            nameof(Array_contains_as_a_filtered_count_element_predicate_is_native))
             + Guid.NewGuid().ToString("N")[..8];
         var mongoCollection = database.MongoDatabase.GetCollection<QuantifierOwner>(collectionName);
         mongoCollection.InsertMany([
@@ -365,27 +385,82 @@ public class Ef382ArrayContainsTests(TemporaryDatabaseFixture database) : IClass
             }
         ]);
 
-        using (var native = CreateQuantifierContext(mongoCollection, MongoQueryMode.Native))
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.NativeOnly })
         {
-            var counts = native.Entities
+            using var db = CreateQuantifierContext(mongoCollection, mode);
+            var counts = db.Entities
                 .OrderBy(o => o.Title)
                 .Select(o => new {o.Title, N = o.Posts.Count(p => p.Tags.Contains("keep"))})
                 .ToList();
-
             Assert.Equal([("mixed", 1), ("noneKeep", 0)], counts.Select(c => (c.Title, c.N)));
+
+            var negated = db.Entities
+                .OrderBy(o => o.Title)
+                .Select(o => new {o.Title, N = o.Posts.Count(p => !p.Tags.Contains("keep"))})
+                .ToList();
+            Assert.Equal([("mixed", 1), ("noneKeep", 2)], negated.Select(c => (c.Title, c.N)));
+        }
+    }
+
+    // #40: a captured non-nullable item inside an owned collection's element predicate ($elemMatch, the query dialect, with a
+    // parameter placeholder), the same item in an aggregation-dialect filtered count, and a missing / BSON-null / empty list.
+    [Fact]
+    public void Owned_collection_element_contains_a_constant_or_captured_value_matches_in_memory_LINQ()
+    {
+        var collectionName = TemporaryDatabaseFixtureBase.CreateCollectionName(
+            nameof(Owned_collection_element_contains_a_constant_or_captured_value_matches_in_memory_LINQ))
+            + Guid.NewGuid().ToString("N")[..8];
+        var mongoCollection = database.MongoDatabase.GetCollection<QuantifierOwner>(collectionName);
+        mongoCollection.InsertMany([
+            new QuantifierOwner { Title = "a", Posts = [new QuantifierPost { Scores = [5, 6] }, new QuantifierPost { Scores = [] }] },
+            new QuantifierOwner { Title = "b", Posts = [new QuantifierPost { Scores = [7] }] },
+            new QuantifierOwner { Title = "c", Posts = [] }
+        ]);
+        var raw = database.MongoDatabase.GetCollection<MongoDB.Bson.BsonDocument>(collectionName);
+        raw.InsertMany([
+            new MongoDB.Bson.BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Title", "d_missing" },
+                { "Posts", new MongoDB.Bson.BsonArray { new MongoDB.Bson.BsonDocument { { "Heading", "h" } } } }
+            },
+            new MongoDB.Bson.BsonDocument
+            {
+                { "_id", ObjectId.GenerateNewId() }, { "Title", "e_null" },
+                { "Posts", new MongoDB.Bson.BsonArray { new MongoDB.Bson.BsonDocument { { "Heading", "h" }, { "Scores", MongoDB.Bson.BsonNull.Value } } } }
+            }
+        ]);
+
+        var data = new List<QuantifierOwner>
+        {
+            new() { Title = "a", Posts = [new QuantifierPost { Scores = [5, 6] }, new QuantifierPost { Scores = [] }] },
+            new() { Title = "b", Posts = [new QuantifierPost { Scores = [7] }] },
+            new() { Title = "c", Posts = [] },
+            new() { Title = "d_missing", Posts = [new QuantifierPost()] },
+            new() { Title = "e_null", Posts = [new QuantifierPost()] }
+        };
+
+        foreach (var wanted in new[] { 5, 7, 99 })
+        {
+            foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.NativeOnly })
+            {
+                using var db = CreateQuantifierContext(mongoCollection, mode);
+                Assert.Equal(
+                    [.. data.Where(o => o.Posts.Any(p => p.Scores.Contains(wanted))).Select(o => o.Title).Order()],
+                    db.Entities.Where(o => o.Posts.Any(p => p.Scores.Contains(wanted))).OrderBy(o => o.Title).Select(o => o.Title).ToList());
+                Assert.Equal(
+                    [.. data.Where(o => o.Posts.All(p => !p.Scores.Contains(wanted))).Select(o => o.Title).Order()],
+                    db.Entities.Where(o => o.Posts.All(p => !p.Scores.Contains(wanted))).OrderBy(o => o.Title).Select(o => o.Title).ToList());
+                Assert.Equal(
+                    [.. data.OrderBy(o => o.Title, StringComparer.Ordinal).Select(o => o.Posts.Count(p => p.Scores.Contains(wanted)))],
+                    db.Entities.OrderBy(o => o.Title).Select(o => o.Posts.Count(p => p.Scores.Contains(wanted))).ToList());
+                Assert.Equal(
+                    [.. data.OrderBy(o => o.Title, StringComparer.Ordinal).Select(o => o.Posts.Count(p => !p.Scores.Contains(wanted)))],
+                    db.Entities.OrderBy(o => o.Title).Select(o => o.Posts.Count(p => !p.Scores.Contains(wanted))).ToList());
+            }
         }
 
-        using (var nativeOnly = CreateQuantifierContext(mongoCollection, MongoQueryMode.NativeOnly))
-        {
-            var ex = Assert.Throws<NativeTranslationNotSupportedException>(
-                () => nativeOnly.Entities
-                    .OrderBy(o => o.Title)
-                    .Select(o => new {o.Title, N = o.Posts.Count(p => p.Tags.Contains("keep"))})
-                    .ToList());
-            // Pins which gate answered, so an unrelated earlier decline can't make this pass.
-            Assert.Contains("MongoAggregationExpressionRenderer does not support node type "
-                + "'MongoArrayContainsExpression'", ex.Message);
-        }
+        using var constants = CreateQuantifierContext(mongoCollection, MongoQueryMode.NativeOnly);
+        Assert.Equal(["a"], constants.Entities.Where(o => o.Posts.Any(p => p.Scores.Contains(5))).OrderBy(o => o.Title).Select(o => o.Title).ToList());
     }
 
     private static SingleEntityDbContext<QuantifierOwner> CreateQuantifierContext(
@@ -398,6 +473,52 @@ public class Ef382ArrayContainsTests(TemporaryDatabaseFixture database) : IClass
                 b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
                 new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
             });
+
+    // #40: outside a complex element scope the query dialect's `{f: null}` also matches a MISSING array, so an item that can be null
+    // (null constant, nullable or string parameter) must not be translated there; it declines (NativeOnly throws) rather than
+    // answering a missing array as "contains null".
+
+    public class NullableRow
+    {
+        public ObjectId Id { get; set; }
+        public string Label { get; set; } = "";
+        public List<int?> Maybe { get; set; } = [];
+        public List<Guid?> OptCodes { get; set; } = [];
+        public List<string?> Names { get; set; } = [];
+    }
+
+    [Fact]
+    public void Null_capable_items_outside_a_complex_element_scope_decline_natively()
+    {
+        var raw = database.MongoDatabase.GetCollection<BsonDocument>(UniqueCollectionName(nameof(Null_capable_items_outside_a_complex_element_scope_decline_natively)));
+        raw.InsertMany([
+            new BsonDocument { { "Label", "has" }, { "Maybe", new BsonArray { 5, BsonNull.Value } }, { "OptCodes", new BsonArray() }, { "Names", new BsonArray() } },
+            new BsonDocument { { "Label", "missing" } },
+            new BsonDocument { { "Label", "nulls" }, { "Maybe", BsonNull.Value }, { "OptCodes", BsonNull.Value }, { "Names", BsonNull.Value } }
+        ]);
+        var collection = database.MongoDatabase.GetCollection<NullableRow>(raw.CollectionNamespace.CollectionName);
+
+        int? five = 5;
+        int? noInt = null;
+        Guid? code = CodeA;
+        string? name = "n";
+
+        using var db = SingleEntityDbContext.Create(
+            collection,
+            optionsBuilderAction: b =>
+            {
+                b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+                new MongoDbContextOptionsBuilder(b).UseQueryMode(MongoQueryMode.NativeOnly);
+            });
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Maybe.Contains(null)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => !e.Maybe.Contains(null)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Maybe.Contains(five)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Maybe.Contains(noInt)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.OptCodes.Contains(code)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Names.Contains(name)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Names.Contains(null)).Select(e => e.Label).ToList());
+    }
 
     private IMongoCollection<Row> Seed(string name)
     {

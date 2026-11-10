@@ -503,7 +503,8 @@ Rendering (null/missing/dialect semantics):
   owned element scopes keep the RenderBinary no-`$ifNull` rule (a missing owned leaf is malformed data, a null complex element
   is EF-written). Driver-LINQ answers such rows differently (pinned per mode). A query the native path
   DECLINES whose complex-element predicate holds a null-guard-requiring shape (relational, `==`/`!=` null, local-list
-  `Contains` of a member, non-nullable bool equality) is refused at the compile-time gate under `Native` instead of falling
+  `Contains` of a member, a `Contains` over a primitive-collection member of the element that the native path declined (a non-constant, non-parameter item, or an
+  unsupported array; the driver's `$in` over a null element's missing array fails the whole query, #40), non-nullable bool equality) is refused at the compile-time gate under `Native` instead of falling
   back to those wrong rows (`ComplexElementNullGuardRefusal`, called where the gate commits to the fallback; structural,
   so it refuses even over data with no null element; explicit `DriverLinq` runs the driver; owned scopes untouched).
   It is a BEST-EFFORT net for structurally keyable shapes, not a guarantee. The scanner RESTATES the node kinds
@@ -604,7 +605,15 @@ Shapers and projections:
 - **TPH `$lookup` to a derived type must narrow by discriminator** (in `LookupExpression`'s constructor). The kind
   `LookupPipelineKind.DiscriminatorNarrowed` is write-once; native for a top-level collection Include only. Reference
   navigations, renamed-to-avoid-collision lookups and correlated reducers still decline.
-- **Primitive collections, dictionaries and composite-key `Contains` are query-dialect only.**
+- **Primitive collections, dictionaries and composite-key `Contains` are query-dialect only**, except `arrayField.Contains(item)`
+  (`MongoArrayContainsExpression`), which also has an aggregation form `{$in: [item, {$ifNull: [<array>, []]}]}` (negation wraps `$not`).
+  The `$ifNull` matters: `$in` over a missing array is a server error, and a NULL complex element reads every member as missing (#40).
+  - The item is a constant or a query parameter of exactly the element type, serialized through the array's ELEMENT serializer. A
+    converted or whole-collection-serialized array declines.
+  - Outside a complex element scope the item must be unable to be null (a null constant, a string or nullable parameter decline),
+    because the query dialect's `{f: null}` also matches a missing field.
+  - Inside one (always the aggregation dialect, `ScopeField` NullSafe) `$in: [null, array]` is exactly `list.Contains(null)`, so
+    null-capable items are translated.
   - `Any()`/`Count()`/`Length` over a primitive-collection PROPERTY reuse the owned size forms
     (`TryResolvePrimitiveCollectionPath`); a missing/null array counts as empty. `Any(pred)`/`All(pred)` stay declined.
   - A string-keyed dictionary entry is the sub-field `<dict>.<key>` (`MongoDictionaryEntryExpression`, serialized by the

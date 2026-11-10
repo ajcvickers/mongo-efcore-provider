@@ -448,8 +448,8 @@ public class MongoExpressionNodeCoverageTests
     /// </remarks>
     private static readonly Dictionary<string, string> ExpectedMatrix = new(StringComparer.Ordinal)
     {
-        ["MongoArrayContainsExpression|Agg.CanRender"] = "false",
-        ["MongoArrayContainsExpression|Agg.Render"] = "declined",
+        ["MongoArrayContainsExpression|Agg.CanRender"] = "true",
+        ["MongoArrayContainsExpression|Agg.Render"] = "rendered",
         ["MongoArrayContainsExpression|AllFieldsDefaultSerialized"] = "true",
         ["MongoArrayContainsExpression|AllFieldsDefaultSerialized(converted)"] = "true",
         ["MongoArrayContainsExpression|Negator.TryNegate"] = "true",

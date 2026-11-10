@@ -198,6 +198,84 @@ public class MongoAggregationExpressionRendererTests
         Assert.Equal(new BsonDocument("$in", new BsonArray { "$Status", new BsonDocument("$literal", new BsonArray { "A", "B" }) }), rendered);
     }
 
+    // MongoArrayContainsExpression aggregation-dialect arm (#40): $in over the array, $ifNull'd to empty.
+
+    [Fact]
+    public void MongoArrayContainsExpression_renders_in_over_the_array_coalesced_to_empty()
+    {
+        var age = GetProperty<Customer>("Age");
+        var node = new MongoArrayContainsExpression(
+            new MongoFieldExpression(age, "Nums"), new MongoConstantExpression(new BsonInt32(5), forSerialization: null), negated: false);
+
+        Assert.True(MongoAggregationExpressionRenderer.CanRender(node));
+        Assert.Equal(
+            new BsonDocument("$in", new BsonArray
+            {
+                new BsonDocument("$literal", 5),
+                new BsonDocument("$ifNull", new BsonArray { "$Nums", new BsonArray() })
+            }),
+            MongoAggregationExpressionRenderer.Render(node, new PlaceholderTable()));
+    }
+
+    [Fact]
+    public void MongoArrayContainsExpression_negated_wraps_in_not_and_reads_the_element_scope_variable()
+    {
+        var age = GetProperty<Customer>("Age");
+        var node = new MongoArrayContainsExpression(
+            new MongoFieldExpression(age, "Nums", nullSafe: true), new MongoConstantExpression(new BsonInt32(5), forSerialization: null),
+            negated: true);
+
+        Assert.Equal(
+            new BsonDocument("$not", new BsonArray
+            {
+                new BsonDocument("$in", new BsonArray
+                {
+                    new BsonDocument("$literal", 5),
+                    new BsonDocument("$ifNull", new BsonArray { "$$e.Nums", new BsonArray() })
+                })
+            }),
+            MongoAggregationExpressionRenderer.Render(node, new PlaceholderTable(), "e"));
+    }
+
+    [Fact]
+    public void MongoArrayContainsExpression_literal_wraps_a_dollar_prefixed_string_item()
+    {
+        var age = GetProperty<Customer>("Age");
+        var node = new MongoArrayContainsExpression(
+            new MongoFieldExpression(age, "Tags"), new MongoConstantExpression(new BsonString("$y"), forSerialization: null), negated: false);
+
+        var rendered = Assert.IsType<BsonDocument>(MongoAggregationExpressionRenderer.Render(node, new PlaceholderTable()));
+        Assert.Equal(new BsonDocument("$literal", "$y"), rendered["$in"].AsBsonArray[0]);
+    }
+
+    [Fact]
+    public void MongoArrayContainsExpression_renders_a_parameter_item_as_a_literal_placeholder()
+    {
+        var age = GetProperty<Customer>("Age");
+        var node = new MongoArrayContainsExpression(
+            new MongoFieldExpression(age, "Nums"), new MongoParameterExpression("p0", forSerialization: null, valueType: typeof(int)),
+            negated: false);
+
+        Assert.True(MongoAggregationExpressionRenderer.CanRender(node));
+        var placeholders = new PlaceholderTable();
+        var rendered = Assert.IsType<BsonDocument>(MongoAggregationExpressionRenderer.Render(node, placeholders));
+        Assert.Equal("$literal", rendered["$in"].AsBsonArray[0].AsBsonDocument.GetElement(0).Name);
+
+        // The item is a placeholder recorded with the parameter's name; the explicit element serializer is applied at Build.
+        var entry = Assert.Single(placeholders.Entries);
+        Assert.Equal("p0", entry.Name);
+        Assert.False(entry.IsArray);
+    }
+
+    [Fact]
+    public void MongoArrayContainsExpression_with_a_non_constant_non_parameter_item_cannot_be_rendered()
+    {
+        var age = GetProperty<Customer>("Age");
+        var node = new MongoArrayContainsExpression(new MongoFieldExpression(age, "Nums"), new MongoFieldExpression(age, "Age"), negated: false);
+
+        Assert.False(MongoAggregationExpressionRenderer.CanRender(node));
+    }
+
     [Fact]
     public void CanRender_reports_true_for_negated_MongoInExpression()
     {
