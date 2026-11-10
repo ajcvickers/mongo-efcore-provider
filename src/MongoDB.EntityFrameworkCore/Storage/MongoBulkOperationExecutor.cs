@@ -415,12 +415,14 @@ internal static class MongoBulkOperationExecutor
             + "as a two-phase operation requiring a transaction. The current MongoDB deployment does not support "
             + "multi-document transactions (a replica set or sharded cluster is required).", inner);
 
-    // Unsupported deployments fail in three shapes: MongoTransaction.Start's NotSupportedException, a raw
-    // MongoCommandException (code 20), or "Transaction numbers are only allowed on a replica set member or mongos".
-    // Match conservatively so unrelated failures propagate.
-    private static bool IsTransactionsUnsupported(Exception exception)
-        => exception is MongoCommandException { Code: 20 }
-           || (exception is MongoException && exception.Message.Contains("Transaction numbers are only allowed", StringComparison.Ordinal))
+    // An unsupported deployment fails in two shapes: MongoTransaction.Start intercepts the driver's "Standalone servers do not support
+    // transactions." and rethrows a NotSupportedException whose message contains "does not support transactions"; or the server replies
+    // "Transaction numbers are only allowed on a replica set member or mongos" (a MongoCommandException with code 20, which is just the
+    // concrete type the driver throws; the message is what identifies it). Code 20 is IllegalOperation in general, so it is not
+    // matched on its own: an unrelated illegal operation inside the transaction must propagate, not be relabelled. Internal so the
+    // unit tests can reach it.
+    internal static bool IsTransactionsUnsupported(Exception exception)
+        => (exception is MongoException && exception.Message.Contains("Transaction numbers are only allowed", StringComparison.Ordinal))
            || (exception is NotSupportedException && exception.Message.Contains("does not support transactions", StringComparison.Ordinal));
 
     private static (IMongoCollection<BsonDocument> collection, IClientSessionHandle? session) GetBulkCollectionAndSession(

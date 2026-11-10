@@ -244,8 +244,9 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Equal("closed", db.Entities.Single().Status);
     }
 
-    [Fact(Skip = "Requires a standalone (non-replica-set) MongoDB to exercise the transaction-unsupported path; "
-        + "CI/local use a replica set (atlas-local). The error mapping is covered by IsTransactionsUnsupported. EF-107")]
+    [Fact(Skip = "Requires a standalone (non-replica-set) MongoDB to exercise the end-to-end path; CI/local use a replica set "
+        + "(atlas-local). The error classification itself is unit-tested server-free in "
+        + "UnitTests/Storage/BulkTransactionErrorClassificationTests.cs. EF-107")]
     public void ExecuteDelete_two_phase_on_standalone_throws_actionable_error()
     {
     }
