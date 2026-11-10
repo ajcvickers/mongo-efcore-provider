@@ -24,7 +24,7 @@ namespace MongoDB.EntityFrameworkCore.Diagnostics;
 
 using BulkWriteEventDefinition = EventDefinition<string, CollectionNamespace, long, long, long>;
 #if !EF8
-using BulkExecutingEventDefinition = EventDefinition<string, CollectionNamespace, string, string>;
+using BulkExecutingEventDefinition = EventDefinition<string, CollectionNamespace, string, string, string>;
 using BulkExecutedDeleteEventDefinition = EventDefinition<string, CollectionNamespace, long>;
 using BulkExecutedUpdateEventDefinition = EventDefinition<string, CollectionNamespace, long, long>;
 #endif
@@ -190,26 +190,42 @@ internal static class MongoLoggerUpdateExtensions
     /// For a two-phase operation, the number of target document ids collected in phase 1;
     /// <see langword="null"/> for a single-command operation.
     /// </param>
+    /// <param name="renderCommand">
+    /// Renders the command (already redacted to <c>"?"</c> when sensitive-data logging is off). Only invoked when something is
+    /// listening to this event, and then once.
+    /// </param>
     public static void ExecutingBulkDelete(
         this IDiagnosticsLogger<DbLoggerCategory.Update> diagnostics,
         TimeSpan duration,
         CollectionNamespace collectionNamespace,
         string strategy,
-        long? targetCount)
+        long? targetCount,
+        Func<string> renderCommand)
     {
         var definition = LogExecutingBulkDelete(diagnostics);
 
-        if (diagnostics.ShouldLog(definition))
+        var shouldLog = diagnostics.ShouldLog(definition);
+        var needsEventData = diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled);
+        if (!shouldLog && !needsEventData)
+        {
+            // Nothing is listening: don't render the command (a two-phase filter can hold every harvested id).
+            return;
+        }
+
+        var command = renderCommand();
+
+        if (shouldLog)
         {
             definition.Log(
                 diagnostics,
                 duration.TotalMilliseconds.ToString(CultureInfo.InvariantCulture),
                 collectionNamespace,
                 strategy,
-                FormatTargetCount(targetCount));
+                FormatTargetCount(targetCount),
+                command);
         }
 
-        if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+        if (needsEventData)
         {
             var eventData = new MongoBulkDeleteEventData(
                 definition,
@@ -218,7 +234,9 @@ internal static class MongoLoggerUpdateExtensions
                 collectionNamespace,
                 deleteCount: 0,
                 targetCount: targetCount,
-                strategy: strategy);
+                strategy: strategy,
+                command: command,
+                logSensitiveData: diagnostics.ShouldLogSensitiveData());
 
             diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
         }
@@ -232,7 +250,8 @@ internal static class MongoLoggerUpdateExtensions
             p.Elapsed.TotalMilliseconds.ToString(CultureInfo.InvariantCulture),
             p.CollectionNamespace,
             p.Strategy,
-            FormatTargetCount(p.TargetCount));
+            FormatTargetCount(p.TargetCount),
+            p.Command!); // Always set: the Executing message is only generated from the payload built in ExecutingBulkDelete.
     }
 
     private static BulkExecutingEventDefinition LogExecutingBulkDelete(IDiagnosticsLogger logger)
@@ -245,10 +264,11 @@ internal static class MongoLoggerUpdateExtensions
                     MongoEventId.ExecutingBulkDelete,
                     LogLevel.Information,
                     "MongoEventId.ExecutingBulkDelete",
-                    level => LoggerMessage.Define<string, CollectionNamespace, string, string>(
+                    level => LoggerMessage.Define<string, CollectionNamespace, string, string, string>(
                         level,
                         MongoEventId.ExecutingBulkDelete,
-                        "Executing Bulk Delete ({elapsed} ms) Collection='{collectionNamespace}', Strategy={strategy}, Targets={targetCount}"))));
+                        "Executing Bulk Delete ({elapsed} ms) Collection='{collectionNamespace}', Strategy={strategy}, "
+                        + "Targets={targetCount}, Command={command}"))));
 
     /// <summary>
     /// Logs for the <see cref="MongoEventId.ExecutedBulkDelete" /> event.
@@ -282,7 +302,9 @@ internal static class MongoLoggerUpdateExtensions
                 collectionNamespace,
                 deleteCount: deleteCount,
                 targetCount: null,
-                strategy: strategy);
+                strategy: strategy,
+                command: null,
+                logSensitiveData: false);
 
             diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
         }
@@ -322,26 +344,42 @@ internal static class MongoLoggerUpdateExtensions
     /// For a two-phase operation, the number of target document ids collected in phase 1;
     /// <see langword="null"/> for a single-command operation.
     /// </param>
+    /// <param name="renderCommand">
+    /// Renders the command (already redacted to <c>"?"</c> when sensitive-data logging is off). Only invoked when something is
+    /// listening to this event, and then once.
+    /// </param>
     public static void ExecutingBulkUpdate(
         this IDiagnosticsLogger<DbLoggerCategory.Update> diagnostics,
         TimeSpan duration,
         CollectionNamespace collectionNamespace,
         string strategy,
-        long? targetCount)
+        long? targetCount,
+        Func<string> renderCommand)
     {
         var definition = LogExecutingBulkUpdate(diagnostics);
 
-        if (diagnostics.ShouldLog(definition))
+        var shouldLog = diagnostics.ShouldLog(definition);
+        var needsEventData = diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled);
+        if (!shouldLog && !needsEventData)
+        {
+            // Nothing is listening: don't render the command (a two-phase filter can hold every harvested id).
+            return;
+        }
+
+        var command = renderCommand();
+
+        if (shouldLog)
         {
             definition.Log(
                 diagnostics,
                 duration.TotalMilliseconds.ToString(CultureInfo.InvariantCulture),
                 collectionNamespace,
                 strategy,
-                FormatTargetCount(targetCount));
+                FormatTargetCount(targetCount),
+                command);
         }
 
-        if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+        if (needsEventData)
         {
             var eventData = new MongoBulkUpdateEventData(
                 definition,
@@ -351,7 +389,9 @@ internal static class MongoLoggerUpdateExtensions
                 modifyCount: 0,
                 matchedCount: 0,
                 targetCount: targetCount,
-                strategy: strategy);
+                strategy: strategy,
+                command: command,
+                logSensitiveData: diagnostics.ShouldLogSensitiveData());
 
             diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
         }
@@ -365,7 +405,8 @@ internal static class MongoLoggerUpdateExtensions
             p.Elapsed.TotalMilliseconds.ToString(CultureInfo.InvariantCulture),
             p.CollectionNamespace,
             p.Strategy,
-            FormatTargetCount(p.TargetCount));
+            FormatTargetCount(p.TargetCount),
+            p.Command!); // Always set: the Executing message is only generated from the payload built in ExecutingBulkUpdate.
     }
 
     private static BulkExecutingEventDefinition LogExecutingBulkUpdate(IDiagnosticsLogger logger)
@@ -378,10 +419,11 @@ internal static class MongoLoggerUpdateExtensions
                     MongoEventId.ExecutingBulkUpdate,
                     LogLevel.Information,
                     "MongoEventId.ExecutingBulkUpdate",
-                    level => LoggerMessage.Define<string, CollectionNamespace, string, string>(
+                    level => LoggerMessage.Define<string, CollectionNamespace, string, string, string>(
                         level,
                         MongoEventId.ExecutingBulkUpdate,
-                        "Executing Bulk Update ({elapsed} ms) Collection='{collectionNamespace}', Strategy={strategy}, Targets={targetCount}"))));
+                        "Executing Bulk Update ({elapsed} ms) Collection='{collectionNamespace}', Strategy={strategy}, "
+                        + "Targets={targetCount}, Command={command}"))));
 
     /// <summary>
     /// Logs for the <see cref="MongoEventId.ExecutedBulkUpdate" /> event.
@@ -422,7 +464,9 @@ internal static class MongoLoggerUpdateExtensions
                 modifyCount: modifyCount,
                 matchedCount: matchedCount,
                 targetCount: null,
-                strategy: strategy);
+                strategy: strategy,
+                command: null,
+                logSensitiveData: false);
 
             diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
         }

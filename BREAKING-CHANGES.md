@@ -638,6 +638,29 @@ context.Orders.Where(o => o.Priority > threshold);
 
 For a genuinely per-row value, bring the rows to the client first: `context.Orders.AsEnumerable().Select(o => new { o.Id, R = Random.Shared.Next() })`.
 
+### `MongoQueryContext` and `MongoQueryContextFactory` constructors gained a parameter
+
+#### Old behavior
+
+`MongoQueryContext(QueryContextDependencies dependencies, IMongoClientWrapper mongoClient)` and
+`MongoQueryContextFactory(QueryContextDependencies dependencies, IMongoClientWrapper mongoClient)` took two parameters.
+
+#### New behavior
+
+Both constructors take a third parameter, `IDiagnosticsLogger<DbLoggerCategory.Update> updateLogger`. `MongoQueryContext` exposes it as the new
+`UpdateLogger` property, and `MongoQueryContextFactory` passes it to each context it creates.
+
+#### Why
+
+Bulk `ExecuteUpdate`/`ExecuteDelete` bypasses `SaveChanges`, so it needs the `Update`-category logger to emit its diagnostics. It used to resolve that
+logger from the `DbContext`'s service provider on every execution. The factory now supplies it, the same way the read path gets its query logger.
+
+#### Mitigations
+
+Nothing to do when the provider is registered the usual way (`UseMongoDB`): both types are built by the provider's own service registration. The break
+only affects code that constructs or subclasses these types directly (for example a test double or a custom provider extension). Resolve
+`IDiagnosticsLogger<DbLoggerCategory.Update>` from the service provider, or accept it in your own constructor, and pass it through.
+
 ## Breaking changes in 8.4.0 / 9.1.0 / 10.0.0
 
 ### The element name for discriminators may have changed

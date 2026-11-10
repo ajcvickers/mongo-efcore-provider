@@ -35,7 +35,12 @@ public class MongoBulkUpdateEventData : EventData
     /// </summary>
     /// <param name="eventDefinition">The event definition.</param>
     /// <param name="messageGenerator">A delegate that generates a log message for this event.</param>
-    /// <param name="elapsed">The time elapsed since the command was sent to the database.</param>
+    /// <param name="elapsed">
+    /// For <c>SingleCommand</c>, the time since immediately before the <c>deleteMany</c>/<c>updateMany</c> call (so on the
+    /// <c>Executing</c> event this is effectively zero, and on <c>Executed</c> it is the driver round-trip time). For
+    /// <c>TwoPhase</c>, the time since immediately before the phase-1 read that collects the target ids (translation of that read
+    /// included), so both the <c>Executing</c> and <c>Executed</c> events include phase 1 as well as phase 2.
+    /// </param>
     /// <param name="collectionNamespace">The <see cref="CollectionNamespace"/> being operated upon.</param>
     /// <param name="modifyCount">The number of documents whose stored values actually changed.</param>
     /// <param name="matchedCount">
@@ -50,6 +55,14 @@ public class MongoBulkUpdateEventData : EventData
     /// The execution strategy used for this operation: <c>SingleCommand</c> for a single server command, or
     /// <c>TwoPhase</c> for an id-collecting read followed by a write by <c>_id</c>.
     /// </param>
+    /// <param name="command">
+    /// The rendered MongoDB command for this operation, or <c>"?"</c> when sensitive-data logging is disabled.
+    /// <see langword="null" /> on the <c>Executed</c> event, which does not carry the command.
+    /// </param>
+    /// <param name="logSensitiveData">
+    /// Indicates whether the application allows logging of sensitive data. Always <see langword="false" /> on the <c>Executed</c>
+    /// event, which carries nothing sensitive.
+    /// </param>
     public MongoBulkUpdateEventData(
         EventDefinitionBase eventDefinition,
         Func<EventDefinitionBase, EventData, string> messageGenerator,
@@ -58,7 +71,9 @@ public class MongoBulkUpdateEventData : EventData
         long modifyCount,
         long matchedCount,
         long? targetCount,
-        string strategy)
+        string strategy,
+        string? command,
+        bool logSensitiveData)
         : base(eventDefinition, messageGenerator)
     {
         Elapsed = elapsed;
@@ -67,10 +82,15 @@ public class MongoBulkUpdateEventData : EventData
         MatchedCount = matchedCount;
         TargetCount = targetCount;
         Strategy = strategy;
+        Command = command;
+        LogSensitiveData = logSensitiveData;
     }
 
     /// <summary>
-    /// The time elapsed since the command was sent to the database.
+    /// For <c>SingleCommand</c>, the time since immediately before the <c>deleteMany</c>/<c>updateMany</c> call (so on the
+    /// <c>Executing</c> event this is effectively zero, and on <c>Executed</c> it is the driver round-trip time). For
+    /// <c>TwoPhase</c>, the time since immediately before the phase-1 read that collects the target ids (translation of that read
+    /// included), so both the <c>Executing</c> and <c>Executed</c> events include phase 1 as well as phase 2.
     /// </summary>
     public TimeSpan Elapsed { get; }
 
@@ -101,6 +121,18 @@ public class MongoBulkUpdateEventData : EventData
     /// <c>TwoPhase</c> for an id-collecting read followed by a write by <c>_id</c>.
     /// </summary>
     public string Strategy { get; }
+
+    /// <summary>
+    /// The rendered MongoDB command for this operation (the filter, and for an update the update document), or <c>"?"</c> when
+    /// sensitive-data logging is disabled. <see langword="null" /> on the <c>Executed</c> event, which does not carry the command.
+    /// </summary>
+    public string? Command { get; }
+
+    /// <summary>
+    /// Indicates whether the application allows logging of sensitive data. Always <see langword="false" /> on the <c>Executed</c>
+    /// event, which carries nothing sensitive.
+    /// </summary>
+    public bool LogSensitiveData { get; }
 }
 
 #endif

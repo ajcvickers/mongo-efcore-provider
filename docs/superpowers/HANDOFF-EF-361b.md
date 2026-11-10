@@ -40,10 +40,18 @@ caching) are on release.
    defect) and typed `MongoException` catches. Task 22's "owned target throws" test is obsolete (release supports them).
 6. Phase 7 docs (25-26): README.md:99 still says "single atomic deleteMany/updateMany" (per-document atomicity only).
 
-## OPEN DECISION (blocks Phase 2)
-Task 9 wants duplicate setters rejected, but release now documents last-wins on purpose
-(`NonQuery.cs` `ThrowIfSetterPathsOverlap`, "the same path set twice is not an overlap"). Owner has not ruled:
-reject, or keep last-wins and drop the item.
+## DECIDED (2026-11-10, owner): duplicate setters stay last-wins
+Task 9 wanted duplicate setters rejected, but `release` documents last-wins on purpose (`NonQuery.cs` `ThrowIfSetterPathsOverlap`,
+"the same path set twice is not an overlap"). Owner ruling: **keep last-wins** and drop the duplicate-setter rejection from Task 9. The rest of
+Task 9 (`FindProperty(MemberInfo)`, declaring-typed `SetProperty` match) is still to port. Phase 2 is unblocked.
+
+## Progress log
+- **Phase 1** (2026-11-10): Task 4 (`34ad08fa`: one `EventDefinition` per bulk `EventId`, `MatchedCount`, `Strategy` on the event payloads),
+  Task 5 (redaction-gated `Command`, lazy `Func<string>` renderer, stopwatch spanning both phases) and Task 6 (`UpdateLogger` on `MongoQueryContext`,
+  with a `BREAKING-CHANGES.md` entry for the two public constructor changes; latest releases are v10.0.5 / v9.1.5 / v8.4.5) are ported.
+  Not yet ported from Task 5/23: payload-level assertions (`Command`, `LogSensitiveData`, `Elapsed > 0` for two-phase) need `DiagnosticSourceSpy`,
+  which does not exist on `release`; Task 5's tests assert the rendered log message instead. Add the payload assertions with Task 23.
+- Known unrelated failure on one checkout: two EF11 `ConferencePlannerMongoTest` SpecFails wrappers, tracked in issue #63.
 
 ## Recorded decisions from the old work (do not re-litigate)
 - Concurrency-token setters are PERMITTED (2026-07-30, `832ad8bd`).
