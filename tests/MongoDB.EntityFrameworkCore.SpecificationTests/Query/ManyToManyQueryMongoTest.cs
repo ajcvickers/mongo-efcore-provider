@@ -517,7 +517,6 @@ UnidirectionalEntityRoots.{ "$match" : { "$and" : [{ "_t" : { "$in" : ["Unidirec
 
     public class ManyToManyQueryMongoFixture : ManyToManyQueryFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override ITestStoreFactory TestStoreFactory
@@ -533,7 +532,7 @@ UnidirectionalEntityRoots.{ "$match" : { "$and" : [{ "_t" : { "$in" : ["Unidirec
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -551,11 +550,6 @@ UnidirectionalEntityRoots.{ "$match" : { "$and" : [{ "_t" : { "$in" : ["Unidirec
             modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
 
-        public override Microsoft.EntityFrameworkCore.TestModels.ManyToManyModel.ManyToManyContext CreateContext()
-        {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
-        }
     }
 }
 

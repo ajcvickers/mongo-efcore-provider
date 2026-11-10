@@ -401,7 +401,6 @@ GeoPointEntity.
 
     public class SpatialQueryMongoFixture : SpatialQueryFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override ITestStoreFactory TestStoreFactory
@@ -417,7 +416,7 @@ GeoPointEntity.
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         // EF-X320: the provider has no spatial support and would own the NetTopologySuite types, so they are stored as well-known binary.
@@ -453,10 +452,5 @@ GeoPointEntity.
                 b => (TGeometry)new WKBReader().Read(b))
             where TGeometry : Geometry;
 
-        public override Microsoft.EntityFrameworkCore.TestModels.SpatialModel.SpatialContext CreateContext()
-        {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
-        }
     }
 }

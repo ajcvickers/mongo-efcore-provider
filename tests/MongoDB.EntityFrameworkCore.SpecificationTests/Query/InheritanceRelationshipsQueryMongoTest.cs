@@ -422,9 +422,15 @@ NestedCollections.{ "$lookup" : { "from" : "BaseReferencesOnBase", "localField" 
 """);
     }
 
-    // Fails: hierarchy materialization fails: no discriminator matches the stored value EF-X519
+#if EF8
+    // Fails: EF8 materialization throws NullReferenceException for the nested include over the hierarchy (the later EF versions report no matching discriminator, EF-X519) EF-X600
     public override Task Nested_include_with_inheritance_collection_reference(bool async)
-        => SpecFails.ThrowsAsync(() => base.Nested_include_with_inheritance_collection_reference(async), "No discriminators matched");
+        => SpecFails.ThrowsAsync(() => base.Nested_include_with_inheritance_collection_reference(async), "NullReferenceException");
+#else
+    // Fails: hierarchy materialization fails: no discriminator matches the stored value EF-X519
+    public override Task Nested_include_with_inheritance_collection_reference(bool async)
+        => SpecFails.ThrowsAsync(() => base.Nested_include_with_inheritance_collection_reference(async), "No discriminators matched");
+#endif
 
     public override async Task Nested_include_with_inheritance_collection_reference_reverse(bool async)
     {
@@ -479,7 +485,6 @@ ReferencedEntities.{ "$lookup" : { "from" : "PrincipalEntities", "let" : { "loca
 
     public class InheritanceRelationshipsQueryMongoFixture : InheritanceRelationshipsQueryFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override ITestStoreFactory TestStoreFactory
@@ -495,7 +500,7 @@ ReferencedEntities.{ "$lookup" : { "from" : "PrincipalEntities", "let" : { "loca
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -515,10 +520,5 @@ ReferencedEntities.{ "$lookup" : { "from" : "PrincipalEntities", "let" : { "loca
             modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
 
-        public override Microsoft.EntityFrameworkCore.TestModels.InheritanceRelationshipsModel.InheritanceRelationshipsContext CreateContext()
-        {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
-        }
     }
 }

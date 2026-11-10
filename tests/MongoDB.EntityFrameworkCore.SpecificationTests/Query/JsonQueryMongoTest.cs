@@ -1663,7 +1663,6 @@ JsonEntitiesBasic.{ "$project" : { "Id" : "$_id", "x" : "$$ROOT", "_id" : 0 } }
 
     public class JsonQueryMongoFixture : JsonQueryFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override ITestStoreFactory TestStoreFactory
@@ -1679,7 +1678,7 @@ JsonEntitiesBasic.{ "$project" : { "Id" : "$_id", "x" : "$$ROOT", "_id" : 0 } }
             var server = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(server, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
@@ -1745,11 +1744,6 @@ JsonEntitiesBasic.{ "$project" : { "Id" : "$_id", "x" : "$$ROOT", "_id" : 0 } }
             }
         }
 
-        public override Microsoft.EntityFrameworkCore.TestModels.JsonQuery.JsonQueryContext CreateContext()
-        {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
-        }
     }
 }
 
