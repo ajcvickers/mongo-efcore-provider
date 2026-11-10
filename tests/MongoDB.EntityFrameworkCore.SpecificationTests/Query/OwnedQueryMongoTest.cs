@@ -34,6 +34,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Can_query_owner_with_different_owned_types_having_same_property_name_in_hierarchy(bool async)
     {
         await base.Can_query_owner_with_different_owned_types_having_same_property_name_in_hierarchy(async);
+
+        AssertMql(
+            """
+Balloon.
+""");
     }
 
     public override async Task Query_with_owned_entity_equality_operator(bool async)
@@ -63,6 +68,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task No_ignored_include_warning_when_implicit_load(bool async)
     {
         await base.No_ignored_include_warning_when_implicit_load(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$count" : "v" }
+""");
     }
 
     public override async Task Query_for_branch_type_loads_all_owned_navs(bool async)
@@ -101,6 +111,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Project_owned_reference_navigation_which_owns_additional(bool async)
     {
         await base.Project_owned_reference_navigation_which_owns_additional(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$sort" : { "_id" : 1 } }
+""");
     }
 #endif
 
@@ -108,12 +123,22 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Project_owned_reference_navigation_which_does_not_own_additional(bool async)
     {
         await base.Project_owned_reference_navigation_which_does_not_own_additional(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$sort" : { "_id" : 1 } }
+""");
     }
 #endif
 
     public override async Task Navigation_rewrite_on_owned_reference_projecting_scalar(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_projecting_scalar(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$match" : { "PersonAddress.Country.Name" : "USA" } }, { "$project" : { "_v" : "$PersonAddress.Country.Name", "_id" : 0 } }
+""");
     }
 
     public override async Task Navigation_rewrite_on_owned_reference_projecting_entity(bool async)
@@ -165,12 +190,19 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Set_throws_for_owned_type(bool async)
     {
         await base.Set_throws_for_owned_type(async);
+
+        AssertMql();
     }
 
 #if (EF10 || EF11)
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$lookup" : { "from" : "Planet", "localField" : "PersonAddress.Country.PlanetId", "foreignField" : "_id", "as" : "_lookup_Planet" } }, { "$unwind" : { "path" : "$_lookup_Planet", "preserveNullAndEmptyArrays" : true } }
+""");
     }
 #endif
 
@@ -208,6 +240,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$lookup" : { "from" : "Planet", "localField" : "PersonAddress.Country.PlanetId", "foreignField" : "_id", "as" : "_lookup_Planet" } }, { "$unwind" : { "path" : "$_lookup_Planet", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Planet._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -249,6 +286,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$lookup" : { "from" : "Planet", "localField" : "PersonAddress.Country.PlanetId", "foreignField" : "_id", "as" : "_lookup_Planet" } }, { "$unwind" : { "path" : "$_lookup_Planet", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "Star", "localField" : "_lookup_Planet.StarId", "foreignField" : "_id", "as" : "_lookup_Star" } }, { "$set" : { "_lookup_Star" : { "$arrayElemAt" : ["$_lookup_Star", 0] } } }, { "$project" : { "_v" : "$_lookup_Star.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -270,17 +312,32 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Query_loads_reference_nav_automatically_in_projection(bool async)
     {
         await base.Query_loads_reference_nav_automatically_in_projection(async);
+
+        AssertMql(
+            """
+Fink.{ "$limit" : 2 }, { "$lookup" : { "from" : "Barton", "localField" : "BartonId", "foreignField" : "_id", "as" : "_lookup_Barton" } }, { "$set" : { "_lookup_Barton" : { "$arrayElemAt" : ["$_lookup_Barton", 0] } } }
+""");
     }
 #endif
 
     public override async Task Throw_for_owned_entities_without_owner_in_tracking_query(bool async)
     {
         await base.Throw_for_owned_entities_without_owner_in_tracking_query(async);
+
+        AssertMql(
+            """
+OwnedPerson.
+""");
     }
 
     public override async Task Owned_entity_without_owner_does_not_throw_for_identity_resolution(bool async, bool useAsTracking)
     {
         await base.Owned_entity_without_owner_does_not_throw_for_identity_resolution(async, useAsTracking);
+
+        AssertMql(
+            """
+OwnedPerson.
+""");
     }
 
 #if EF9 || (EF10 || EF11)
@@ -448,21 +505,41 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Can_project_indexer_properties(bool async)
     {
         await base.Can_project_indexer_properties(async);
+
+        AssertMql(
+            """
+OwnedPerson.
+""");
     }
 
     public override async Task Can_project_owned_indexer_properties(bool async)
     {
         await base.Can_project_owned_indexer_properties(async);
+
+        AssertMql(
+            """
+OwnedPerson.
+""");
     }
 
     public override async Task Can_project_indexer_properties_converted(bool async)
     {
         await base.Can_project_indexer_properties_converted(async);
+
+        AssertMql(
+            """
+OwnedPerson.
+""");
     }
 
     public override async Task Can_project_owned_indexer_properties_converted(bool async)
     {
         await base.Can_project_owned_indexer_properties_converted(async);
+
+        AssertMql(
+            """
+OwnedPerson.
+""");
     }
 
     public override async Task Can_OrderBy_indexer_properties(bool async)
@@ -580,6 +657,8 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task NoTracking_Include_with_cycles_throws(bool async)
     {
         await base.NoTracking_Include_with_cycles_throws(async);
+
+        AssertMql();
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -655,6 +734,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Simple_query_entity_with_owned_collection(bool async)
     {
         await base.Simple_query_entity_with_owned_collection(async);
+
+        AssertMql(
+            """
+Star.
+""");
     }
 
 #if (EF10 || EF11)
@@ -677,6 +761,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(bool async)
     {
         await base.GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$group" : { "_id" : "$_id", "Sum" : { "$sum" : "$PersonAddress.Country.PlanetId" } } }, { "$project" : { "Key" : "$_id", "Sum" : "$Sum", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_aggregate_on_owned_navigation_in_aggregate_selector(bool async)
@@ -778,6 +867,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$lookup" : { "from" : "Planet", "localField" : "PersonAddress.Country.PlanetId", "foreignField" : "_id", "as" : "_lookup_Planet" } }, { "$unwind" : { "path" : "$_lookup_Planet", "preserveNullAndEmptyArrays" : true } }
+""");
     }
 #endif
 
@@ -809,6 +903,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_property(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$lookup" : { "from" : "Planet", "localField" : "PersonAddress.Country.PlanetId", "foreignField" : "_id", "as" : "_lookup_Planet" } }, { "$unwind" : { "path" : "$_lookup_Planet", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_v" : "$_lookup_Planet._id", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -832,6 +931,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(bool async)
     {
         await base.Navigation_rewrite_on_owned_reference_followed_by_regular_entity_and_another_reference_and_scalar(async);
+
+        AssertMql(
+            """
+OwnedPerson.{ "$lookup" : { "from" : "Planet", "localField" : "PersonAddress.Country.PlanetId", "foreignField" : "_id", "as" : "_lookup_Planet" } }, { "$unwind" : { "path" : "$_lookup_Planet", "preserveNullAndEmptyArrays" : true } }, { "$lookup" : { "from" : "Star", "localField" : "_lookup_Planet.StarId", "foreignField" : "_id", "as" : "_lookup_Star" } }, { "$set" : { "_lookup_Star" : { "$arrayElemAt" : ["$_lookup_Star", 0] } } }, { "$project" : { "_v" : "$_lookup_Star.Name", "_id" : 0 } }
+""");
     }
 #endif
 
@@ -847,6 +951,11 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
     public override async Task Query_loads_reference_nav_automatically_in_projection(bool async)
     {
         await base.Query_loads_reference_nav_automatically_in_projection(async);
+
+        AssertMql(
+            """
+Fink.{ "$limit" : 2 }, { "$lookup" : { "from" : "Barton", "localField" : "BartonId", "foreignField" : "_id", "as" : "_lookup_Barton" } }, { "$set" : { "_lookup_Barton" : { "$arrayElemAt" : ["$_lookup_Barton", 0] } } }
+""");
     }
 #endif
 
@@ -881,6 +990,9 @@ public class OwnedQueryMongoTest : OwnedQueryTestBase<OwnedQueryMongoTest.OwnedQ
         await SpecFails.ThrowsAsync(() => base.Can_OrderBy_owened_indexer_properties_converted(async), "Expression not supported");
     }
 #endif
+
+    private void AssertMql(params string[] expected)
+        => Fixture.TestMqlLoggerFactory.AssertBaseline(expected);
 
     public class OwnedQueryMongoFixture : OwnedQueryFixtureBase
     {
