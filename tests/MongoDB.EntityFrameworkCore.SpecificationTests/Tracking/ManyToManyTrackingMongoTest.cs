@@ -20,11 +20,17 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
 public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyTrackingMongoFixture fixture)
-    : ManyToManyTrackingTestBase<ManyToManyTrackingMongoTest.ManyToManyTrackingMongoFixture>(fixture)
+    : ManyToManyTrackingTestBase<ManyToManyTrackingMongoTest.ManyToManyTrackingMongoFixture>(fixture), IAsyncLifetime
 {
+    // The tests write to the shared database and there is no rollback, so which test sees which rows depends on the order they run in.
+    public async LifetimeTask InitializeAsync()
+        => await Fixture.ReseedAsync();
+
+    public LifetimeTask DisposeAsync()
+        => LifetimeTask.CompletedTask;
+
     public class ManyToManyTrackingMongoFixture : ManyToManyTrackingFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("ManyToManyTracking");
@@ -36,22 +42,27 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override DbContextOptionsBuilder AddOptions(DbContextOptionsBuilder builder)
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
         {
-            _initFailure.ThrowIfFailed();
-            return base.AddOptions(builder);
+            base.ConfigureConventions(configurationBuilder);
+
+            // EF-X102: the provider owns, by convention, any type it reaches through a navigation that is not yet in the model, which breaks the
+            // upstream relationships; here every such type is an independent entity type.
+            configurationBuilder.DoNotOwnTypes((type, _) => type.Name.Contains("Join"));
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
-            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: false);
+            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+            MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
+            modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
     }
 
@@ -60,16 +71,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_Attach_or_Update_a_many_to_many_with_mixed_set_and_unset_keys(bool useUpdate, bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_Attach_or_Update_a_many_to_many_with_mixed_set_and_unset_keys(useUpdate, async));
 #else
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_Attach_or_Update_a_many_to_many_with_mixed_set_and_unset_keys(bool useUpdate, bool async)
-        =>
-            ((global::System.Convert.ToString(useUpdate) == "True" && global::System.Convert.ToString(async) == "True"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_Attach_or_Update_a_many_to_many_with_mixed_set_and_unset_keys(useUpdate, async), "The instance of entity type 'GeneratedKeysLeft' cannot be tracked because another instance")
-                :
-            ((global::System.Convert.ToString(useUpdate) == "False" && global::System.Convert.ToString(async) == "False") || (global::System.Convert.ToString(useUpdate) == "False" && global::System.Convert.ToString(async) == "True") || (global::System.Convert.ToString(useUpdate) == "True" && global::System.Convert.ToString(async) == "False"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_Attach_or_Update_a_many_to_many_with_mixed_set_and_unset_keys(useUpdate, async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_Attach_or_Update_a_many_to_many_with_mixed_set_and_unset_keys(useUpdate, async);
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_Attach_or_Update_a_many_to_many_with_mixed_set_and_unset_keys(useUpdate, async));
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -317,9 +321,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many(async), "Cannot save instance of 'JoinOneToTwo' because it is an owned entity without any reference");
 #else
-    // Fails: Many-to-many join entity is modelled as owned, cannot be saved or queried on its own EF-X112
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many(bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many(async), "Cannot save instance of 'JoinOneToTwo' because it is an owned entity without any reference");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many(async));
 #endif
 
 #if EF11
@@ -333,9 +337,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_insert_many_to_many_composite_additional_pk_with_navs(async));
 #endif
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_composite_additional_pk_with_navs(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_composite_additional_pk_with_navs(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_composite_additional_pk_with_navs(async));
 #endif
 
 #if EF11
@@ -343,9 +347,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_composite_additional_pk_with_navs_unidirectional(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_composite_additional_pk_with_navs_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_composite_additional_pk_with_navs_unidirectional(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_composite_additional_pk_with_navs_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_composite_additional_pk_with_navs_unidirectional(async));
 #endif
 
 #if EF11
@@ -353,16 +357,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_composite_shared_with_navs(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_composite_shared_with_navs(async));
 #else
-    // Fails: Include of a skip (many-to-many) navigation is not supported EF-X110
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_composite_shared_with_navs(bool async)
-        =>
-            ((global::System.Convert.ToString(async) == "False"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_composite_shared_with_navs(async), "Including navigation 'Navigation' is not supported.")
-                :
-            ((global::System.Convert.ToString(async) == "True"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_composite_shared_with_navs(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_insert_many_to_many_composite_shared_with_navs(async);
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_composite_shared_with_navs(async));
 #endif
 
 #if EF11
@@ -370,9 +367,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_composite_with_navs(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_composite_with_navs(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_composite_with_navs(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_composite_with_navs(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_composite_with_navs(async));
 #endif
 
 #if EF11
@@ -386,13 +383,8 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_insert_many_to_many_composite_with_navs_unidirectional(async));
 #endif
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (some data rows only)
     public override Task Can_insert_many_to_many_composite_with_navs_unidirectional(bool async)
-        =>
-            ((global::System.Convert.ToString(async) == "False"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_composite_with_navs_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_insert_many_to_many_composite_with_navs_unidirectional(async);
+        => base.Can_insert_many_to_many_composite_with_navs_unidirectional(async);
 #endif
 
 #if EF11
@@ -400,16 +392,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_fully_by_convention(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_fully_by_convention(async));
 #else
-    // Fails: Include of a skip (many-to-many) navigation is not supported EF-X110
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_fully_by_convention(bool async)
-        =>
-            ((global::System.Convert.ToString(async) == "True"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_fully_by_convention(async), "Including navigation 'Navigation' is not supported.")
-                :
-            ((global::System.Convert.ToString(async) == "False"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_fully_by_convention(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_insert_many_to_many_fully_by_convention(async);
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_fully_by_convention(async));
 #endif
 
 #if EF11
@@ -417,9 +402,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_fully_by_convention_generated_keys(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_fully_by_convention_generated_keys(async), "The instance of entity type 'GeneratedKeysLeft' cannot be tracked because another instance");
 #else
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_fully_by_convention_generated_keys(bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_fully_by_convention_generated_keys(async), "The instance of entity type 'GeneratedKeysLeft' cannot be tracked because another instance");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_fully_by_convention_generated_keys(async));
 #endif
 
 #if EF11
@@ -427,9 +412,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_self_shared(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_self_shared(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_self_shared(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_self_shared(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_self_shared(async));
 #endif
 
 #if EF11
@@ -437,9 +422,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_self_shared_unidirectional(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_self_shared_unidirectional(async));
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_self_shared_unidirectional(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_self_shared_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_self_shared_unidirectional(async));
 #endif
 
 #if EF11
@@ -447,9 +432,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_self_with_payload(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_self_with_payload(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override Task Can_insert_many_to_many_self_with_payload(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_self_with_payload(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.Can_insert_many_to_many_self_with_payload(async));
 #endif
 
 #if EF11
@@ -457,9 +442,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_self_with_payload_unidirectional(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_self_with_payload_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override Task Can_insert_many_to_many_self_with_payload_unidirectional(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_self_with_payload_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.Can_insert_many_to_many_self_with_payload_unidirectional(async));
 #endif
 
 #if EF11
@@ -467,9 +452,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_shared(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_shared(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_shared(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_shared(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_shared(async));
 #endif
 
 #if EF11
@@ -477,9 +462,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_shared_unidirectional(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_shared_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_shared_unidirectional(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_shared_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_shared_unidirectional(async));
 #endif
 
 #if EF11
@@ -487,9 +472,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_shared_with_payload(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_shared_with_payload(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Can_insert_many_to_many_shared_with_payload(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_shared_with_payload(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.Collections.Generic.KeyNotFoundException>(() => base.Can_insert_many_to_many_shared_with_payload(async));
 #endif
 
 #if EF11
@@ -503,9 +488,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_insert_many_to_many_shared_with_payload_unidirectional(async));
 #endif
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Can_insert_many_to_many_shared_with_payload_unidirectional(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_shared_with_payload_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.Collections.Generic.KeyNotFoundException>(() => base.Can_insert_many_to_many_shared_with_payload_unidirectional(async));
 #endif
 
 #if EF11
@@ -513,9 +498,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_dangling_join(bool async, bool useTrackGraph, bool useDetectChanges)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_dangling_join(async, useTrackGraph, useDetectChanges), "Cannot save instance of 'JoinOneToTwo' because it is an owned entity without any reference");
 #else
-    // Fails: Many-to-many join entity is modelled as owned, cannot be saved or queried on its own EF-X112
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_dangling_join(bool async, bool useTrackGraph, bool useDetectChanges)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_dangling_join(async, useTrackGraph, useDetectChanges), "Cannot save instance of 'JoinOneToTwo' because it is an owned entity without any reference");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_dangling_join(async, useTrackGraph, useDetectChanges));
 #endif
 
 #if EF11
@@ -523,9 +508,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_dangling_join_unidirectional(bool async, bool useTrackGraph, bool useDetectChanges)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_dangling_join_unidirectional(async, useTrackGraph, useDetectChanges), "Cannot save instance of 'UnidirectionalJoinOneToTwo' because it is an owned entity without");
 #else
-    // Fails: Many-to-many join entity is modelled as owned, cannot be saved or queried on its own EF-X112
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_dangling_join_unidirectional(bool async, bool useTrackGraph, bool useDetectChanges)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_dangling_join_unidirectional(async, useTrackGraph, useDetectChanges), "Cannot save instance of 'UnidirectionalJoinOneToTwo' because it is an owned entity without");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_dangling_join_unidirectional(async, useTrackGraph, useDetectChanges));
 #endif
 
 #if EF11
@@ -533,9 +518,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_inheritance(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_inheritance(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_inheritance(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_with_inheritance(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_inheritance(async));
 #endif
 
 #if EF11
@@ -543,9 +528,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_inheritance_unidirectional(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_inheritance_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_inheritance_unidirectional(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_with_inheritance_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_inheritance_unidirectional(async));
 #endif
 
 #if EF11
@@ -553,16 +538,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_navs(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_navs(async));
 #else
-    // Fails: Include of a skip (many-to-many) navigation is not supported EF-X110
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_navs(bool async)
-        =>
-            ((global::System.Convert.ToString(async) == "True"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_navs(async), "Including navigation 'Navigation' is not supported.")
-                :
-            ((global::System.Convert.ToString(async) == "False"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_with_navs(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_insert_many_to_many_with_navs(async);
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_navs(async));
 #endif
 
 #if EF11
@@ -570,9 +548,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_navs_by_join_entity(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_navs_by_join_entity(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_navs_by_join_entity(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_with_navs_by_join_entity(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_navs_by_join_entity(async));
 #endif
 
 #if EF11
@@ -580,16 +558,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_navs_by_join_entity_unidirectional(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_navs_by_join_entity_unidirectional(async));
 #else
-    // Fails: Include of a skip (many-to-many) navigation is not supported EF-X110
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_navs_by_join_entity_unidirectional(bool async)
-        =>
-            ((global::System.Convert.ToString(async) == "False"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_navs_by_join_entity_unidirectional(async), "Including navigation 'Navigation' is not supported.")
-                :
-            ((global::System.Convert.ToString(async) == "True"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_with_navs_by_join_entity_unidirectional(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_insert_many_to_many_with_navs_by_join_entity_unidirectional(async);
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_navs_by_join_entity_unidirectional(async));
 #endif
 
 #if EF11
@@ -597,9 +568,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_payload(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_payload(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override Task Can_insert_many_to_many_with_payload(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_with_payload(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Can_insert_many_to_many_with_payload(async));
 #endif
 
 #if EF11
@@ -607,16 +578,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_suspected_dangling_join(bool async, bool useTrackGraph, bool useDetectChanges)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_suspected_dangling_join(async, useTrackGraph, useDetectChanges));
 #else
-    // Fails: Include of a skip (many-to-many) navigation is not supported EF-X110
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_suspected_dangling_join(bool async, bool useTrackGraph, bool useDetectChanges)
-        =>
-            ((global::System.Convert.ToString(async) == "True" && global::System.Convert.ToString(useTrackGraph) == "False" && global::System.Convert.ToString(useDetectChanges) == "True"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_suspected_dangling_join(async, useTrackGraph, useDetectChanges), "Including navigation 'Navigation' is not supported.")
-                :
-            ((global::System.Convert.ToString(async) == "False" && global::System.Convert.ToString(useTrackGraph) == "False" && global::System.Convert.ToString(useDetectChanges) == "False") || (global::System.Convert.ToString(async) == "True" && global::System.Convert.ToString(useTrackGraph) == "True" && global::System.Convert.ToString(useDetectChanges) == "False") || (global::System.Convert.ToString(async) == "False" && global::System.Convert.ToString(useTrackGraph) == "True" && global::System.Convert.ToString(useDetectChanges) == "False") || (global::System.Convert.ToString(async) == "False" && global::System.Convert.ToString(useTrackGraph) == "False" && global::System.Convert.ToString(useDetectChanges) == "True") || (global::System.Convert.ToString(async) == "True" && global::System.Convert.ToString(useTrackGraph) == "False" && global::System.Convert.ToString(useDetectChanges) == "False") || (global::System.Convert.ToString(async) == "True" && global::System.Convert.ToString(useTrackGraph) == "True" && global::System.Convert.ToString(useDetectChanges) == "True") || (global::System.Convert.ToString(async) == "False" && global::System.Convert.ToString(useTrackGraph) == "True" && global::System.Convert.ToString(useDetectChanges) == "True"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_with_suspected_dangling_join(async, useTrackGraph, useDetectChanges), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_insert_many_to_many_with_suspected_dangling_join(async, useTrackGraph, useDetectChanges);
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_suspected_dangling_join(async, useTrackGraph, useDetectChanges));
 #endif
 
 #if EF11
@@ -624,16 +588,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Can_insert_many_to_many_with_suspected_dangling_join_unidirectional(bool async, bool useTrackGraph, bool useDetectChanges)
         => SpecFails.AnyOutcomeAsync(() => base.Can_insert_many_to_many_with_suspected_dangling_join_unidirectional(async, useTrackGraph, useDetectChanges));
 #else
-    // Fails: Include of a skip (many-to-many) navigation is not supported EF-X110
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_insert_many_to_many_with_suspected_dangling_join_unidirectional(bool async, bool useTrackGraph, bool useDetectChanges)
-        =>
-            ((global::System.Convert.ToString(async) == "False" && global::System.Convert.ToString(useTrackGraph) == "True" && global::System.Convert.ToString(useDetectChanges) == "True"))
-                ? SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_suspected_dangling_join_unidirectional(async, useTrackGraph, useDetectChanges), "Including navigation 'Navigation' is not supported.")
-                :
-            ((global::System.Convert.ToString(async) == "True" && global::System.Convert.ToString(useTrackGraph) == "False" && global::System.Convert.ToString(useDetectChanges) == "False") || (global::System.Convert.ToString(async) == "True" && global::System.Convert.ToString(useTrackGraph) == "True" && global::System.Convert.ToString(useDetectChanges) == "True") || (global::System.Convert.ToString(async) == "True" && global::System.Convert.ToString(useTrackGraph) == "True" && global::System.Convert.ToString(useDetectChanges) == "False") || (global::System.Convert.ToString(async) == "False" && global::System.Convert.ToString(useTrackGraph) == "False" && global::System.Convert.ToString(useDetectChanges) == "False") || (global::System.Convert.ToString(async) == "False" && global::System.Convert.ToString(useTrackGraph) == "False" && global::System.Convert.ToString(useDetectChanges) == "True") || (global::System.Convert.ToString(async) == "False" && global::System.Convert.ToString(useTrackGraph) == "True" && global::System.Convert.ToString(useDetectChanges) == "False") || (global::System.Convert.ToString(async) == "True" && global::System.Convert.ToString(useTrackGraph) == "False" && global::System.Convert.ToString(useDetectChanges) == "True"))
-                ? SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_many_to_many_with_suspected_dangling_join_unidirectional(async, useTrackGraph, useDetectChanges), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic")
-                :
-            base.Can_insert_many_to_many_with_suspected_dangling_join_unidirectional(async, useTrackGraph, useDetectChanges);
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_many_to_many_with_suspected_dangling_join_unidirectional(async, useTrackGraph, useDetectChanges));
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -660,12 +617,12 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
 #else
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
     public override Task Can_insert_update_delete_proxyable_shared_type_entity_type_unidirectional()
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_update_delete_proxyable_shared_type_entity_type_unidirectional(), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.TranslationFailedAsync(() => base.Can_insert_update_delete_proxyable_shared_type_entity_type_unidirectional());
 #endif
 #elif EF8
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
     public override void Can_insert_update_delete_proxyable_shared_type_entity_type_unidirectional()
-        => SpecFails.Throws<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_update_delete_proxyable_shared_type_entity_type_unidirectional(), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.TranslationFailed(() => base.Can_insert_update_delete_proxyable_shared_type_entity_type_unidirectional());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -689,9 +646,8 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override void Can_load_entities_in_any_order(int[] order)
         => SpecFails.AnyOutcome(() => base.Can_load_entities_in_any_order(order), "Cannot create a DbSet for 'JoinOneToTwo' because it is configured as an owned entity type ");
 #else
-    // Fails: Many-to-many join entity is modelled as owned, cannot be saved or queried on its own EF-X112
     public override void Can_load_entities_in_any_order(int[] order)
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Can_load_entities_in_any_order(order), "Cannot create a DbSet for 'JoinOneToTwo' because it is configured as an owned entity type ");
+        => base.Can_load_entities_in_any_order(order);
 #endif
 
 #if EF11
@@ -705,9 +661,9 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
         => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_replace_dependent_with_many_to_many(createNewCollection, async));
 #endif
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Can_replace_dependent_with_many_to_many(bool createNewCollection, bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_replace_dependent_with_many_to_many(createNewCollection, async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_replace_dependent_with_many_to_many(createNewCollection, async));
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -1003,8 +959,8 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
     public override Task Initial_tracking_uses_skip_navigations(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Initial_tracking_uses_skip_navigations(async));
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Initial_tracking_uses_skip_navigations(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Initial_tracking_uses_skip_navigations(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Initial_tracking_uses_skip_navigations(async));
 #endif
 }

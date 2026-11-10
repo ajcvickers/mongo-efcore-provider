@@ -20,13 +20,19 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
 public class StoreGeneratedFixupMongoTest(StoreGeneratedFixupMongoTest.StoreGeneratedFixupMongoFixture fixture)
-    : StoreGeneratedFixupTestBase<StoreGeneratedFixupMongoTest.StoreGeneratedFixupMongoFixture>(fixture)
+    : StoreGeneratedFixupTestBase<StoreGeneratedFixupMongoTest.StoreGeneratedFixupMongoFixture>(fixture), IAsyncLifetime
 {
+    // The tests write to the shared database and there is no rollback, so which test sees which rows depends on the order they run in.
+    public async LifetimeTask InitializeAsync()
+        => await Fixture.ReseedAsync();
+
+    public LifetimeTask DisposeAsync()
+        => LifetimeTask.CompletedTask;
+
     protected override bool EnforcesFKs => false;
 
     public class StoreGeneratedFixupMongoFixture : StoreGeneratedFixupFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("StoreGeneratedFixup");
@@ -38,1190 +44,963 @@ public class StoreGeneratedFixupMongoTest(StoreGeneratedFixupMongoTest.StoreGene
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override PoolableDbContext CreateContext()
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
         {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
+            base.ConfigureConventions(configurationBuilder);
+
+            // EF-X102: the provider owns, by convention, any type it reaches through a navigation that is not yet in the model, which breaks the
+            // upstream relationships; here every such type is an independent entity type.
+            configurationBuilder.DoNotOwnTypes((_, _) => true);
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
-            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: false);
+            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+            MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
+            modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
     }
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_FK_not_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_FK_not_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_FK_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_FK_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_dep_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_no_navs_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_no_navs_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_no_navs_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_no_navs_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_many_prin_uni_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_FK_not_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_FK_not_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_FK_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_FK_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_dep_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_no_navs_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_no_navs_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_no_navs_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_no_navs_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_but_not_principal_one_to_one_prin_uni_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_FK_not_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_not_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_FK_not_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_not_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_FK_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_FK_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_dep_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_dep_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_dep_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_no_navs_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_no_navs_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_no_navs_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_no_navs_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_prin_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_prin_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_many_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_many_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_many_prin_uni_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_FK_not_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_not_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_FK_not_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_not_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_FK_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_FK_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_dep_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_dep_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_dep_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_no_navs_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_no_navs_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_no_navs_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_no_navs_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_prin_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_prin_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_dependent_then_principal_one_to_one_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_dependent_then_principal_one_to_one_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_dependent_then_principal_one_to_one_prin_uni_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_overlapping_graph_from_game()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_overlapping_graph_from_game(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_overlapping_graph_from_game();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_overlapping_graph_from_game()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_overlapping_graph_from_game(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_overlapping_graph_from_game();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_overlapping_graph_from_item()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_overlapping_graph_from_item(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_overlapping_graph_from_item();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_overlapping_graph_from_item()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_overlapping_graph_from_item(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_overlapping_graph_from_item();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_overlapping_graph_from_level()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_overlapping_graph_from_level(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_overlapping_graph_from_level();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_overlapping_graph_from_level()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_overlapping_graph_from_level(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_overlapping_graph_from_level();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_FK_not_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_FK_not_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_FK_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_FK_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_dep_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_no_navs_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_no_navs_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_no_navs_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_no_navs_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_many_prin_uni_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_FK_not_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_FK_not_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_FK_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_FK_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_dep_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_no_navs_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_no_navs_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_no_navs_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_no_navs_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_but_not_dependent_one_to_one_prin_uni_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_FK_not_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_not_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_FK_not_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_not_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_FK_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_FK_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_dep_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_dep_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_dep_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_no_navs_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_no_navs_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_no_navs_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_no_navs_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_prin_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_prin_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_many_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_many_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_many_prin_uni_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_FK_not_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_not_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_FK_not_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_not_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_not_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_FK_set_both_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_set_both_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_FK_set_both_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_set_both_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_set_both_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_not_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_set_dependent_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_dep_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_dep_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_dep_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_no_navs_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_no_navs_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_no_navs_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_no_navs_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_no_navs_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_not_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_prin_uni_FK_set_no_navs_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_set_no_navs_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_prin_uni_FK_set_no_navs_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_set_no_navs_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_set_no_navs_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override Task Add_principal_then_dependent_one_to_one_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_set_principal_nav_set();
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Add_principal_then_dependent_one_to_one_prin_uni_FK_set_principal_nav_set()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_set_principal_nav_set(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Add_principal_then_dependent_one_to_one_prin_uni_FK_set_principal_nav_set();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Multi_level_add_replace_and_save()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multi_level_add_replace_and_save(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multi_level_add_replace_and_save());
 #elif EF8
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
+    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override void Multi_level_add_replace_and_save()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Multi_level_add_replace_and_save(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Multi_level_add_replace_and_save());
 #endif
 
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Remove_overlapping_principal()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Remove_overlapping_principal(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Remove_overlapping_principal();
 
-    // Fails: Relationship discovery between root entity types fails at model build EF-X102
     public override void Temporary_value_equals_database_generated_value()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Temporary_value_equals_database_generated_value(), "Unable to determine the relationship represented by navigation 'GameEntity.Game#Game.Level");
+        => base.Temporary_value_equals_database_generated_value();
 }
