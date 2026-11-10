@@ -474,6 +474,52 @@ public class Ef382ArrayContainsTests(TemporaryDatabaseFixture database) : IClass
                 new MongoDbContextOptionsBuilder(b).UseQueryMode(mode);
             });
 
+    // #40: outside a complex element scope the query dialect's `{f: null}` also matches a MISSING array, so an item that can be null
+    // (null constant, nullable or string parameter) must not be translated there; it declines (NativeOnly throws) rather than
+    // answering a missing array as "contains null".
+
+    public class NullableRow
+    {
+        public ObjectId Id { get; set; }
+        public string Label { get; set; } = "";
+        public List<int?> Maybe { get; set; } = [];
+        public List<Guid?> OptCodes { get; set; } = [];
+        public List<string?> Names { get; set; } = [];
+    }
+
+    [Fact]
+    public void Null_capable_items_outside_a_complex_element_scope_decline_natively()
+    {
+        var raw = database.MongoDatabase.GetCollection<BsonDocument>(UniqueCollectionName(nameof(Null_capable_items_outside_a_complex_element_scope_decline_natively)));
+        raw.InsertMany([
+            new BsonDocument { { "Label", "has" }, { "Maybe", new BsonArray { 5, BsonNull.Value } }, { "OptCodes", new BsonArray() }, { "Names", new BsonArray() } },
+            new BsonDocument { { "Label", "missing" } },
+            new BsonDocument { { "Label", "nulls" }, { "Maybe", BsonNull.Value }, { "OptCodes", BsonNull.Value }, { "Names", BsonNull.Value } }
+        ]);
+        var collection = database.MongoDatabase.GetCollection<NullableRow>(raw.CollectionNamespace.CollectionName);
+
+        int? five = 5;
+        int? noInt = null;
+        Guid? code = CodeA;
+        string? name = "n";
+
+        using var db = SingleEntityDbContext.Create(
+            collection,
+            optionsBuilderAction: b =>
+            {
+                b.ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+                new MongoDbContextOptionsBuilder(b).UseQueryMode(MongoQueryMode.NativeOnly);
+            });
+
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Maybe.Contains(null)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => !e.Maybe.Contains(null)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Maybe.Contains(five)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Maybe.Contains(noInt)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.OptCodes.Contains(code)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Names.Contains(name)).Select(e => e.Label).ToList());
+        Assert.Throws<NativeTranslationNotSupportedException>(() => db.Entities.Where(e => e.Names.Contains(null)).Select(e => e.Label).ToList());
+    }
+
     private IMongoCollection<Row> Seed(string name)
     {
         var collection = database.MongoDatabase.GetCollection<Row>(UniqueCollectionName(name));

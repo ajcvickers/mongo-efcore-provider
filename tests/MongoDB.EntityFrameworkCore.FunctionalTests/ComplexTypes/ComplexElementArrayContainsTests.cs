@@ -358,6 +358,11 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
             Assert.True(
                 Throws<NativeTranslationNotSupportedException>(() => Run(withNull, MongoQueryMode.Native, query)), $"Native: {label}");
 
+            // The refusal is structural: it applies over data that holds no null element too (a deliberate tightening of Native
+            // for shapes the native path cannot serve; explicit DriverLinq is the opt-in).
+            Assert.True(
+                Throws<NativeTranslationNotSupportedException>(() => Run(clean, MongoQueryMode.Native, query)), $"Native, clean data: {label}");
+
             // Explicit DriverLinq is the opt-in.
             Assert.True(
                 Expected(withNullElements: false, expected).SequenceEqual(Run(clean, MongoQueryMode.DriverLinq, query, label)), $"DriverLinq: {label}");

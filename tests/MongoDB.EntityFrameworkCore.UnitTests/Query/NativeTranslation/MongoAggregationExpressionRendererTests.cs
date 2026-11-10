@@ -260,6 +260,20 @@ public class MongoAggregationExpressionRendererTests
         var placeholders = new PlaceholderTable();
         var rendered = Assert.IsType<BsonDocument>(MongoAggregationExpressionRenderer.Render(node, placeholders));
         Assert.Equal("$literal", rendered["$in"].AsBsonArray[0].AsBsonDocument.GetElement(0).Name);
+
+        // The item is a placeholder recorded with the parameter's name; the explicit element serializer is applied at Build.
+        var entry = Assert.Single(placeholders.Entries);
+        Assert.Equal("p0", entry.Name);
+        Assert.False(entry.IsArray);
+    }
+
+    [Fact]
+    public void MongoArrayContainsExpression_with_a_non_constant_non_parameter_item_cannot_be_rendered()
+    {
+        var age = GetProperty<Customer>("Age");
+        var node = new MongoArrayContainsExpression(new MongoFieldExpression(age, "Nums"), new MongoFieldExpression(age, "Age"), negated: false);
+
+        Assert.False(MongoAggregationExpressionRenderer.CanRender(node));
     }
 
     [Fact]

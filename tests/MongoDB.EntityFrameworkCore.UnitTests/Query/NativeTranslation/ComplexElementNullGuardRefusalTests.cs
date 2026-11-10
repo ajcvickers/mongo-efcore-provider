@@ -197,6 +197,9 @@ public class ComplexElementNullGuardRefusalTests
         yield return ["root relational over a complex-collection count", Query(q => q.Where(r => r.Stops.Count < 3))];
         yield return ["OWNED element relational", Query(q => q.Where(r => r.Owned.Any(s => s.When.AddDays(1).Year < 2030)))];
         yield return ["OWNED element == null", Query(q => q.Where(r => r.Owned.Any(s => s.Note == null)))];
+        // Negative controls for the member-Contains arm (#40): an OWNED element (not keyed) and a complex element's list not tested for membership.
+        yield return ["OWNED element member Contains (only complex collections are keyed)", Query(q => q.Where(r => r.Owned.Any(s => s.Nums.Contains(5))))];
+        yield return ["complex element member Any() (no membership test)", Query(q => q.Where(r => r.Stops.Any(s => s.Nums.Any())))];
         yield return ["relational on the root inside the element lambda only", Query(q => q.Where(r => r.Stops.Any(s => r.Departs < DateTime.UnixEpoch)))];
         yield return ["Contains of the element itself (member-wise equality, not a leaf)", Query(q => q.Where(r => r.Stops.Any(s => new List<Stop>().Contains(s))))];
         // A relational over a COUNT whose nested lambda merely reads the element (`s.City`, an equality): the compared
