@@ -49,6 +49,11 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task GroupBy_is_optimized_when_projecting_group_count(bool async)
     {
         await base.GroupBy_is_optimized_when_projecting_group_count(async);
+
+        AssertMql(
+            """
+ArubaOwner.{ "$group" : { "_id" : "$FirstName", "_v" : { "$sum" : 1 } } }, { "$project" : { "_v" : "$_v", "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_is_optimized_when_projecting_group_count(bool async)
@@ -154,6 +159,11 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task GroupBy_is_optimized_when_projecting_conditional_expression_containing_group_key(bool async)
     {
         await base.GroupBy_is_optimized_when_projecting_conditional_expression_containing_group_key(async);
+
+        AssertMql(
+            """
+ArubaOwner.{ "$group" : { "_id" : "$FirstName" } }, { "$project" : { "keyIsNull" : { "$cond" : { "if" : { "$eq" : [{ "$ifNull" : ["$_id", null] }, null] }, "then" : { "$literal" : "is null" }, "else" : { "$literal" : "not null" } } }, "logicExpression" : { "$literal" : false }, "_id" : 0 } }
+""");
     }
 #else
     public override async Task GroupBy_is_optimized_when_projecting_conditional_expression_containing_group_key(bool async)
@@ -390,37 +400,54 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task GroupBy_Simple_1_from_LINQ_101(bool async)
     {
         await base.GroupBy_Simple_1_from_LINQ_101(async);
+
+        AssertMql();
     }
 
     public override async Task GroupBy_Simple_2_from_LINQ_101(bool async)
     {
         await base.GroupBy_Simple_2_from_LINQ_101(async);
+
+        AssertMql();
     }
 
     public override async Task GroupBy_Simple_3_from_LINQ_101(bool async)
     {
         await base.GroupBy_Simple_3_from_LINQ_101(async);
+
+        AssertMql();
     }
 
     public override async Task GroupBy_Nested_from_LINQ_101(bool async)
     {
         await base.GroupBy_Nested_from_LINQ_101(async);
+
+        AssertMql();
     }
 
     public override async Task Any_Grouped_from_LINQ_101(bool async)
     {
         await base.Any_Grouped_from_LINQ_101(async);
+
+        AssertMql();
     }
 
     public override async Task All_Grouped_from_LINQ_101(bool async)
     {
         await base.All_Grouped_from_LINQ_101(async);
+
+        AssertMql();
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Count_Grouped_from_LINQ_101(bool async)
     {
         await base.Count_Grouped_from_LINQ_101(async);
+
+        AssertMql(
+            """
+ProductForLinq.{ "$group" : { "_id" : "$Category", "ProductCount" : { "$sum" : 1 } } }, { "$project" : { "Category" : "$_id", "ProductCount" : "$ProductCount", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Count_Grouped_from_LINQ_101(bool async)
@@ -434,6 +461,11 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task LongCount_Grouped_from_LINQ_101(bool async)
     {
         await base.LongCount_Grouped_from_LINQ_101(async);
+
+        AssertMql(
+            """
+ProductForLinq.{ "$group" : { "_id" : "$Category", "ProductLongCount" : { "$sum" : 1 } } }, { "$project" : { "Category" : "$_id", "ProductLongCount" : "$ProductLongCount", "_id" : 0 } }
+""");
     }
 #else
     public override async Task LongCount_Grouped_from_LINQ_101(bool async)
@@ -447,6 +479,11 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task Sum_Grouped_from_LINQ_101(bool async)
     {
         await base.Sum_Grouped_from_LINQ_101(async);
+
+        AssertMql(
+            """
+ProductForLinq.{ "$group" : { "_id" : "$Category", "TotalUnitsInStock" : { "$sum" : "$UnitsInStock" } } }, { "$project" : { "Category" : "$_id", "TotalUnitsInStock" : "$TotalUnitsInStock", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Sum_Grouped_from_LINQ_101(bool async)
@@ -460,6 +497,11 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task Min_Grouped_from_LINQ_101(bool async)
     {
         await base.Min_Grouped_from_LINQ_101(async);
+
+        AssertMql(
+            """
+ProductForLinq.{ "$group" : { "_id" : "$Category", "CheapestPrice" : { "$min" : "$UnitPrice" } } }, { "$project" : { "Category" : "$_id", "CheapestPrice" : "$CheapestPrice", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Min_Grouped_from_LINQ_101(bool async)
@@ -472,12 +514,19 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task Min_Elements_from_LINQ_101(bool async)
     {
         await base.Min_Elements_from_LINQ_101(async);
+
+        AssertMql();
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Max_Grouped_from_LINQ_101(bool async)
     {
         await base.Max_Grouped_from_LINQ_101(async);
+
+        AssertMql(
+            """
+ProductForLinq.{ "$group" : { "_id" : "$Category", "MostExpensivePrice" : { "$max" : "$UnitPrice" } } }, { "$project" : { "Category" : "$_id", "MostExpensivePrice" : "$MostExpensivePrice", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Max_Grouped_from_LINQ_101(bool async)
@@ -490,12 +539,19 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task Max_Elements_from_LINQ_101(bool async)
     {
         await base.Max_Elements_from_LINQ_101(async);
+
+        AssertMql();
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
     public override async Task Average_Grouped_from_LINQ_101(bool async)
     {
         await base.Average_Grouped_from_LINQ_101(async);
+
+        AssertMql(
+            """
+ProductForLinq.{ "$group" : { "_id" : "$Category", "AveragePrice" : { "$avg" : "$UnitPrice" } } }, { "$project" : { "Category" : "$_id", "AveragePrice" : "$AveragePrice", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Average_Grouped_from_LINQ_101(bool async)
@@ -573,6 +629,11 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task Whats_new_2021_sample_4(bool async)
     {
         await base.Whats_new_2021_sample_4(async);
+
+        AssertMql(
+            """
+Person.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Shoes", "localField" : "_outer.Age", "foreignField" : "Age", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$group" : { "_id" : "$Inner.Style", "__agg0" : { "$push" : "$Inner.Style" }, "__agg1" : { "$sum" : 1 } } }, { "$project" : { "Key" : "$_id", "Style" : { "$let" : { "vars" : { "values" : "$__agg0" }, "in" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$$values" }, 0] }, "then" : null, "else" : { "$arrayElemAt" : ["$$values", 0] } } } } }, "Count" : "$__agg1", "_id" : 0 } }
+""");
     }
 #else
     public override async Task Whats_new_2021_sample_4(bool async)
@@ -660,6 +721,11 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task Whats_new_2021_sample_10(bool async)
     {
         await base.Whats_new_2021_sample_10(async);
+
+        AssertMql(
+            """
+Person.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Shoes", "localField" : "_outer.Age", "foreignField" : "Age", "as" : "_inner" } }, { "$unwind" : "$_inner" }, { "$project" : { "Outer" : "$_outer", "Inner" : "$_inner", "_id" : 0 } }, { "$group" : { "_id" : { "_id" : "$Outer._id", "Style" : "$Inner.Style", "Age" : "$Inner.Age" }, "__agg0" : { "$push" : { "_id" : "$Inner._id", "Style" : "$Inner.Style", "Age" : "$Inner.Age" } } } }, { "$sort" : { "_id._id" : 1, "_id.Style" : 1, "_id.Age" : 1 } }, { "$project" : { "_id" : "$_id._id", "Age" : "$_id.Age", "Style" : "$_id.Style", "Values" : "$__agg0" } }
+""");
     }
 #else
     public override async Task Whats_new_2021_sample_10(bool async)
@@ -750,6 +816,8 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task Whats_new_2021_sample_14(bool async)
     {
         await base.Whats_new_2021_sample_14(async);
+
+        AssertMql();
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -769,6 +837,8 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
     public override async Task Whats_new_2021_sample_16(bool async)
     {
         await base.Whats_new_2021_sample_16(async);
+
+        AssertMql();
     }
 
 #if EF8 || EF9
@@ -794,6 +864,9 @@ public class Ef6GroupByMongoTest : Ef6GroupByTestBase<Ef6GroupByMongoTest.Ef6Gro
         await SpecFails.ThrowsAsync<global::Xunit.Sdk.TrueException>(() => base.GroupBy_is_optimized_when_filerting_and_projecting_anonymous_type_with_group_key_and_function_aggregate(async));
     }
 #endif
+
+    private void AssertMql(params string[] expected)
+        => Fixture.TestMqlLoggerFactory.AssertBaseline(expected);
 
     public class Ef6GroupByMongoFixture : Ef6GroupByFixtureBase
     {
