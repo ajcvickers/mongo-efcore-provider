@@ -35,14 +35,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Can_compare_enum_to_constant()
         => base.Can_compare_enum_to_constant();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Can_compare_enum_to_constant()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Can_compare_enum_to_constant(), "Assert.Single() Failure: The collection was empty");
+        => base.Can_compare_enum_to_constant();
 #endif
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override void Can_compare_enum_to_constant()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Can_compare_enum_to_constant(), "Assert.Single() Failure: The collection was empty");
+        => base.Can_compare_enum_to_constant();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -50,32 +48,28 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Can_compare_enum_to_parameter()
         => base.Can_compare_enum_to_parameter();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Can_compare_enum_to_parameter()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Can_compare_enum_to_parameter(), "Assert.Single() Failure: The collection was empty");
+        => base.Can_compare_enum_to_parameter();
 #endif
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override void Can_compare_enum_to_parameter()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Can_compare_enum_to_parameter(), "Assert.Single() Failure: The collection was empty");
+        => base.Can_compare_enum_to_parameter();
 #endif
 
 #if EF11
     public override Task Can_filter_projection_with_captured_enum_variable(bool async)
         => base.Can_filter_projection_with_captured_enum_variable(async);
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Can_filter_projection_with_captured_enum_variable(bool async)
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Can_filter_projection_with_captured_enum_variable(async), "Assert.Single() Failure: The collection was empty");
+        => base.Can_filter_projection_with_captured_enum_variable(async);
 #endif
 
 #if EF11
     public override Task Can_filter_projection_with_inline_enum_variable(bool async)
         => base.Can_filter_projection_with_inline_enum_variable(async);
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Can_filter_projection_with_inline_enum_variable(bool async)
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Can_filter_projection_with_inline_enum_variable(async), "Assert.Single() Failure: The collection was empty");
+        => base.Can_filter_projection_with_inline_enum_variable(async);
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -98,26 +92,22 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
 
 #if (EF10 || EF11) || EF9
 #if !EF11
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override Task Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null();
 #endif
 #elif EF8
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override void Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_non_null();
 #endif
 
 #if (EF10 || EF11) || EF9
 #if !EF11
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override Task Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null();
 #endif
 #elif EF8
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override void Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_insert_and_read_back_all_nullable_data_types_with_values_set_to_null();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -211,14 +201,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Can_insert_query_multiline_string()
         => base.Can_insert_query_multiline_string();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Can_insert_query_multiline_string()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Can_insert_query_multiline_string(), "Assert.Single() Failure: The collection was empty");
+        => base.Can_insert_query_multiline_string();
 #endif
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override void Can_insert_query_multiline_string()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Can_insert_query_multiline_string(), "Assert.Single() Failure: The collection was empty");
+        => base.Can_insert_query_multiline_string();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -254,23 +242,21 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override Task Can_query_and_update_with_nullable_converter_on_primary_key()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_and_update_with_nullable_converter_on_primary_key(), "Unsupported ValueConverter for 'Nullable<Int32>' encountered. Null con");
+        => base.Can_query_and_update_with_nullable_converter_on_primary_key();
 #elif EF8
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override void Can_query_and_update_with_nullable_converter_on_primary_key()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_and_update_with_nullable_converter_on_primary_key(), "Unsupported ValueConverter for 'Nullable<Int32>' encountered. Null con");
+        => base.Can_query_and_update_with_nullable_converter_on_primary_key();
 #endif
 
-#if (EF10 || EF11) || EF9
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
-    public override Task Can_query_and_update_with_nullable_converter_on_unique_index()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_and_update_with_nullable_converter_on_unique_index(), "Unsupported ValueConverter for 'Nullable<SocialSecurityNumber>' encoun");
-#elif EF8
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
+#if EF8
+    // Fails: Two documents with a null in a unique index collide (the converter maps the nullable value to null) EF-X207
     public override void Can_query_and_update_with_nullable_converter_on_unique_index()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_and_update_with_nullable_converter_on_unique_index(), "Unsupported ValueConverter for 'Nullable<SocialSecurityNumber>' encoun");
+        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_query_and_update_with_nullable_converter_on_unique_index(), "duplicate key");
+#else
+    // Fails: Two documents with a null in a unique index collide (the converter maps the nullable value to null) EF-X207
+    public override Task Can_query_and_update_with_nullable_converter_on_unique_index()
+        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_query_and_update_with_nullable_converter_on_unique_index(), "duplicate key");
 #endif
 
     public override Task Can_query_custom_type_not_mapped_by_default_equality(bool async)
@@ -308,38 +294,32 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
 
 #if (EF10 || EF11) || EF9
 #if !EF11
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override Task Can_query_using_any_nullable_data_type()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_using_any_nullable_data_type(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_query_using_any_nullable_data_type();
 #endif
 #elif EF8
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override void Can_query_using_any_nullable_data_type()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_using_any_nullable_data_type(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_query_using_any_nullable_data_type();
 #endif
 
 #if (EF10 || EF11) || EF9
 #if !EF11
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override Task Can_query_using_any_nullable_data_type_as_literal()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_using_any_nullable_data_type_as_literal(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_query_using_any_nullable_data_type_as_literal();
 #endif
 #elif EF8
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override void Can_query_using_any_nullable_data_type_as_literal()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_using_any_nullable_data_type_as_literal(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_query_using_any_nullable_data_type_as_literal();
 #endif
 
 #if (EF10 || EF11) || EF9
 #if !EF11
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override Task Can_query_with_null_parameters_using_any_nullable_data_type()
-        => SpecFails.Async<global::System.NotSupportedException>(() => base.Can_query_with_null_parameters_using_any_nullable_data_type(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_query_with_null_parameters_using_any_nullable_data_type();
 #endif
 #elif EF8
-    // Fails: Value converter built from inline conversion expressions on a nullable property is not supported EF-X300
     public override void Can_query_with_null_parameters_using_any_nullable_data_type()
-        => SpecFails.Sync<global::System.NotSupportedException>(() => base.Can_query_with_null_parameters_using_any_nullable_data_type(), "Unsupported ValueConverter for 'Nullable<Enum16>' encountered. Null co");
+        => base.Can_query_with_null_parameters_using_any_nullable_data_type();
 #endif
 
 #if (EF10 || EF11)
@@ -347,18 +327,15 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Can_read_back_bool_mapped_as_int_through_navigation()
         => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Can_read_back_bool_mapped_as_int_through_navigation()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation(), "Assert.Single() Failure: The collection was empty");
+        => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #endif
 #elif EF9
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override Task Can_read_back_bool_mapped_as_int_through_navigation()
-        => SpecFails.ThrowsAsync<global::Xunit.Sdk.SingleException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation());
+        => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #elif EF8
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override void Can_read_back_bool_mapped_as_int_through_navigation()
-        => SpecFails.Throws<global::Xunit.Sdk.SingleException>(() => base.Can_read_back_bool_mapped_as_int_through_navigation());
+        => base.Can_read_back_bool_mapped_as_int_through_navigation();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -366,14 +343,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Can_read_back_mapped_enum_from_collection_first_or_default()
         => base.Can_read_back_mapped_enum_from_collection_first_or_default();
 #else
-    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Can_read_back_mapped_enum_from_collection_first_or_default()
-        => SpecFails.ThrowsAsync<global::System.NullReferenceException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default());
+        => base.Can_read_back_mapped_enum_from_collection_first_or_default();
 #endif
 #elif EF8
-    // Fails: Other unexpected exception from query execution EF-X605
     public override void Can_read_back_mapped_enum_from_collection_first_or_default()
-        => SpecFails.Throws<global::System.NullReferenceException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default());
+        => base.Can_read_back_mapped_enum_from_collection_first_or_default();
 #endif
 
     // Fails: Value-converter behavior differs from the provider-agnostic expectation (not triaged) EF-X315
@@ -392,20 +367,14 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override void Composition_over_collection_of_complex_mapped_as_scalar()
         => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Composition_over_collection_of_complex_mapped_as_scalar(), "Assert.Equal() Failure: Strings differ");
 
-#if (EF10 || EF11) || EF9
-#if EF11
+#if EF8
+    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    public override void Field_on_derived_type_retrieved_via_cast_applies_value_converter()
+        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Field_on_derived_type_retrieved_via_cast_applies_value_converter());
+#else
     // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override Task Field_on_derived_type_retrieved_via_cast_applies_value_converter()
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Field_on_derived_type_retrieved_via_cast_applies_value_converter());
-#else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
-    public override Task Field_on_derived_type_retrieved_via_cast_applies_value_converter()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Field_on_derived_type_retrieved_via_cast_applies_value_converter(), "Assert.Single() Failure: The collection was empty");
-#endif
-#elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
-    public override void Field_on_derived_type_retrieved_via_cast_applies_value_converter()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Field_on_derived_type_retrieved_via_cast_applies_value_converter(), "Assert.Single() Failure: The collection was empty");
 #endif
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -423,14 +392,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Id_object_as_entity_key()
         => base.Id_object_as_entity_key();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Id_object_as_entity_key()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Id_object_as_entity_key(), "Assert.Single() Failure: The collection was empty");
+        => base.Id_object_as_entity_key();
 #endif
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override void Id_object_as_entity_key()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Id_object_as_entity_key(), "Assert.Single() Failure: The collection was empty");
+        => base.Id_object_as_entity_key();
 #endif
 
     // Fails: Driver LINQ translation rejects expression over converted property, indexer or subquery EF-X314
@@ -467,14 +434,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Select_bool_with_value_conversion_is_used()
         => base.Select_bool_with_value_conversion_is_used();
 #else
-    // Fails: Value-converter behavior differs from the provider-agnostic expectation (not triaged) EF-X315
     public override Task Select_bool_with_value_conversion_is_used()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Select_bool_with_value_conversion_is_used(), "Assert.Equal() Failure: Values differ");
+        => base.Select_bool_with_value_conversion_is_used();
 #endif
 #elif EF8
-    // Fails: Value-converter behavior differs from the provider-agnostic expectation (not triaged) EF-X315
     public override void Select_bool_with_value_conversion_is_used()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Select_bool_with_value_conversion_is_used(), "Assert.Equal() Failure: Values differ");
+        => base.Select_bool_with_value_conversion_is_used();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -482,14 +447,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Select_conditional_bool_with_value_conversion_is_used()
         => base.Select_conditional_bool_with_value_conversion_is_used();
 #else
-    // Fails: Value-converter behavior differs from the provider-agnostic expectation (not triaged) EF-X315
     public override Task Select_conditional_bool_with_value_conversion_is_used()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Select_conditional_bool_with_value_conversion_is_used(), "Assert.Equal() Failure: Values differ");
+        => base.Select_conditional_bool_with_value_conversion_is_used();
 #endif
 #elif EF8
-    // Fails: Value-converter behavior differs from the provider-agnostic expectation (not triaged) EF-X315
     public override void Select_conditional_bool_with_value_conversion_is_used()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Select_conditional_bool_with_value_conversion_is_used(), "Assert.Equal() Failure: Values differ");
+        => base.Select_conditional_bool_with_value_conversion_is_used();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -529,14 +492,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Where_bool_gets_converted_to_equality_when_value_conversion_is_used()
         => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Where_bool_gets_converted_to_equality_when_value_conversion_is_used()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used(), "Assert.Single() Failure: The collection was empty");
+        => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used();
 #endif
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override void Where_bool_gets_converted_to_equality_when_value_conversion_is_used()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used(), "Assert.Single() Failure: The collection was empty");
+        => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -544,14 +505,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Where_bool_gets_converted_to_equality_when_value_conversion_is_used_using_EFProperty()
         => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used_using_EFProperty();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Where_bool_gets_converted_to_equality_when_value_conversion_is_used_using_EFProperty()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used_using_EFProperty(), "Assert.Single() Failure: The collection was empty");
+        => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used_using_EFProperty();
 #endif
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override void Where_bool_gets_converted_to_equality_when_value_conversion_is_used_using_EFProperty()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used_using_EFProperty(), "Assert.Single() Failure: The collection was empty");
+        => base.Where_bool_gets_converted_to_equality_when_value_conversion_is_used_using_EFProperty();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -569,14 +528,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Where_bool_with_value_conversion_inside_comparison_doesnt_get_converted_twice()
         => base.Where_bool_with_value_conversion_inside_comparison_doesnt_get_converted_twice();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Where_bool_with_value_conversion_inside_comparison_doesnt_get_converted_twice()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Where_bool_with_value_conversion_inside_comparison_doesnt_get_converted_twice(), "Assert.Single() Failure: The collection was empty");
+        => base.Where_bool_with_value_conversion_inside_comparison_doesnt_get_converted_twice();
 #endif
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override void Where_bool_with_value_conversion_inside_comparison_doesnt_get_converted_twice()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Where_bool_with_value_conversion_inside_comparison_doesnt_get_converted_twice(), "Assert.Single() Failure: The collection was empty");
+        => base.Where_bool_with_value_conversion_inside_comparison_doesnt_get_converted_twice();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -594,14 +551,12 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
     public override Task Where_negated_bool_gets_converted_to_equality_when_value_conversion_is_used()
         => base.Where_negated_bool_gets_converted_to_equality_when_value_conversion_is_used();
 #else
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override Task Where_negated_bool_gets_converted_to_equality_when_value_conversion_is_used()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.Where_negated_bool_gets_converted_to_equality_when_value_conversion_is_used(), "Assert.Single() Failure: The collection was empty");
+        => base.Where_negated_bool_gets_converted_to_equality_when_value_conversion_is_used();
 #endif
 #elif EF8
-    // Fails: Fixture seeding fails (value converter on nullable property), so the test finds no data EF-X300
     public override void Where_negated_bool_gets_converted_to_equality_when_value_conversion_is_used()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Where_negated_bool_gets_converted_to_equality_when_value_conversion_is_used(), "Assert.Single() Failure: The collection was empty");
+        => base.Where_negated_bool_gets_converted_to_equality_when_value_conversion_is_used();
 #endif
     // </generated>
 
@@ -618,15 +573,7 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
-            try
-            {
-                await base.InitializeAsync();
-            }
-            catch (NotSupportedException)
-            {
-                // Fails: Seeding fails for value converters built from inline conversion expressions EF-X300
-                // The tests then run (and fail) against an unseeded database.
-            }
+            await base.InitializeAsync();
         }
 
         public override DbContextOptionsBuilder AddOptions(DbContextOptionsBuilder builder)
@@ -636,6 +583,9 @@ public class CustomConvertersMongoTest(CustomConvertersMongoTest.CustomConverter
         {
             base.OnModelCreating(modelBuilder, context);
             MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+
+            // EF-X300: inline conversion expressions on nullable properties build converters the provider rejects.
+            modelBuilder.UnwrapNullableValueConverters();
         }
 
         protected override ITestStoreFactory TestStoreFactory

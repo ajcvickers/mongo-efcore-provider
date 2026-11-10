@@ -166,6 +166,57 @@ public static class MongoSpecModelHelpers
     }
 
     /// <summary>
+    /// The provider rejects a value converter whose model type is a nullable value type (what <c>HasConversion(x =&gt; ..., y =&gt; ...)</c> with
+    /// inline expressions builds for a nullable property, EF-X300). Replaces each such converter with an equivalent over the underlying
+    /// non-nullable types; EF Core already leaves null out of the conversion. Call after the model is built.
+    /// </summary>
+    public static ModelBuilder UnwrapNullableValueConverters(this ModelBuilder modelBuilder)
+    {
+        foreach (var property in modelBuilder.Model.GetEntityTypes().SelectMany(e => e.GetDeclaredProperties()).ToList())
+        {
+            if (property.GetValueConverter() is not { } converter || !converter.ModelClrType.IsNullableValueType())
+            {
+                continue;
+            }
+
+            var modelType = Nullable.GetUnderlyingType(converter.ModelClrType)!;
+            var providerType = Nullable.GetUnderlyingType(converter.ProviderClrType) ?? converter.ProviderClrType;
+
+            var model = System.Linq.Expressions.Expression.Parameter(modelType, "m");
+            var provider = System.Linq.Expressions.Expression.Parameter(providerType, "p");
+            var toProvider = System.Linq.Expressions.Expression.Lambda(
+                System.Linq.Expressions.Expression.GetFuncType(modelType, providerType),
+                System.Linq.Expressions.Expression.Convert(
+                    System.Linq.Expressions.Expression.Invoke(
+                        converter.ConvertToProviderExpression,
+                        System.Linq.Expressions.Expression.Convert(model, converter.ModelClrType)),
+                    providerType),
+                model);
+            var fromProvider = System.Linq.Expressions.Expression.Lambda(
+                System.Linq.Expressions.Expression.GetFuncType(providerType, modelType),
+                System.Linq.Expressions.Expression.Convert(
+                    System.Linq.Expressions.Expression.Invoke(
+                        converter.ConvertFromProviderExpression,
+                        System.Linq.Expressions.Expression.Convert(provider, converter.ProviderClrType)),
+                    modelType),
+                provider);
+
+            var converterType = typeof(Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<,>).MakeGenericType(modelType, providerType);
+            // The constructor's trailing parameters (mapping hints, and on later versions more) are all optional.
+            var constructor = converterType.GetConstructors()
+                .Where(c => c.GetParameters() is { Length: >= 2 } p
+                            && p[0].ParameterType.IsInstanceOfType(toProvider) && p[1].ParameterType.IsInstanceOfType(fromProvider))
+                .OrderBy(c => c.GetParameters().Length)
+                .First();
+            ((IMutableProperty)property).SetValueConverter(
+                (Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter)constructor.Invoke(
+                    constructor.GetParameters().Select((p, i) => i == 0 ? toProvider : i == 1 ? fromProvider : null).ToArray()));
+        }
+
+        return modelBuilder;
+    }
+
+    /// <summary>
     /// The provider owns, by convention, any non-generic type it reaches through a navigation that is not yet in the model. This
     /// replaces that convention so the types selected by <paramref name="isEntityType"/> are independent entity types instead
     /// (upstream models rely on a type with no <c>DbSet</c> being discovered through a navigation, then configured explicitly).
