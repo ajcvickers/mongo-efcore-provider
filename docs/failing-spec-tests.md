@@ -41,7 +41,7 @@ ported suites were never exercised before, so their failures were invisible. A t
 stays green; it is a measure of the provider's gaps, not of broken tests. Methods that pass as the upstream base are not
 counted anywhere in this file. The bases still ignored are the complex type suites (separate work), the Associations suites,
 the Translations bases for Math, String, the Operators and Miscellaneous groups, `TypeTestBase`, the bulk-update suites for
-shapes the provider does not support, and the bases blocked by a concrete failure (`EF-X538`, `EF-X539`, `EF-X548`); the reason
+shapes the provider does not support, and the bases blocked by a concrete failure (`EF-X538`, `EF-X539`); the reason
 sits next to each entry in `MongoComplianceTest.cs`.
 
 Ten largest tickets (distinct overridden methods, all EF versions):
@@ -71,7 +71,7 @@ individually); expect them to split once someone looks at the individual failure
 > prose, such as `post-EF-117`, are not counted. Earlier figures in this file used an unknown mixture of rules and have all
 > been replaced. A count of 0 means no test is tagged: either the bug is fixed (the row is kept for history), or the
 > ticket describes a workaround that the ported fixtures apply in their model (`EF-X201`, `X207`, `X211`, `X214`, `X215`,
-> `X304`) or a base that could not be ported (`EF-X538`, `X548`).
+> `X304`) or a base that could not be ported (`EF-X538`).
 
 > If you fix one of these bugs, search for the ticket id in the spec-tests
 > project — the corresponding overrides need to be updated (drop the
@@ -216,7 +216,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X307 | Model validation requires every key property to be mapped to `_id` | 6 |
 | EF-X308 | Relationship/navigation discovery differs (navigations become owned by convention) | 26 |
 | EF-X309 | `[Required]`/`[MaxLength]`/`[StringLength]` are not enforced by the store | 4 |
-| EF-X310 | `Single`/`First` over an empty result in the test body (not triaged) | 2 |
+| EF-X310 | `Single`/`First` over an empty result in the test body (not triaged) | 4 |
 | EF-X311 | Music store query fails with `InvalidOperationException` (not triaged) | 1 |
 | EF-X312 | `[Column(TypeName)]` is reported as an error by default | 5 |
 | EF-X314 | Driver LINQ translation rejects expression over converted property, indexer or subquery | 6 |
@@ -305,8 +305,8 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X546 | Filter on a nested DTO via an interface: serializer value type mismatch | 1 |
 | EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
 | EF-X538 | `InheritanceRelationshipsQueryTestBase<>` (ported with `InitFailureGuard`): model validation fails in the fixture (the dependent side of a 1:1 between a base type and its derived type cannot be determined, although the upstream model calls `HasForeignKey<Derived>` explicitly), so every test asserts that failure | 48 |
-| EF-X548 | `JsonQueryTestBase<>` (ported with `InitFailureGuard`): saving an entity with a `uint[]` or `List<uint>` property holding a value above `Int32.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`), so seeding the JSON model fails and every test asserts that failure | 219 |
-| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 170 |
+| EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
+| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 171 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 5 |
 | EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 65 |
