@@ -342,7 +342,7 @@ internal static class MongoBulkPlanBuilder
         };
         var translatedBody = translator.Visit(setter.ValueExpression)!;
 
-        translatedBody = new ParameterRebindingExpressionVisitor(entityParameter).Visit(translatedBody);
+        translatedBody = RebindSetterValueParameters(translatedBody, entityParameter, setter.Property);
 
         var resultType = setter.Property.ClrType;
         var renderer = RenderAggregateExpressionMethodInfo.MakeGenericMethod(typeof(TSource), resultType);
@@ -409,12 +409,52 @@ internal static class MongoBulkPlanBuilder
     private static object? CompileAndEvaluate(Expression expression)
         => Expression.Lambda<Func<object?>>(Expression.Convert(expression, typeof(object))).Compile()();
 
-    /// <summary>Rebinds every parameter in a translated self-referencing setter body to one shared parameter, as the renderer requires.</summary>
+    /// <summary>
+    /// Rebinds the parameters in a translated self-referencing setter body to the shared entity parameter, so the assembled value
+    /// lambda has exactly one parameter as the renderer requires. Rebinding is by type rather than identity because translation
+    /// through <see cref="MongoEFToLinqTranslatingExpressionVisitor"/> discards the original parameter identity, which is only
+    /// sound while the body has exactly one parameter of the entity type. A second one is rejected rather than merged, because
+    /// merging renders a wrong update with no error: <c>SetProperty(e =&gt; e.Rank, e =&gt; e.DirectReports.Max(r =&gt; r.Rank))</c> over a
+    /// self-referencing navigation has two <c>Employee</c> parameters, and collapsing them degenerates the update to a no-op.
+    /// <paramref name="property"/> is used only to name the offending setter in the error.
+    /// </summary>
+    internal static Expression RebindSetterValueParameters(Expression body, ParameterExpression target, IPropertyBase property)
+    {
+        var collector = new EntityParameterCollector(target.Type);
+        collector.Visit(body);
+
+        if (collector.Parameters.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"The self-referencing bulk update setter for '{property.DeclaringType.DisplayName()}.{property.Name}' referenced more "
+                + $"than one '{target.Type.Name}' parameter, which the MongoDB provider cannot render as a single aggregation "
+                + "expression; compute the value first and pass it as a constant/parameter, or perform the update via the change "
+                + "tracker instead.");
+        }
+
+        return new ParameterRebindingExpressionVisitor(target).Visit(body)!;
+    }
+
+    private sealed class EntityParameterCollector(Type entityType) : System.Linq.Expressions.ExpressionVisitor
+    {
+        // Distinct by identity: a body that reads the same parameter twice (o.Quantity + o.Quantity) is still one parameter.
+        public HashSet<ParameterExpression> Parameters { get; } = [];
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (node.Type == entityType)
+            {
+                Parameters.Add(node);
+            }
+
+            return base.VisitParameter(node);
+        }
+    }
+
     private sealed class ParameterRebindingExpressionVisitor(ParameterExpression target)
         : System.Linq.Expressions.ExpressionVisitor
     {
         protected override Expression VisitParameter(ParameterExpression node)
-            // Rebind by type: translation discards the original parameter identity, and the value body has exactly one TSource-typed parameter.
             => node.Type == target.Type ? target : base.VisitParameter(node);
     }
 

@@ -85,6 +85,21 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         mb.Entity<Dog>();
     };
 
+    // A self-referencing one-to-many within one collection (same shape as StaffMember in CrossCollectionIncludeTests).
+    private class Employee
+    {
+        public ObjectId _id { get; set; }
+        public int Rank { get; set; }
+        public ObjectId? ManagerId { get; set; }
+        public Employee? Manager { get; set; }
+        public List<Employee> DirectReports { get; set; } = [];
+    }
+
+    private static readonly Action<ModelBuilder> ConfigureEmployeeModel = mb =>
+    {
+        mb.Entity<Employee>().HasOne(e => e.Manager).WithMany(e => e.DirectReports).HasForeignKey(e => e.ManagerId);
+    };
+
     private SingleEntityDbContext<Order> CreateSeededContext([CallerMemberName] string? collectionName = null)
     {
         var collection = database.CreateCollection<Order>(collectionName);
@@ -616,6 +631,40 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName)
             .Find(FilterDefinition<BsonDocument>.Empty).Single();
         Assert.Equal(newVersion, raw["Version"].AsBsonBinaryData.Bytes);
+    }
+
+    // A self-referencing navigation inside a setter value gives the value body two Employee-typed parameters (the setter's own `e`
+    // and the nested lambda's `r`). If that ever reached the renderer's type-based parameter rebinding, the two would collapse onto
+    // one and the update would degenerate to a silent no-op (Rank set to its own value). It is rejected loudly instead: today by the
+    // translator ("could not be translated"), and, should that layer start accepting the shape, by the
+    // MongoBulkPlanBuilder.RebindSetterValueParameters guard (unit-tested in BulkSetterRebindingTests).
+    [Fact]
+    public void ExecuteUpdate_self_referencing_setter_with_nested_entity_typed_parameter_is_rejected_not_silently_wrong()
+    {
+        var collection = database.CreateCollection<Employee>();
+        var managerId = ObjectId.GenerateNewId();
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureEmployeeModel))
+        {
+            seed.AddRange(
+                new Employee { _id = managerId, Rank = 1 },
+                new Employee { _id = ObjectId.GenerateNewId(), Rank = 5, ManagerId = managerId },
+                new Employee { _id = ObjectId.GenerateNewId(), Rank = 9, ManagerId = managerId });
+            seed.SaveChanges();
+        }
+
+        using var db = SingleEntityDbContext.Create(collection, ConfigureEmployeeModel);
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.Where(e => e._id == managerId)
+                .ExecuteUpdate(s => s.SetProperty(e => e.Rank, e => e.DirectReports.Max(r => r.Rank))));
+
+        Assert.True(
+            ex.Message.Contains("could not be translated") || ex.Message.Contains("more than one"),
+            $"Expected a loud rejection of the shape, got: {ex.Message}");
+
+        // And nothing was written.
+        using var check = SingleEntityDbContext.Create(collection, ConfigureEmployeeModel);
+        Assert.Equal(1, check.Entities.Single(e => e._id == managerId).Rank);
     }
 }
 
