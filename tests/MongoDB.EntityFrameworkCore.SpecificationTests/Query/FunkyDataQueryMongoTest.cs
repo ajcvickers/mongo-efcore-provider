@@ -198,7 +198,15 @@ public class FunkyDataQueryMongoTest : FunkyDataQueryTestBase<FunkyDataQueryMong
     public override async Task String_Contains_and_StartsWith_with_same_parameter(bool async)
     {
         await base.String_Contains_and_StartsWith_with_same_parameter(async);
+
+        AssertMql(
+            """
+FunkyCustomers.{ "$match" : { "$or" : [{ "FirstName" : { "$regularExpression" : { "pattern" : "B", "options" : "s" } } }, { "LastName" : { "$regularExpression" : { "pattern" : "^B", "options" : "s" } } }] } }
+""");
     }
+
+    private void AssertMql(params string[] expected)
+        => Fixture.TestMqlLoggerFactory.AssertBaseline(expected);
 
     public class FunkyDataQueryMongoFixture : FunkyDataQueryFixtureBase
     {
