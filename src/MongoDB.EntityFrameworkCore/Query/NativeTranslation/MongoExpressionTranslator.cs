@@ -308,8 +308,10 @@ internal sealed partial class MongoExpressionTranslator
             return false;
 
         // A DateTimeOffset's time of day is that of its stored local (offset) time, as for its other date parts.
-        MongoExpression operand = receiver.Type == typeof(DateTimeOffset) ? new MongoDateTimeOffsetLocalExpression(field) : field;
-        result = new MongoDatePartExpression(operand, MongoDatePart.TimeOfDay);
+        // Its exact value is in the stored Ticks, not in the millisecond BSON date (EF-X702).
+        result = receiver.Type == typeof(DateTimeOffset)
+            ? new MongoDatePartExpression(new MongoDateTimeOffsetLocalExpression(field), MongoDatePart.TimeOfDayTicks)
+            : new MongoDatePartExpression(field, MongoDatePart.TimeOfDay);
         return true;
     }
 

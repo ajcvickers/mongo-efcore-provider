@@ -1196,7 +1196,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     /// </summary>
     private Expression CreateAliasRead(string alias, Type type)
         => type.UnwrapNullableType() == typeof(TimeSpan) && _queryExpression.Select.IsTimeOfDayProjection(alias)
-            ? BsonBinding.CreateGetElementValue(DocParameter, alias, type, BsonSerializerFactory.CreateTimeOfDaySerializer(type))
+            ? BsonBinding.CreateGetElementValue(DocParameter, alias, type, BsonSerializerFactory.CreateTimeOfDaySerializer(type, _queryExpression.Select.IsTimeOfDayTicksProjection(alias)))
             : type.UnwrapNullableType() == typeof(float)
                 ? BsonBinding.CreateGetElementValue(DocParameter, alias, type, BsonBinding.CreateNarrowingFloatSerializer(type))
                 : BsonBinding.CreateGetElementValue(

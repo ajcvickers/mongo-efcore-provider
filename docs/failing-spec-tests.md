@@ -50,7 +50,7 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 | --- | --- | --- |
 | EF-X526 | 622 | Query shape (navigation/projection/set operation) not translated |
 | EF-X101 | 299 | Entities added without an explicit key get Id 0 (no int/long key generation), so tracking/saving them ... |
-| EF-X530 | 237 | Wrong results compared with the reference (client) evaluation |
+| EF-X530 | 236 | Wrong results compared with the reference (client) evaluation |
 | EF-216 | 204 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
 | EF-X102 | 203 | Relationship discovery between root entity types fails at model build (Unable to determine the relatio... |
 | EF-X527 | 185 | Expression not supported by the driver LINQ translator |
@@ -99,7 +99,7 @@ failure, tagged `// Fails: REGRESSION vs main: ...`, so any change is noticed. W
 | Ticket | Test(s) | What changed | EF versions |
 | --- | --- | --- | --- |
 | EF-X703 | **Fixed.** `CompositeKeyEndToEnd.Can_use_two_non_generated_integers_as_composite_key_end_to_end` could not query back a saved row. The discriminator is part of the composite key, so it is stored in `_id._t`, but the discriminator filter of a derived-type query targeted a top-level `_t` (`MongoDiscriminatorPredicate`). The test now calls `base`; regression test `CompositeKeyDiscriminatorTests` | 0 |
-| EF-X702 | `DateTimeOffsetTranslations.TimeOfDay` | Wrong data: the time of day is truncated to whole milliseconds | 1 |
+| EF-X702 | **Fixed.** `DateTimeOffsetTranslations.TimeOfDay` lost the sub-millisecond ticks (and rounded a pre-1970 value up). The native leaf now computes the time of day from the stored `Ticks` (`MongoDatePart.TimeOfDayTicks`) and reads it back as ticks; regression test `DateTimeOffsetTimeOfDayTests`. The explicit `DriverLinq` bridge still truncates to milliseconds | 0 |
 | EF-X701 | **Fixed.** `AdHocQueryFilters.Query_filter_with_context_accessor_with_constant` threw `NullReferenceException` while building the pipeline for an unset list member of the context (`Foo == 1 ? Baz.Contains(e.Bar) : ...`), even though the list's branch was not taken. `MongoPipelineFactory` now serializes an unset list parameter as an empty list, as EF Core treats a null collection (`Contains` matches nothing). This also fixes EF-X503 (`PrimitiveCollections.Parameter_collection_null_Contains`) and EF-X524 (`QueryFilterFuncletization.DbContext_list_is_parameterized`), which asserted the same `NullReferenceException`; regression test `QueryFilterContextMemberTests` | 0 |
 | EF-X704 | **Deliberate, not a bug.** `GuidTranslations.NewGuid`: `Guid.NewGuid()` in a query is refused ("cannot be evaluated once per row on the server"), as for the other non-deterministic calls (EF-255). The test asserts the refusal without a `// Fails:` tag. No `$rand`-based translation is planned | 0 |
 | EF-X705 | `GearsOfWar`: `Group_by_with_aggregate_max_on_entity_type`, `Nav_rewrite_Distinct_with_convert`, `_anonymous`; `ComplexNavigationsSharedType`: one GroupJoin test | **Not a regression.** Only the exception type of an unsupported query changed (`FormatException` / `ArgumentException` instead of `InvalidOperationException`). `AGENTS.md` does not count this as a break, so the tests pin the type each one throws (`FormatException` for `Group_by_with_aggregate_max_on_entity_type`, `ArgumentException` for the rest) | 8, 9, 10 |
@@ -288,7 +288,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X527 | Expression not supported by the driver LINQ translator | 184 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
 | EF-X529 | NullReferenceException during query execution/materialization | 0 |
-| EF-X530 | Wrong results compared with the reference (client) evaluation | 237 |
+| EF-X530 | Wrong results compared with the reference (client) evaluation | 236 |
 | EF-X531 | ArgumentNullException (null string/source argument) during translation or materialization | 10 |
 | EF-X532 | GroupBy over all columns builds an invalid materialization expression (QueryingEnumerable not assignable) | 9 |
 | EF-X533 | Manual left join / transparent identifier shape throws ArgumentException (LeftJoinResult / _inner / _outer) | 38 |
@@ -314,7 +314,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X605 | Other unexpected exception from query execution | 61 |
 | EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
 | EF-X701 | **Fixed:** an unset list parameter (a context member used by a query filter, or a null captured list) is serialized as an empty list instead of throwing `NullReferenceException` | 0 |
-| EF-X702 | **Regression vs `main`:** `DateTimeOffset.TimeOfDay` is truncated to whole milliseconds | 1 |
+| EF-X702 | **Fixed:** `DateTimeOffset.TimeOfDay` is computed from the stored `Ticks`, so sub-millisecond ticks are kept | 0 |
 | EF-X703 | **Fixed:** a derived-type query filtered on a top-level discriminator even when the discriminator is part of the composite key (`_id._t`) | 0 |
 | EF-X704 | **Deliberate (EF-255):** `Guid.NewGuid()` in a query is refused (cannot be evaluated once per row); the test asserts the refusal | 0 |
 | EF-X705 | Exception type only, not a regression: an unsupported query throws `FormatException` / `ArgumentException` where the upstream test expects `InvalidOperationException` (not contract, see `AGENTS.md`) | 5 |

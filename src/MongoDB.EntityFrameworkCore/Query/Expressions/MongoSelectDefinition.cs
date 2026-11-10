@@ -454,24 +454,33 @@ internal sealed class MongoSelectDefinition
 
     /// <summary>Whether <paramref name="alias"/> is a native <c>DateTime.TimeOfDay</c> leaf here or in a set-op operand, read through <c>BsonSerializerFactory.TimeOfDayMillisecondsSerializer</c>.</summary>
     internal bool IsTimeOfDayProjection(string alias)
+        => FindTimeOfDayPart(alias) is not null;
+
+    /// <summary>Whether <paramref name="alias"/> is a <c>DateTimeOffset.TimeOfDay</c> leaf (ticks since midnight), not a <c>DateTime.TimeOfDay</c> one (milliseconds).</summary>
+    internal bool IsTimeOfDayTicksProjection(string alias)
+        => FindTimeOfDayPart(alias) == MongoDatePart.TimeOfDayTicks;
+
+    private MongoDatePart? FindTimeOfDayPart(string alias)
     {
         foreach (var projection in _projections)
         {
             if (projection.Alias == alias)
             {
-                return MongoDatePartExpression.IsTimeOfDay(projection.Expression);
+                return MongoDatePartExpression.IsTimeOfDay(projection.Expression)
+                    ? ((MongoDatePartExpression)projection.Expression).Part
+                    : null;
             }
         }
 
         foreach (var link in _setOperations)
         {
-            if (link.OperandsProjected && link.OperandSelect.IsTimeOfDayProjection(alias))
+            if (link.OperandsProjected && link.OperandSelect.FindTimeOfDayPart(alias) is { } part)
             {
-                return true;
+                return part;
             }
         }
 
-        return false;
+        return null;
     }
 
     /// <summary><see langword="true"/> when a bare selector body populated <see cref="Projection"/>.</summary>

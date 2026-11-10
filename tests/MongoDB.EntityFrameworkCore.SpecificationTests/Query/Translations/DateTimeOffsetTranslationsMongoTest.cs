@@ -188,9 +188,15 @@ public class DateTimeOffsetTranslationsMongoTest : DateTimeOffsetTranslationsTes
     """);
     }
 
-    // Fails: REGRESSION vs main: TimeOfDay is truncated to whole milliseconds, so the query returns different data EF-X702
-    public override Task TimeOfDay()
-        => SpecFails.Async<global::Xunit.Sdk.XunitException>(() => base.TimeOfDay(), "Values differ");
+    public override async Task TimeOfDay()
+    {
+        await base.TimeOfDay();
+
+        AssertMql(
+    """
+    BasicTypesEntities.{ "$project" : { "_v" : { "$mod" : ["$DateTimeOffset.Ticks", 864000000000] }, "_id" : 0 } }
+    """);
+    }
 
     // Fails: DateOnly/TimeOnly/TimeSpan/DateTimeOffset members and methods are not translated by the driver EF-X321
     public override Task ToUnixTimeMilliseconds()

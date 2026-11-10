@@ -22,7 +22,10 @@ namespace MongoDB.EntityFrameworkCore.Query.Expressions;
 /// <see cref="TimeOfDay"/> is produced only as a whole projection leaf (<c>TryTranslateTimeOfDayLeaf</c>), never by
 /// the general value translator: it renders as milliseconds since midnight, so only a read through
 /// <c>BsonSerializerFactory.TimeOfDayMillisecondsSerializer</c> gives the right <see cref="TimeSpan"/>; a filter, group
-/// key or accumulator would misread those milliseconds.
+/// key or accumulator would misread those milliseconds. <see cref="TimeOfDayTicks"/> is the same leaf for a
+/// <see cref="DateTimeOffset"/>, computed from the stored <c>Ticks</c> field as ticks since midnight: the stored
+/// <c>DateTime</c> is a BSON date, which keeps whole milliseconds only (and rounds a pre-1970 value the wrong way).
+/// Read through <c>BsonSerializerFactory.TimeOfDayTicksSerializer</c>.
 /// </remarks>
 internal enum MongoDatePart
 {
@@ -36,7 +39,8 @@ internal enum MongoDatePart
     DayOfWeek,
     DayOfYear,
     Date,
-    TimeOfDay
+    TimeOfDay,
+    TimeOfDayTicks
 }
 
 /// <summary>
@@ -55,14 +59,14 @@ internal sealed class MongoDatePartExpression(MongoExpression operand, MongoDate
     /// <see cref="TimeSpan"/>'s default stored form). The one predicate the emit-side declines and the read side share.
     /// </summary>
     internal static bool IsTimeOfDay(MongoExpression node)
-        => node is MongoDatePartExpression { Part: MongoDatePart.TimeOfDay };
+        => node is MongoDatePartExpression { Part: MongoDatePart.TimeOfDay or MongoDatePart.TimeOfDayTicks };
 
     /// <inheritdoc />
     public override Type Type { get; } = part switch
     {
         MongoDatePart.Date => typeof(DateTime),
         MongoDatePart.DayOfWeek => typeof(DayOfWeek),
-        MongoDatePart.TimeOfDay => typeof(TimeSpan),
+        MongoDatePart.TimeOfDay or MongoDatePart.TimeOfDayTicks => typeof(TimeSpan),
         _ => typeof(int)
     };
 }

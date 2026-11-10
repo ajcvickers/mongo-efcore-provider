@@ -312,6 +312,18 @@ internal static class MongoAggregationExpressionRenderer
     // $dayOfWeek is 1 (Sunday)..7; .NET DayOfWeek is 0..6. Omitting the subtraction shifts every day by one.
     private static BsonValue RenderDatePart(MongoDatePartExpression node, PlaceholderTable placeholders, string? elementVariable)
     {
+        // A DateTimeOffset's time of day comes from its stored local-clock "Ticks" (exact), not from the millisecond BSON date.
+        if (node.Part == MongoDatePart.TimeOfDayTicks)
+        {
+            return node.Operand is MongoDateTimeOffsetLocalExpression ticksSource
+                ? new BsonDocument("$mod", new BsonArray
+                {
+                    FieldRef(ticksSource.Operand.ElementName + ".Ticks", elementVariable),
+                    new BsonInt64(TimeSpan.TicksPerDay)
+                })
+                : throw new NativeTranslationNotSupportedException($"{nameof(MongoDatePart.TimeOfDayTicks)} needs a stored DateTimeOffset operand.");
+        }
+
         var operand = Render(node.Operand, placeholders, elementVariable);
         return node.Part switch
         {
