@@ -156,11 +156,23 @@ EntityType.{ "$limit" : 2 }
     public override async Task Nullable_complex_type_with_discriminator_set_to_different_value()
     {
         await base.Nullable_complex_type_with_discriminator_set_to_different_value();
+
+        // The query embeds a Guid key generated per run, so Guid values are normalized before comparing.
+        AssertMqlIgnoringGuids(
+            """
+EntityType.{ "$match" : { "_id" : { "$binary" : { "base64" : "+5NAsgL6SdGhPRHD2HGA3w==", "subType" : "04" } } } }, { "$limit" : 2 }
+""");
     }
 
     public override async Task Nullable_complex_type_with_discriminator_set_to_null()
     {
         await base.Nullable_complex_type_with_discriminator_set_to_null();
+
+        // The query embeds a Guid key generated per run, so Guid values are normalized before comparing.
+        AssertMqlIgnoringGuids(
+            """
+EntityType.{ "$match" : { "_id" : { "$binary" : { "base64" : "cmMgCGFVS6aOJOJfovJw8g==", "subType" : "04" } } } }, { "$limit" : 2 }
+""");
     }
 
     public override async Task Nested_nullable_complex_type_with_discriminator_null_to_non_null_roundtrip()
@@ -179,6 +191,17 @@ EntityType.{ "$limit" : 2 }
 
     private TestMqlLoggerFactory TestMqlLoggerFactory
         => (TestMqlLoggerFactory)ListLoggerFactory;
+
+    private void AssertMqlIgnoringGuids(params string[] expected)
+    {
+        static string Normalize(string mql)
+            => System.Text.RegularExpressions.Regex.Replace(
+                mql, """\{ "base64" : "[^"]*", "subType" : "04" \}""", """{ "base64" : <guid>, "subType" : "04" }""");
+
+        var actual = TestMqlLoggerFactory.MqlStatements.Select(Normalize).ToArray();
+        TestMqlLoggerFactory.Clear();
+        Assert.Equal(expected.Select(Normalize).ToArray(), actual);
+    }
 
     private void AssertMql(params string[] expected)
         => TestMqlLoggerFactory.AssertBaseline(expected);
