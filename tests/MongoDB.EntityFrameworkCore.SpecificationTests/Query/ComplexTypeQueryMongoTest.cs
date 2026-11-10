@@ -76,7 +76,7 @@ EntityType.
 
         AssertMql(
             """
-EntityType.{ "$match" : { "AllOptionalsComplexType" : null } }, { "$limit" : 2 }
+EntityType.{ "$match" : { "$or" : [{ "AllOptionalsComplexType" : null }, { "AllOptionalsComplexType.Discriminator" : null }] } }, { "$limit" : 2 }
 """,
             //
             """

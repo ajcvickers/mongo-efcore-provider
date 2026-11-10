@@ -283,10 +283,10 @@ internal sealed partial class MongoExpressionTranslator
     private bool TryTranslateComplexHasValue(Expression receiver, [NotNullWhen(true)] out MongoExpression? result)
     {
         result = null;
-        if (!TryResolveComplexOperand(receiver, out var path, out _))
+        if (!TryResolveComplexOperand(receiver, out var path, out var complexProperty))
             return false;
 
-        result = new MongoElementNullCheckExpression(path, isNotNull: true);
+        result = IsNullValue(complexProperty, path).NotEqual;
         return true;
     }
 
@@ -358,7 +358,7 @@ internal sealed partial class MongoExpressionTranslator
             // `c.Address == null`: null and missing alike (and for a required property, the malformed rows driver-LINQ's
             // { Address: null } also returns).
             case ComplexComparand.Known { Value: null }:
-                return EqualityPair.IsNull(path);
+                return IsNullValue(complexProperty, path);
 
             case ComplexComparand.Known or ComplexComparand.Runtime { MayBeNull: false } or ComplexComparand.Constructed:
             {
@@ -367,7 +367,7 @@ internal sealed partial class MongoExpressionTranslator
                     return null;
 
                 // An absent-able value equals an instance only when present: `{}` holds an instance, null/missing don't.
-                return WhenPresent(path, mayBeAbsent, members.Value);
+                return WhenPresent(complexProperty, path, mayBeAbsent, members.Value);
             }
 
             case ComplexComparand.Runtime runtime:
@@ -380,8 +380,8 @@ internal sealed partial class MongoExpressionTranslator
                 // (value is not null AND the value is present with matching members).
                 var valueIsNull = RuntimeIsNull(runtime);
                 return EqualityPair.Or(
-                    EqualityPair.And(valueIsNull, EqualityPair.IsNull(path)),
-                    EqualityPair.And(valueIsNull.Negate(), WhenPresent(path, mayBeAbsent, members.Value)));
+                    EqualityPair.And(valueIsNull, IsNullValue(complexProperty, path)),
+                    EqualityPair.And(valueIsNull.Negate(), WhenPresent(complexProperty, path, mayBeAbsent, members.Value)));
             }
 
             case ComplexComparand.Stored stored:
@@ -400,8 +400,8 @@ internal sealed partial class MongoExpressionTranslator
                 // Each side is null when its element is null/missing. C# null propagation: null == null is true, null ==
                 // value false, value == value member-wise. A side that can't be absent is never null (its missing element is
                 // malformed data and reads members as null, as everywhere else).
-                var leftNull = mayBeAbsent ? EqualityPair.IsNull(path) : Never;
-                var rightNull = otherAbsent ? EqualityPair.IsNull(stored.Path) : Never;
+                var leftNull = mayBeAbsent ? IsNullValue(complexProperty, path) : Never;
+                var rightNull = otherAbsent ? IsNullValue(stored.Property, stored.Path) : Never;
                 return EqualityPair.Or(
                     EqualityPair.And(leftNull, rightNull),
                     EqualityPair.And(EqualityPair.And(leftNull.Negate(), rightNull.Negate()), members.Value));
@@ -427,8 +427,31 @@ internal sealed partial class MongoExpressionTranslator
     private static string JoinPath(string path, string member)
         => path.Length == 0 ? member : path + "." + member;
 
-    private static EqualityPair WhenPresent(string path, bool mayBeAbsent, EqualityPair members)
-        => mayBeAbsent ? EqualityPair.And(EqualityPair.IsNull(path).Negate(), members) : members;
+    private static EqualityPair WhenPresent(IComplexProperty complexProperty, string path, bool mayBeAbsent, EqualityPair members)
+        => mayBeAbsent ? EqualityPair.And(IsNullValue(complexProperty, path).Negate(), members) : members;
+
+    /// <summary>
+    /// Whether the complex value stored at <paramref name="path"/> reads as null: its element is null or missing, and, for an
+    /// optional property with a discriminator (EF10 <c>HasDiscriminator()</c>), also when the stored discriminator is null or
+    /// missing, whatever the other members hold. This is the rule the shaper applies when materializing
+    /// (<c>ComplexTypeMaterializationBuilder</c>), so a filter and a projection agree on which rows have a null property.
+    /// </summary>
+    private static EqualityPair IsNullValue(IComplexProperty complexProperty, string path)
+    {
+        var elementNull = EqualityPair.IsNull(path);
+#if EF10 || EF11
+        // Complex-type discriminators exist from EF10.
+        if (path.Length != 0
+            && !complexProperty.IsCollection
+            && complexProperty.IsOptional()
+            && complexProperty.ComplexType.FindDiscriminatorProperty() is { } discriminator)
+        {
+            return EqualityPair.Or(elementNull, EqualityPair.IsNull(path + "." + discriminator.GetElementName()));
+        }
+#endif
+
+        return elementNull;
+    }
 
     /// <summary>
     /// The conjunction of member equalities of <paramref name="complexType"/> (stored at <paramref name="path"/>) with
