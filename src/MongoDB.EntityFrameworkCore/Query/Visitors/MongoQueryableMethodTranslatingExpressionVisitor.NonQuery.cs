@@ -448,9 +448,11 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
     }
 
     /// <summary>
-    /// Classifies the captured source chain of a bulk delete/update. Only <c>Where</c> is the single-command atomic path;
-    /// <c>OrderBy</c>/<c>ThenBy</c>/<c>Skip</c>/<c>Take</c>/<c>Distinct</c> require the two-phase path (query target
-    /// <c>_id</c>s, then act by <c>$in</c>). Anything else produces EF's canonical non-query translation failure.
+    /// Classifies the captured source chain of a bulk delete/update. <c>Where</c> scopes the operation directly. Ordering and
+    /// <c>Distinct</c> do not change which documents are affected (<see cref="MongoNonQueryExpression.IsAffectedSetNeutral"/>), so on
+    /// their own they stay on the atomic single-command path. <c>Skip</c>/<c>Take</c> do change the affected set and cannot be
+    /// expressed as one <c>deleteMany</c>/<c>updateMany</c>, so they need the two-phase path (query the target <c>_id</c>s, then act by
+    /// <c>$in</c>). Anything else produces EF's canonical non-query translation failure.
     /// </summary>
     private MongoNonQueryExpression.BulkStrategy ClassifyBulkSource(MongoQueryExpression mongoQueryExpression)
     {
@@ -464,24 +466,18 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                 ThrowBulkSourceNotSupported(mongoQueryExpression, methodCallExpression.Method.Name);
             }
 
-            switch (methodCallExpression.Method.Name)
+            var name = methodCallExpression.Method.Name;
+            if (name == nameof(Queryable.Where) || MongoNonQueryExpression.IsAffectedSetNeutral(name))
             {
-                case nameof(Queryable.Where):
-                    break;
-
-                case nameof(Queryable.OrderBy):
-                case nameof(Queryable.OrderByDescending):
-                case nameof(Queryable.ThenBy):
-                case nameof(Queryable.ThenByDescending):
-                case nameof(Queryable.Skip):
-                case nameof(Queryable.Take):
-                case nameof(Queryable.Distinct):
-                    strategy = MongoNonQueryExpression.BulkStrategy.TwoPhase;
-                    break;
-
-                default:
-                    ThrowBulkSourceNotSupported(mongoQueryExpression, methodCallExpression.Method.Name);
-                    break;
+                // Scopes the operation, or leaves the affected set alone.
+            }
+            else if (MongoNonQueryExpression.IsPaging(name))
+            {
+                strategy = MongoNonQueryExpression.BulkStrategy.TwoPhase;
+            }
+            else
+            {
+                ThrowBulkSourceNotSupported(mongoQueryExpression, name);
             }
 
             expression = methodCallExpression.Arguments[0];

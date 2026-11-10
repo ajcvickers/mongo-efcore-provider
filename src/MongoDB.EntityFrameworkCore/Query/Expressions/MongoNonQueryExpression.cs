@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -89,6 +90,27 @@ internal sealed class MongoNonQueryExpression : Expression
            && Array.IndexOf(BulkOperatorNames, name) >= 0
             ? call.Arguments[0]
             : capturedExpression;
+
+    /// <summary>
+    /// Whether a <see cref="Queryable"/> operator leaves WHICH documents a bulk operation affects unchanged, so it neither forces the
+    /// two-phase strategy nor needs translating into the server-side filter. Ordering matters only together with paging, and
+    /// <c>Distinct</c> over one collection's entities is a no-op because documents are already distinct by <c>_id</c>.
+    /// <para>
+    /// The classifier and the filter builder both consult this, so they cannot drift apart. An operator that NARROWS the affected set
+    /// (<c>OfType</c>, <c>Cast</c>, <c>Skip</c>, <c>Take</c>) must never be added here: the filter builder would step over it, and
+    /// a bulk delete would remove documents the caller did not select.
+    /// </para>
+    /// </summary>
+    public static bool IsAffectedSetNeutral(string operatorName)
+        => operatorName is nameof(Queryable.OrderBy)
+            or nameof(Queryable.OrderByDescending)
+            or nameof(Queryable.ThenBy)
+            or nameof(Queryable.ThenByDescending)
+            or nameof(Queryable.Distinct);
+
+    /// <summary>Whether a <see cref="Queryable"/> operator changes the affected set in a way one server command cannot express.</summary>
+    public static bool IsPaging(string operatorName)
+        => operatorName is nameof(Queryable.Skip) or nameof(Queryable.Take);
 
     public override ExpressionType NodeType => ExpressionType.Extension;
     public override System.Type Type => typeof(int);

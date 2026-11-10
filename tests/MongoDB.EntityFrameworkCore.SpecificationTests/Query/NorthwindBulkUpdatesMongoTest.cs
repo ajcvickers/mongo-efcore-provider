@@ -33,7 +33,7 @@ namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 //
 // Supported cases call base, which asserts the affected-document count and before/after state. Bulk operations
 // emit Executing/ExecutedBulkUpdate|Delete events rather than ExecutedMqlQuery, so there is no AssertMql baseline.
-// Ordering/paging/Distinct-scoped operations use the two-phase (_id-projection) path and also call base.
+// Skip/Take-scoped operations use the two-phase (_id-projection) path and also call base; ordering and Distinct alone stay single-command.
 // Out-of-subset cases (joins, set operations, GroupBy, SelectMany, navigations, non-entity projections,
 // multiple-collection updates) are not skipped (docs/failing-spec-tests.md): they run and assert the current
 // failure mode, tagged with a // Fails: comment. More coverage: FunctionalTests/Query/ExecuteUpdateTests.cs and

@@ -96,8 +96,8 @@ Entity Framework Core and MongoDB have a wide variety of features. This provider
 - MongoDB vector search (Previously known as Atlas Vector Search)
 - [Client Side Field Level Encryption](https://www.mongodb.com/docs/manual/core/csfle/quick-start/) and [Queryable Encryption](https://www.mongodb.com/docs/manual/core/queryable-encryption/) compatibility
 - Bulk `ExecuteUpdate` and `ExecuteDelete` (EF 9+) on a single collection; supports constant and self-referencing setters; bypasses the change tracker (concurrency tokens are neither checked nor protected: a bulk update may set one explicitly)
-  - `Where`-scoped sources execute as a single atomic `deleteMany` / `updateMany` server command
-  - Sources that also use `OrderBy`/`ThenBy`/`Skip`/`Take`/`Distinct` are supported via a transactional two-phase execution (phase 1 collects the target `_id`s; phase 2 acts on them via `{ _id: { $in: [...] } }`); requires a transaction-capable deployment (replica set or sharded cluster); under `AutoTransactionBehavior.Never` the caller must open an explicit transaction
+  - `Where`-scoped sources, including ones that also use `OrderBy`/`ThenBy`/`Distinct` (they do not change which documents match), execute as a single `deleteMany` / `updateMany` server command
+  - Sources that use `Skip`/`Take` are supported via a transactional two-phase execution (phase 1 collects the target `_id`s; phase 2 acts on them via `{ _id: { $in: [...] } }`); requires a transaction-capable deployment (replica set or sharded cluster); under `AutoTransactionBehavior.Never` the caller must open an explicit transaction
   - If a transaction is already open on the context, the operation enlists in it rather than starting its own — MongoDB does not support nested transactions, so a two-phase bulk op cannot open an inner transaction the way some relational providers do
   - Not supported: joins, `GroupBy`, `SelectMany`, set operations, cross-document navigation predicates, or multiple-collection updates
 

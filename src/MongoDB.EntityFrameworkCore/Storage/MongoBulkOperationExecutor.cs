@@ -459,13 +459,13 @@ internal static class MongoBulkOperationExecutor
 
     private static InvalidOperationException NoAutoTransactionError()
         => new(
-            "This bulk delete or update uses ordering, paging, or 'Distinct', which the MongoDB provider executes "
+            "This bulk delete or update uses paging ('Skip'/'Take'), which the MongoDB provider executes "
             + "as a two-phase operation requiring a transaction. The context's AutoTransactionBehavior is 'Never', "
             + "so open an explicit transaction (Database.BeginTransaction) around the call.");
 
     private static InvalidOperationException StandaloneTransactionError(Exception inner)
         => new(
-            "This bulk delete or update uses ordering, paging, or 'Distinct', which the MongoDB provider executes "
+            "This bulk delete or update uses paging ('Skip'/'Take'), which the MongoDB provider executes "
             + "as a two-phase operation requiring a transaction. The current MongoDB deployment does not support "
             + "multi-document transactions (a replica set or sharded cluster is required).", inner);
 

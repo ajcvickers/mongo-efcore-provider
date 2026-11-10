@@ -46,7 +46,9 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         mb.Entity<Order>().Property(e => e.Status).HasElementName("state");
     };
 
-    private SingleEntityDbContext<Order> CreateSeededContext([CallerMemberName] string? collectionName = null)
+    // loggerFactory comes FIRST so the existing [CallerMemberName] collection name still applies when it is omitted or passed alone.
+    private SingleEntityDbContext<Order> CreateSeededContext(
+        Microsoft.Extensions.Logging.LoggerFactory? loggerFactory = null, [CallerMemberName] string? collectionName = null)
     {
         var collection = database.CreateCollection<Order>(collectionName);
 
@@ -59,7 +61,9 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
             seedDb.SaveChanges();
         }
 
-        return SingleEntityDbContext.Create(collection, ConfigureModel);
+        return loggerFactory == null
+            ? SingleEntityDbContext.Create(collection, ConfigureModel)
+            : SingleEntityDbContext.Create(collection, loggerFactory, ConfigureModel);
     }
 
     [Fact]
@@ -368,7 +372,8 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
     public async Task ExecuteDelete_two_phase_with_a_foreign_ambient_transaction_throws_rather_than_running_unprotected(bool async)
     {
         // One collection per row: the helper names it from the method, and both rows share a method.
-        using var db = CreateSeededContext($"{nameof(ExecuteDelete_two_phase_with_a_foreign_ambient_transaction_throws_rather_than_running_unprotected)}_{async}");
+        using var db = CreateSeededContext(
+            collectionName: $"{nameof(ExecuteDelete_two_phase_with_a_foreign_ambient_transaction_throws_rather_than_running_unprotected)}_{async}");
         ((MongoTransactionManager)db.Database.GetService<IDbContextTransactionManager>()).CurrentTransaction = new NotAMongoTransaction();
 
         var ex = async
@@ -389,8 +394,7 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
     [InlineData(true)]
     public async Task ExecuteDelete_two_phase_with_a_source_the_driver_cannot_translate_reports_a_translation_failure(bool async)
     {
-        using var db = CreateSeededContext(
-            $"{nameof(ExecuteDelete_two_phase_with_a_source_the_driver_cannot_translate_reports_a_translation_failure)}_{async}");
+        using var db = CreateSeededContext(collectionName: $"{nameof(ExecuteDelete_two_phase_with_a_source_the_driver_cannot_translate_reports_a_translation_failure)}_{async}");
         var source = db.Entities.Where(o => db.Entities.GroupBy(x => x.Status).Count() > 1).OrderBy(o => o.Quantity).Take(1);
 
         var ex = async
@@ -490,6 +494,86 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         var phase1 = Assert.Single(capture.Named("aggregate"));
         Assert.True(phase1.Contains("txnNumber"), $"The phase-1 read ran outside the transaction. Its fields: {string.Join(", ", phase1.Names)}");
         Assert.True(Assert.Single(capture.Named("delete")).Contains("txnNumber"), "The phase-2 delete ran outside the transaction.");
+    }
+
+    // Ordering and Distinct do not change which documents are affected, so they must not demand a transaction, read every match to the
+    // client, or make the server sort for nothing (an unindexed blocking sort over 100 MB fails outright).
+    [Fact]
+    public void ExecuteDelete_with_OrderBy_and_no_paging_uses_the_single_command_path()
+    {
+        var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
+        using var db = CreateSeededContext(loggerFactory);
+
+        var deleted = db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).ExecuteDelete();
+
+        Assert.Equal(2, deleted);
+        Assert.Contains("Strategy=SingleCommand", spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete));
+    }
+
+    [Fact]
+    public void ExecuteDelete_with_ThenBy_mid_chain_and_no_paging_uses_the_single_command_path()
+    {
+        var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
+        using var db = CreateSeededContext(loggerFactory);
+
+        var deleted = db.Entities.OrderBy(o => o.Quantity).ThenByDescending(o => o.Status).Where(o => o.Status == "open").ExecuteDelete();
+
+        Assert.Equal(2, deleted);
+        Assert.Contains("Strategy=SingleCommand", spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete));
+    }
+
+    [Fact]
+    public void ExecuteDelete_with_Distinct_and_no_paging_uses_the_single_command_path()
+    {
+        var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
+        using var db = CreateSeededContext(loggerFactory);
+
+        var deleted = db.Entities.Where(o => o.Status == "open").Distinct().ExecuteDelete();
+
+        Assert.Equal(2, deleted);
+        Assert.Contains("Strategy=SingleCommand", spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete));
+    }
+
+    [Fact]
+    public void ExecuteDelete_with_OrderBy_and_no_paging_works_under_AutoTransactionBehavior_Never()
+    {
+        using var db = CreateSeededContext();
+        db.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
+
+        var deleted = db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).ExecuteDelete();
+
+        Assert.Equal(2, deleted);
+    }
+
+    [Fact]
+    public void ExecuteDelete_with_Skip_and_no_Take_still_uses_the_two_phase_path()
+    {
+        var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
+        using var db = CreateSeededContext(loggerFactory);
+
+        var deleted = db.Entities.OrderBy(o => o.Quantity).Skip(1).ExecuteDelete();
+
+        Assert.Equal(2, deleted);
+        Assert.Contains("Strategy=TwoPhase", spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete));
+        Assert.Equal("open", db.Entities.Single().Status);
+    }
+
+    // The filter builder steps over OrderBy rather than stopping at it; stopping would drop the inner Where and delete too much. The
+    // predicates are chosen so that dropping EITHER one changes the result: Status == "open" matches {10, 20} and Quantity > 15 matches
+    // {20, 30}, so only the conjunction deletes exactly one document.
+    [Fact]
+    public void ExecuteDelete_with_Where_either_side_of_OrderBy_applies_both_predicates()
+    {
+        using var db = CreateSeededContext();
+
+        var deleted = db.Entities
+            .Where(o => o.Status == "open")
+            .OrderBy(o => o.Quantity)
+            .Where(o => o.Quantity > 15)
+            .ExecuteDelete();
+
+        Assert.Equal(1, deleted);
+        Assert.Equal(2, db.Entities.Count());
     }
 }
 

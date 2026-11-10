@@ -167,7 +167,7 @@ internal static class MongoBulkPlanBuilder
         {
             throw NonQueryTranslationFailed(
                 ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression),
-                "the entity must have a primary key to use ordering, paging, or Distinct in a bulk delete or update.");
+                "the entity must have a primary key to use paging (Skip/Take) in a bulk delete or update.");
         }
     }
 
@@ -208,28 +208,30 @@ internal static class MongoBulkPlanBuilder
 
         Expression? combinedBody = null;
         var expression = MongoNonQueryExpression.UnwrapBulkOperator(nonQuery.SourceQuery.CapturedExpression);
-        // ClassifyBulkSource has already rejected any operator other than Queryable.Where on the single-command path.
-        while (expression is MethodCallExpression { Method: { DeclaringType: var declaringType, Name: nameof(Queryable.Where) } }
-                   whereCall
+        // Only the single-command strategy reaches here, and ClassifyBulkSource has kept Skip/Take (two-phase) and every operator it does
+        // not know out of it. Step over the affected-set-neutral operators (ordering, Distinct) and keep collecting predicates from
+        // further in: stopping at one would silently drop every inner Where and delete more than was asked.
+        while (expression is MethodCallExpression { Method: { DeclaringType: var declaringType, Name: var operatorName } } call
                && declaringType == typeof(Queryable))
         {
-            var predicate = whereCall.Arguments[1].UnwrapLambdaFromQuote();
-            var translatedBody = translator.Visit(predicate.Body)!;
-            translatedBody = ReplacingExpressionVisitor.Replace(predicate.Parameters[0], sharedParameter, translatedBody);
+            if (operatorName == nameof(Queryable.Where))
+            {
+                var predicate = call.Arguments[1].UnwrapLambdaFromQuote();
+                var translatedBody = translator.Visit(predicate.Body)!;
+                translatedBody = ReplacingExpressionVisitor.Replace(predicate.Parameters[0], sharedParameter, translatedBody);
 
-            combinedBody = combinedBody == null ? translatedBody : Expression.AndAlso(combinedBody, translatedBody);
+                combinedBody = combinedBody == null ? translatedBody : Expression.AndAlso(combinedBody, translatedBody);
+            }
+            else if (!MongoNonQueryExpression.IsAffectedSetNeutral(operatorName))
+            {
+                // Fail loud: an operator the classifier admitted that this builder cannot honour would affect the wrong documents.
+                throw new InvalidOperationException(
+                    $"Bulk filter construction encountered an unsupported '{operatorName}' operator in the source "
+                    + "chain. Only 'Where' can scope a single-command bulk filter and only ordering and 'Distinct' may be skipped; this "
+                    + "indicates the bulk-source classifier admitted an operator the filter builder does not handle.");
+            }
 
-            expression = whereCall.Arguments[0];
-        }
-
-        // Fail loud: a remaining non-Where operator means ClassifyBulkSource admitted something this builder ignores, which would affect the wrong documents.
-        if (expression is MethodCallExpression { Method.DeclaringType: var remainingType } remaining
-            && remainingType == typeof(Queryable))
-        {
-            throw new InvalidOperationException(
-                $"Bulk filter construction encountered an unsupported '{remaining.Method.Name}' operator in the source "
-                + "chain. Only 'Where' can scope a single-command bulk filter; this indicates the bulk-source classifier "
-                + "admitted an operator the filter builder does not handle.");
+            expression = call.Arguments[0];
         }
 
         if (combinedBody == null)
