@@ -17,8 +17,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Query;
 
 namespace MongoDB.EntityFrameworkCore.Query.Expressions;
 
@@ -91,6 +93,26 @@ internal sealed class MongoNonQueryExpression : Expression
             ? call.Arguments[0]
             : capturedExpression;
 
+    // The canonical single-key / parameterless overloads. Matched by method definition, not by name (Query/AGENTS.md: reference-equality on
+    // MethodInfo), so overloads with different semantics are not admitted: OrderBy(keySelector, IComparer<T>) and
+    // Distinct(IEqualityComparer<T>) change what is selected or how it is compared, and an indexed Where would leave its index parameter
+    // unbound in the filter. EF rejects those before provider code runs today; this keeps that true if it ever loosens.
+    private static readonly IReadOnlySet<MethodInfo> AffectedSetNeutralDefinitions = new HashSet<MethodInfo>
+    {
+        QueryableMethods.OrderBy,
+        QueryableMethods.OrderByDescending,
+        QueryableMethods.ThenBy,
+        QueryableMethods.ThenByDescending,
+        QueryableMethods.Distinct
+    };
+
+    private static MethodInfo Definition(MethodInfo method)
+        => method.IsGenericMethod ? method.GetGenericMethodDefinition() : method;
+
+    /// <summary>Whether this is the canonical <c>Queryable.Where(source, predicate)</c>, which scopes a bulk operation.</summary>
+    public static bool IsWhere(MethodInfo method)
+        => Definition(method) == QueryableMethods.Where;
+
     /// <summary>
     /// Whether a <see cref="Queryable"/> operator leaves WHICH documents a bulk operation affects unchanged, so it neither forces the
     /// two-phase strategy nor needs translating into the server-side filter. Ordering matters only together with paging, and
@@ -101,16 +123,15 @@ internal sealed class MongoNonQueryExpression : Expression
     /// a bulk delete would remove documents the caller did not select.
     /// </para>
     /// </summary>
-    public static bool IsAffectedSetNeutral(string operatorName)
-        => operatorName is nameof(Queryable.OrderBy)
-            or nameof(Queryable.OrderByDescending)
-            or nameof(Queryable.ThenBy)
-            or nameof(Queryable.ThenByDescending)
-            or nameof(Queryable.Distinct);
+    public static bool IsAffectedSetNeutral(MethodInfo method)
+        => AffectedSetNeutralDefinitions.Contains(Definition(method));
 
-    /// <summary>Whether a <see cref="Queryable"/> operator changes the affected set in a way one server command cannot express.</summary>
-    public static bool IsPaging(string operatorName)
-        => operatorName is nameof(Queryable.Skip) or nameof(Queryable.Take);
+    /// <summary>Whether this is the canonical <c>Skip</c> or <c>Take</c>, which change the affected set in a way one server command cannot express.</summary>
+    public static bool IsPaging(MethodInfo method)
+    {
+        var definition = Definition(method);
+        return definition == QueryableMethods.Skip || definition == QueryableMethods.Take;
+    }
 
     public override ExpressionType NodeType => ExpressionType.Extension;
     public override System.Type Type => typeof(int);

@@ -211,10 +211,10 @@ internal static class MongoBulkPlanBuilder
         // Only the single-command strategy reaches here, and ClassifyBulkSource has kept Skip/Take (two-phase) and every operator it does
         // not know out of it. Step over the affected-set-neutral operators (ordering, Distinct) and keep collecting predicates from
         // further in: stopping at one would silently drop every inner Where and delete more than was asked.
-        while (expression is MethodCallExpression { Method: { DeclaringType: var declaringType, Name: var operatorName } } call
+        while (expression is MethodCallExpression { Method: { DeclaringType: var declaringType } method } call
                && declaringType == typeof(Queryable))
         {
-            if (operatorName == nameof(Queryable.Where))
+            if (MongoNonQueryExpression.IsWhere(method))
             {
                 var predicate = call.Arguments[1].UnwrapLambdaFromQuote();
                 var translatedBody = translator.Visit(predicate.Body)!;
@@ -222,11 +222,11 @@ internal static class MongoBulkPlanBuilder
 
                 combinedBody = combinedBody == null ? translatedBody : Expression.AndAlso(combinedBody, translatedBody);
             }
-            else if (!MongoNonQueryExpression.IsAffectedSetNeutral(operatorName))
+            else if (!MongoNonQueryExpression.IsAffectedSetNeutral(method))
             {
                 // Fail loud: an operator the classifier admitted that this builder cannot honour would affect the wrong documents.
                 throw new InvalidOperationException(
-                    $"Bulk filter construction encountered an unsupported '{operatorName}' operator in the source "
+                    $"Bulk filter construction encountered an unsupported '{method.Name}' operator in the source "
                     + "chain. Only 'Where' can scope a single-command bulk filter and only ordering and 'Distinct' may be skipped; this "
                     + "indicates the bulk-source classifier admitted an operator the filter builder does not handle.");
             }

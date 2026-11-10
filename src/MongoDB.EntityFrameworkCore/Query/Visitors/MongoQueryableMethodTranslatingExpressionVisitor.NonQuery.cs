@@ -466,18 +466,18 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                 ThrowBulkSourceNotSupported(mongoQueryExpression, methodCallExpression.Method.Name);
             }
 
-            var name = methodCallExpression.Method.Name;
-            if (name == nameof(Queryable.Where) || MongoNonQueryExpression.IsAffectedSetNeutral(name))
+            var method = methodCallExpression.Method;
+            if (MongoNonQueryExpression.IsWhere(method) || MongoNonQueryExpression.IsAffectedSetNeutral(method))
             {
                 // Scopes the operation, or leaves the affected set alone.
             }
-            else if (MongoNonQueryExpression.IsPaging(name))
+            else if (MongoNonQueryExpression.IsPaging(method))
             {
                 strategy = MongoNonQueryExpression.BulkStrategy.TwoPhase;
             }
             else
             {
-                ThrowBulkSourceNotSupported(mongoQueryExpression, name);
+                ThrowBulkSourceNotSupported(mongoQueryExpression, method.Name);
             }
 
             expression = methodCallExpression.Arguments[0];
