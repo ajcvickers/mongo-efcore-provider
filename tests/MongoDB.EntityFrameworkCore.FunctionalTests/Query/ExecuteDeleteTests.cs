@@ -605,6 +605,76 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         using var check = SingleEntityDbContext.Create(collection, ConfigureModel);
         Assert.Equal(1, check.Entities.Count());
     }
+
+    // The ceiling is shrunk to 2 so 7 documents span 4 batches. Observed on the wire: four delete commands, but ONE commitTransaction,
+    // so the batches commit together; and the total counts every batch.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_splits_phase_2_across_batches_inside_one_transaction(bool async)
+    {
+        var collection = database.CreateCollection<Order>(nameof(ExecuteDelete_two_phase_splits_phase_2_across_batches_inside_one_transaction), async);
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureModel))
+        {
+            for (var i = 0; i < 7; i++)
+            {
+                seed.Add(new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = i });
+            }
+
+            seed.SaveChanges();
+        }
+
+        using var capture = new CommandCapture(database);
+        int deleted;
+        using (MongoBulkOperationExecutor.OverrideMaxIdsPerBulkCommand(2))
+        using (var db = SingleEntityDbContext.Create(capture.Collection(collection), ConfigureModel))
+        {
+            deleted = async
+                ? await db.Entities.OrderBy(o => o.Quantity).Take(7).ExecuteDeleteAsync()
+                : db.Entities.OrderBy(o => o.Quantity).Take(7).ExecuteDelete();
+        }
+
+        Assert.Equal(7, deleted);
+        Assert.Equal(4, capture.Named("delete").Count);
+        Assert.Single(capture.Named("commitTransaction"));
+
+        using var check = SingleEntityDbContext.Create(collection, ConfigureModel);
+        Assert.Equal(0, check.Entities.Count());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_splits_phase_2_across_batches_inside_one_transaction(bool async)
+    {
+        var collection = database.CreateCollection<Order>(nameof(ExecuteUpdate_two_phase_splits_phase_2_across_batches_inside_one_transaction), async);
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureModel))
+        {
+            for (var i = 0; i < 7; i++)
+            {
+                seed.Add(new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = i });
+            }
+
+            seed.SaveChanges();
+        }
+
+        using var capture = new CommandCapture(database);
+        int updated;
+        using (MongoBulkOperationExecutor.OverrideMaxIdsPerBulkCommand(2))
+        using (var db = SingleEntityDbContext.Create(capture.Collection(collection), ConfigureModel))
+        {
+            updated = async
+                ? await db.Entities.OrderBy(o => o.Quantity).Take(7).ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, "archived"))
+                : db.Entities.OrderBy(o => o.Quantity).Take(7).ExecuteUpdate(s => s.SetProperty(o => o.Status, "archived"));
+        }
+
+        Assert.Equal(7, updated);
+        Assert.Equal(4, capture.Named("update").Count);
+        Assert.Single(capture.Named("commitTransaction"));
+
+        using var check = SingleEntityDbContext.Create(collection, ConfigureModel);
+        Assert.Equal(7, check.Entities.Count(o => o.Status == "archived"));
+    }
 }
 
 #endif

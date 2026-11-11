@@ -201,84 +201,147 @@ internal static class MongoBulkOperationExecutor
         });
     }
 
+    // A single { _id: { $in: [...] } } filter is bounded by the 16 MB BSON command limit (about 500k ObjectIds), and a very large $in
+    // costs real query-planning time, so phase 2 is split into batches. Every batch runs on the one session phase 1 opened, so they commit
+    // or abort together: atomicity is unchanged. Batching buys NO relief from transactionLifetimeLimitSeconds; more round trips inside the
+    // one transaction can only make that limit easier to reach. The ids themselves are still buffered in one list.
+    private const int DefaultMaxIdsPerBulkCommand = 50_000;
+
+    private static int MaxIdsPerBulkCommand = DefaultMaxIdsPerBulkCommand;
+
+    internal static IEnumerable<List<BsonValue>> BatchIds(List<BsonValue> ids, int batchSize)
+    {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize));
+        }
+
+        for (var start = 0; start < ids.Count; start += batchSize)
+        {
+            yield return ids.GetRange(start, Math.Min(batchSize, ids.Count - start));
+        }
+    }
+
+    // Test seam: shrinks the ceiling so a handful of documents spans several batches. Internal (reachable only through
+    // InternalsVisibleTo) and restored on Dispose even if the test throws. A plain static is acceptable because both test assemblies
+    // disable test parallelization.
+    internal static IDisposable OverrideMaxIdsPerBulkCommand(int batchSize)
+    {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize));
+        }
+
+        return new MaxIdsPerBulkCommandOverride(batchSize);
+    }
+
+    private sealed class MaxIdsPerBulkCommandOverride : IDisposable
+    {
+        private readonly int _previous = MaxIdsPerBulkCommand;
+
+        public MaxIdsPerBulkCommandOverride(int batchSize) => MaxIdsPerBulkCommand = batchSize;
+
+        public void Dispose() => MaxIdsPerBulkCommand = _previous;
+    }
+
     private static int DeleteByIds(
         QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, Stopwatch stopwatch)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
-        var filter = Builders<BsonDocument>.Filter.In("_id", ids);
-
         var updateLogger = GetUpdateLogger(queryContext);
-        updateLogger.ExecutingBulkDelete(
-            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count,
-            () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery));
 
-        var result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
+        long deleted = 0;
+        foreach (var batch in BatchIds(ids, MaxIdsPerBulkCommand))
+        {
+            var filter = Builders<BsonDocument>.Filter.In("_id", batch);
+            updateLogger.ExecutingBulkDelete(
+                stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), batch.Count,
+                () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery));
 
-        updateLogger.ExecutedBulkDelete(
-            stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount, plan.Strategy.ToString());
-        return checked((int)result.DeletedCount);
+            var result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
+            deleted += result.DeletedCount;
+        }
+
+        updateLogger.ExecutedBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, deleted, plan.Strategy.ToString());
+        return checked((int)deleted);
     }
 
     private static async Task<int> DeleteByIdsAsync(
         QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, Stopwatch stopwatch)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
-        var filter = Builders<BsonDocument>.Filter.In("_id", ids);
-
         var updateLogger = GetUpdateLogger(queryContext);
-        updateLogger.ExecutingBulkDelete(
-            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count,
-            () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery));
-
         var cancellationToken = queryContext.CancellationToken;
-        var result = session == null
-            ? await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false)
-            : await collection.DeleteManyAsync(session, filter, options: null, cancellationToken).ConfigureAwait(false);
 
-        updateLogger.ExecutedBulkDelete(
-            stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount, plan.Strategy.ToString());
-        return checked((int)result.DeletedCount);
+        long deleted = 0;
+        foreach (var batch in BatchIds(ids, MaxIdsPerBulkCommand))
+        {
+            var filter = Builders<BsonDocument>.Filter.In("_id", batch);
+            updateLogger.ExecutingBulkDelete(
+                stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), batch.Count,
+                () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery));
+
+            var result = session == null
+                ? await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false)
+                : await collection.DeleteManyAsync(session, filter, options: null, cancellationToken).ConfigureAwait(false);
+            deleted += result.DeletedCount;
+        }
+
+        updateLogger.ExecutedBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, deleted, plan.Strategy.ToString());
+        return checked((int)deleted);
     }
 
     private static int UpdateByIds(
-        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids,
+        UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
-        var filter = Builders<BsonDocument>.Filter.In("_id", ids);
-
         var updateLogger = GetUpdateLogger(queryContext);
-        updateLogger.ExecutingBulkUpdate(
-            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count,
-            () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery));
 
-        var result = session == null
-            ? collection.UpdateMany(filter, update)
-            : collection.UpdateMany(session, filter, update);
+        long matched = 0, modified = 0;
+        foreach (var batch in BatchIds(ids, MaxIdsPerBulkCommand))
+        {
+            var filter = Builders<BsonDocument>.Filter.In("_id", batch);
+            updateLogger.ExecutingBulkUpdate(
+                stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), batch.Count,
+                () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery));
 
-        updateLogger.ExecutedBulkUpdate(
-            stopwatch.Elapsed, collection.CollectionNamespace, result.MatchedCount, result.ModifiedCount, plan.Strategy.ToString());
-        return checked((int)result.MatchedCount);
+            var result = session == null
+                ? collection.UpdateMany(filter, update)
+                : collection.UpdateMany(session, filter, update);
+            matched += result.MatchedCount;
+            modified += result.ModifiedCount;
+        }
+
+        updateLogger.ExecutedBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, matched, modified, plan.Strategy.ToString());
+        return checked((int)matched);
     }
 
     private static async Task<int> UpdateByIdsAsync(
-        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids,
+        UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
-        var filter = Builders<BsonDocument>.Filter.In("_id", ids);
-
         var updateLogger = GetUpdateLogger(queryContext);
-        updateLogger.ExecutingBulkUpdate(
-            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count,
-            () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery));
-
         var cancellationToken = queryContext.CancellationToken;
-        var result = session == null
-            ? await collection.UpdateManyAsync(filter, update, options: null, cancellationToken).ConfigureAwait(false)
-            : await collection.UpdateManyAsync(session, filter, update, options: null, cancellationToken).ConfigureAwait(false);
 
-        updateLogger.ExecutedBulkUpdate(
-            stopwatch.Elapsed, collection.CollectionNamespace, result.MatchedCount, result.ModifiedCount, plan.Strategy.ToString());
-        return checked((int)result.MatchedCount);
+        long matched = 0, modified = 0;
+        foreach (var batch in BatchIds(ids, MaxIdsPerBulkCommand))
+        {
+            var filter = Builders<BsonDocument>.Filter.In("_id", batch);
+            updateLogger.ExecutingBulkUpdate(
+                stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), batch.Count,
+                () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery));
+
+            var result = session == null
+                ? await collection.UpdateManyAsync(filter, update, options: null, cancellationToken).ConfigureAwait(false)
+                : await collection.UpdateManyAsync(session, filter, update, options: null, cancellationToken).ConfigureAwait(false);
+            matched += result.MatchedCount;
+            modified += result.ModifiedCount;
+        }
+
+        updateLogger.ExecutedBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, matched, modified, plan.Strategy.ToString());
+        return checked((int)matched);
     }
 
     // The driver translates the phase-1 LINQ query lazily, when it is first enumerated, so a source it cannot translate surfaces here.
