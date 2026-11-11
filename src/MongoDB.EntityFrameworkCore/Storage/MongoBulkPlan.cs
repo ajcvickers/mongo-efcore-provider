@@ -82,7 +82,7 @@ internal sealed class MongoBulkPlan
     /// when it runs) as EF's canonical non-query translation failure, so it reads like a failure from <see cref="BuildFilter"/> or
     /// <see cref="BuildUpdate"/> rather than a raw driver exception. <see langword="null"/> for single-command.
     /// </summary>
-    public Func<Exception, InvalidOperationException>? TranslationFailed { get; init; }
+    public Func<Exception, QueryContext, InvalidOperationException>? TranslationFailed { get; init; }
 }
 
 #endif

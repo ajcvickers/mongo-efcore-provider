@@ -123,7 +123,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
             ? await source.ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, status))
             : source.ExecuteUpdate(s => s.SetProperty(o => o.Status, status));
 
-    private SingleEntityDbContext<Order> CreateSeededContext(bool async = false, [CallerMemberName] string? collectionName = null)
+    private SingleEntityDbContext<Order> CreateSeededContext(
+        bool async = false, bool sensitive = false, [CallerMemberName] string? collectionName = null)
     {
         var collection = database.CreateCollection<Order>(collectionName, async);
 
@@ -136,7 +137,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
             seedDb.SaveChanges();
         }
 
-        return SingleEntityDbContext.Create(collection, ConfigureModel);
+        return SingleEntityDbContext.Create(
+            collection, ConfigureModel, optionsBuilderAction: sensitive ? o => o.EnableSensitiveDataLogging() : null);
     }
 
     [Fact]
@@ -389,7 +391,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
     [Fact]
     public void ExecuteUpdate_unsupported_setter_method_reports_the_expression_not_a_reflection_wrapper()
     {
-        using var db = CreateSeededContext();
+        // The driver's description of the failing expression is only included with sensitive-data logging on.
+        using var db = CreateSeededContext(sensitive: true);
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => Foo(o.Quantity))));
@@ -402,7 +405,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
     [Fact]
     public void ExecuteUpdate_unsupported_setter_GetHashCode_reports_the_expression_not_a_reflection_wrapper()
     {
-        using var db = CreateSeededContext();
+        // The driver's description of the failing expression is only included with sensitive-data logging on.
+        using var db = CreateSeededContext(sensitive: true);
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Status.GetHashCode())));

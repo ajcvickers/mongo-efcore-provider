@@ -29,6 +29,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Storage;
 using Xunit;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
@@ -223,6 +224,42 @@ public class BulkOperationsEventDataTests(TemporaryDatabaseFixture database)
             collector.Stop();
         }
     }
+
+    // A large two-phase operation is written in batches: one Executing event per batch, each reporting ITS batch's id count as TargetCount,
+    // then a single Executed event carrying the totals.
+    [Fact]
+    public void Multi_batch_two_phase_update_raises_one_Executing_event_per_batch_and_one_Executed_event()
+    {
+        var collection = Seed(nameof(Multi_batch_two_phase_update_raises_one_Executing_event_per_batch_and_one_Executed_event));
+        var collector = new BulkEventCollector(collection.CollectionNamespace);
+        using var subscription = DiagnosticListener.AllListeners.Subscribe(collector);
+        try
+        {
+            using var db = SingleEntityDbContext.Create(collection);
+
+            int updated;
+            using (MongoBulkOperationExecutor.OverrideMaxIdsPerBulkCommand(1))
+            {
+                updated = db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteUpdate(s => s.SetProperty(o => o.Status, "shipped"));
+            }
+
+            Assert.Equal(2, updated);
+            var data = collector.Events.Select(e => e.Data).OfType<MongoBulkUpdateEventData>().ToList();
+            var executing = data.Where(d => d.Command != null).ToList();
+            var executed = Assert.Single(data.Where(d => d.Command == null));
+
+            Assert.Equal(2, executing.Count);
+            Assert.All(executing, d => Assert.Equal(1, d.TargetCount));
+            Assert.Equal(2, executed.MatchedCount);
+            Assert.Equal(2, executed.ModifyCount);
+            Assert.Null(executed.TargetCount);
+        }
+        finally
+        {
+            collector.Stop();
+        }
+    }
+
 }
 
 #endif

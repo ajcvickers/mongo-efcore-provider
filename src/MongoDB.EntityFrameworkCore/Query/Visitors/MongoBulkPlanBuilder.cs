@@ -89,7 +89,7 @@ internal static class MongoBulkPlanBuilder
             CollectionName = nonQuery.SourceQuery.CollectionExpression.CollectionName,
             BuildFilter = isTwoPhase
                 ? null
-                : qc => TranslateBulkOrThrow(nonQuery, () =>
+                : qc => TranslateBulkOrThrow(nonQuery, qc, () =>
                 {
                     ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
                     return BuildFilter<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
@@ -97,12 +97,12 @@ internal static class MongoBulkPlanBuilder
             // BuildUpdate needs no check of its own: the executor always calls BuildFilter (single command) or
             // BuildTargetIdQuery (two-phase) first, and that check covers the setter values too.
             BuildUpdate = isUpdate
-                ? qc => TranslateBulkOrThrow(nonQuery, () => BuildUpdate<TSource>(qc, entityType, bsonSerializerFactory, nonQuery))
+                ? qc => TranslateBulkOrThrow(nonQuery, qc, () => BuildUpdate<TSource>(qc, entityType, bsonSerializerFactory, nonQuery))
                 : null,
             BuildTargetIdQuery = isTwoPhase
                 ? qc =>
                 {
-                    TranslateBulkOrThrow(nonQuery, () =>
+                    TranslateBulkOrThrow(nonQuery, qc, () =>
                     {
                         ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
                         return true;
@@ -111,8 +111,7 @@ internal static class MongoBulkPlanBuilder
                 }
                 : null,
             TranslationFailed = isTwoPhase
-                ? exception => NonQueryTranslationFailed(
-                    ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression), exception.Message, exception)
+                ? (exception, qc) => TranslationFailedFrom(nonQuery, exception, qc)
                 : null,
         };
     }
@@ -140,7 +139,7 @@ internal static class MongoBulkPlanBuilder
     // Bulk filter/update are translated at execution time. A shape that slipped past compile-time validation makes the driver throw a raw
     // ExpressionNotSupportedException/ArgumentException: convert those to EF's non-query translation failure. InvalidOperationException
     // is left as-is (it already carries that message or the cross-DbSet rejection).
-    private static T TranslateBulkOrThrow<T>(MongoNonQueryExpression nonQuery, Func<T> translate)
+    private static T TranslateBulkOrThrow<T>(MongoNonQueryExpression nonQuery, QueryContext queryContext, Func<T> translate)
     {
         try
         {
@@ -148,10 +147,34 @@ internal static class MongoBulkPlanBuilder
         }
         catch (Exception exception) when (exception is not InvalidOperationException)
         {
-            throw NonQueryTranslationFailed(
-                ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression), exception.Message, exception);
+            throw TranslationFailedFrom(nonQuery, exception, queryContext);
         }
     }
+
+    // The driver's own exceptions print the failing LINQ expression with its constants and captured values inlined ("... Where(x => x.Ssn ==
+    // "123-45-6789")"), and an exception message is often logged or shown. EF masks constants in the expression it prints, so unless
+    // sensitive-data logging is on (the switch that governs the bulk Command) the driver's text is kept with its string and numeric literals
+    // masked, and the raw exception is not attached. The provider's own refusals print shapes through ExpressionShapePrinter and are kept.
+    private static InvalidOperationException TranslationFailedFrom(MongoNonQueryExpression nonQuery, Exception exception, QueryContext queryContext)
+    {
+        var expression = ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression);
+        var fromDriver = exception.GetType().Assembly == typeof(MongoClient).Assembly;
+        var sensitive = queryContext is MongoQueryContext { UpdateLogger: var logger } && logger.ShouldLogSensitiveData();
+        if (!fromDriver || sensitive)
+        {
+            return NonQueryTranslationFailed(expression, exception.Message, exception);
+        }
+
+        var masked = MaskLiterals(exception.Message);
+        return NonQueryTranslationFailed(expression, masked, new InvalidOperationException(masked));
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex StringLiteral = new(@"""(?:[^""\\]|\\.)*""");
+
+    private static readonly System.Text.RegularExpressions.Regex NumericLiteral = new(@"(?<![\w.])\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[LlMmFfDdUu]*(?![\w])");
+
+    internal static string MaskLiterals(string message)
+        => NumericLiteral.Replace(StringLiteral.Replace(message, "\"?\""), "?");
 
     // EF11 dropped the "with details" message: the details travel as the inner exception instead.
     internal static InvalidOperationException NonQueryTranslationFailed(

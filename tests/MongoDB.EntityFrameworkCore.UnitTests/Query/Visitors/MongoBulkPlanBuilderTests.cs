@@ -161,6 +161,20 @@ public class MongoBulkPlanBuilderTests
         Assert.Contains("primary key", ex.Message);
 #endif
     }
+
+    [Fact]
+    public static void MaskLiterals_hides_string_and_numeric_constants_but_keeps_identifiers()
+    {
+        var masked = MongoBulkPlanBuilder.MaskLiterals(
+            "Expression not supported: c.Aggregate([]).Where(o2 => ((o2.Status == \"SECRET \\\"x\\\" 1\") AndAlso (o2.Age > 42)) OrElse (o2.Price == 1.5E+3M)).Foo(7)");
+
+        Assert.DoesNotContain("SECRET", masked);
+        Assert.DoesNotContain("42", masked);
+        Assert.DoesNotContain("1.5", masked);
+        Assert.DoesNotContain("7)", masked);
+        Assert.Contains("o2.Status", masked);
+        Assert.Contains("Foo(?)", masked);
+    }
 }
 
 #endif

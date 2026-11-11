@@ -157,7 +157,7 @@ internal static class MongoBulkOperationExecutor
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
             var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
-            var ids = MaterializeIds(plan, targetIdQuery);
+            var ids = MaterializeIds(queryContext, plan, targetIdQuery);
             return ids.Count == 0 ? 0 : DeleteByIds(queryContext, plan, targetIdQuery, ids, stopwatch);
         });
 
@@ -167,7 +167,7 @@ internal static class MongoBulkOperationExecutor
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
             var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
-            var ids = await MaterializeIdsAsync(plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
+            var ids = await MaterializeIdsAsync(queryContext, plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
             return ids.Count == 0 ? 0 : await DeleteByIdsAsync(queryContext, plan, targetIdQuery, ids, stopwatch).ConfigureAwait(false);
         });
 
@@ -180,7 +180,7 @@ internal static class MongoBulkOperationExecutor
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
             var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
-            var ids = MaterializeIds(plan, targetIdQuery);
+            var ids = MaterializeIds(queryContext, plan, targetIdQuery);
             return ids.Count == 0 ? 0 : UpdateByIds(queryContext, plan, targetIdQuery, ids, update, stopwatch);
         });
     }
@@ -194,7 +194,7 @@ internal static class MongoBulkOperationExecutor
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
             var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
-            var ids = await MaterializeIdsAsync(plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
+            var ids = await MaterializeIdsAsync(queryContext, plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
             return ids.Count == 0
                 ? 0
                 : await UpdateByIdsAsync(queryContext, plan, targetIdQuery, ids, update, stopwatch).ConfigureAwait(false);
@@ -207,7 +207,14 @@ internal static class MongoBulkOperationExecutor
     // one transaction can only make that limit easier to reach. The ids themselves are still buffered in one list.
     private const int DefaultMaxIdsPerBulkCommand = 50_000;
 
-    private static int MaxIdsPerBulkCommand = DefaultMaxIdsPerBulkCommand;
+    // Test seam storage. AsyncLocal rather than a plain static: FunctionalTests runs test classes in parallel, and a process-wide override
+    // would shrink the batch size of unrelated tests running at the same time.
+    private static readonly AsyncLocal<int?> MaxIdsPerBulkCommandOverrideValue = new();
+
+    private static int MaxIdsPerBulkCommand => MaxIdsPerBulkCommandOverrideValue.Value ?? DefaultMaxIdsPerBulkCommand;
+
+    // Test seam: the ceiling currently in force.
+    internal static int CurrentMaxIdsPerBulkCommand => MaxIdsPerBulkCommand;
 
     internal static IEnumerable<List<BsonValue>> BatchIds(List<BsonValue> ids, int batchSize)
     {
@@ -223,8 +230,7 @@ internal static class MongoBulkOperationExecutor
     }
 
     // Test seam: shrinks the ceiling so a handful of documents spans several batches. Internal (reachable only through
-    // InternalsVisibleTo) and restored on Dispose even if the test throws. A plain static is acceptable because both test assemblies
-    // disable test parallelization.
+    // InternalsVisibleTo), scoped to the calling async flow, and restored on Dispose even if the test throws.
     internal static IDisposable OverrideMaxIdsPerBulkCommand(int batchSize)
     {
         if (batchSize <= 0)
@@ -237,11 +243,11 @@ internal static class MongoBulkOperationExecutor
 
     private sealed class MaxIdsPerBulkCommandOverride : IDisposable
     {
-        private readonly int _previous = MaxIdsPerBulkCommand;
+        private readonly int? _previous = MaxIdsPerBulkCommandOverrideValue.Value;
 
-        public MaxIdsPerBulkCommandOverride(int batchSize) => MaxIdsPerBulkCommand = batchSize;
+        public MaxIdsPerBulkCommandOverride(int batchSize) => MaxIdsPerBulkCommandOverrideValue.Value = batchSize;
 
-        public void Dispose() => MaxIdsPerBulkCommand = _previous;
+        public void Dispose() => MaxIdsPerBulkCommandOverrideValue.Value = _previous;
     }
 
     private static int DeleteByIds(
@@ -347,7 +353,7 @@ internal static class MongoBulkOperationExecutor
     // The driver translates the phase-1 LINQ query lazily, when it is first enumerated, so a source it cannot translate surfaces here.
     // ONLY ExpressionNotSupportedException is mapped to EF's canonical translation failure: this is an I/O site, so a broad filter
     // would relabel cancellation and server or network errors (write conflicts, timeouts) as "could not be translated".
-    private static List<BsonValue> MaterializeIds(MongoBulkPlan plan, IQueryable<BsonDocument> documents)
+    private static List<BsonValue> MaterializeIds(QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> documents)
     {
         try
         {
@@ -361,7 +367,7 @@ internal static class MongoBulkOperationExecutor
         }
         catch (ExpressionNotSupportedException exception) when (plan.TranslationFailed != null)
         {
-            throw plan.TranslationFailed(exception);
+            throw plan.TranslationFailed(exception, queryContext);
         }
     }
 
@@ -370,7 +376,7 @@ internal static class MongoBulkOperationExecutor
     // drained. The narrow catch wraps only ToCursorAsync, where the driver translates the query (synchronously, before any I/O), so a
     // MoveNextAsync failure (cancellation, network, server) is never relabelled as a translation error.
     private static async Task<List<BsonValue>> MaterializeIdsAsync(
-        MongoBulkPlan plan, IQueryable<BsonDocument> documents, CancellationToken cancellationToken)
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> documents, CancellationToken cancellationToken)
     {
         IAsyncCursor<BsonDocument> cursor;
         try
@@ -379,7 +385,7 @@ internal static class MongoBulkOperationExecutor
         }
         catch (ExpressionNotSupportedException exception) when (plan.TranslationFailed != null)
         {
-            throw plan.TranslationFailed(exception);
+            throw plan.TranslationFailed(exception, queryContext);
         }
 
         using (cursor)
@@ -564,8 +570,6 @@ internal static class MongoBulkOperationExecutor
         return (collection, session);
     }
 
-    // Server-side ExecuteDelete/ExecuteUpdate bypass SaveChanges, so MongoDatabaseWrapper's bulk-write logging never
-    // fires for them. Resolve the Update-category logger from the context's service provider for the dedicated bulk events.
     // Renders the command for diagnostics. Command content includes predicate values and the values being written, so it is
     // gated on ShouldLogSensitiveData() exactly like MQL is on the read path (Diagnostics/AGENTS.md: redaction is single-pointed).
     private static string RenderBulkCommand(

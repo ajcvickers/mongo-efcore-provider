@@ -274,6 +274,7 @@ public class BulkOperationsInheritanceTests(TemporaryDatabaseFixture database)
         var options = new DbContextOptionsBuilder<RootAndDerivedContext>()
             .UseMongoDB(collection.Database.Client, collection.Database.DatabaseNamespace.DatabaseName)
             .ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.ManyServiceProvidersCreatedWarning))
             .Options;
         return new RootAndDerivedContext(options);
     }

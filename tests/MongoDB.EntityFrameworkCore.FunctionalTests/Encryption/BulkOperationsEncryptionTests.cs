@@ -108,6 +108,13 @@ public class BulkOperationsEncryptionTests(TemporaryDatabaseFixture database)
         }
     }
 
+    // Pinned to the documented reason, so an unrelated encryption failure (missing key, bad schema) cannot masquerade as the rejection.
+    private static void ThrowsMultiDocumentUpdateRejection(Action bulkUpdate)
+    {
+        var ex = Assert.ThrowsAny<MongoEncryptionException>(bulkUpdate);
+        Assert.Contains("Multi-document updates are not allowed", ex.Message);
+    }
+
     private List<BsonDocument> RawDocuments(string collectionName)
         => _database.MongoDatabase.GetCollection<BsonDocument>(collectionName).Find(FilterDefinition<BsonDocument>.Empty).ToList();
 
@@ -168,13 +175,30 @@ public class BulkOperationsEncryptionTests(TemporaryDatabaseFixture database)
     [QueryableEncryptionTheory]
     [InlineData(CryptProvider.Mongocryptd)]
     [InlineData(CryptProvider.AutoEncryptSharedLibrary)]
+    public void Two_phase_bulk_delete_on_a_queryable_encrypted_collection_deletes_exactly_the_targeted_document(CryptProvider cryptProvider)
+    {
+        // Skip/Take goes through the two-phase path: phase 1 reads the target _ids, phase 2 deletes by { _id: { $in: [...] } }.
+        var (db, collectionName, patients) = Setup(cryptProvider, h => h.Builder.Property(x => x.SSN).IsEncryptedForEquality(h.DataKeyId));
+        using var _ = db;
+
+        var deleted = db.Patients.OrderBy(p => p.Sequence).Take(1).ExecuteDelete();
+
+        Assert.Equal(1, deleted);
+        var after = RawDocuments(collectionName);
+        Assert.Equal(patients.Length - 1, after.Count);
+        Assert.DoesNotContain(db.Patients.ToList(), p => p.Sequence == patients.Min(x => x.Sequence));
+    }
+
+    [QueryableEncryptionTheory]
+    [InlineData(CryptProvider.Mongocryptd)]
+    [InlineData(CryptProvider.AutoEncryptSharedLibrary)]
     public void Bulk_update_of_an_encrypted_field_is_rejected_and_writes_no_plaintext(CryptProvider cryptProvider)
     {
         var (db, collectionName, _) = Setup(cryptProvider, h => h.Builder.Property(x => x.SSN).IsEncrypted(h.DataKeyId));
         using var _ = db;
         var before = RawDocuments(collectionName);
 
-        Assert.ThrowsAny<MongoEncryptionException>(() => db.Patients.ExecuteUpdate(s => s.SetProperty(p => p.SSN, "000-00-0000")));
+        ThrowsMultiDocumentUpdateRejection(() => db.Patients.ExecuteUpdate(s => s.SetProperty(p => p.SSN, "000-00-0000")));
 
         var after = RawDocuments(collectionName);
         AssertRawDocumentsUnchanged(before, after);
@@ -193,7 +217,7 @@ public class BulkOperationsEncryptionTests(TemporaryDatabaseFixture database)
         using var _ = db;
         var before = RawDocuments(collectionName);
 
-        Assert.ThrowsAny<MongoEncryptionException>(() => db.Patients.ExecuteUpdate(s => s.SetProperty(p => p.Sequence, p => p.Sequence + 1)));
+        ThrowsMultiDocumentUpdateRejection(() => db.Patients.ExecuteUpdate(s => s.SetProperty(p => p.Sequence, p => p.Sequence + 1)));
 
         var after = RawDocuments(collectionName);
         AssertRawDocumentsUnchanged(before, after);
@@ -213,7 +237,7 @@ public class BulkOperationsEncryptionTests(TemporaryDatabaseFixture database)
         using var _ = db;
         var before = RawDocuments(collectionName);
 
-        Assert.ThrowsAny<MongoEncryptionException>(() => db.Patients.ExecuteUpdate(s => s.SetProperty(p => p.Sequence, p => p.Sequence + 1)));
+        ThrowsMultiDocumentUpdateRejection(() => db.Patients.ExecuteUpdate(s => s.SetProperty(p => p.Sequence, p => p.Sequence + 1)));
 
         var after = RawDocuments(collectionName);
         AssertRawDocumentsUnchanged(before, after);

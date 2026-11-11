@@ -443,6 +443,52 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Equal(3, db.Entities.Count());
     }
 
+    // The driver's own translation failure prints the failing expression with its constants and captured values inlined. An exception message
+    // is often logged or shown, so none of that may reach the exception (message or inner exception).
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_translation_failure_does_not_echo_predicate_values(bool async)
+    {
+        using var db = CreateSeededContext(async: async);
+        var captured = "SECRET-CAPTURED-VALUE";
+        var source = db.Entities
+            .Where(o => db.Entities.Where(x => x.Status == "SECRET-LITERAL-VALUE" && x.Status == captured).GroupBy(x => x.Status).Count() > 1)
+            .OrderBy(o => o.Quantity).Take(1);
+
+        var ex = async
+            ? await Assert.ThrowsAsync<InvalidOperationException>(() => source.ExecuteDeleteAsync())
+            : Assert.Throws<InvalidOperationException>(() => source.ExecuteDelete());
+
+        Assert.Contains("could not be translated", ex.Message);
+        for (Exception? e = ex; e != null; e = e.InnerException)
+        {
+            Assert.DoesNotContain("SECRET-LITERAL-VALUE", e.Message);
+            Assert.DoesNotContain("SECRET-CAPTURED-VALUE", e.Message);
+        }
+    }
+
+    // With sensitive-data logging on the driver's description is kept, as it is in the bulk Command.
+    [Fact]
+    public void ExecuteDelete_two_phase_translation_failure_keeps_the_driver_detail_with_sensitive_logging()
+    {
+        var collection = database.CreateCollection<Order>();
+        using var db = SingleEntityDbContext.Create(collection, ConfigureModel, optionsBuilderAction: o => o.EnableSensitiveDataLogging());
+        var source = db.Entities
+            .Where(o => db.Entities.Where(x => x.Status == "VISIBLE-LITERAL").GroupBy(x => x.Status).Count() > 1)
+            .OrderBy(o => o.Quantity).Take(1);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => source.ExecuteDelete());
+
+        var all = new System.Text.StringBuilder();
+        for (Exception? e = ex; e != null; e = e.InnerException)
+        {
+            all.AppendLine(e.Message);
+        }
+
+        Assert.Contains("VISIBLE-LITERAL", all.ToString());
+    }
+
     // The mapping is narrow on purpose: phase 1 is an I/O site, so cancellation must propagate as itself, not be relabelled as a
     // translation failure.
     [Fact]

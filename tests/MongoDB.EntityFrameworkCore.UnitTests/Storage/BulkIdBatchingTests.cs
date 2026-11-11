@@ -48,14 +48,21 @@ public static class BulkIdBatchingTests
         => Assert.Throws<ArgumentOutOfRangeException>(() => MongoBulkOperationExecutor.BatchIds([], batchSize).ToList());
 
     [Fact]
-    public static void The_override_is_restored_on_dispose()
+    public static void The_override_applies_and_is_restored_on_dispose()
     {
+        var before = MongoBulkOperationExecutor.CurrentMaxIdsPerBulkCommand;
+
         using (MongoBulkOperationExecutor.OverrideMaxIdsPerBulkCommand(2))
         {
+            Assert.Equal(2, MongoBulkOperationExecutor.CurrentMaxIdsPerBulkCommand);
         }
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => MongoBulkOperationExecutor.OverrideMaxIdsPerBulkCommand(0));
+        Assert.Equal(before, MongoBulkOperationExecutor.CurrentMaxIdsPerBulkCommand);
     }
+
+    [Fact]
+    public static void A_non_positive_override_is_rejected()
+        => Assert.Throws<ArgumentOutOfRangeException>(() => MongoBulkOperationExecutor.OverrideMaxIdsPerBulkCommand(0));
 }
 
 #endif

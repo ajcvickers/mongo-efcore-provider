@@ -81,13 +81,11 @@ public class InheritanceBulkUpdatesMongoTest : InheritanceBulkUpdatesTestBase<In
     public override Task Update_base_property_on_derived_type(bool async)
         => base.Update_base_property_on_derived_type(async);
 
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Update_derived_property_on_derived_type(bool async)
-        => SpecFails.ThrowsAsync(() => base.Update_derived_property_on_derived_type(async));
+        => base.Update_derived_property_on_derived_type(async);
 
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Update_base_and_derived_types(bool async)
-        => SpecFails.ThrowsAsync(() => base.Update_base_and_derived_types(async));
+        => base.Update_base_and_derived_types(async);
 
     // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Update_where_using_hierarchy(bool async)
@@ -97,13 +95,11 @@ public class InheritanceBulkUpdatesMongoTest : InheritanceBulkUpdatesTestBase<In
     public override Task Update_where_using_hierarchy_derived(bool async)
         => SpecFails.ThrowsAsync(() => base.Update_where_using_hierarchy_derived(async));
 
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Update_with_interface_in_property_expression(bool async)
-        => SpecFails.ThrowsAsync(() => base.Update_with_interface_in_property_expression(async));
+        => base.Update_with_interface_in_property_expression(async);
 
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Update_with_interface_in_EF_Property_in_property_expression(bool async)
-        => SpecFails.ThrowsAsync(() => base.Update_with_interface_in_EF_Property_in_property_expression(async));
+        => base.Update_with_interface_in_EF_Property_in_property_expression(async);
 
     public class InheritanceBulkUpdatesMongoFixture : InheritanceBulkUpdatesFixtureBase
     {
