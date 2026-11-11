@@ -73,7 +73,7 @@ internal static class MongoBulkOperationExecutor
         var stopwatch = Stopwatch.StartNew();
         updateLogger.ExecutingBulkDelete(
             stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null,
-            () => RenderBulkCommand(updateLogger, filter, update: null));
+            () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery: null));
 
         var result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
 
@@ -91,7 +91,7 @@ internal static class MongoBulkOperationExecutor
         var stopwatch = Stopwatch.StartNew();
         updateLogger.ExecutingBulkDelete(
             stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null,
-            () => RenderBulkCommand(updateLogger, filter, update: null));
+            () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery: null));
 
         var cancellationToken = queryContext.CancellationToken;
         var result = session == null
@@ -113,7 +113,7 @@ internal static class MongoBulkOperationExecutor
         var stopwatch = Stopwatch.StartNew();
         updateLogger.ExecutingBulkUpdate(
             stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null,
-            () => RenderBulkCommand(updateLogger, filter, update));
+            () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery: null));
 
         var result = session == null
             ? collection.UpdateMany(filter, update)
@@ -134,7 +134,7 @@ internal static class MongoBulkOperationExecutor
         var stopwatch = Stopwatch.StartNew();
         updateLogger.ExecutingBulkUpdate(
             stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null,
-            () => RenderBulkCommand(updateLogger, filter, update));
+            () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery: null));
 
         var cancellationToken = queryContext.CancellationToken;
         var result = session == null
@@ -156,8 +156,9 @@ internal static class MongoBulkOperationExecutor
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = MaterializeIds(plan, plan.BuildTargetIdQuery!(queryContext));
-            return ids.Count == 0 ? 0 : DeleteByIds(queryContext, plan, ids, stopwatch);
+            var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
+            var ids = MaterializeIds(plan, targetIdQuery);
+            return ids.Count == 0 ? 0 : DeleteByIds(queryContext, plan, targetIdQuery, ids, stopwatch);
         });
 
     private static Task<int> ExecuteTwoPhaseDeleteAsync(QueryContext queryContext, MongoBulkPlan plan)
@@ -165,9 +166,9 @@ internal static class MongoBulkOperationExecutor
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = await MaterializeIdsAsync(plan, plan.BuildTargetIdQuery!(queryContext), queryContext.CancellationToken)
-                .ConfigureAwait(false);
-            return ids.Count == 0 ? 0 : await DeleteByIdsAsync(queryContext, plan, ids, stopwatch).ConfigureAwait(false);
+            var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
+            var ids = await MaterializeIdsAsync(plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
+            return ids.Count == 0 ? 0 : await DeleteByIdsAsync(queryContext, plan, targetIdQuery, ids, stopwatch).ConfigureAwait(false);
         });
 
     private static int ExecuteTwoPhaseUpdate(QueryContext queryContext, MongoBulkPlan plan)
@@ -178,8 +179,9 @@ internal static class MongoBulkOperationExecutor
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = MaterializeIds(plan, plan.BuildTargetIdQuery!(queryContext));
-            return ids.Count == 0 ? 0 : UpdateByIds(queryContext, plan, ids, update, stopwatch);
+            var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
+            var ids = MaterializeIds(plan, targetIdQuery);
+            return ids.Count == 0 ? 0 : UpdateByIds(queryContext, plan, targetIdQuery, ids, update, stopwatch);
         });
     }
 
@@ -191,15 +193,16 @@ internal static class MongoBulkOperationExecutor
         {
             // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
             var stopwatch = Stopwatch.StartNew();
-            var ids = await MaterializeIdsAsync(plan, plan.BuildTargetIdQuery!(queryContext), queryContext.CancellationToken)
-                .ConfigureAwait(false);
+            var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
+            var ids = await MaterializeIdsAsync(plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
             return ids.Count == 0
                 ? 0
-                : await UpdateByIdsAsync(queryContext, plan, ids, update, stopwatch).ConfigureAwait(false);
+                : await UpdateByIdsAsync(queryContext, plan, targetIdQuery, ids, update, stopwatch).ConfigureAwait(false);
         });
     }
 
-    private static int DeleteByIds(QueryContext queryContext, MongoBulkPlan plan, List<BsonValue> ids, Stopwatch stopwatch)
+    private static int DeleteByIds(
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, Stopwatch stopwatch)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
         var filter = Builders<BsonDocument>.Filter.In("_id", ids);
@@ -207,7 +210,7 @@ internal static class MongoBulkOperationExecutor
         var updateLogger = GetUpdateLogger(queryContext);
         updateLogger.ExecutingBulkDelete(
             stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count,
-            () => RenderBulkCommand(updateLogger, filter, update: null));
+            () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery));
 
         var result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
 
@@ -216,7 +219,8 @@ internal static class MongoBulkOperationExecutor
         return checked((int)result.DeletedCount);
     }
 
-    private static async Task<int> DeleteByIdsAsync(QueryContext queryContext, MongoBulkPlan plan, List<BsonValue> ids, Stopwatch stopwatch)
+    private static async Task<int> DeleteByIdsAsync(
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, Stopwatch stopwatch)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
         var filter = Builders<BsonDocument>.Filter.In("_id", ids);
@@ -224,7 +228,7 @@ internal static class MongoBulkOperationExecutor
         var updateLogger = GetUpdateLogger(queryContext);
         updateLogger.ExecutingBulkDelete(
             stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count,
-            () => RenderBulkCommand(updateLogger, filter, update: null));
+            () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery));
 
         var cancellationToken = queryContext.CancellationToken;
         var result = session == null
@@ -237,7 +241,7 @@ internal static class MongoBulkOperationExecutor
     }
 
     private static int UpdateByIds(
-        QueryContext queryContext, MongoBulkPlan plan, List<BsonValue> ids, UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
         var filter = Builders<BsonDocument>.Filter.In("_id", ids);
@@ -245,7 +249,7 @@ internal static class MongoBulkOperationExecutor
         var updateLogger = GetUpdateLogger(queryContext);
         updateLogger.ExecutingBulkUpdate(
             stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count,
-            () => RenderBulkCommand(updateLogger, filter, update));
+            () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery));
 
         var result = session == null
             ? collection.UpdateMany(filter, update)
@@ -257,7 +261,7 @@ internal static class MongoBulkOperationExecutor
     }
 
     private static async Task<int> UpdateByIdsAsync(
-        QueryContext queryContext, MongoBulkPlan plan, List<BsonValue> ids, UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
         var filter = Builders<BsonDocument>.Filter.In("_id", ids);
@@ -265,7 +269,7 @@ internal static class MongoBulkOperationExecutor
         var updateLogger = GetUpdateLogger(queryContext);
         updateLogger.ExecutingBulkUpdate(
             stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), ids.Count,
-            () => RenderBulkCommand(updateLogger, filter, update));
+            () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery));
 
         var cancellationToken = queryContext.CancellationToken;
         var result = session == null
@@ -494,7 +498,8 @@ internal static class MongoBulkOperationExecutor
     private static string RenderBulkCommand(
         IDiagnosticsLogger<DbLoggerCategory.Update> logger,
         FilterDefinition<BsonDocument> filter,
-        UpdateDefinition<BsonDocument>? update)
+        UpdateDefinition<BsonDocument>? update,
+        IQueryable<BsonDocument>? targetIdQuery)
     {
         if (!logger.ShouldLogSensitiveData())
         {
@@ -503,7 +508,17 @@ internal static class MongoBulkOperationExecutor
 
         var registry = BsonSerializer.SerializerRegistry;
         var renderArgs = new RenderArgs<BsonDocument>(registry.GetSerializer<BsonDocument>(), registry);
-        var rendered = new BsonDocument("filter", filter.Render(renderArgs));
+        var rendered = new BsonDocument();
+        if (targetIdQuery != null)
+        {
+            // Phase 1: the pipeline the aggregate command actually carried (the driver's LoggedStages; it is populated once the query has
+            // executed, which it has by the time phase 2 logs). JSON null rather than a throw if it is unavailable. Rendered here, behind
+            // the one redaction gate above, so it is never disclosed with sensitive-data logging off.
+            var stages = (targetIdQuery.Provider as IMongoQueryProvider)?.LoggedStages;
+            rendered.Add("phase1Pipeline", stages == null ? BsonNull.Value : new BsonArray(stages));
+        }
+
+        rendered.Add("filter", filter.Render(renderArgs));
         if (update != null)
         {
             rendered.Add("update", update.Render(renderArgs));

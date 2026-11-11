@@ -178,10 +178,17 @@ public class BulkOperationsCommandTests(TemporaryDatabaseFixture database)
             Assert.DoesNotContain("Command=?", executing);
             Assert.Contains("$in", executing);
             Assert.Contains("_id", executing);
+
+            // Phase 1 is part of the command and reads only _id: the projection is the LAST stage of the pipeline the aggregate carried
+            // (appended after the sort and limit, so it cannot change which documents are selected).
+            Assert.Contains("phase1Pipeline", executing);
+            var command = BsonDocument.Parse(executing[(executing.IndexOf("Command=", StringComparison.Ordinal) + "Command=".Length)..].Trim());
+            Assert.Equal(new BsonDocument("$project", new BsonDocument("_id", 1)), command["phase1Pipeline"].AsBsonArray.Last());
         }
         else
         {
             Assert.Contains("Command=?", executing);
+            Assert.DoesNotContain("$project", executing);
             Assert.DoesNotContain("$in", executing);
             Assert.DoesNotContain("ObjectId", executing);
         }

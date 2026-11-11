@@ -172,7 +172,9 @@ internal static class MongoBulkPlanBuilder
     }
 
     // Builds a driver query yielding the raw stored BsonDocuments for the bulk source, via the read path's TranslateQuery (so the driver-LINQ
-    // bridge stays alive even once no read query falls back). Fetches whole documents and keeps only _id; a { _id: 1 } projection could cut transfer.
+    // bridge stays alive even once no read query falls back). Phase 1 needs only each match's _id, so a { $project: { _id: 1 } } stage is appended LAST (after any
+    // Distinct/Skip/Take, so it cannot change which documents are selected): fewer bytes on the wire and less client-side BSON parsing. It is not
+    // generally a covered index scan; that needs _id in the index key or a collection clustered on _id.
     private static IQueryable<BsonDocument> BuildIdDocumentQuery<TSource>(
         QueryContext queryContext,
         IReadOnlyEntityType entityType,
@@ -189,7 +191,11 @@ internal static class MongoBulkPlanBuilder
                     MongoNonQueryExpression.UnwrapBulkOperator(expression)!, ResultCardinality.Enumerable,
                     guardUnstrippableForceUnwindJoin: false));
 
-        return executableQuery.Provider.CreateQuery<BsonDocument>(executableQuery.Query);
+        // A fresh stage per call: the driver renders the very instance it is handed into the command and its logged stages, so a shared
+        // static would be aliased into every execution's output.
+        return executableQuery.Provider.CreateQuery<BsonDocument>(executableQuery.Query).AppendStage(
+            new BsonDocumentPipelineStageDefinition<BsonDocument, BsonDocument>(
+                new BsonDocument("$project", new BsonDocument("_id", 1))));
     }
 
     /// <summary>
