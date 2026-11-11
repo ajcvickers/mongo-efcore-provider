@@ -302,25 +302,35 @@ internal static class MongoBulkOperationExecutor
         }
     }
 
+    // Streams the cursor, keeping only each document's _id, so peak memory is one batch plus the ids (as the sync path's lazy enumeration
+    // is) rather than every matched document held at once by ToListAsync. No capacity hint: the count is unknown until the cursor is
+    // drained. The narrow catch wraps only ToCursorAsync, where the driver translates the query (synchronously, before any I/O), so a
+    // MoveNextAsync failure (cancellation, network, server) is never relabelled as a translation error.
     private static async Task<List<BsonValue>> MaterializeIdsAsync(
         MongoBulkPlan plan, IQueryable<BsonDocument> documents, CancellationToken cancellationToken)
     {
+        IAsyncCursor<BsonDocument> cursor;
         try
         {
-            var materialized = await IAsyncCursorSourceExtensions
-                .ToListAsync((IAsyncCursorSource<BsonDocument>)documents, cancellationToken).ConfigureAwait(false);
-
-            var ids = new List<BsonValue>(materialized.Count);
-            foreach (var document in materialized)
-            {
-                ids.Add(document["_id"]);
-            }
-
-            return ids;
+            cursor = await ((IAsyncCursorSource<BsonDocument>)documents).ToCursorAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (ExpressionNotSupportedException exception) when (plan.TranslationFailed != null)
         {
             throw plan.TranslationFailed(exception);
+        }
+
+        using (cursor)
+        {
+            var ids = new List<BsonValue>();
+            while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
+            {
+                foreach (var document in cursor.Current)
+                {
+                    ids.Add(document["_id"]);
+                }
+            }
+
+            return ids;
         }
     }
 

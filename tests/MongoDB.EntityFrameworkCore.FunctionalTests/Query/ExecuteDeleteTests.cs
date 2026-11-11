@@ -575,6 +575,36 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Equal(1, deleted);
         Assert.Equal(2, db.Entities.Count());
     }
+
+    // The async phase-1 read drains the cursor by hand (rather than ToListAsync), so it must drain EVERY batch: 250 documents exceed the
+    // default first batch (101), forcing getMore round trips. A drain loop that stopped after the first batch would delete far too few.
+    [Fact]
+    public async Task ExecuteDeleteAsync_two_phase_streams_every_id_across_multiple_getMore_batches()
+    {
+        var collection = database.CreateCollection<Order>();
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureModel))
+        {
+            for (var i = 0; i < 250; i++)
+            {
+                seed.Add(new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = i });
+            }
+
+            seed.SaveChanges();
+        }
+
+        using var capture = new CommandCapture(database);
+        int deleted;
+        using (var db = SingleEntityDbContext.Create(capture.Collection(collection), ConfigureModel))
+        {
+            deleted = await db.Entities.OrderBy(o => o.Quantity).Skip(1).ExecuteDeleteAsync();
+        }
+
+        Assert.Equal(249, deleted);
+        Assert.True(capture.Named("getMore").Count > 0, "the test must span more than one cursor batch to mean anything");
+
+        using var check = SingleEntityDbContext.Create(collection, ConfigureModel);
+        Assert.Equal(1, check.Entities.Count());
+    }
 }
 
 #endif
