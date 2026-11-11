@@ -44,6 +44,16 @@ public class BulkOperationsUnsupportedOnEf8Tests(TemporaryDatabaseFixture databa
         Assert.Contains("could not be translated", ex.Message);
     }
 
+    [Fact]
+    public void ExecuteUpdate_throws_translation_failure()
+    {
+        using var db = SingleEntityDbContext.Create(database.CreateCollection<SimpleEntity>());
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty(e => e._id, ObjectId.Empty)));
+        Assert.Contains("could not be translated", ex.Message);
+    }
+
     public class Place
     {
         public string City { get; set; } = null!;

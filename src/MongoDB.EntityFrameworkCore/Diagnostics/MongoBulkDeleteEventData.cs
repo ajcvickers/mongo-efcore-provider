@@ -31,17 +31,16 @@ namespace MongoDB.EntityFrameworkCore.Diagnostics;
 public class MongoBulkDeleteEventData : EventData
 {
     /// <summary>
-    /// Constructs the event payload.
+    /// Constructs the event payload as it was before the strategy and command were added. <see cref="Strategy"/> is inferred from
+    /// <paramref name="targetCount"/> (<see langword="null"/> means <c>SingleCommand</c>), <see cref="Command"/> is <see langword="null"/>
+    /// and <see cref="LogSensitiveData"/> is <see langword="false"/>.
     /// </summary>
     /// <param name="eventDefinition">The event definition.</param>
     /// <param name="messageGenerator">A delegate that generates a log message for this event.</param>
-    /// <param name="elapsed">The time elapsed since the command was sent to the database.</param>
+    /// <param name="elapsed">The elapsed time (see <see cref="Elapsed"/>).</param>
     /// <param name="collectionNamespace">The <see cref="CollectionNamespace"/> being operated upon.</param>
     /// <param name="deleteCount">The number of documents deleted by this bulk delete operation.</param>
-    /// <param name="targetCount">
-    /// For a two-phase bulk delete — the number of documents identified in phase one to be deleted by
-    /// <c>_id</c>; <see langword="null" /> for a single-command bulk delete.
-    /// </param>
+    /// <param name="targetCount">The target count (see <see cref="TargetCount"/>).</param>
     public MongoBulkDeleteEventData(
         EventDefinitionBase eventDefinition,
         Func<EventDefinitionBase, EventData, string> messageGenerator,
@@ -49,16 +48,67 @@ public class MongoBulkDeleteEventData : EventData
         CollectionNamespace collectionNamespace,
         long deleteCount,
         long? targetCount)
+        : this(
+            eventDefinition, messageGenerator, elapsed, collectionNamespace, deleteCount, targetCount,
+            strategy: targetCount == null ? "SingleCommand" : "TwoPhase", command: null, logSensitiveData: false)
+    {
+    }
+
+    /// <summary>
+    /// Constructs the event payload.
+    /// </summary>
+    /// <param name="eventDefinition">The event definition.</param>
+    /// <param name="messageGenerator">A delegate that generates a log message for this event.</param>
+    /// <param name="elapsed">
+    /// For <c>SingleCommand</c>, the time since immediately before the <c>deleteMany</c>/<c>updateMany</c> call (so on the
+    /// <c>Executing</c> event this is effectively zero, and on <c>Executed</c> it is the driver round-trip time). For
+    /// <c>TwoPhase</c>, the time since immediately before the phase-1 read that collects the target ids (translation of that read
+    /// included), so both the <c>Executing</c> and <c>Executed</c> events include phase 1 as well as phase 2.
+    /// </param>
+    /// <param name="collectionNamespace">The <see cref="CollectionNamespace"/> being operated upon.</param>
+    /// <param name="deleteCount">The number of documents deleted by this bulk delete operation.</param>
+    /// <param name="targetCount">
+    /// For a two-phase bulk delete — the number of documents identified in phase one to be deleted by
+    /// <c>_id</c>; <see langword="null" /> for a single-command bulk delete.
+    /// </param>
+    /// <param name="strategy">
+    /// The execution strategy used for this operation: <c>SingleCommand</c> for a single server command, or
+    /// <c>TwoPhase</c> for an id-collecting read followed by a write by <c>_id</c>.
+    /// </param>
+    /// <param name="command">
+    /// The rendered MongoDB command for this operation, or <c>"?"</c> when sensitive-data logging is disabled.
+    /// <see langword="null" /> on the <c>Executed</c> event, which does not carry the command.
+    /// </param>
+    /// <param name="logSensitiveData">
+    /// Indicates whether the application allows logging of sensitive data. Always <see langword="false" /> on the <c>Executed</c>
+    /// event, which carries nothing sensitive.
+    /// </param>
+    public MongoBulkDeleteEventData(
+        EventDefinitionBase eventDefinition,
+        Func<EventDefinitionBase, EventData, string> messageGenerator,
+        TimeSpan elapsed,
+        CollectionNamespace collectionNamespace,
+        long deleteCount,
+        long? targetCount,
+        string strategy,
+        string? command,
+        bool logSensitiveData)
         : base(eventDefinition, messageGenerator)
     {
         Elapsed = elapsed;
         CollectionNamespace = collectionNamespace;
         DeleteCount = deleteCount;
         TargetCount = targetCount;
+        Strategy = strategy;
+        Command = command;
+        LogSensitiveData = logSensitiveData;
     }
 
     /// <summary>
-    /// The time elapsed since the command was sent to the database.
+    /// For <c>SingleCommand</c>, the time since immediately before the <c>deleteMany</c>/<c>updateMany</c> call (so on the
+    /// <c>Executing</c> event this is effectively zero, and on <c>Executed</c> it is the driver round-trip time). For
+    /// <c>TwoPhase</c>, the time since immediately before the phase-1 read that collects the target ids (translation of that read
+    /// included), so both the <c>Executing</c> and <c>Executed</c> events include phase 1 as well as phase 2.
     /// </summary>
     public TimeSpan Elapsed { get; }
 
@@ -68,15 +118,36 @@ public class MongoBulkDeleteEventData : EventData
     public CollectionNamespace CollectionNamespace { get; }
 
     /// <summary>
-    /// The number of documents deleted by this bulk delete operation.
+    /// The number of documents deleted by this bulk delete operation. Only meaningful on the <c>Executed</c> event; it is 0 on
+    /// <c>Executing</c>.
     /// </summary>
     public long DeleteCount { get; }
 
     /// <summary>
-    /// For a two-phase bulk delete — the number of documents identified in phase one to be deleted by
-    /// <c>_id</c>; <see langword="null" /> for a single-command bulk delete.
+    /// On an <c>Executing</c> event of a two-phase bulk delete — the number of ids in the <c>$in</c> filter of the command THIS event
+    /// describes. Phase 2 is written in batches of up to 50,000 ids inside one transaction, so a large operation raises several
+    /// <c>Executing</c> events (one per batch) and each reports its own batch size; the total is <see cref="DeleteCount"/> on the single
+    /// <c>Executed</c> event. <see langword="null" /> for a single-command bulk delete and on every <c>Executed</c> event.
     /// </summary>
     public long? TargetCount { get; }
+
+    /// <summary>
+    /// The execution strategy used for this operation: <c>SingleCommand</c> for a single server command, or
+    /// <c>TwoPhase</c> for an id-collecting read followed by a write by <c>_id</c>.
+    /// </summary>
+    public string Strategy { get; }
+
+    /// <summary>
+    /// The rendered MongoDB command for this operation (the filter, and for an update the update document), or <c>"?"</c> when
+    /// sensitive-data logging is disabled. <see langword="null" /> on the <c>Executed</c> event, which does not carry the command.
+    /// </summary>
+    public string? Command { get; }
+
+    /// <summary>
+    /// Indicates whether the application allows logging of sensitive data. Always <see langword="false" /> on the <c>Executed</c>
+    /// event, which carries nothing sensitive.
+    /// </summary>
+    public bool LogSensitiveData { get; }
 }
 
 #endif

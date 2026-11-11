@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using MongoDB.EntityFrameworkCore.Storage;
 
@@ -25,6 +27,23 @@ public class MongoQueryContextFactory : IQueryContextFactory
 {
     /// <summary>
     /// Create a <see cref="MongoQueryContextFactory"/>.
+    /// </summary>
+    /// <param name="dependencies">The <see cref="QueryContextDependencies"/> passed to each created <see cref="MongoQueryContext" /> instance.</param>
+    /// <param name="mongoClient">The <see cref="IMongoClientWrapper"/> passed to each created <see cref="MongoQueryContext" /> instance.</param>
+    /// <param name="updateLogger">The <see cref="DbLoggerCategory.Update"/> logger passed to each created <see cref="MongoQueryContext" /> instance.</param>
+    public MongoQueryContextFactory(
+        QueryContextDependencies dependencies,
+        IMongoClientWrapper mongoClient,
+        IDiagnosticsLogger<DbLoggerCategory.Update> updateLogger)
+    {
+        Dependencies = dependencies;
+        Client = mongoClient;
+        UpdateLogger = updateLogger;
+    }
+
+    /// <summary>
+    /// Create a <see cref="MongoQueryContextFactory"/> without supplying the <see cref="DbLoggerCategory.Update"/> logger (the constructor
+    /// shipped before bulk operations needed one). Each created <see cref="MongoQueryContext"/> then resolves the logger itself.
     /// </summary>
     /// <param name="dependencies">The <see cref="QueryContextDependencies"/> passed to each created <see cref="MongoQueryContext" /> instance.</param>
     /// <param name="mongoClient">The <see cref="IMongoClientWrapper"/> passed to each created <see cref="MongoQueryContext" /> instance.</param>
@@ -46,10 +65,18 @@ public class MongoQueryContextFactory : IQueryContextFactory
     /// </summary>
     /// <returns>The newly created <see cref="MongoQueryContext"/>.</returns>
     public virtual QueryContext Create()
-        => new MongoQueryContext(Dependencies, Client);
+        => UpdateLogger == null
+            ? new MongoQueryContext(Dependencies, Client)
+            : new MongoQueryContext(Dependencies, Client, UpdateLogger);
 
     /// <summary>
     /// The <see cref="IMongoClientWrapper"/> passed to each created <see cref="MongoQueryContext"/>.
     /// </summary>
     public IMongoClientWrapper Client { get; }
+
+    /// <summary>
+    /// The <see cref="DbLoggerCategory.Update"/> logger passed to each created <see cref="MongoQueryContext"/>, or
+    /// <see langword="null"/> when the factory was built without one (each context then resolves it).
+    /// </summary>
+    protected virtual IDiagnosticsLogger<DbLoggerCategory.Update>? UpdateLogger { get; }
 }

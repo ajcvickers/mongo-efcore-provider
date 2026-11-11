@@ -33,8 +33,8 @@ internal enum MongoBulkOperationKind
 }
 
 /// <summary>
-/// How a bulk operation is executed: a single atomic command, or the transactional two-phase
-/// (collect target <c>_id</c>s, then act by <c>$in</c>) strategy.
+/// How a bulk operation is executed: a single server command (atomic per document only, not across documents), or the
+/// transactional two-phase (collect target <c>_id</c>s, then act by <c>$in</c>) strategy.
 /// </summary>
 internal enum MongoBulkStrategy
 {
@@ -62,7 +62,7 @@ internal sealed class MongoBulkPlan
     /// <summary>Whether this operation deletes or updates documents.</summary>
     public required MongoBulkOperationKind Kind { get; init; }
 
-    /// <summary>The execution strategy: a single atomic command, or the transactional two-phase strategy.</summary>
+    /// <summary>The execution strategy: a single server command (atomic per document only), or the transactional two-phase strategy.</summary>
     public required MongoBulkStrategy Strategy { get; init; }
 
     /// <summary>The MongoDB collection the operation targets.</summary>
@@ -76,6 +76,13 @@ internal sealed class MongoBulkPlan
 
     /// <summary>Builds the phase-1 read query yielding the target documents. <see langword="null"/> for single-command.</summary>
     public Func<QueryContext, IQueryable<BsonDocument>>? BuildTargetIdQuery { get; init; }
+
+    /// <summary>
+    /// Wraps a driver translation failure raised while the phase-1 query is first enumerated (the driver translates a LINQ query lazily,
+    /// when it runs) as EF's canonical non-query translation failure, so it reads like a failure from <see cref="BuildFilter"/> or
+    /// <see cref="BuildUpdate"/> rather than a raw driver exception. <see langword="null"/> for single-command.
+    /// </summary>
+    public Func<Exception, QueryContext, InvalidOperationException>? TranslationFailed { get; init; }
 }
 
 #endif

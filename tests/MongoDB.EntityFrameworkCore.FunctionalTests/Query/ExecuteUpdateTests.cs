@@ -21,6 +21,9 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+#if EF9
+using Microsoft.EntityFrameworkCore.Query;
+#endif
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
@@ -55,9 +58,75 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         mb.Entity<Order>().Property(e => e.Status).HasElementName("state");
     };
 
-    private SingleEntityDbContext<Order> CreateSeededContext([CallerMemberName] string? collectionName = null)
+    private class VersionedOrder
     {
-        var collection = database.CreateCollection<Order>(collectionName);
+        public ObjectId _id { get; set; }
+        public string Status { get; set; } = null!;
+        public byte[] Version { get; set; } = null!;
+    }
+
+    private static readonly Action<ModelBuilder> ConfigureVersionedModel = mb =>
+    {
+        mb.Entity<VersionedOrder>().Property(e => e.Version).IsRowVersion();
+    };
+
+    private abstract class Animal
+    {
+        public ObjectId _id { get; set; }
+        public string Kind { get; set; } = null!;
+        public string Name { get; set; } = null!;
+    }
+
+    private class Cat : Animal;
+
+    private class Dog : Animal;
+
+    private static readonly Action<ModelBuilder> ConfigureHierarchyModel = mb =>
+    {
+        mb.Entity<Animal>().HasDiscriminator(a => a.Kind).HasValue<Cat>("cat").HasValue<Dog>("dog");
+        mb.Entity<Cat>();
+        mb.Entity<Dog>();
+    };
+
+    // A self-referencing one-to-many within one collection (same shape as StaffMember in CrossCollectionIncludeTests).
+    private class Employee
+    {
+        public ObjectId _id { get; set; }
+        public int Rank { get; set; }
+        public ObjectId? ManagerId { get; set; }
+        public Employee? Manager { get; set; }
+        public List<Employee> DirectReports { get; set; } = [];
+    }
+
+    private static readonly Action<ModelBuilder> ConfigureEmployeeModel = mb =>
+    {
+        mb.Entity<Employee>().HasOne(e => e.Manager).WithMany(e => e.DirectReports).HasForeignKey(e => e.ManagerId);
+    };
+
+    // EF11 dropped the "with details" translation-failure message: the specific reason travels as the inner exception.
+    private static string WholeChain(Exception exception)
+    {
+        var messages = new List<string>();
+        for (var e = exception; e != null; e = e.InnerException)
+        {
+            messages.Add(e.Message);
+        }
+
+        return string.Join(" | ", messages);
+    }
+
+    // `async` is part of the collection name: both cases of a theory share one [CallerMemberName], and CreateCollection reuses an existing
+    // collection, so without it the second case would run against the first case's leftovers.
+    // Runs the sync or the genuinely async operation, so each theory case exercises its own implementation.
+    private static async Task<int> SetStatus(IQueryable<Order> source, bool async, string status)
+        => async
+            ? await source.ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, status))
+            : source.ExecuteUpdate(s => s.SetProperty(o => o.Status, status));
+
+    private SingleEntityDbContext<Order> CreateSeededContext(
+        bool async = false, bool sensitive = false, [CallerMemberName] string? collectionName = null)
+    {
+        var collection = database.CreateCollection<Order>(collectionName, async);
 
         using (var seedDb = SingleEntityDbContext.Create(collection, ConfigureModel))
         {
@@ -68,7 +137,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
             seedDb.SaveChanges();
         }
 
-        return SingleEntityDbContext.Create(collection, ConfigureModel);
+        return SingleEntityDbContext.Create(
+            collection, ConfigureModel, optionsBuilderAction: sensitive ? o => o.EnableSensitiveDataLogging() : null);
     }
 
     [Fact]
@@ -126,6 +196,28 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
 
         Assert.Equal(2, updated);
         Assert.Equal(2, db.Entities.Count(o => o.Status == "processing"));
+    }
+
+    // The setter value is compiled and evaluated by a fallback whose delegate is cached on the setter (the query is compiled once and the
+    // same node serves every execution). This shape (a value lambda that ignores its parameter and calls Guid.NewGuid) is one that
+    // reaches that fallback on EF9 and EF10 alike. What is cached is the DELEGATE, so each execution must still evaluate afresh: a cache
+    // that held the first VALUE would write the same string both times. (Pre-existing and out of scope: the lambda is evaluated once per
+    // execution, not once per document.)
+    [Fact]
+    public void ExecuteUpdate_compiled_setter_fallback_is_evaluated_afresh_on_each_execution()
+    {
+        using var db = CreateSeededContext();
+
+        string Run()
+        {
+            db.Entities.Where(o => o.Quantity >= 20).ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString()));
+            return db.Entities.Where(o => o.Quantity == 20).Select(o => o.Status).Single();
+        }
+
+        var first = Run();
+        var second = Run();
+
+        Assert.NotEqual(first, second);
     }
 
     [Fact]
@@ -186,14 +278,15 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Equal(3, db.Entities.Count(o => o.Status == "all"));
     }
 
-    [Fact]
-    public void ExecuteUpdate_with_OrderBy_Take_updates_only_targeted_rows()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_with_OrderBy_Take_updates_only_targeted_rows(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // Two-phase: phase 1 reads the top-2 _ids (ordered by Quantity), phase 2 applies the update.
-        var updated = db.Entities.OrderBy(o => o.Quantity).Take(2)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Status, "archived"));
+        var updated = await SetStatus(db.Entities.OrderBy(o => o.Quantity).Take(2), async, "archived");
 
         Assert.Equal(2, updated);
         Assert.Equal(2, db.Entities.Count(o => o.Status == "archived"));
@@ -201,44 +294,62 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Equal(1, db.Entities.Count(o => o.Status == "closed"));
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_self_referencing_setter()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_self_referencing_setter(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // Two-phase: targets the single lowest-quantity document and increments its Quantity by 5.
-        var updated = db.Entities.OrderBy(o => o.Quantity).Take(1)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Quantity + 5));
+        var updated = async
+            ? await db.Entities.OrderBy(o => o.Quantity).Take(1)
+                .ExecuteUpdateAsync(s => s.SetProperty(o => o.Quantity, o => o.Quantity + 5))
+            : db.Entities.OrderBy(o => o.Quantity).Take(1)
+                .ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Quantity + 5));
 
         Assert.Equal(1, updated);
         // Lowest seeded Quantity is 10; +5 = 15.
         Assert.Contains(db.Entities.ToList(), o => o.Quantity == 15);
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_rolls_back_inside_user_transaction()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_rolls_back_inside_user_transaction(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
-        using (var tx = db.Database.BeginTransaction())
+        await using (var tx = async ? await db.Database.BeginTransactionAsync() : db.Database.BeginTransaction())
         {
-            db.Entities.OrderBy(o => o.Quantity).Take(2)
-                .ExecuteUpdate(s => s.SetProperty(o => o.Status, "archived"));
-            tx.Rollback();
+            await SetStatus(db.Entities.OrderBy(o => o.Quantity).Take(2), async, "archived");
+            if (async)
+            {
+                await tx.RollbackAsync();
+            }
+            else
+            {
+                tx.Rollback();
+            }
         }
 
         Assert.Equal(0, db.Entities.Count(o => o.Status == "archived"));
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_with_AutoTransactionBehavior_Never_throws_and_changes_nothing()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_with_AutoTransactionBehavior_Never_throws_and_changes_nothing(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
         db.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
 
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => db.Entities.OrderBy(o => o.Quantity).Take(2)
-                .ExecuteUpdate(s => s.SetProperty(o => o.Status, "archived")));
+        // The async case throws before its first await; ThrowsAsync pins that the failure still surfaces through the returned task.
+        var ex = async
+            ? await Assert.ThrowsAsync<InvalidOperationException>(
+                () => SetStatus(db.Entities.OrderBy(o => o.Quantity).Take(2), async, "archived"))
+            : Assert.Throws<InvalidOperationException>(
+                () => SetStatus(db.Entities.OrderBy(o => o.Quantity).Take(2), async, "archived").GetAwaiter().GetResult());
 
         Assert.Contains("AutoTransactionBehavior", AllMessages(ex));
         Assert.Equal(0, db.Entities.Count(o => o.Status == "archived")); // nothing updated
@@ -280,7 +391,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
     [Fact]
     public void ExecuteUpdate_unsupported_setter_method_reports_the_expression_not_a_reflection_wrapper()
     {
-        using var db = CreateSeededContext();
+        // The driver's description of the failing expression is only included with sensitive-data logging on.
+        using var db = CreateSeededContext(sensitive: true);
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => Foo(o.Quantity))));
@@ -293,7 +405,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
     [Fact]
     public void ExecuteUpdate_unsupported_setter_GetHashCode_reports_the_expression_not_a_reflection_wrapper()
     {
-        using var db = CreateSeededContext();
+        // The driver's description of the failing expression is only included with sensitive-data logging on.
+        using var db = CreateSeededContext(sensitive: true);
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Status.GetHashCode())));
@@ -377,44 +490,83 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var executedMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutedBulkUpdate);
         Assert.Contains("Executed Bulk Update", executedMessage);
         Assert.Contains($"Collection='{collection.CollectionNamespace}'", executedMessage);
+        Assert.Contains("Matched=2", executedMessage);
         Assert.Contains("Modified=2", executedMessage);
+        Assert.Contains("Strategy=SingleCommand", executingMessage);
+        Assert.Contains("Targets=-", executingMessage);
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_empty_target_returns_zero()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_event_reports_both_matched_and_modified_counts(bool async)
     {
-        using var db = CreateSeededContext();
+        var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
+        var collection = database.CreateCollection<Order>(
+            nameof(ExecuteUpdate_event_reports_both_matched_and_modified_counts), async);
+
+        using (var seedDb = SingleEntityDbContext.Create(collection, ConfigureModel))
+        {
+            seedDb.AddRange(
+                new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = 10 },
+                new Order { _id = ObjectId.GenerateNewId(), Status = "open", Quantity = 20 });
+            seedDb.SaveChanges();
+        }
+
+        using var db = SingleEntityDbContext.Create(collection, loggerFactory, ConfigureModel);
+
+        // Both documents match, but the write changes nothing: matched is 2, modified is 0.
+        var updated = async
+            ? await db.Entities.Where(o => o.Status == "open")
+                .ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, "open"))
+            : db.Entities.Where(o => o.Status == "open")
+                .ExecuteUpdate(s => s.SetProperty(o => o.Status, "open"));
+
+        Assert.Equal(2, updated);
+
+        var executedMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutedBulkUpdate);
+        Assert.Contains("Matched=2", executedMessage);
+        Assert.Contains("Modified=0", executedMessage);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_empty_target_returns_zero(bool async)
+    {
+        using var db = CreateSeededContext(async);
 
         // Two-phase phase 1 finds no targets, so phase 2 is skipped and nothing is written.
-        var updated = db.Entities.Where(o => o.Status == "nonexistent").OrderBy(o => o.Quantity).Take(5)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Status, "x"));
+        var updated = await SetStatus(db.Entities.Where(o => o.Status == "nonexistent").OrderBy(o => o.Quantity).Take(5), async, "x");
 
         Assert.Equal(0, updated);
         Assert.Equal(0, db.Entities.Count(o => o.Status == "x"));
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_returns_matched_count_even_when_values_already_match()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_returns_matched_count_even_when_values_already_match(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // Two-phase (OrderBy + Take) targeting the two "open" docs and setting Status to its existing value:
         // the server reports ModifiedCount 0, but ExecuteUpdate must still return the matched-row count (2)
         // through the { _id: { $in: ... } } UpdateMany path, matching EF Core's contract.
-        var updated = db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Take(2)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Status, "open"));
+        var updated = await SetStatus(db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Take(2), async, "open");
 
         Assert.Equal(2, updated);
     }
 
-    [Fact]
-    public void ExecuteUpdate_with_Where_and_Skip_Take_scopes_to_window()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_with_Where_and_Skip_Take_scopes_to_window(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // "open" docs are Quantity 10 and 20; Skip(1).Take(1) over ascending Quantity targets only the 20.
-        var updated = db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Skip(1).Take(1)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Status, "windowed"));
+        var updated = await SetStatus(db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Skip(1).Take(1), async, "windowed");
 
         Assert.Equal(1, updated);
         Assert.Equal(1, db.Entities.Count(o => o.Status == "windowed"));
@@ -453,8 +605,8 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var executingMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkUpdate);
         Assert.Contains("Executing Bulk Update", executingMessage);
         Assert.Contains($"Collection='{collection.CollectionNamespace}'", executingMessage);
-        Assert.Contains("two-phase", executingMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("2 target(s)", executingMessage);
+        Assert.Contains("Strategy=TwoPhase", executingMessage);
+        Assert.Contains("Targets=2", executingMessage);
     }
 
     [Theory]
@@ -491,6 +643,141 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var committedMessage = spyLogger.GetLogMessageByEventId(MongoEventId.TransactionCommitted);
         Assert.Contains("Committed transaction", committedMessage);
     }
+
+    [Fact]
+    public void ExecuteUpdate_targeting_the_primary_key_throws_a_translation_failure()
+    {
+        using var db = CreateSeededContext();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o._id, ObjectId.GenerateNewId())));
+
+        Assert.Contains("primary key", WholeChain(ex));
+        Assert.Equal(3, db.Entities.Count());
+    }
+
+    [Fact]
+    public void ExecuteUpdate_targeting_the_discriminator_throws_a_translation_failure_and_writes_nothing()
+    {
+        var collection = database.CreateCollection<Animal>();
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureHierarchyModel))
+        {
+            seed.AddRange(new Cat { _id = ObjectId.GenerateNewId(), Name = "Tom" }, new Dog { _id = ObjectId.GenerateNewId(), Name = "Rex" });
+            seed.SaveChanges();
+        }
+
+        using var db = SingleEntityDbContext.Create(collection, ConfigureHierarchyModel);
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty(a => a.Kind, "dog")));
+        Assert.Contains("discriminator", WholeChain(ex));
+
+        // A query rooted on a derived type is guarded the same way.
+        var derived = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.Where(a => a is Cat).ExecuteUpdate(s => s.SetProperty(a => a.Kind, "dog")));
+        Assert.Contains("discriminator", WholeChain(derived));
+
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
+        Assert.Equal(1, raw.CountDocuments(new BsonDocument("_t", "cat"))); // the discriminator is stored as _t
+        Assert.Equal(1, raw.CountDocuments(new BsonDocument("_t", "dog")));
+    }
+
+    [Fact]
+    public void ExecuteUpdate_can_set_a_concurrency_token()
+    {
+        // A bulk update neither checks nor protects concurrency tokens, so setting one explicitly is a supported use.
+        var collection = database.CreateCollection<VersionedOrder>();
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureVersionedModel))
+        {
+            seed.Add(new VersionedOrder { _id = ObjectId.GenerateNewId(), Status = "open" });
+            seed.SaveChanges();
+        }
+
+        var newVersion = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+        using (var db = SingleEntityDbContext.Create(collection, ConfigureVersionedModel))
+        {
+            Assert.Equal(1, db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Version, newVersion)));
+        }
+
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName)
+            .Find(FilterDefinition<BsonDocument>.Empty).Single();
+        Assert.Equal(newVersion, raw["Version"].AsBsonBinaryData.Bytes);
+    }
+
+    // A self-referencing navigation inside a setter value gives the value body two Employee-typed parameters (the setter's own `e`
+    // and the nested lambda's `r`). If that ever reached the renderer's type-based parameter rebinding, the two would collapse onto
+    // one and the update would degenerate to a silent no-op (Rank set to its own value). It is rejected loudly instead: today by the
+    // translator ("could not be translated"), and, should that layer start accepting the shape, by the
+    // MongoBulkPlanBuilder.RebindSetterValueParameters guard (unit-tested in BulkSetterRebindingTests).
+    [Fact]
+    public void ExecuteUpdate_self_referencing_setter_with_nested_entity_typed_parameter_is_rejected_not_silently_wrong()
+    {
+        var collection = database.CreateCollection<Employee>();
+        var managerId = ObjectId.GenerateNewId();
+        using (var seed = SingleEntityDbContext.Create(collection, ConfigureEmployeeModel))
+        {
+            seed.AddRange(
+                new Employee { _id = managerId, Rank = 1 },
+                new Employee { _id = ObjectId.GenerateNewId(), Rank = 5, ManagerId = managerId },
+                new Employee { _id = ObjectId.GenerateNewId(), Rank = 9, ManagerId = managerId });
+            seed.SaveChanges();
+        }
+
+        using var db = SingleEntityDbContext.Create(collection, ConfigureEmployeeModel);
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.Where(e => e._id == managerId)
+                .ExecuteUpdate(s => s.SetProperty(e => e.Rank, e => e.DirectReports.Max(r => r.Rank))));
+
+        Assert.True(
+            ex.Message.Contains("could not be translated") || ex.Message.Contains("more than one"),
+            $"Expected a loud rejection of the shape, got: {ex.Message}");
+
+        // And nothing was written.
+        using var check = SingleEntityDbContext.Create(collection, ConfigureEmployeeModel);
+        Assert.Equal(1, check.Entities.Single(e => e._id == managerId).Rank);
+    }
+
+#if EF9
+    [Fact]
+    public void ExecuteUpdate_does_not_treat_a_user_defined_SetProperty_extension_as_a_setter()
+    {
+        using var db = CreateSeededContext();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty("Status", "x")));
+
+        Assert.Contains("at least one 'SetProperty'", ex.Message);
+        Assert.Equal(0, db.Entities.Count(o => o.Status == "x"));
+    }
+#endif
+
+    // The update document is built before the transaction is opened. AutoTransactionBehavior.Never makes opening one impossible, so if
+    // the setter is checked first the message is about the setter, not about transactions. (The primary-key setter is rejected by the
+    // translator, so this pins the ordering rather than the executor-side build; the unit of hoisting itself is covered by the
+    // conformance suite.)
+    [Fact]
+    public void ExecuteUpdate_two_phase_with_an_invalid_setter_fails_before_a_transaction_is_needed()
+    {
+        using var db = CreateSeededContext();
+        db.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.OrderBy(o => o.Quantity).Take(1)
+                .ExecuteUpdate(s => s.SetProperty(o => o._id, ObjectId.GenerateNewId())));
+
+        Assert.Contains("primary key", WholeChain(ex));
+        Assert.DoesNotContain("AutoTransactionBehavior", WholeChain(ex));
+    }
 }
+
+#if EF9
+// Same name as the real SetProperty, but not the SetPropertyCalls<T> instance method.
+internal static class UserSetPropertyExtensions
+{
+    public static SetPropertyCalls<T> SetProperty<T>(this SetPropertyCalls<T> calls, string name, string value)
+        => calls;
+}
+#endif
 
 #endif

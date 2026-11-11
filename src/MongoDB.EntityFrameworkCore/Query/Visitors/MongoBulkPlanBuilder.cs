@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -88,7 +89,7 @@ internal static class MongoBulkPlanBuilder
             CollectionName = nonQuery.SourceQuery.CollectionExpression.CollectionName,
             BuildFilter = isTwoPhase
                 ? null
-                : qc => TranslateBulkOrThrow(nonQuery, () =>
+                : qc => TranslateBulkOrThrow(nonQuery, qc, () =>
                 {
                     ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
                     return BuildFilter<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
@@ -96,18 +97,21 @@ internal static class MongoBulkPlanBuilder
             // BuildUpdate needs no check of its own: the executor always calls BuildFilter (single command) or
             // BuildTargetIdQuery (two-phase) first, and that check covers the setter values too.
             BuildUpdate = isUpdate
-                ? qc => TranslateBulkOrThrow(nonQuery, () => BuildUpdate<TSource>(qc, entityType, bsonSerializerFactory, nonQuery))
+                ? qc => TranslateBulkOrThrow(nonQuery, qc, () => BuildUpdate<TSource>(qc, entityType, bsonSerializerFactory, nonQuery))
                 : null,
             BuildTargetIdQuery = isTwoPhase
                 ? qc =>
                 {
-                    TranslateBulkOrThrow(nonQuery, () =>
+                    TranslateBulkOrThrow(nonQuery, qc, () =>
                     {
                         ThrowIfBulkMisreadsNullElements(qc, entityType, nonQuery, mode);
                         return true;
                     });
                     return BuildIdDocumentQuery<TSource>(qc, entityType, bsonSerializerFactory, nonQuery);
                 }
+                : null,
+            TranslationFailed = isTwoPhase
+                ? (exception, qc) => TranslationFailedFrom(nonQuery, exception, qc)
                 : null,
         };
     }
@@ -135,7 +139,7 @@ internal static class MongoBulkPlanBuilder
     // Bulk filter/update are translated at execution time. A shape that slipped past compile-time validation makes the driver throw a raw
     // ExpressionNotSupportedException/ArgumentException: convert those to EF's non-query translation failure. InvalidOperationException
     // is left as-is (it already carries that message or the cross-DbSet rejection).
-    private static T TranslateBulkOrThrow<T>(MongoNonQueryExpression nonQuery, Func<T> translate)
+    private static T TranslateBulkOrThrow<T>(MongoNonQueryExpression nonQuery, QueryContext queryContext, Func<T> translate)
     {
         try
         {
@@ -143,10 +147,34 @@ internal static class MongoBulkPlanBuilder
         }
         catch (Exception exception) when (exception is not InvalidOperationException)
         {
-            throw NonQueryTranslationFailed(
-                ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression), exception.Message, exception);
+            throw TranslationFailedFrom(nonQuery, exception, queryContext);
         }
     }
+
+    // The driver's own exceptions print the failing LINQ expression with its constants and captured values inlined ("... Where(x => x.Ssn ==
+    // "123-45-6789")"), and an exception message is often logged or shown. EF masks constants in the expression it prints, so unless
+    // sensitive-data logging is on (the switch that governs the bulk Command) the driver's text is kept with its string and numeric literals
+    // masked, and the raw exception is not attached. The provider's own refusals print shapes through ExpressionShapePrinter and are kept.
+    private static InvalidOperationException TranslationFailedFrom(MongoNonQueryExpression nonQuery, Exception exception, QueryContext queryContext)
+    {
+        var expression = ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression);
+        var fromDriver = exception.GetType().Assembly == typeof(MongoClient).Assembly;
+        var sensitive = queryContext is MongoQueryContext { UpdateLogger: var logger } && logger.ShouldLogSensitiveData();
+        if (!fromDriver || sensitive)
+        {
+            return NonQueryTranslationFailed(expression, exception.Message, exception);
+        }
+
+        var masked = MaskLiterals(exception.Message);
+        return NonQueryTranslationFailed(expression, masked, new InvalidOperationException(masked));
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex StringLiteral = new(@"""(?:[^""\\]|\\.)*""");
+
+    private static readonly System.Text.RegularExpressions.Regex NumericLiteral = new(@"(?<![\w.])\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[LlMmFfDdUu]*(?![\w])");
+
+    internal static string MaskLiterals(string message)
+        => NumericLiteral.Replace(StringLiteral.Replace(message, "\"?\""), "?");
 
     // EF11 dropped the "with details" message: the details travel as the inner exception instead.
     internal static InvalidOperationException NonQueryTranslationFailed(
@@ -163,12 +191,14 @@ internal static class MongoBulkPlanBuilder
         {
             throw NonQueryTranslationFailed(
                 ExpressionShapePrinter.PrintQuery(nonQuery.SourceQuery.CapturedExpression),
-                "the entity must have a primary key to use ordering, paging, or Distinct in a bulk delete or update.");
+                "the entity must have a primary key to use paging (Skip/Take) in a bulk delete or update.");
         }
     }
 
     // Builds a driver query yielding the raw stored BsonDocuments for the bulk source, via the read path's TranslateQuery (so the driver-LINQ
-    // bridge stays alive even once no read query falls back). Fetches whole documents and keeps only _id; a { _id: 1 } projection could cut transfer.
+    // bridge stays alive even once no read query falls back). Phase 1 needs only each match's _id, so a { $project: { _id: 1 } } stage is appended LAST (after any
+    // Distinct/Skip/Take, so it cannot change which documents are selected): fewer bytes on the wire and less client-side BSON parsing. It is not
+    // generally a covered index scan; that needs _id in the index key or a collection clustered on _id.
     private static IQueryable<BsonDocument> BuildIdDocumentQuery<TSource>(
         QueryContext queryContext,
         IReadOnlyEntityType entityType,
@@ -185,7 +215,11 @@ internal static class MongoBulkPlanBuilder
                     MongoNonQueryExpression.UnwrapBulkOperator(expression)!, ResultCardinality.Enumerable,
                     guardUnstrippableForceUnwindJoin: false));
 
-        return executableQuery.Provider.CreateQuery<BsonDocument>(executableQuery.Query);
+        // A fresh stage per call: the driver renders the very instance it is handed into the command and its logged stages, so a shared
+        // static would be aliased into every execution's output.
+        return executableQuery.Provider.CreateQuery<BsonDocument>(executableQuery.Query).AppendStage(
+            new BsonDocumentPipelineStageDefinition<BsonDocument, BsonDocument>(
+                new BsonDocument("$project", new BsonDocument("_id", 1))));
     }
 
     /// <summary>
@@ -204,28 +238,30 @@ internal static class MongoBulkPlanBuilder
 
         Expression? combinedBody = null;
         var expression = MongoNonQueryExpression.UnwrapBulkOperator(nonQuery.SourceQuery.CapturedExpression);
-        // ClassifyBulkSource has already rejected any operator other than Queryable.Where on the single-command path.
-        while (expression is MethodCallExpression { Method: { DeclaringType: var declaringType, Name: nameof(Queryable.Where) } }
-                   whereCall
+        // Only the single-command strategy reaches here, and ClassifyBulkSource has kept Skip/Take (two-phase) and every operator it does
+        // not know out of it. Step over the affected-set-neutral operators (ordering, Distinct) and keep collecting predicates from
+        // further in: stopping at one would silently drop every inner Where and delete more than was asked.
+        while (expression is MethodCallExpression { Method: { DeclaringType: var declaringType } method } call
                && declaringType == typeof(Queryable))
         {
-            var predicate = whereCall.Arguments[1].UnwrapLambdaFromQuote();
-            var translatedBody = translator.Visit(predicate.Body)!;
-            translatedBody = ReplacingExpressionVisitor.Replace(predicate.Parameters[0], sharedParameter, translatedBody);
+            if (MongoNonQueryExpression.IsWhere(method))
+            {
+                var predicate = call.Arguments[1].UnwrapLambdaFromQuote();
+                var translatedBody = translator.Visit(predicate.Body)!;
+                translatedBody = ReplacingExpressionVisitor.Replace(predicate.Parameters[0], sharedParameter, translatedBody);
 
-            combinedBody = combinedBody == null ? translatedBody : Expression.AndAlso(combinedBody, translatedBody);
+                combinedBody = combinedBody == null ? translatedBody : Expression.AndAlso(combinedBody, translatedBody);
+            }
+            else if (!MongoNonQueryExpression.IsAffectedSetNeutral(method))
+            {
+                // Fail loud: an operator the classifier admitted that this builder cannot honour would affect the wrong documents.
+                throw new InvalidOperationException(
+                    $"Bulk filter construction encountered an unsupported '{method.Name}' operator in the source "
+                    + "chain. Only 'Where' can scope a single-command bulk filter and only ordering and 'Distinct' may be skipped; this "
+                    + "indicates the bulk-source classifier admitted an operator the filter builder does not handle.");
+            }
 
-            expression = whereCall.Arguments[0];
-        }
-
-        // Fail loud: a remaining non-Where operator means ClassifyBulkSource admitted something this builder ignores, which would affect the wrong documents.
-        if (expression is MethodCallExpression { Method.DeclaringType: var remainingType } remaining
-            && remainingType == typeof(Queryable))
-        {
-            throw new InvalidOperationException(
-                $"Bulk filter construction encountered an unsupported '{remaining.Method.Name}' operator in the source "
-                + "chain. Only 'Where' can scope a single-command bulk filter; this indicates the bulk-source classifier "
-                + "admitted an operator the filter builder does not handle.");
+            expression = call.Arguments[0];
         }
 
         if (combinedBody == null)
@@ -296,7 +332,7 @@ internal static class MongoBulkPlanBuilder
     /// </summary>
     private static BsonValue SerializeConstant(QueryContext queryContext, MongoNonQueryExpression.Setter setter)
     {
-        var value = EvaluateToConstant(queryContext, setter.ValueExpression);
+        var value = EvaluateToConstant(queryContext, setter);
         if (setter.Property is IComplexProperty complexProperty)
         {
             // A null REQUIRED complex property or collection would be stored, then fail every read ("... is null for required
@@ -342,10 +378,10 @@ internal static class MongoBulkPlanBuilder
         };
         var translatedBody = translator.Visit(setter.ValueExpression)!;
 
-        translatedBody = new ParameterRebindingExpressionVisitor(entityParameter).Visit(translatedBody);
+        translatedBody = RebindSetterValueParameters(translatedBody, entityParameter, setter.Property);
 
         var resultType = setter.Property.ClrType;
-        var renderer = RenderAggregateExpressionMethodInfo.MakeGenericMethod(typeof(TSource), resultType);
+        var renderer = GetAggregateRenderer(typeof(TSource), resultType);
         return (BsonValue)InvokeUnwrapped(renderer, [entityParameter, translatedBody, efSerializer])!;
     }
 
@@ -367,8 +403,9 @@ internal static class MongoBulkPlanBuilder
     /// lets compile-and-evaluate failures propagate as exceptions — throwing on an un-evaluatable setter value
     /// is preferable to silently writing null.
     /// </summary>
-    private static object? EvaluateToConstant(QueryContext queryContext, Expression expression)
+    private static object? EvaluateToConstant(QueryContext queryContext, MongoNonQueryExpression.Setter setter)
     {
+        var expression = setter.ValueExpression;
         while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
         {
             expression = convert.Operand;
@@ -381,12 +418,14 @@ internal static class MongoBulkPlanBuilder
 
         if (expression is MemberExpression { Expression: ConstantExpression closureConstant } member)
         {
-            return member.Member switch
+            // A MemberExpression's member is always a field or a property (Expression.MakeMemberAccess rejects anything else).
+            switch (member.Member)
             {
-                FieldInfo field => field.GetValue(closureConstant.Value),
-                PropertyInfo prop => prop.GetValue(closureConstant.Value),
-                _ => CompileAndEvaluate(expression)
-            };
+                case FieldInfo field:
+                    return field.GetValue(closureConstant.Value);
+                case PropertyInfo prop:
+                    return prop.GetValue(closureConstant.Value);
+            }
         }
 
 #if EF8 || EF9
@@ -403,18 +442,65 @@ internal static class MongoBulkPlanBuilder
         }
 #endif
 
-        return CompileAndEvaluate(expression);
+        // Compile-and-evaluate fallback. The delegate is cached on the setter (see Setter.CompiledValue); it is stored only after Compile()
+        // succeeds, so a shape that cannot be compiled keeps failing identically on every execution rather than being cached. Failures
+        // propagate: throwing on an un-evaluatable setter value is preferable to silently writing null.
+        var compiled = setter.CompiledValue;
+        if (compiled == null)
+        {
+            compiled = Expression.Lambda<Func<object?>>(Expression.Convert(expression, typeof(object))).Compile();
+            setter.CompiledValue = compiled;
+        }
+
+        return compiled();
     }
 
-    private static object? CompileAndEvaluate(Expression expression)
-        => Expression.Lambda<Func<object?>>(Expression.Convert(expression, typeof(object))).Compile()();
+    /// <summary>
+    /// Rebinds the parameters in a translated self-referencing setter body to the shared entity parameter, so the assembled value
+    /// lambda has exactly one parameter as the renderer requires. Rebinding is by type rather than identity because translation
+    /// through <see cref="MongoEFToLinqTranslatingExpressionVisitor"/> discards the original parameter identity, which is only
+    /// sound while the body has exactly one parameter of the entity type. A second one is rejected rather than merged, because
+    /// merging renders a wrong update with no error: <c>SetProperty(e =&gt; e.Rank, e =&gt; e.DirectReports.Max(r =&gt; r.Rank))</c> over a
+    /// self-referencing navigation has two <c>Employee</c> parameters, and collapsing them degenerates the update to a no-op.
+    /// <paramref name="property"/> is used only to name the offending setter in the error.
+    /// </summary>
+    internal static Expression RebindSetterValueParameters(Expression body, ParameterExpression target, IPropertyBase property)
+    {
+        var collector = new EntityParameterCollector(target.Type);
+        collector.Visit(body);
 
-    /// <summary>Rebinds every parameter in a translated self-referencing setter body to one shared parameter, as the renderer requires.</summary>
+        if (collector.Parameters.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"The self-referencing bulk update setter for '{property.DeclaringType.DisplayName()}.{property.Name}' referenced more "
+                + $"than one '{target.Type.Name}' parameter, which the MongoDB provider cannot render as a single aggregation "
+                + "expression; compute the value first and pass it as a constant/parameter, or perform the update via the change "
+                + "tracker instead.");
+        }
+
+        return new ParameterRebindingExpressionVisitor(target).Visit(body)!;
+    }
+
+    private sealed class EntityParameterCollector(Type entityType) : System.Linq.Expressions.ExpressionVisitor
+    {
+        // Distinct by identity: a body that reads the same parameter twice (o.Quantity + o.Quantity) is still one parameter.
+        public HashSet<ParameterExpression> Parameters { get; } = [];
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (node.Type == entityType)
+            {
+                Parameters.Add(node);
+            }
+
+            return base.VisitParameter(node);
+        }
+    }
+
     private sealed class ParameterRebindingExpressionVisitor(ParameterExpression target)
         : System.Linq.Expressions.ExpressionVisitor
     {
         protected override Expression VisitParameter(ParameterExpression node)
-            // Rebind by type: translation discards the original parameter identity, and the value body has exactly one TSource-typed parameter.
             => node.Type == target.Type ? target : base.VisitParameter(node);
     }
 
@@ -423,6 +509,14 @@ internal static class MongoBulkPlanBuilder
             .GetTypeInfo()
             .DeclaredMethods
             .Single(m => m.Name == nameof(CreateBulkPlan));
+
+    // MakeGenericMethod per self-referencing setter per execution is pure overhead on a path that exists to be fast.
+    private static readonly ConcurrentDictionary<(Type Source, Type Result), MethodInfo> AggregateRendererCache = new();
+
+    private static MethodInfo GetAggregateRenderer(Type sourceType, Type resultType)
+        => AggregateRendererCache.GetOrAdd(
+            (sourceType, resultType),
+            static key => RenderAggregateExpressionMethodInfo.MakeGenericMethod(key.Source, key.Result));
 
     private static readonly MethodInfo RenderAggregateExpressionMethodInfo =
         typeof(MongoBulkPlanBuilder)

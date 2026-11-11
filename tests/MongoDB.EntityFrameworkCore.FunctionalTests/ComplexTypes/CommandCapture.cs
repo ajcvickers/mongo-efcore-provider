@@ -28,19 +28,54 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 internal sealed class CommandCapture : IDisposable
 {
     private readonly List<BsonDocument> _commands = [];
+    private readonly List<string> _succeeded = [];
     private readonly MongoClient _client;
 
-    public CommandCapture(TemporaryDatabaseFixture database)
+    /// <param name="database">The fixture whose server the client connects to.</param>
+    /// <param name="onCommandSucceeded">
+    /// Called synchronously on the connection's receive path when a command succeeds, before its result reaches the caller.
+    /// </param>
+    public CommandCapture(TemporaryDatabaseFixture database, Action<CommandSucceededEvent>? onCommandSucceeded = null)
     {
         var settings = MongoClientSettings.FromConnectionString(database.TestServer.ConnectionString);
-        settings.ClusterConfigurator = cb => cb.Subscribe<CommandStartedEvent>(e =>
+        settings.ClusterConfigurator = cb =>
         {
-            lock (_commands)
+            cb.Subscribe<CommandStartedEvent>(e =>
             {
-                _commands.Add(new BsonDocument("name", e.CommandName).Add("command", e.Command.DeepClone()));
-            }
-        });
+                lock (_commands)
+                {
+                    _commands.Add(new BsonDocument("name", e.CommandName).Add("command", e.Command.DeepClone()));
+                }
+            });
+            cb.Subscribe<CommandSucceededEvent>(e =>
+            {
+                lock (_succeeded)
+                {
+                    _succeeded.Add(e.CommandName);
+                }
+
+                onCommandSucceeded?.Invoke(e);
+            });
+        };
         _client = new MongoClient(settings);
+    }
+
+    /// <summary>The names of every command sent, in order (for failure messages).</summary>
+    public IReadOnlyList<string> Names()
+    {
+        lock (_commands)
+        {
+            return _commands.Select(c => c["name"].AsString).ToList();
+        }
+    }
+
+    /// <summary>The number of commands with this name the server acknowledged as successful.</summary>
+    public int SucceededCount(string name)
+    {
+        lock (_succeeded)
+        {
+            return _succeeded.Count(n => n == name);
+        }
     }
 
     public IMongoCollection<T> Collection<T>(IMongoCollection<T> collection)

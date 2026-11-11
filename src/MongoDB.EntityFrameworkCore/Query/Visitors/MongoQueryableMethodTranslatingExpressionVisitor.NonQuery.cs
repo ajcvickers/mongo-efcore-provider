@@ -68,7 +68,10 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         var body = setPropertyCalls.Body;
         // Built outer-to-inner: s.SetProperty(a).SetProperty(b) parses as (s.SetProperty(a)).SetProperty(b), so walk Object
         // inward, inserting at the front to preserve the authored order.
-        while (body is MethodCallExpression { Method.Name: "SetProperty" } call)
+        // Matched on the declaring type as well as the name, so a user-defined method that happens to be called SetProperty is not
+        // consumed as a setter (it falls through to the "at least one SetProperty" rejection below).
+        while (body is MethodCallExpression { Method: { Name: "SetProperty", DeclaringType: { IsGenericType: true } declaringType } } call
+               && declaringType.GetGenericTypeDefinition() == typeof(SetPropertyCalls<>))
         {
             var selector = call.Arguments[0].UnwrapLambdaFromQuote();
             // For the self-referencing SetProperty overload the value arg is a quoted Func<T,TProp>
@@ -124,6 +127,28 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         }
     }
 
+    [DoesNotReturn]
+    private void RejectSetterTarget(MongoQueryExpression mongoQueryExpression, string details)
+    {
+        AddTranslationErrorDetails(details);
+        throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+            ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
+    }
+
+    // Resolves a setter target by name. The lambda parameter is typed by the source's element type, so after OfType<Cat>() (or on a
+    // derived DbSet, which the preprocessor narrows to OfType) it is the derived type and a property declared only there is a valid
+    // target. The two-phase path then scopes the write to that type. The key/discriminator guards still run against the root.
+    private static IPropertyBase? FindSetterProperty(IEntityType rootType, Type parameterType, string name)
+    {
+        var property = rootType.FindProperty(name);
+        if (property != null || parameterType == rootType.ClrType)
+        {
+            return property;
+        }
+
+        return rootType.GetDerivedTypes().FirstOrDefault(d => d.ClrType == parameterType)?.FindProperty(name);
+    }
+
     /// <summary>
     /// Parses a <c>SetProperty(selector, value)</c> into a <see cref="MongoNonQueryExpression.Setter"/>. The selector must
     /// target a mapped root scalar property; anything else produces EF's canonical non-query translation failure.
@@ -148,7 +173,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             && propertySelector.Parameters.Count == 1
             && IsParameterReference(memberSource, propertySelector.Parameters[0]))
         {
-            property = entityType.FindProperty(member.Member.Name);
+            property = FindSetterProperty(entityType, propertySelector.Parameters[0].Type, member.Member.Name);
         }
         // Also accept an EF.Property<TProperty>(entity, "Name") selector, e.g.
         // SetProperty(c => EF.Property<string>(c, "ContactName"), ...).
@@ -158,7 +183,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                  && IsParameterReference(efPropertyCall.Arguments[0], propertySelector.Parameters[0])
                  && efPropertyCall.Arguments[1] is ConstantExpression { Value: string efPropertyName })
         {
-            property = entityType.FindProperty(efPropertyName);
+            property = FindSetterProperty(entityType, propertySelector.Parameters[0].Type, efPropertyName);
         }
 
         // A complex target: a scalar leaf through single complex hops (`c => c.Address.City`, `c.Address.Location.Lat`), or
@@ -179,6 +204,27 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                 ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
         }
 
+        // Reject setters on fields the provider owns. Without these guards a bulk update can rewrite a document's type (the
+        // discriminator maps to _t, so the model could no longer materialize it) or attempt an immutable-_id write that only fails at
+        // the server as a raw driver exception. Concurrency tokens are deliberately NOT rejected: a bulk update neither checks nor
+        // protects them, and setting one explicitly is a supported use.
+        if (property is IProperty target)
+        {
+            if (target.IsPrimaryKey())
+            {
+                RejectSetterTarget(
+                    mongoQueryExpression,
+                    ComplexTypeRefusals.BulkSetterTargetIsPrimaryKey(target.DeclaringType.DisplayName(), target.Name));
+            }
+
+            if (target == entityType.FindDiscriminatorProperty())
+            {
+                RejectSetterTarget(
+                    mongoQueryExpression,
+                    ComplexTypeRefusals.BulkSetterTargetIsDiscriminator(target.DeclaringType.DisplayName(), target.Name));
+            }
+        }
+
         // EF9 self-referencing: value is a quoted Func<T,TProp> lambda; unwrap and detect a reference to its parameter.
         // EF10 (and EF9 constants): value is the raw expression; detect a reference to the setter's lambda parameter.
         bool isSelfReferencing;
@@ -193,6 +239,18 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
         {
             value = valueExpression;
             isSelfReferencing = propertySelector.Parameters.Any(p => value.ReferencesParameter(p));
+        }
+
+        // A self-referencing value over an OfType<TDerived>() source: EF types the setter's lambda parameter as TDerived, but the value is
+        // rendered against the root entity type, so the parameter would stay free in the rendered expression and the driver fails with
+        // an opaque "Expression not supported: e." Refused with the real limitation instead. A constant setter is unaffected.
+        if (isSelfReferencing && propertySelector.Parameters[0].Type != entityType.ClrType)
+        {
+            AddTranslationErrorDetails(
+                ComplexTypeRefusals.BulkSelfReferencingSetterOverTypeFilter(
+                    $"{property.DeclaringType.DisplayName()}.{property.Name}", propertySelector.Parameters[0].Type.Name));
+            throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+                ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
         }
 
         if (isSelfReferencing && property is IProperty scalar && scalar.GetTypeMapping().Converter != null)
@@ -416,9 +474,11 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
     }
 
     /// <summary>
-    /// Classifies the captured source chain of a bulk delete/update. Only <c>Where</c> is the single-command atomic path;
-    /// <c>OrderBy</c>/<c>ThenBy</c>/<c>Skip</c>/<c>Take</c>/<c>Distinct</c> require the two-phase path (query target
-    /// <c>_id</c>s, then act by <c>$in</c>). Anything else produces EF's canonical non-query translation failure.
+    /// Classifies the captured source chain of a bulk delete/update. <c>Where</c> scopes the operation directly. Ordering and
+    /// <c>Distinct</c> do not change which documents are affected (<see cref="MongoNonQueryExpression.IsAffectedSetNeutral"/>), so on
+    /// their own they stay on the single-command path (one <c>deleteMany</c>/<c>updateMany</c>, atomic per document only). <c>Skip</c>/<c>Take</c> do change the affected set and cannot be
+    /// expressed as one <c>deleteMany</c>/<c>updateMany</c>, so they need the two-phase path (query the target <c>_id</c>s, then act by
+    /// <c>$in</c>). Anything else produces EF's canonical non-query translation failure.
     /// </summary>
     private MongoNonQueryExpression.BulkStrategy ClassifyBulkSource(MongoQueryExpression mongoQueryExpression)
     {
@@ -432,24 +492,30 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                 ThrowBulkSourceNotSupported(mongoQueryExpression, methodCallExpression.Method.Name);
             }
 
-            switch (methodCallExpression.Method.Name)
+            var method = methodCallExpression.Method;
+            if (MongoNonQueryExpression.IsWhere(method) || MongoNonQueryExpression.IsAffectedSetNeutral(method))
             {
-                case nameof(Queryable.Where):
-                    break;
-
-                case nameof(Queryable.OrderBy):
-                case nameof(Queryable.OrderByDescending):
-                case nameof(Queryable.ThenBy):
-                case nameof(Queryable.ThenByDescending):
-                case nameof(Queryable.Skip):
-                case nameof(Queryable.Take):
-                case nameof(Queryable.Distinct):
+                // Scopes the operation, or leaves the affected set alone.
+            }
+            else if (MongoNonQueryExpression.IsPaging(method))
+            {
+                strategy = MongoNonQueryExpression.BulkStrategy.TwoPhase;
+            }
+            else if (MongoNonQueryExpression.IsOfType(method))
+            {
+                // OfType<TDerived> narrows the affected set to one type of a hierarchy, which the read path expresses as a discriminator
+                // filter that only it knows how to build. Run two-phase so phase 1 reuses that translation, rather than synthesizing
+                // the filter in BuildFilter: getting that wrong on a delete destroys documents of the wrong type. OfType of the root
+                // type itself narrows nothing and stays single-command. Cast is NOT admitted: it only reshapes the shaper, and the
+                // driver cannot translate it, so admitting it would only trade this message for a driver exception.
+                if (method.GetGenericArguments()[0] != mongoQueryExpression.CollectionExpression.EntityType.ClrType)
+                {
                     strategy = MongoNonQueryExpression.BulkStrategy.TwoPhase;
-                    break;
-
-                default:
-                    ThrowBulkSourceNotSupported(mongoQueryExpression, methodCallExpression.Method.Name);
-                    break;
+                }
+            }
+            else
+            {
+                ThrowBulkSourceNotSupported(mongoQueryExpression, method.Name);
             }
 
             expression = methodCallExpression.Arguments[0];
