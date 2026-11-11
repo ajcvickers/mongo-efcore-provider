@@ -46,11 +46,17 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         mb.Entity<Order>().Property(e => e.Status).HasElementName("state");
     };
 
+    // Runs the sync or the genuinely async operation, so each theory case exercises its own implementation.
+    private static async Task<int> Delete<T>(IQueryable<T> source, bool async) where T : class
+        => async ? await source.ExecuteDeleteAsync() : source.ExecuteDelete();
+
     // loggerFactory comes FIRST so the existing [CallerMemberName] collection name still applies when it is omitted or passed alone.
+    // `async` is part of the collection name: both cases of a theory share one [CallerMemberName], and CreateCollection reuses an existing
+    // collection, so without it the second case would run against the first case's leftovers.
     private SingleEntityDbContext<Order> CreateSeededContext(
-        Microsoft.Extensions.Logging.LoggerFactory? loggerFactory = null, [CallerMemberName] string? collectionName = null)
+        Microsoft.Extensions.Logging.LoggerFactory? loggerFactory = null, bool async = false, [CallerMemberName] string? collectionName = null)
     {
-        var collection = database.CreateCollection<Order>(collectionName);
+        var collection = database.CreateCollection<Order>(collectionName, async);
 
         using (var seedDb = SingleEntityDbContext.Create(collection, ConfigureModel))
         {
@@ -149,27 +155,32 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Contains("Deleted=2", executedMessage);
     }
 
-    [Fact]
-    public void ExecuteDelete_with_two_Where_clauses_deletes_matching_both_and_returns_count()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_with_two_Where_clauses_deletes_matching_both_and_returns_count(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async: async);
 
-        var deleted = db.Entities
-            .Where(o => o.Status == "open")
-            .Where(o => o.Quantity >= 20)
-            .ExecuteDelete();
+        var deleted = await Delete(
+            db.Entities
+                .Where(o => o.Status == "open")
+                .Where(o => o.Quantity >= 20),
+            async);
 
         Assert.Equal(1, deleted);
         Assert.Equal(2, db.Entities.Count());
         Assert.DoesNotContain(db.Entities.ToList(), o => o.Status == "open" && o.Quantity >= 20);
     }
 
-    [Fact]
-    public void ExecuteDelete_with_OrderBy_Take_deletes_lowest_quantities()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_with_OrderBy_Take_deletes_lowest_quantities(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async: async);
 
-        var deleted = db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDelete();
+        var deleted = await Delete(db.Entities.OrderBy(o => o.Quantity).Take(2), async);
 
         Assert.Equal(2, deleted);
         var remaining = db.Entities.OrderBy(o => o.Quantity).ToList();
@@ -177,51 +188,68 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Equal(30, remaining[0].Quantity);
     }
 
-    [Fact]
-    public void ExecuteDelete_with_Where_and_Skip_Take_scopes_to_window()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_with_Where_and_Skip_Take_scopes_to_window(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async: async);
 
-        var deleted = db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Skip(1).Take(1).ExecuteDelete();
+        var deleted = await Delete(db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Skip(1).Take(1), async);
 
         Assert.Equal(1, deleted);
         Assert.Equal(2, db.Entities.Count());
         Assert.DoesNotContain(db.Entities.ToList(), o => o.Quantity == 20);
     }
 
-    [Fact]
-    public void ExecuteDelete_two_phase_empty_target_returns_zero()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_empty_target_returns_zero(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async: async);
 
-        var deleted = db.Entities.Where(o => o.Status == "nonexistent").OrderBy(o => o.Quantity).Take(5).ExecuteDelete();
+        var deleted = await Delete(db.Entities.Where(o => o.Status == "nonexistent").OrderBy(o => o.Quantity).Take(5), async);
 
         Assert.Equal(0, deleted);
         Assert.Equal(3, db.Entities.Count());
     }
 
-    [Fact]
-    public void ExecuteDelete_two_phase_rolls_back_inside_user_transaction()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_rolls_back_inside_user_transaction(bool async)
     {
-        using var db = CreateSeededContext();
-        using (var tx = db.Database.BeginTransaction())
+        using var db = CreateSeededContext(async: async);
+        await using (var tx = async ? await db.Database.BeginTransactionAsync() : db.Database.BeginTransaction())
         {
-            var deleted = db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDelete();
+            var deleted = await Delete(db.Entities.OrderBy(o => o.Quantity).Take(2), async);
             Assert.Equal(2, deleted);
-            tx.Rollback();
+            if (async)
+            {
+                await tx.RollbackAsync();
+            }
+            else
+            {
+                tx.Rollback();
+            }
         }
 
         Assert.Equal(3, db.Entities.Count());
     }
 
-    [Fact]
-    public void ExecuteDelete_two_phase_with_AutoTransactionBehavior_Never_throws_and_changes_nothing()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_with_AutoTransactionBehavior_Never_throws_and_changes_nothing(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async: async);
         db.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
 
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDelete());
+        // The async case throws before its first await; ThrowsAsync pins that the failure still surfaces through the returned task.
+        var ex = async
+            ? await Assert.ThrowsAsync<InvalidOperationException>(() => db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDeleteAsync())
+            : Assert.Throws<InvalidOperationException>(() => db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDelete());
 
         Assert.Contains("AutoTransactionBehavior", ex.Message);
         Assert.Equal(3, db.Entities.Count()); // nothing deleted
@@ -239,14 +267,16 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Equal(2, deleted);
     }
 
-    [Fact]
-    public void ExecuteDelete_with_Distinct_deletes_matching()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_with_Distinct_deletes_matching(bool async)
     {
         // Distinct on a root entity triggers the two-phase execution path: phase 1 reads the
         // distinct matching _ids, phase 2 deletes by { _id: { $in: [...] } }.
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async: async);
 
-        var deleted = db.Entities.Where(o => o.Status == "open").Distinct().ExecuteDelete();
+        var deleted = await Delete(db.Entities.Where(o => o.Status == "open").Distinct(), async);
 
         Assert.Equal(2, deleted);
         Assert.Equal(1, db.Entities.Count());
@@ -294,16 +324,25 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Contains("Targets=2", executingMessage);
     }
 
-    [Fact]
-    public void ExecuteDelete_two_phase_commits_inside_user_transaction()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_commits_inside_user_transaction(bool async)
     {
-        using var db = CreateSeededContext();
-        using (var tx = db.Database.BeginTransaction())
+        using var db = CreateSeededContext(async: async);
+        await using (var tx = async ? await db.Database.BeginTransactionAsync() : db.Database.BeginTransaction())
         {
             // Two-phase runs on the ambient session; the provider must NOT commit the user's transaction.
-            var deleted = db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDelete();
+            var deleted = await Delete(db.Entities.OrderBy(o => o.Quantity).Take(2), async);
             Assert.Equal(2, deleted);
-            tx.Commit();
+            if (async)
+            {
+                await tx.CommitAsync();
+            }
+            else
+            {
+                tx.Commit();
+            }
         }
 
         Assert.Equal(1, db.Entities.Count());
@@ -324,9 +363,9 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         mb.Entity<LineItem>().HasKey(e => new { e.OrderId, e.ProductId });
     };
 
-    private SingleEntityDbContext<LineItem> CreateSeededCompositeKeyContext([CallerMemberName] string? collectionName = null)
+    private SingleEntityDbContext<LineItem> CreateSeededCompositeKeyContext(bool async = false, [CallerMemberName] string? collectionName = null)
     {
-        var collection = database.CreateCollection<LineItem>(collectionName);
+        var collection = database.CreateCollection<LineItem>(collectionName, async);
 
         using (var seedDb = SingleEntityDbContext.Create(collection, ConfigureCompositeKeyModel))
         {
@@ -340,14 +379,16 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         return SingleEntityDbContext.Create(collection, ConfigureCompositeKeyModel);
     }
 
-    [Fact]
-    public void ExecuteDelete_two_phase_with_composite_key_deletes_targeted_rows()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteDelete_two_phase_with_composite_key_deletes_targeted_rows(bool async)
     {
-        using var db = CreateSeededCompositeKeyContext();
+        using var db = CreateSeededCompositeKeyContext(async);
 
         // Two-phase on a composite-key entity: phase 1 must collect composite _id sub-documents,
         // phase 2 deletes by { _id: { $in: [ { OrderId, ProductId }, ... ] } }.
-        var deleted = db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDelete();
+        var deleted = await Delete(db.Entities.OrderBy(o => o.Quantity).Take(2), async);
 
         Assert.Equal(2, deleted);
         var remaining = db.Entities.Single();

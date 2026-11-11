@@ -115,9 +115,17 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         return string.Join(" | ", messages);
     }
 
-    private SingleEntityDbContext<Order> CreateSeededContext([CallerMemberName] string? collectionName = null)
+    // `async` is part of the collection name: both cases of a theory share one [CallerMemberName], and CreateCollection reuses an existing
+    // collection, so without it the second case would run against the first case's leftovers.
+    // Runs the sync or the genuinely async operation, so each theory case exercises its own implementation.
+    private static async Task<int> SetStatus(IQueryable<Order> source, bool async, string status)
+        => async
+            ? await source.ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, status))
+            : source.ExecuteUpdate(s => s.SetProperty(o => o.Status, status));
+
+    private SingleEntityDbContext<Order> CreateSeededContext(bool async = false, [CallerMemberName] string? collectionName = null)
     {
-        var collection = database.CreateCollection<Order>(collectionName);
+        var collection = database.CreateCollection<Order>(collectionName, async);
 
         using (var seedDb = SingleEntityDbContext.Create(collection, ConfigureModel))
         {
@@ -268,14 +276,15 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Equal(3, db.Entities.Count(o => o.Status == "all"));
     }
 
-    [Fact]
-    public void ExecuteUpdate_with_OrderBy_Take_updates_only_targeted_rows()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_with_OrderBy_Take_updates_only_targeted_rows(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // Two-phase: phase 1 reads the top-2 _ids (ordered by Quantity), phase 2 applies the update.
-        var updated = db.Entities.OrderBy(o => o.Quantity).Take(2)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Status, "archived"));
+        var updated = await SetStatus(db.Entities.OrderBy(o => o.Quantity).Take(2), async, "archived");
 
         Assert.Equal(2, updated);
         Assert.Equal(2, db.Entities.Count(o => o.Status == "archived"));
@@ -283,44 +292,62 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Equal(1, db.Entities.Count(o => o.Status == "closed"));
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_self_referencing_setter()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_self_referencing_setter(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // Two-phase: targets the single lowest-quantity document and increments its Quantity by 5.
-        var updated = db.Entities.OrderBy(o => o.Quantity).Take(1)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Quantity + 5));
+        var updated = async
+            ? await db.Entities.OrderBy(o => o.Quantity).Take(1)
+                .ExecuteUpdateAsync(s => s.SetProperty(o => o.Quantity, o => o.Quantity + 5))
+            : db.Entities.OrderBy(o => o.Quantity).Take(1)
+                .ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Quantity + 5));
 
         Assert.Equal(1, updated);
         // Lowest seeded Quantity is 10; +5 = 15.
         Assert.Contains(db.Entities.ToList(), o => o.Quantity == 15);
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_rolls_back_inside_user_transaction()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_rolls_back_inside_user_transaction(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
-        using (var tx = db.Database.BeginTransaction())
+        await using (var tx = async ? await db.Database.BeginTransactionAsync() : db.Database.BeginTransaction())
         {
-            db.Entities.OrderBy(o => o.Quantity).Take(2)
-                .ExecuteUpdate(s => s.SetProperty(o => o.Status, "archived"));
-            tx.Rollback();
+            await SetStatus(db.Entities.OrderBy(o => o.Quantity).Take(2), async, "archived");
+            if (async)
+            {
+                await tx.RollbackAsync();
+            }
+            else
+            {
+                tx.Rollback();
+            }
         }
 
         Assert.Equal(0, db.Entities.Count(o => o.Status == "archived"));
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_with_AutoTransactionBehavior_Never_throws_and_changes_nothing()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_with_AutoTransactionBehavior_Never_throws_and_changes_nothing(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
         db.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
 
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => db.Entities.OrderBy(o => o.Quantity).Take(2)
-                .ExecuteUpdate(s => s.SetProperty(o => o.Status, "archived")));
+        // The async case throws before its first await; ThrowsAsync pins that the failure still surfaces through the returned task.
+        var ex = async
+            ? await Assert.ThrowsAsync<InvalidOperationException>(
+                () => SetStatus(db.Entities.OrderBy(o => o.Quantity).Take(2), async, "archived"))
+            : Assert.Throws<InvalidOperationException>(
+                () => SetStatus(db.Entities.OrderBy(o => o.Quantity).Take(2), async, "archived").GetAwaiter().GetResult());
 
         Assert.Contains("AutoTransactionBehavior", AllMessages(ex));
         Assert.Equal(0, db.Entities.Count(o => o.Status == "archived")); // nothing updated
@@ -498,41 +525,44 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Contains("Modified=0", executedMessage);
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_empty_target_returns_zero()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_empty_target_returns_zero(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // Two-phase phase 1 finds no targets, so phase 2 is skipped and nothing is written.
-        var updated = db.Entities.Where(o => o.Status == "nonexistent").OrderBy(o => o.Quantity).Take(5)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Status, "x"));
+        var updated = await SetStatus(db.Entities.Where(o => o.Status == "nonexistent").OrderBy(o => o.Quantity).Take(5), async, "x");
 
         Assert.Equal(0, updated);
         Assert.Equal(0, db.Entities.Count(o => o.Status == "x"));
     }
 
-    [Fact]
-    public void ExecuteUpdate_two_phase_returns_matched_count_even_when_values_already_match()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_two_phase_returns_matched_count_even_when_values_already_match(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // Two-phase (OrderBy + Take) targeting the two "open" docs and setting Status to its existing value:
         // the server reports ModifiedCount 0, but ExecuteUpdate must still return the matched-row count (2)
         // through the { _id: { $in: ... } } UpdateMany path, matching EF Core's contract.
-        var updated = db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Take(2)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Status, "open"));
+        var updated = await SetStatus(db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Take(2), async, "open");
 
         Assert.Equal(2, updated);
     }
 
-    [Fact]
-    public void ExecuteUpdate_with_Where_and_Skip_Take_scopes_to_window()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_with_Where_and_Skip_Take_scopes_to_window(bool async)
     {
-        using var db = CreateSeededContext();
+        using var db = CreateSeededContext(async);
 
         // "open" docs are Quantity 10 and 20; Skip(1).Take(1) over ascending Quantity targets only the 20.
-        var updated = db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Skip(1).Take(1)
-            .ExecuteUpdate(s => s.SetProperty(o => o.Status, "windowed"));
+        var updated = await SetStatus(db.Entities.Where(o => o.Status == "open").OrderBy(o => o.Quantity).Skip(1).Take(1), async, "windowed");
 
         Assert.Equal(1, updated);
         Assert.Equal(1, db.Entities.Count(o => o.Status == "windowed"));
