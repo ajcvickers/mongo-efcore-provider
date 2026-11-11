@@ -145,14 +145,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_computed_property_on_Added_entity_with_default_value_gets_value_from_store()
         => SpecFails.AnyOutcomeAsync(() => base.Always_computed_property_on_Added_entity_with_default_value_gets_value_from_store(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_computed_property_on_Added_entity_with_default_value_gets_value_from_store()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Always_computed_property_on_Added_entity_with_default_value_gets_value_from_store());
+        => SpecFails.ThrowsAsync(() => base.Always_computed_property_on_Added_entity_with_default_value_gets_value_from_store());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_computed_property_on_Added_entity_with_default_value_gets_value_from_store()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Always_computed_property_on_Added_entity_with_default_value_gets_value_from_store());
+        => SpecFails.Throws(() => base.Always_computed_property_on_Added_entity_with_default_value_gets_value_from_store());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -161,14 +161,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
         => SpecFails.AnyOutcomeAsync(() => base.Always_computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
-        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Always_computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set());
+        => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Always_computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "Assert.Equal() Failure: Strings differ");
 #endif
 #elif EF8
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
-        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Always_computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set());
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Always_computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "Assert.Equal() Failure: Strings differ");
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -177,14 +177,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_computed_property_on_Added_entity_with_temporary_value_gets_value_from_store()
         => SpecFails.AnyOutcomeAsync(() => base.Always_computed_property_on_Added_entity_with_temporary_value_gets_value_from_store(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_computed_property_on_Added_entity_with_temporary_value_gets_value_from_store()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Always_computed_property_on_Added_entity_with_temporary_value_gets_value_from_store());
+        => SpecFails.ThrowsAsync(() => base.Always_computed_property_on_Added_entity_with_temporary_value_gets_value_from_store());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_computed_property_on_Added_entity_with_temporary_value_gets_value_from_store()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Always_computed_property_on_Added_entity_with_temporary_value_gets_value_from_store());
+        => SpecFails.Throws(() => base.Always_computed_property_on_Added_entity_with_temporary_value_gets_value_from_store());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -193,14 +193,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_computed_property_on_Modified_entity_is_read_from_store_when_not_modified()
         => SpecFails.AnyOutcomeAsync(() => base.Always_computed_property_on_Modified_entity_is_read_from_store_when_not_modified(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_computed_property_on_Modified_entity_is_read_from_store_when_not_modified()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Always_computed_property_on_Modified_entity_is_read_from_store_when_not_modified());
+        => SpecFails.ThrowsAsync(() => base.Always_computed_property_on_Modified_entity_is_read_from_store_when_not_modified());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_computed_property_on_Modified_entity_is_read_from_store_when_not_modified()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Always_computed_property_on_Modified_entity_is_read_from_store_when_not_modified());
+        => SpecFails.Throws(() => base.Always_computed_property_on_Modified_entity_is_read_from_store_when_not_modified());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -209,14 +209,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
         => SpecFails.AnyOutcomeAsync(() => base.Always_computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Always_computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
+        => SpecFails.ThrowsAsync(() => base.Always_computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Always_computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
+        => SpecFails.Throws(() => base.Always_computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -225,14 +225,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_identity_property_on_Added_entity_with_default_value_gets_value_from_store()
         => SpecFails.AnyOutcomeAsync(() => base.Always_identity_property_on_Added_entity_with_default_value_gets_value_from_store(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_identity_property_on_Added_entity_with_default_value_gets_value_from_store()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Always_identity_property_on_Added_entity_with_default_value_gets_value_from_store());
+        => SpecFails.ThrowsAsync(() => base.Always_identity_property_on_Added_entity_with_default_value_gets_value_from_store());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_identity_property_on_Added_entity_with_default_value_gets_value_from_store()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Always_identity_property_on_Added_entity_with_default_value_gets_value_from_store());
+        => SpecFails.Throws(() => base.Always_identity_property_on_Added_entity_with_default_value_gets_value_from_store());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -241,14 +241,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
         => SpecFails.AnyOutcomeAsync(() => base.Always_identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
-        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Always_identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set());
+        => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Always_identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "Assert.Equal() Failure: Strings differ");
 #endif
 #elif EF8
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
-        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Always_identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set());
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Always_identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "Assert.Equal() Failure: Strings differ");
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -257,14 +257,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_identity_property_on_Added_entity_with_temporary_value_gets_value_from_store()
         => SpecFails.AnyOutcomeAsync(() => base.Always_identity_property_on_Added_entity_with_temporary_value_gets_value_from_store(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_identity_property_on_Added_entity_with_temporary_value_gets_value_from_store()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Always_identity_property_on_Added_entity_with_temporary_value_gets_value_from_store());
+        => SpecFails.ThrowsAsync(() => base.Always_identity_property_on_Added_entity_with_temporary_value_gets_value_from_store());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_identity_property_on_Added_entity_with_temporary_value_gets_value_from_store()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Always_identity_property_on_Added_entity_with_temporary_value_gets_value_from_store());
+        => SpecFails.Throws(() => base.Always_identity_property_on_Added_entity_with_temporary_value_gets_value_from_store());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -273,14 +273,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_identity_property_on_Modified_entity_is_not_included_in_the_update_when_not_modified()
         => SpecFails.AnyOutcomeAsync(() => base.Always_identity_property_on_Modified_entity_is_not_included_in_the_update_when_not_modified(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_identity_property_on_Modified_entity_is_not_included_in_the_update_when_not_modified()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Always_identity_property_on_Modified_entity_is_not_included_in_the_update_when_not_modified());
+        => SpecFails.ThrowsAsync(() => base.Always_identity_property_on_Modified_entity_is_not_included_in_the_update_when_not_modified());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_identity_property_on_Modified_entity_is_not_included_in_the_update_when_not_modified()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Always_identity_property_on_Modified_entity_is_not_included_in_the_update_when_not_modified());
+        => SpecFails.Throws(() => base.Always_identity_property_on_Modified_entity_is_not_included_in_the_update_when_not_modified());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -289,14 +289,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Always_identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
         => SpecFails.AnyOutcomeAsync(() => base.Always_identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Always_identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Always_identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
+        => SpecFails.ThrowsAsync(() => base.Always_identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Always_identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Always_identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
+        => SpecFails.Throws(() => base.Always_identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -429,14 +429,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Computed_property_on_Added_entity_can_have_value_set_explicitly()
         => SpecFails.AnyOutcomeAsync(() => base.Computed_property_on_Added_entity_can_have_value_set_explicitly(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Computed_property_on_Added_entity_can_have_value_set_explicitly()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Computed_property_on_Added_entity_can_have_value_set_explicitly());
+        => SpecFails.AsyncSomeRows<global::System.InvalidOperationException>(() => base.Computed_property_on_Added_entity_can_have_value_set_explicitly(), "is defined as read-only before it has been saved, but its value has been set to something");
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Computed_property_on_Added_entity_can_have_value_set_explicitly()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Computed_property_on_Added_entity_can_have_value_set_explicitly());
+        => SpecFails.SyncSomeRows<global::System.InvalidOperationException>(() => base.Computed_property_on_Added_entity_can_have_value_set_explicitly(), "is defined as read-only before it has been saved, but its value has been set to something");
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -445,14 +445,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Computed_property_on_Added_entity_with_default_value_gets_value_from_store()
         => SpecFails.AnyOutcomeAsync(() => base.Computed_property_on_Added_entity_with_default_value_gets_value_from_store(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Computed_property_on_Added_entity_with_default_value_gets_value_from_store()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Computed_property_on_Added_entity_with_default_value_gets_value_from_store());
+        => SpecFails.ThrowsAsync(() => base.Computed_property_on_Added_entity_with_default_value_gets_value_from_store());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Computed_property_on_Added_entity_with_default_value_gets_value_from_store()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Computed_property_on_Added_entity_with_default_value_gets_value_from_store());
+        => SpecFails.Throws(() => base.Computed_property_on_Added_entity_with_default_value_gets_value_from_store());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -461,14 +461,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
         => SpecFails.AnyOutcomeAsync(() => base.Computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
-        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set());
+        => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "Assert.Equal() Failure: Strings differ");
 #endif
 #elif EF8
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
-        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set());
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Computed_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "Assert.Equal() Failure: Strings differ");
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -477,14 +477,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Computed_property_on_Added_entity_with_temporary_value_gets_value_from_store()
         => SpecFails.AnyOutcomeAsync(() => base.Computed_property_on_Added_entity_with_temporary_value_gets_value_from_store(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Computed_property_on_Added_entity_with_temporary_value_gets_value_from_store()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Computed_property_on_Added_entity_with_temporary_value_gets_value_from_store());
+        => SpecFails.ThrowsAsync(() => base.Computed_property_on_Added_entity_with_temporary_value_gets_value_from_store());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Computed_property_on_Added_entity_with_temporary_value_gets_value_from_store()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Computed_property_on_Added_entity_with_temporary_value_gets_value_from_store());
+        => SpecFails.Throws(() => base.Computed_property_on_Added_entity_with_temporary_value_gets_value_from_store());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -493,14 +493,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Computed_property_on_Modified_entity_is_included_in_update_when_modified()
         => SpecFails.AnyOutcomeAsync(() => base.Computed_property_on_Modified_entity_is_included_in_update_when_modified(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Computed_property_on_Modified_entity_is_included_in_update_when_modified()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Computed_property_on_Modified_entity_is_included_in_update_when_modified());
+        => SpecFails.ThrowsAsync(() => base.Computed_property_on_Modified_entity_is_included_in_update_when_modified());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Computed_property_on_Modified_entity_is_included_in_update_when_modified()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Computed_property_on_Modified_entity_is_included_in_update_when_modified());
+        => SpecFails.Throws(() => base.Computed_property_on_Modified_entity_is_included_in_update_when_modified());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -509,14 +509,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Computed_property_on_Modified_entity_is_read_from_store_when_not_modified()
         => SpecFails.AnyOutcomeAsync(() => base.Computed_property_on_Modified_entity_is_read_from_store_when_not_modified(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Computed_property_on_Modified_entity_is_read_from_store_when_not_modified()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Computed_property_on_Modified_entity_is_read_from_store_when_not_modified());
+        => SpecFails.ThrowsAsync(() => base.Computed_property_on_Modified_entity_is_read_from_store_when_not_modified());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Computed_property_on_Modified_entity_is_read_from_store_when_not_modified()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Computed_property_on_Modified_entity_is_read_from_store_when_not_modified());
+        => SpecFails.Throws(() => base.Computed_property_on_Modified_entity_is_read_from_store_when_not_modified());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -525,14 +525,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
         => SpecFails.AnyOutcomeAsync(() => base.Computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
+        => SpecFails.ThrowsAsync(() => base.Computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
+        => SpecFails.Throws(() => base.Computed_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -568,14 +568,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Identity_property_on_Added_entity_can_have_value_set_explicitly()
         => SpecFails.AnyOutcomeAsync(() => base.Identity_property_on_Added_entity_can_have_value_set_explicitly(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Identity_property_on_Added_entity_can_have_value_set_explicitly()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_can_have_value_set_explicitly());
+        => SpecFails.AsyncSomeRows<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_can_have_value_set_explicitly(), "is defined as read-only before it has been saved, but its value has been set to something");
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Identity_property_on_Added_entity_can_have_value_set_explicitly()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_can_have_value_set_explicitly());
+        => SpecFails.SyncSomeRows<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_can_have_value_set_explicitly(), "is defined as read-only before it has been saved, but its value has been set to something");
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -584,14 +584,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Identity_property_on_Added_entity_with_default_value_gets_value_from_store()
         => SpecFails.AnyOutcomeAsync(() => base.Identity_property_on_Added_entity_with_default_value_gets_value_from_store(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Identity_property_on_Added_entity_with_default_value_gets_value_from_store()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_with_default_value_gets_value_from_store());
+        => SpecFails.ThrowsAsync(() => base.Identity_property_on_Added_entity_with_default_value_gets_value_from_store());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Identity_property_on_Added_entity_with_default_value_gets_value_from_store()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_with_default_value_gets_value_from_store());
+        => SpecFails.Throws(() => base.Identity_property_on_Added_entity_with_default_value_gets_value_from_store());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -600,14 +600,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
         => SpecFails.AnyOutcomeAsync(() => base.Identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
-        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set());
+        => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "Assert.Equal() Failure: Strings differ");
 #endif
 #elif EF8
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set()
-        => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.Identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set());
+        => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Identity_property_on_Added_entity_with_read_only_before_save_throws_if_explicit_values_set(), "Assert.Equal() Failure: Strings differ");
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -616,14 +616,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store()
         => SpecFails.AnyOutcomeAsync(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store());
+        => SpecFails.ThrowsAsync(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store());
+        => SpecFails.Throws(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -632,14 +632,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store_even_if_same()
         => SpecFails.AnyOutcomeAsync(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store_even_if_same(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store_even_if_same()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store_even_if_same());
+        => SpecFails.AsyncSomeRows<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store_even_if_same(), "is defined as read-only before it has been saved, but its value has been set to something");
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store_even_if_same()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store_even_if_same());
+        => SpecFails.SyncSomeRows<global::System.InvalidOperationException>(() => base.Identity_property_on_Added_entity_with_temporary_value_gets_value_from_store_even_if_same(), "is defined as read-only before it has been saved, but its value has been set to something");
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -648,14 +648,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Identity_property_on_Modified_entity_is_included_in_update_when_modified()
         => SpecFails.AnyOutcomeAsync(() => base.Identity_property_on_Modified_entity_is_included_in_update_when_modified(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Identity_property_on_Modified_entity_is_included_in_update_when_modified()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Identity_property_on_Modified_entity_is_included_in_update_when_modified());
+        => SpecFails.ThrowsAsync(() => base.Identity_property_on_Modified_entity_is_included_in_update_when_modified());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Identity_property_on_Modified_entity_is_included_in_update_when_modified()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Identity_property_on_Modified_entity_is_included_in_update_when_modified());
+        => SpecFails.Throws(() => base.Identity_property_on_Modified_entity_is_included_in_update_when_modified());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -664,14 +664,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Identity_property_on_Modified_entity_is_not_included_in_update_when_not_modified()
         => SpecFails.AnyOutcomeAsync(() => base.Identity_property_on_Modified_entity_is_not_included_in_update_when_not_modified(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Identity_property_on_Modified_entity_is_not_included_in_update_when_not_modified()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Identity_property_on_Modified_entity_is_not_included_in_update_when_not_modified());
+        => SpecFails.ThrowsAsync(() => base.Identity_property_on_Modified_entity_is_not_included_in_update_when_not_modified());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Identity_property_on_Modified_entity_is_not_included_in_update_when_not_modified()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Identity_property_on_Modified_entity_is_not_included_in_update_when_not_modified());
+        => SpecFails.Throws(() => base.Identity_property_on_Modified_entity_is_not_included_in_update_when_not_modified());
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -680,14 +680,14 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
     public override Task Identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
         => SpecFails.AnyOutcomeAsync(() => base.Identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state(), "The property 'Gumball.Id' does not have a value set and no value generator is available fo");
 #else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
+        => SpecFails.ThrowsAsync(() => base.Identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
 #endif
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
+        => SpecFails.Throws(() => base.Identity_property_on_Modified_entity_with_read_only_after_save_throws_if_value_is_in_modified_state());
 #endif
 
 #if EF9

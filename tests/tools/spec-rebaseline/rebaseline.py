@@ -234,7 +234,7 @@ def classify(rows):
         return ('MULTI',)
     # mixed pass + throw
     if len(types) == 1:
-        return ('MIXED', throws[0][1], [r[3] for r in throws])
+        return ('MIXED', throws[0][1], tuple(r[3] for r in throws))
     return ('MULTI',)
 
 
