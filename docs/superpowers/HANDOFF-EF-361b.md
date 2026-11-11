@@ -103,9 +103,15 @@ Task 9 (`FindProperty(MemberInfo)`, declaring-typed `SetProperty` match) is stil
     `ExecuteDelete` WORKS on a Queryable Encryption collection (an equality filter on an encrypted field matches exactly the intended documents), while
     `ExecuteUpdate` is rejected with `MongoEncryptionException` "Multi-document updates are not allowed with Queryable Encryption" and changes nothing.
     **For Task 25:** the README must say this (updates unsupported on QE, deletes supported), not the old "QE forbids multi-document writes" for both.
-  - Final-wave items still to do: the derived-TPH `DbSet` bulk guard (`entityType.BaseType != null`, verify with a test first), delete the empty
-    `ExecuteDelete_two_phase_on_standalone_throws_actionable_error` skipped test and ticket its coverage.
-  - Next: Phase 7 docs (Tasks 25-26).
+- **Phase 7, docs (Tasks 25-26)** is ported. README states the per-document atomicity of the single-command path, the OfType/Skip/Take two-phase boundary,
+  batching, key/discriminator setter rejection, query filters and the Queryable Encryption outcome (delete works, update is rejected).
+  `docs/failing-spec-tests.md` now counts 67 EF-X016 tags. Task 26's unused parameter and unreachable `break` were already gone on `release`.
+- **Final-wave items:** the derived-TPH `DbSet` guard was verified with a test first and is NOT needed: `DerivedEntityRootNarrower` already narrows a derived
+  `DbSet` to `OfType<T>()`, so `db.Cats.ExecuteDelete()` deletes only cats (pinned by two tests in `BulkOperationsInheritanceTests`). The empty skipped
+  standalone test was deleted (the classification is unit-tested). Still unfiled tickets: "no error event on failure", the TPH read-path discriminator
+  gap (now unverified, since the narrowing may cover reads too), the EF9 auto-included owned navigation breaking `ExecuteUpdate`, and a value lambda that
+  ignores its parameter being evaluated once per execution rather than per document.
+- Remaining: a clean full `/test-all --native`, then push.
 - Known unrelated failure on one checkout: two EF11 `ConferencePlannerMongoTest` SpecFails wrappers, tracked in issue #63.
 
 ## Recorded decisions from the old work (do not re-litigate)

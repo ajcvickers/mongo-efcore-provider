@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
@@ -190,6 +191,60 @@ public class BulkOperationsInheritanceTests(TemporaryDatabaseFixture database)
         }
 
         return string.Join(" | ", messages);
+    }
+
+    // A DbSet of a DERIVED type maps to its root's collection. A bulk operation on it must only touch that type: if the discriminator were
+    // dropped, deleting all Cats would delete the Dog too. The preprocessor narrows the derived set to OfType<Cat>() (so it goes
+    // two-phase with the discriminator filter); this pins that the narrowing reaches the bulk path.
+    [Fact]
+    public void ExecuteDelete_on_a_derived_DbSet_does_not_destroy_the_rest_of_the_hierarchy()
+    {
+        var collection = Seed(nameof(ExecuteDelete_on_a_derived_DbSet_does_not_destroy_the_rest_of_the_hierarchy));
+        using var db = CreateRootAndDerivedContext(collection);
+
+        var deleted = db.Cats.ExecuteDelete();
+
+        Assert.Equal(2, deleted);
+        Assert.Equal(0, Count(collection, "cat"));
+        Assert.Equal(1, Count(collection, "dog"));
+    }
+
+    [Fact]
+    public void ExecuteUpdate_on_a_derived_DbSet_does_not_modify_the_rest_of_the_hierarchy()
+    {
+        var collection = Seed(nameof(ExecuteUpdate_on_a_derived_DbSet_does_not_modify_the_rest_of_the_hierarchy));
+        using var db = CreateRootAndDerivedContext(collection);
+
+        var updated = db.Cats.ExecuteUpdate(s => s.SetProperty(a => a.Name, "renamed"));
+
+        Assert.Equal(2, updated);
+        Assert.Equal("Rex", db.Animals.OfType<Dog>().Single().Name);
+        Assert.All(db.Animals.OfType<Cat>().ToList(), c => Assert.Equal("renamed", c.Name));
+    }
+
+    // Both the hierarchy root and a derived type as DbSets, over the root's collection.
+    private sealed class RootAndDerivedContext(DbContextOptions options) : DbContext(options)
+    {
+        public DbSet<Animal> Animals { get; set; } = null!;
+        public DbSet<Cat> Cats { get; set; } = null!;
+
+        protected override void OnModelCreating(ModelBuilder mb)
+        {
+            Configure(mb);
+            mb.Entity<Animal>().ToCollection(Collection);
+        }
+
+        public static string Collection = null!;
+    }
+
+    private static RootAndDerivedContext CreateRootAndDerivedContext(IMongoCollection<Animal> collection)
+    {
+        RootAndDerivedContext.Collection = collection.CollectionNamespace.CollectionName;
+        var options = new DbContextOptionsBuilder<RootAndDerivedContext>()
+            .UseMongoDB(collection.Database.Client, collection.Database.DatabaseNamespace.DatabaseName)
+            .ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+            .Options;
+        return new RootAndDerivedContext(options);
     }
 }
 

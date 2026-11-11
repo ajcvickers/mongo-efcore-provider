@@ -283,12 +283,9 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         Assert.Equal("closed", db.Entities.Single().Status);
     }
 
-    [Fact(Skip = "Requires a standalone (non-replica-set) MongoDB to exercise the end-to-end path; CI/local use a replica set "
-        + "(atlas-local). The error classification itself is unit-tested server-free in "
-        + "UnitTests/Storage/BulkTransactionErrorClassificationTests.cs. EF-107")]
-    public void ExecuteDelete_two_phase_on_standalone_throws_actionable_error()
-    {
-    }
+    // There is deliberately no end-to-end test for a two-phase operation on a standalone (non-transactional) deployment: CI and local runs use a
+    // replica set, and an always-skipped empty test only looks like coverage. The error classification that maps the two standalone failure
+    // shapes to the actionable message is unit-tested server-free in UnitTests/Storage/BulkTransactionErrorClassificationTests.cs.
 
     [Theory]
     [InlineData(false)]
