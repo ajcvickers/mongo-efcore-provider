@@ -20,15 +20,8 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
 public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongoFixture fixture)
-    : PropertyValuesTestBase<PropertyValuesMongoTest.PropertyValuesMongoFixture>(fixture), IAsyncLifetime
+    : PropertyValuesTestBase<PropertyValuesMongoTest.PropertyValuesMongoFixture>(fixture)
 {
-    // The tests write to the shared database and there is no rollback, so which test sees which rows depends on the order they run in.
-    public async LifetimeTask InitializeAsync()
-        => await Fixture.ReseedAsync();
-
-    public LifetimeTask DisposeAsync()
-        => LifetimeTask.CompletedTask;
-
 #if EF11
     private readonly object? _ef11Skips = Ef11TestSkips.SkipIfListed("xUnit v3 (EF11) cannot hide this non-virtual upstream test; it fails here for the reasons in EF-X101 (see the New-method override on EF8 to EF10)", "Reload_when_entity_deleted_in_store_can_happen_for_any_state", "Store_values_really_are_store_values_not_current_or_original_values", "Store_values_really_are_store_values_not_current_or_original_values_async", "Values_can_be_reloaded_from_database_for_entity_in_any_state", "Reloading_optional_complex_property_with_null_does_not_throw");
 #endif
