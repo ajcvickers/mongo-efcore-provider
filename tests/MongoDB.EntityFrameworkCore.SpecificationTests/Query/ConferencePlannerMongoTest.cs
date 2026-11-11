@@ -25,8 +25,23 @@ using MongoDB.EntityFrameworkCore.SpecificationTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
 
 public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePlannerMongoFixture fixture)
-    : ConferencePlannerTestBase<ConferencePlannerMongoTest.ConferencePlannerMongoFixture>(fixture)
+    : ConferencePlannerTestBase<ConferencePlannerMongoTest.ConferencePlannerMongoFixture>(fixture), IAsyncLifetime
 {
+    // The fixture's database is shared by every test in the class and there is no transaction to roll back, so a test that writes (Put,
+    // Post, Delete, AddSession...) changes what later tests read. The run order is decided by xUnit from per-test ids that depend on the
+    // build (EF11's xUnit v3 hashes source locations), so which tests failed depended on the checkout path (#63). Every test starts from
+    // freshly seeded data instead.
+    public async LifetimeTask InitializeAsync()
+        => await Fixture.ResetDatabaseAsync();
+
+#if EF11
+    public LifetimeTask DisposeAsync()
+        => default;
+#else
+    public LifetimeTask DisposeAsync()
+        => Task.CompletedTask;
+#endif
+
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
@@ -86,31 +101,23 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
     public override Task SessionsController_Delete()
         => SpecFails.FailsInUtcAsync(() => base.SessionsController_Delete());
 #else
-    // Fails: Single/First over empty result in test body (not triaged) EF-X310
     public override Task SessionsController_Delete()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.SessionsController_Delete(), "Sequence contains no elements");
+        => base.SessionsController_Delete();
 #endif
 
     public override Task SessionsController_Delete_with_bad_ID()
         => base.SessionsController_Delete_with_bad_ID();
 
 #if (EF10 || EF11)
-#if EF11
-    // Fails: Query returns different data than the expected result EF-X600
-    public override Task SessionsController_Get()
-        => SpecFails.ThrowsAsync(() => base.SessionsController_Get());
-#else
     public override Task SessionsController_Get()
         => base.SessionsController_Get();
-#endif
 #elif EF9 || EF8
     public override Task SessionsController_Get()
         => base.SessionsController_Get();
 #endif
 
-    // Fails: Single/First over empty result in test body (not triaged) EF-X310
     public override Task SessionsController_Get_with_ID()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.SessionsController_Get_with_ID(), "Sequence contains no elements");
+        => base.SessionsController_Get_with_ID();
 
 #if (EF10 || EF11)
     public override Task SessionsController_Get_with_bad_ID()
@@ -175,5 +182,15 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
 
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
+
+        /// <summary>Drops and re-seeds the database (see <see cref="ConferencePlannerMongoTest.InitializeAsync"/>).</summary>
+        public async Task ResetDatabaseAsync()
+        {
+            ((MongoTestStore)TestStore).TestServer.Client.DropDatabase(StoreName);
+
+            using var context = CreateContext();
+            await context.Database.EnsureCreatedAsync();
+            await SeedAsync(context);
+        }
     }
 }

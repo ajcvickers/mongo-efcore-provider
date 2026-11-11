@@ -216,7 +216,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X307 | Model validation requires every key property to be mapped to `_id` | 6 |
 | EF-X308 | Relationship/navigation discovery differs (navigations become owned by convention) | 26 |
 | EF-X309 | `[Required]`/`[MaxLength]`/`[StringLength]` are not enforced by the store | 4 |
-| EF-X310 | `Single`/`First` over an empty result in the test body (not triaged) | 4 |
+| EF-X310 | `Single`/`First` over an empty result in the test body (not triaged) | 2 |
 | EF-X311 | Music store query fails with `InvalidOperationException` (not triaged) | 1 |
 | EF-X312 | `[Column(TypeName)]` is reported as an error by default | 5 |
 | EF-X314 | Driver LINQ translation rejects expression over converted property, indexer or subquery | 6 |
@@ -306,7 +306,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
 | EF-X538 | `InheritanceRelationshipsQueryTestBase<>` (ported with `InitFailureGuard`): model validation fails in the fixture (the dependent side of a 1:1 between a base type and its derived type cannot be determined, although the upstream model calls `HasForeignKey<Derived>` explicitly), so every test asserts that failure | 48 |
 | EF-X548 | `JsonQueryTestBase<>` (ported with `InitFailureGuard`): saving an entity with a `uint[]` or `List<uint>` property holding a value above `Int32.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`), so seeding the JSON model fails and every test asserts that failure | 219 |
-| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 171 |
+| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 170 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 5 |
 | EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 65 |
