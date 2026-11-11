@@ -54,7 +54,7 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 | EF-216 | 245 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
 | EF-X102 | 8 | Relationship discovery between root entity types fails at model build (Unable to determine the relatio... |
 | EF-X527 | 185 | Expression not supported by the driver LINQ translator |
-| EF-X600 | 225 | Query translates natively but returns different data than the expected result  |
+| EF-X600 | 209 | Query translates natively but returns different data than the expected result  |
 | EF-149 | 147 | GroupBy translation is severely limited; most non-trivial group-by shapes fail to translate. |
 | EF-X001 | 137 | Sub-query selection across DbSets is not translated |
 | EF-X316 | 121 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) |
@@ -260,6 +260,8 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X113 | Indexer (shared-type entity) property access `get_Item(...)` is not translated by the driver | 2 |
 | EF-X114 | Partial update of a tracked entity reports a `DbUpdateConcurrencyException` | 0 |
 | EF-X115 | Concurrency exception message differs from the relational wording asserted by `UpdatesTestBase` | 4 |
+| EF-X116 | A conflicting write between two contexts surfaces as a raw `MongoCommandException` (server write conflict) instead of `DbUpdateConcurrencyException` | 15 |
+| EF-X117 | Inserting a duplicate key surfaces as a raw `MongoBulkWriteException` instead of `DbUpdateException` | 1 |
 | EF-X500 | Primitive-collection projection/SelectMany/Union/Concat/ordering not translated | 10 |
 | EF-X501 | Inline List<T> collection (Min/Max/Contains/index) not translated or serialized | 6 |
 | EF-X502 | Single/SingleOrDefault over a primitive collection not translated | 2 |
@@ -306,7 +308,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
 | EF-X538 | A type that derives from an entity type, and is first reached through a navigation before it is in the model (the base type's navigation to its derived type, with no `DbSet` for the derived type), is owned by convention. That breaks the explicit one-to-one between the two ("the dependent side could not be determined"). `InheritanceRelationshipsQueryMongoFixture` replaces the convention so such a type is not owned; the default is unchanged, because making it the provider default also changes the model of `GraphUpdates` | 0 |
 | EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
-| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 225 |
+| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 209 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 38 |
 | EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 67 |
@@ -904,6 +906,12 @@ Assertion failures (`Assert.Equal`/`Assert.True`) in `StoreGenerated` (computed/
 
 ### EF-X115 — Concurrency message wording
 `UpdatesTestBase.Remove_partial_*`/`Update_*` compare the full exception message with the relational text (`The database operation was expected to affect 1 row(s)...`); the provider says `Conflicts were detected when performing updates to ...` (4 tests).
+
+### EF-X116 — Conflicting writes between two contexts are not reported as a concurrency conflict
+`OptimisticConcurrencyTestBase.ConcurrencyTestAsync` changes the row through a second context and then saves the first. Here the first save fails with `MongoDB.Driver.MongoCommandException: Command update failed: Caused by :: Write conflict during plan execution and yielding is disabled`, so the `DbUpdateConcurrencyException` the 15 tests expect is never thrown. The cause was not investigated further: both contexts write inside the test store's transaction, so it may be how the spec fixtures share a transaction rather than provider behaviour, and a write conflict is in any case not translated to a concurrency exception.
+
+### EF-X117 — Duplicate key is not reported as `DbUpdateException`
+`OptimisticConcurrencyMongoTest.Adding_the_same_entity_twice_results_in_DbUpdateException` expects a `DbUpdateException`; the provider lets the driver's `MongoBulkWriteException` (duplicate key) escape. The cause was not investigated further.
 
 Tests that also appear under existing tickets: cross-document queries in `ManyToManyTracking` carry [EF-216](https://jira.mongodb.org/browse/EF-216) (8 methods) and the EF8/EF9
 `The LINQ expression 'DbSet<...>' could not be translated` failures in `Updates`/`StoreGenerated` carry EF-X020 (6 methods).

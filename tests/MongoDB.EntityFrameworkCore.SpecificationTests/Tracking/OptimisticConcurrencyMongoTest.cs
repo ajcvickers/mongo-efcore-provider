@@ -76,9 +76,9 @@ public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.Optim
 #endif
     }
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: inserting a duplicate key surfaces as a raw MongoBulkWriteException instead of DbUpdateException EF-X117
     public override Task Adding_the_same_entity_twice_results_in_DbUpdateException()
-        => SpecFails.ThrowsAsync(() => base.Adding_the_same_entity_twice_results_in_DbUpdateException());
+        => SpecFails.ThrowsAsync(() => base.Adding_the_same_entity_twice_results_in_DbUpdateException(), "MongoDB.Driver.MongoBulkWriteException");
 
     // Fails: Include of a skip navigation is not supported EF-X110
     public override Task Attempting_to_add_same_relationship_twice_for_many_to_many_results_in_independent_association_exception()
@@ -122,71 +122,71 @@ public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.Optim
     public override Task Calling_Reload_on_an_Unchanged_entity_that_is_not_in_database_detaches_it(bool async)
         => base.Calling_Reload_on_an_Unchanged_entity_that_is_not_in_database_detaches_it(async);
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: Reload of an owned entity returns 10 where the base expects 5 EF-X600
     public override Task Calling_Reload_on_owned_entity_works(bool async)
-        => SpecFails.ThrowsAsync(() => base.Calling_Reload_on_owned_entity_works(async));
+        => SpecFails.ThrowsAsync(() => base.Calling_Reload_on_owned_entity_works(async), "Values differ");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception());
+        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Change_in_independent_association_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_results_in_independent_association_exception());
+        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_results_in_independent_association_exception(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled()
-        => SpecFails.ThrowsAsync(() => base.Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled());
+        => SpecFails.ThrowsAsync(() => base.Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the query returns no rows where the base expects data (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException());
+        => SpecFails.ThrowsAsync(() => base.Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the query returns no rows where the base expects data (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException());
+        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values());
+        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: the nullable client-side concurrency token reads back null where the base expects 1 EF-X600
     public override void Nullable_client_side_concurrency_token_can_be_used()
-        => SpecFails.Throws(() => base.Nullable_client_side_concurrency_token_can_be_used());
+        => SpecFails.Throws(() => base.Nullable_client_side_concurrency_token_can_be_used(), "Values differ");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Simple_concurrency_exception_can_be_resolved_with_client_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_client_values());
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_client_values(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Simple_concurrency_exception_can_be_resolved_with_new_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_new_values());
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_new_values(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values());
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload());
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes());
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first()
-        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first());
+        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the result differs from the one the base expects (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first()
-        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first());
+        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the query returns no rows where the base expects data (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException());
+        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException(), "MongoDB.Driver.MongoCommandException");
 
-    // Fails: the query returns no rows where the base expects data (not yet triaged) EF-X600
+    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
     public override Task Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values());
+        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "MongoDB.Driver.MongoCommandException");
 }
