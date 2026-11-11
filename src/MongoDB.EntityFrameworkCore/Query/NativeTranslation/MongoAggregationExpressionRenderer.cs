@@ -1116,9 +1116,11 @@ internal static class MongoAggregationExpressionRenderer
             // A field under an optional complex property is the exception: a null or missing parent leaves it MISSING wherever it is read, so
             // a group key over it groups those rows under null (flagged to throw) and a Min/Max/Average accumulator over it can reduce an
             // all-missing group to null (declined), as for a Length over a possibly-null string.
-            MongoFieldExpression when ReadsThroughOptionalComplexParent(node) => new NullBehindNonNullable(true, false),
+            // A test that proves every optional ancestor present (`c.Address != null ? c.Address.Lat : 0`) lifts it on that branch.
+            MongoFieldExpression when ReadsThroughUnprovenOptionalComplexParent(node, nonNull) => new NullBehindNonNullable(true, false),
             MongoFieldExpression or MongoOuterFieldExpression when dateParts && storedFields
-                => new NullBehindNonNullable(MayBeNullUnlessProven(node, nonNull, missingFields) || ReadsThroughOptionalComplexParent(node), false),
+                => new NullBehindNonNullable(
+                    MayBeNullUnlessProven(node, nonNull, missingFields) || ReadsThroughUnprovenOptionalComplexParent(node, nonNull), false),
             MongoMathExpression math => WalkMath(math, nonNull, dateParts, missingFields, storedFields),
             // Either branch may be the value read, each under what the test proves on it
             // (`s == null ? a : b` makes s non-null in b).
@@ -1160,20 +1162,54 @@ internal static class MongoAggregationExpressionRenderer
     // Whether a stored field sits under an optional complex property (EF10): a null or missing parent element leaves the field missing, so
     // reading it as a non-nullable value type must throw like EF rather than read default(T).
     internal static bool ReadsThroughOptionalComplexParent(MongoExpression node)
+        => OptionalComplexAncestorCount(node) > 0;
+
+    // Like ReadsThroughOptionalComplexParent, but false when the enclosing tests (nonNull) prove every optional ancestor present: an
+    // element null check on the ancestor's stored path. The leaf's stored path is the dotted ancestors' element names then its own, so
+    // the ancestor `i` hops up (0 = the nearest) is the path without its last i + 1 segments.
+    private static bool ReadsThroughUnprovenOptionalComplexParent(MongoExpression node, IReadOnlyList<MongoExpression> nonNull)
     {
-        if (node is not MongoFieldExpression field)
+        if (node is not MongoFieldExpression field || !ReadsThroughOptionalComplexParent(node))
             return false;
 
+        var segments = field.ElementName.Split('.');
+        var hop = 0;
         var type = field.Property.DeclaringType;
         while (type is Microsoft.EntityFrameworkCore.Metadata.IComplexType complexType)
         {
+            hop++;
             if (complexType.ComplexProperty.IsOptional())
-                return true;
+            {
+                var ancestorPath = segments.Length > hop ? string.Join('.', segments[..^hop]) : null;
+                if (ancestorPath is null
+                    || !nonNull.Any(proven => proven is MongoElementNullCheckExpression { IsNotNull: true } check && check.Path == ancestorPath))
+                {
+                    return true;
+                }
+            }
 
             type = complexType.ComplexProperty.DeclaringType;
         }
 
         return false;
+    }
+
+    private static int OptionalComplexAncestorCount(MongoExpression node)
+    {
+        if (node is not MongoFieldExpression field)
+            return 0;
+
+        var count = 0;
+        var type = field.Property.DeclaringType;
+        while (type is Microsoft.EntityFrameworkCore.Metadata.IComplexType complexType)
+        {
+            if (complexType.ComplexProperty.IsOptional())
+                count++;
+
+            type = complexType.ComplexProperty.DeclaringType;
+        }
+
+        return count;
     }
 
     // A parameter amount is judged by its CLR type (`AddDays(days)` over a captured non-nullable `days` is never
@@ -1197,6 +1233,8 @@ internal static class MongoAggregationExpressionRenderer
             MongoBinaryExpression { Operator: MongoBinaryOperator.AndAlso } andAlso when outcome
                 => ProvenNonNullWhen(andAlso.Left, true).Concat(ProvenNonNullWhen(andAlso.Right, true)),
             MongoUnaryExpression { Operator: MongoUnaryOperator.Not } negation => ProvenNonNullWhen(negation.Operand, !outcome),
+            // `c.Address != null` over a complex element: present on the true branch of a not-null test, on the false branch of a null test.
+            MongoElementNullCheckExpression check when check.IsNotNull == outcome => [check],
             _ => []
         };
 

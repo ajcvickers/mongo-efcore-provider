@@ -692,7 +692,7 @@ instead of reading `0` for that group. `Min`, `Max` and `Average` of such a leaf
 do, and throw the same exception when no row has a parent; `Min` used to answer `0` whenever a parent was absent. `Sum` skips
 those rows too and is `0` when none has a parent. A grouped `Min`/`Max`/`Average` over such a leaf is no longer translated
 natively (it falls back to the driver, or is refused under `MongoQueryMode.NativeOnly`), because an all-null group would read as
-`0`.
+`0`. A leaf read only where a test proves the parent present (`c.Address != null ? c.Address.Location.Lat : -1`) is unaffected.
 
 This applies to the native translator. Explicit `MongoQueryMode.DriverLinq`, and a query the native translator declines, still
 read `default` because the driver deserializes the projection.
@@ -709,6 +709,66 @@ Reading `0` for data that is not there is a silently wrong answer, and it differ
 
 Read the leaf as nullable, `(double?)c.Address!.Location.Lat`, or filter out rows with no parent first:
 `Where(c => c.Address != null)`.
+
+### A nullable struct complex value reached through an absent optional navigation now reads `null`
+
+#### Old behavior
+
+In EF10 and EF11, a projection of a nullable struct complex value through an optional navigation, for example
+`Select(g => g.OptionalCustomer != null ? g.OptionalCustomer.ShippingAddress : (AddressStruct?)null)`, returned an all-zero struct
+for a row that has no related entity. The projection reads the struct through the navigation, which reads the default struct for
+a missing document, and the conversion to `Nullable<AddressStruct>` kept it.
+
+#### New behavior
+
+The row reads `null`. A row whose navigation is present is unaffected, and a non-nullable struct projection through an optional
+navigation (`Select(g => g.OptionalCustomer.ShippingAddress)`) is unchanged.
+
+This applies to the native translator. Explicit `MongoQueryMode.DriverLinq` and a query the native translator declines are
+served by the driver, which returned different rows for this query.
+
+Optional complex properties and their query support are not in the latest release (`v10.0.5.0`), so this changes only
+behavior of the unreleased complex type support.
+
+#### Why
+
+An all-zero struct for a missing related entity is a silently wrong answer, and `null` is what the query asks for in the
+other branch of the conditional.
+
+#### Mitigations
+
+None needed. To keep the old shape, project the struct without the null branch and test the navigation on the client.
+
+### A null check on an optional complex property with a discriminator now agrees with how the property is read
+
+#### Old behavior
+
+In EF10 and EF11 an optional complex property whose members are all nullable has a discriminator (`HasDiscriminator()`), and a stored
+subdocument whose discriminator is null or missing reads as a null property whatever its other members hold. A filter on the
+property (`Where(e => e.Prop == null)`, `!= null`, `.Equals(null)`, or the property compared with another value) tested only the
+stored element, so `Prop == null` missed such a row and `Prop != null` returned it, although the entity materialized with a null
+`Prop`.
+
+#### New behavior
+
+The filter also tests the discriminator: the property is null when its element or its discriminator is null or missing, which is
+`{ "$or" : [{ "Prop" : null }, { "Prop.Discriminator" : null }] }`. The rows a `Prop == null` filter returns are the rows whose
+`Prop` materializes as null, and `Prop != null` returns the others. A property without a discriminator is unchanged.
+
+This applies to the native translator. Explicit `MongoQueryMode.DriverLinq` still tests only the stored element.
+
+Optional complex properties and their query support are not in the latest release (`v10.0.5.0`), so this changes only
+behavior of the unreleased complex type support.
+
+#### Why
+
+A filter and a materializer that disagree about whether a row has a value return rows the caller then sees as null, or hide rows
+that are.
+
+#### Mitigations
+
+None needed. Documents written by SaveChanges always carry the discriminator, so the change only shows for documents written
+another way or whose discriminator was set to null on a tracked entry.
 
 ## Breaking changes in 8.4.0 / 9.1.0 / 10.0.0
 

@@ -849,6 +849,22 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
         }
     }
 
+    // A leaf read under a test that proves the optional parent present (`c.Address != null ? c.Address.Location.Lat : -1`) never reads a
+    // missing parent, so it needs neither the throwing read nor the decline: the aggregate stays native (it was declined once the plain
+    // leaf was treated as possibly null wherever it is read).
+    [Theory]
+    [InlineData(MongoQueryMode.Native)]
+    [InlineData(MongoQueryMode.NativeOnly)]
+    public void Optional_parent_leaf_guarded_by_a_parent_test_stays_native(MongoQueryMode mode)
+    {
+        var collection = SeedOptional(nameof(Optional_parent_leaf_guarded_by_a_parent_test_stays_native) + mode);
+
+        Assert.Equal([3.0], Optional(collection, mode, q => new[] { q.Max(c => c.Address != null ? c.Address.Location.Lat : -1.0) }));
+        Assert.Equal([-1.0], Optional(collection, mode, q => new[] { q.Min(c => c.Address != null ? c.Address.Location.Lat : -1.0) }));
+        Assert.Equal([1.0, 3.0, -1.0, -1.0], Optional(collection, mode,
+            q => q.OrderBy(c => c.Name).Select(c => c.Address != null ? c.Address.Location.Lat : -1.0)));
+    }
+
     // A group of parents that are all missing/null reduces Min/Max/Average to null, which a non-nullable read must not take as 0.
     // The accumulator over such a leaf is not answered natively (it declines, as for a Length over a possibly-null string), so NativeOnly
     // refuses and Native reaches the driver, which fails on the null group; neither returns the 0.
