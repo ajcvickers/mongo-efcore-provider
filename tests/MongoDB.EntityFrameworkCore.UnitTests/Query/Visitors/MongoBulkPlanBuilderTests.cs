@@ -71,7 +71,7 @@ public class MongoBulkPlanBuilderTests
             ? new MongoNonQueryExpression(
                 source,
                 [new MongoNonQueryExpression.Setter(
-                    entityType.FindProperty(nameof(Product.Price))!, Expression.Constant(5m), IsSelfReferencing: false)],
+                    entityType.FindProperty(nameof(Product.Price))!, Expression.Constant(5m), isSelfReferencing: false)],
                 strategy)
             : new MongoNonQueryExpression(source, strategy);
 

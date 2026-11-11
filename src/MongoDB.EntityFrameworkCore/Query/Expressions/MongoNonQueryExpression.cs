@@ -36,20 +36,40 @@ internal sealed class MongoNonQueryExpression : Expression
     public enum BulkStrategy { SingleCommand, TwoPhase }
 
     /// <summary>One <c>SetProperty</c> of a bulk update.</summary>
-    /// <param name="Property">
+    /// <param name="property">
     /// The target: a mapped scalar property (of the root entity or, through single complex-property hops, of a complex
     /// type), or a whole complex property / complex collection.
     /// </param>
-    /// <param name="ValueExpression">The value (a constant/parameter, or an expression over the entity).</param>
-    /// <param name="IsSelfReferencing">Whether <paramref name="ValueExpression"/> reads the entity being updated.</param>
-    /// <param name="ElementPath">
+    /// <param name="valueExpression">The value (a constant/parameter, or an expression over the entity).</param>
+    /// <param name="isSelfReferencing">Whether <paramref name="valueExpression"/> reads the entity being updated.</param>
+    /// <param name="elementPath">
     /// The stored (dotted) path of the target, or <see langword="null"/> for a root scalar property, whose path is its
     /// element name.
     /// </param>
-    public sealed record Setter(IPropertyBase Property, Expression ValueExpression, bool IsSelfReferencing, string? ElementPath = null)
+    public sealed class Setter(IPropertyBase property, Expression valueExpression, bool isSelfReferencing, string? elementPath = null)
     {
+        /// <summary>The target property (see the type documentation).</summary>
+        public IPropertyBase Property { get; } = property;
+
+        /// <summary>The value (a constant/parameter, or an expression over the entity).</summary>
+        public Expression ValueExpression { get; } = valueExpression;
+
+        /// <summary>Whether <see cref="ValueExpression"/> reads the entity being updated.</summary>
+        public bool IsSelfReferencing { get; } = isSelfReferencing;
+
+        /// <summary>The stored (dotted) path of the target, or <see langword="null"/> for a root scalar property.</summary>
+        public string? ElementPath { get; } = elementPath;
+
         /// <summary>The stored path the update writes.</summary>
         public string StoredPath => ElementPath ?? ((IReadOnlyProperty)Property).GetElementName();
+
+        // Lazily populated by the compile-and-evaluate fallback in the execution path. This node is baked into the compiled query as a
+        // constant, so the same instance serves every execution and the delegate need only be built once. What is cached is the DELEGATE,
+        // never a value: it is a parameterless Func over an immutable tree that reads any external state when invoked, so reusing it is
+        // behaviour-identical to compiling afresh. This is a class rather than a record because a field declared in a record body takes
+        // part in synthesized equality. Volatile so a racing thread can never observe the reference before the delegate is fully built
+        // (a duplicate build is harmless; a half-published delegate is not).
+        internal volatile Func<object?>? CompiledValue;
     }
 
     public MongoNonQueryExpression(MongoQueryExpression sourceQuery, BulkStrategy strategy = BulkStrategy.SingleCommand)

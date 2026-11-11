@@ -188,6 +188,28 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Equal(2, db.Entities.Count(o => o.Status == "processing"));
     }
 
+    // The setter value is compiled and evaluated by a fallback whose delegate is cached on the setter (the query is compiled once and the
+    // same node serves every execution). This shape (a value lambda that ignores its parameter and calls Guid.NewGuid) is one that
+    // reaches that fallback on EF9 and EF10 alike. What is cached is the DELEGATE, so each execution must still evaluate afresh: a cache
+    // that held the first VALUE would write the same string both times. (Pre-existing and out of scope: the lambda is evaluated once per
+    // execution, not once per document.)
+    [Fact]
+    public void ExecuteUpdate_compiled_setter_fallback_is_evaluated_afresh_on_each_execution()
+    {
+        using var db = CreateSeededContext();
+
+        string Run()
+        {
+            db.Entities.Where(o => o.Quantity >= 20).ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString()));
+            return db.Entities.Where(o => o.Quantity == 20).Select(o => o.Status).Single();
+        }
+
+        var first = Run();
+        var second = Run();
+
+        Assert.NotEqual(first, second);
+    }
+
     [Fact]
     public void ExecuteUpdate_self_referencing_increments_matched_docs()
     {

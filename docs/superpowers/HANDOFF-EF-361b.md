@@ -83,7 +83,19 @@ Task 9 (`FindProperty(MemberInfo)`, declaring-typed `SetProperty` match) is stil
   - The two-phase error messages no longer enumerate their triggers (they had gone stale three times).
   - Six `Inheritance*BulkUpdatesMongoTest` wrappers (EF-X016) now pass and call `base`. **For Task 25:** `docs/failing-spec-tests.md` still counts
     them and says `OfType` is not translated for bulk; also re-check `MongoComplianceTest.IgnoredTestBases` (Task 20) and the README atomicity wording.
-  - Next: Phase 5 performance (Tasks 16-19). Task 19 must port the FIXED cache design from the ledger, not the plan's original.
+- **Phase 5, performance (Tasks 16-19)** is ported. Findings worth knowing:
+  - Task 16: phase 1 appends `{ $project: { _id: 1 } }` last (via `MongoQueryable.AppendStage` in `MongoBulkPlanBuilder.BuildIdDocumentQuery`). The two-phase
+    `Command` is now `{ phase1Pipeline, filter, update }`, rendered from the driver's `LoggedStages` inside `RenderBulkCommand`, behind the one redaction gate
+    (so the closed-gate assertions cover it). `targetIdQuery` is a required argument (single-command sites pass `null`) so a new two-phase site cannot forget it.
+    The projection saves wire bytes and client parsing; it is a covered index scan only if `_id` is in the index key or the collection is clustered on `_id`.
+  - Task 17: `MaterializeIdsAsync` drains the cursor instead of `ToListAsync`; the narrow `ExpressionNotSupportedException` catch wraps only `ToCursorAsync`.
+    A 250-document test asserts every `getMore` batch is drained. No test covers a failure DURING cursor iteration (Task 23).
+  - Task 18: phase 2 is batched at 50,000 ids on the one transaction (`BatchIds`, internal `OverrideMaxIdsPerBulkCommand` test seam). `Executing` now fires once
+    per batch, `Executed` once. Ids are still buffered in one list (not bounded).
+  - Task 19: `Setter` is now a sealed class (a record field would join equality) with a `volatile` cached compiled delegate for the fallback, plus a cache of the
+    generic aggregate renderer. What is cached is the delegate, never a value. A value lambda that ignores its parameter is evaluated once per execution, not
+    per document (pre-existing; a follow-up ticket candidate).
+  - Next: Phase 6 coverage (Tasks 20-24), then Phase 7 docs.
 - Known unrelated failure on one checkout: two EF11 `ConferencePlannerMongoTest` SpecFails wrappers, tracked in issue #63.
 
 ## Recorded decisions from the old work (do not re-litigate)

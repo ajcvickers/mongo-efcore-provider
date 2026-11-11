@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -308,7 +309,7 @@ internal static class MongoBulkPlanBuilder
     /// </summary>
     private static BsonValue SerializeConstant(QueryContext queryContext, MongoNonQueryExpression.Setter setter)
     {
-        var value = EvaluateToConstant(queryContext, setter.ValueExpression);
+        var value = EvaluateToConstant(queryContext, setter);
         if (setter.Property is IComplexProperty complexProperty)
         {
             // A null REQUIRED complex property or collection would be stored, then fail every read ("... is null for required
@@ -357,7 +358,7 @@ internal static class MongoBulkPlanBuilder
         translatedBody = RebindSetterValueParameters(translatedBody, entityParameter, setter.Property);
 
         var resultType = setter.Property.ClrType;
-        var renderer = RenderAggregateExpressionMethodInfo.MakeGenericMethod(typeof(TSource), resultType);
+        var renderer = GetAggregateRenderer(typeof(TSource), resultType);
         return (BsonValue)InvokeUnwrapped(renderer, [entityParameter, translatedBody, efSerializer])!;
     }
 
@@ -379,8 +380,9 @@ internal static class MongoBulkPlanBuilder
     /// lets compile-and-evaluate failures propagate as exceptions — throwing on an un-evaluatable setter value
     /// is preferable to silently writing null.
     /// </summary>
-    private static object? EvaluateToConstant(QueryContext queryContext, Expression expression)
+    private static object? EvaluateToConstant(QueryContext queryContext, MongoNonQueryExpression.Setter setter)
     {
+        var expression = setter.ValueExpression;
         while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
         {
             expression = convert.Operand;
@@ -393,12 +395,14 @@ internal static class MongoBulkPlanBuilder
 
         if (expression is MemberExpression { Expression: ConstantExpression closureConstant } member)
         {
-            return member.Member switch
+            // A MemberExpression's member is always a field or a property (Expression.MakeMemberAccess rejects anything else).
+            switch (member.Member)
             {
-                FieldInfo field => field.GetValue(closureConstant.Value),
-                PropertyInfo prop => prop.GetValue(closureConstant.Value),
-                _ => CompileAndEvaluate(expression)
-            };
+                case FieldInfo field:
+                    return field.GetValue(closureConstant.Value);
+                case PropertyInfo prop:
+                    return prop.GetValue(closureConstant.Value);
+            }
         }
 
 #if EF8 || EF9
@@ -415,11 +419,18 @@ internal static class MongoBulkPlanBuilder
         }
 #endif
 
-        return CompileAndEvaluate(expression);
-    }
+        // Compile-and-evaluate fallback. The delegate is cached on the setter (see Setter.CompiledValue); it is stored only after Compile()
+        // succeeds, so a shape that cannot be compiled keeps failing identically on every execution rather than being cached. Failures
+        // propagate: throwing on an un-evaluatable setter value is preferable to silently writing null.
+        var compiled = setter.CompiledValue;
+        if (compiled == null)
+        {
+            compiled = Expression.Lambda<Func<object?>>(Expression.Convert(expression, typeof(object))).Compile();
+            setter.CompiledValue = compiled;
+        }
 
-    private static object? CompileAndEvaluate(Expression expression)
-        => Expression.Lambda<Func<object?>>(Expression.Convert(expression, typeof(object))).Compile()();
+        return compiled();
+    }
 
     /// <summary>
     /// Rebinds the parameters in a translated self-referencing setter body to the shared entity parameter, so the assembled value
@@ -475,6 +486,14 @@ internal static class MongoBulkPlanBuilder
             .GetTypeInfo()
             .DeclaredMethods
             .Single(m => m.Name == nameof(CreateBulkPlan));
+
+    // MakeGenericMethod per self-referencing setter per execution is pure overhead on a path that exists to be fast.
+    private static readonly ConcurrentDictionary<(Type Source, Type Result), MethodInfo> AggregateRendererCache = new();
+
+    private static MethodInfo GetAggregateRenderer(Type sourceType, Type resultType)
+        => AggregateRendererCache.GetOrAdd(
+            (sourceType, resultType),
+            static key => RenderAggregateExpressionMethodInfo.MakeGenericMethod(key.Source, key.Result));
 
     private static readonly MethodInfo RenderAggregateExpressionMethodInfo =
         typeof(MongoBulkPlanBuilder)
