@@ -31,6 +31,30 @@ namespace MongoDB.EntityFrameworkCore.Diagnostics;
 public class MongoBulkDeleteEventData : EventData
 {
     /// <summary>
+    /// Constructs the event payload as it was before the strategy and command were added. <see cref="Strategy"/> is inferred from
+    /// <paramref name="targetCount"/> (<see langword="null"/> means <c>SingleCommand</c>), <see cref="Command"/> is <see langword="null"/>
+    /// and <see cref="LogSensitiveData"/> is <see langword="false"/>.
+    /// </summary>
+    /// <param name="eventDefinition">The event definition.</param>
+    /// <param name="messageGenerator">A delegate that generates a log message for this event.</param>
+    /// <param name="elapsed">The elapsed time (see <see cref="Elapsed"/>).</param>
+    /// <param name="collectionNamespace">The <see cref="CollectionNamespace"/> being operated upon.</param>
+    /// <param name="deleteCount">The number of documents deleted by this bulk delete operation.</param>
+    /// <param name="targetCount">The target count (see <see cref="TargetCount"/>).</param>
+    public MongoBulkDeleteEventData(
+        EventDefinitionBase eventDefinition,
+        Func<EventDefinitionBase, EventData, string> messageGenerator,
+        TimeSpan elapsed,
+        CollectionNamespace collectionNamespace,
+        long deleteCount,
+        long? targetCount)
+        : this(
+            eventDefinition, messageGenerator, elapsed, collectionNamespace, deleteCount, targetCount,
+            strategy: targetCount == null ? "SingleCommand" : "TwoPhase", command: null, logSensitiveData: false)
+    {
+    }
+
+    /// <summary>
     /// Constructs the event payload.
     /// </summary>
     /// <param name="eventDefinition">The event definition.</param>
@@ -94,13 +118,16 @@ public class MongoBulkDeleteEventData : EventData
     public CollectionNamespace CollectionNamespace { get; }
 
     /// <summary>
-    /// The number of documents deleted by this bulk delete operation.
+    /// The number of documents deleted by this bulk delete operation. Only meaningful on the <c>Executed</c> event; it is 0 on
+    /// <c>Executing</c>.
     /// </summary>
     public long DeleteCount { get; }
 
     /// <summary>
-    /// For a two-phase bulk delete — the number of documents identified in phase one to be deleted by
-    /// <c>_id</c>; <see langword="null" /> for a single-command bulk delete.
+    /// On an <c>Executing</c> event of a two-phase bulk delete — the number of ids in the <c>$in</c> filter of the command THIS event
+    /// describes. Phase 2 is written in batches of up to 50,000 ids inside one transaction, so a large operation raises several
+    /// <c>Executing</c> events (one per batch) and each reports its own batch size; the total is <see cref="DeleteCount"/> on the single
+    /// <c>Executed</c> event. <see langword="null" /> for a single-command bulk delete and on every <c>Executed</c> event.
     /// </summary>
     public long? TargetCount { get; }
 

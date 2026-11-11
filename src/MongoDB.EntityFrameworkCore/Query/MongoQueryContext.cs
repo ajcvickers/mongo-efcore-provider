@@ -19,6 +19,7 @@ using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -44,7 +45,21 @@ public class MongoQueryContext : QueryContext
         : base(dependencies)
     {
         MongoClient = mongoClient;
-        UpdateLogger = updateLogger;
+        _updateLogger = updateLogger;
+    }
+
+    /// <summary>
+    /// Create a <see cref="MongoQueryContext"/> without supplying the <see cref="DbLoggerCategory.Update"/> logger. This is the constructor
+    /// shipped before bulk operations needed a logger; <see cref="UpdateLogger"/> is then resolved from the context's service provider on first use.
+    /// </summary>
+    /// <param name="dependencies">The <see cref="QueryContextDependencies"/> this context specifies.</param>
+    /// <param name="mongoClient">The <see cref="IMongoClientWrapper"/> to use in executing this query.</param>
+    public MongoQueryContext(
+        QueryContextDependencies dependencies,
+        IMongoClientWrapper mongoClient)
+        : base(dependencies)
+    {
+        MongoClient = mongoClient;
     }
 
     /// <summary>
@@ -56,7 +71,10 @@ public class MongoQueryContext : QueryContext
     /// The <see cref="DbLoggerCategory.Update"/> logger used to emit bulk <c>ExecuteDelete</c>/<c>ExecuteUpdate</c> diagnostics (EF Core 9
     /// and later). Bulk operations bypass <c>SaveChanges</c>, so the update pipeline's own logging never fires for them.
     /// </summary>
-    public virtual IDiagnosticsLogger<DbLoggerCategory.Update> UpdateLogger { get; }
+    public virtual IDiagnosticsLogger<DbLoggerCategory.Update> UpdateLogger
+        => _updateLogger ??= Context.GetService<IDiagnosticsLogger<DbLoggerCategory.Update>>();
+
+    private IDiagnosticsLogger<DbLoggerCategory.Update>? _updateLogger;
 
     // While set, the native one-pass materializer is constructing a row inside the driver's batch deserialization: tracking is recorded,
     // not performed (see MongoPendingTracking).

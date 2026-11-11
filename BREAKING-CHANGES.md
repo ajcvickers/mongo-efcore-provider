@@ -638,28 +638,39 @@ context.Orders.Where(o => o.Priority > threshold);
 
 For a genuinely per-row value, bring the rows to the client first: `context.Orders.AsEnumerable().Select(o => new { o.Id, R = Random.Shared.Next() })`.
 
-### `MongoQueryContext` and `MongoQueryContextFactory` constructors gained a parameter
+### Bulk `ExecuteUpdate`/`ExecuteDelete`: diagnostics payloads, execution strategy and rejected setters changed
 
 #### Old behavior
 
-`MongoQueryContext(QueryContextDependencies dependencies, IMongoClientWrapper mongoClient)` and
-`MongoQueryContextFactory(QueryContextDependencies dependencies, IMongoClientWrapper mongoClient)` took two parameters.
+- `Where` with `OrderBy`/`ThenBy`/`Distinct` was executed as a transactional two-phase operation.
+- A setter could target the primary key or the type discriminator.
+- `OfType<TDerived>()` was rejected, and a bulk operation on a derived-type `DbSet` was not scoped by the discriminator.
+- `MongoBulkDeleteEventData`/`MongoBulkUpdateEventData` carried no strategy, command or matched count, one `Executing` event was raised per
+  operation, and the log message did not include the strategy or command.
 
 #### New behavior
 
-Both constructors take a third parameter, `IDiagnosticsLogger<DbLoggerCategory.Update> updateLogger`. `MongoQueryContext` exposes it as the new
-`UpdateLogger` property, and `MongoQueryContextFactory` passes it to each context it creates.
+- `Where` with `OrderBy`/`ThenBy`/`Distinct` runs as a single `deleteMany`/`updateMany`. It no longer needs a transaction and is atomic per
+  document only. `Skip`/`Take` and `OfType<TDerived>()` still use the two-phase operation, which writes in batches of up to 50,000 ids inside
+  one transaction.
+- A setter on the primary key or the discriminator is rejected before anything is written (`InvalidOperationException`).
+- `OfType<TDerived>()` and a derived-type `DbSet` are supported and scoped by the discriminator.
+- The event data types gained `Strategy`, `Command` (redacted to `?` unless sensitive-data logging is on), `LogSensitiveData` and, for updates,
+  `MatchedCount`. The log message now reads `Strategy=..., Targets=..., Command=...`. A large two-phase operation raises one `Executing` event
+  per batch (each with its own `TargetCount`) and one `Executed` event. The old event data constructors are kept.
+
+The `MongoQueryContext` and `MongoQueryContextFactory` constructors gained an overload that takes the `Update`-category logger; the old
+constructors remain and resolve the logger themselves.
 
 #### Why
 
-Bulk `ExecuteUpdate`/`ExecuteDelete` bypasses `SaveChanges`, so it needs the `Update`-category logger to emit its diagnostics. It used to resolve that
-logger from the `DbContext`'s service provider on every execution. The factory now supplies it, the same way the read path gets its query logger.
+A transaction for an ordering or `Distinct` that does not change which documents match was unnecessary cost and made those operations fail on
+standalone deployments. Writing the primary key or discriminator corrupted documents. The diagnostics changes make the operation observable.
 
 #### Mitigations
 
-Nothing to do when the provider is registered the usual way (`UseMongoDB`): both types are built by the provider's own service registration. The break
-only affects code that constructs or subclasses these types directly (for example a test double or a custom provider extension). Resolve
-`IDiagnosticsLogger<DbLoggerCategory.Update>` from the service provider, or accept it in your own constructor, and pass it through.
+If you depended on ordering or `Distinct` running in a transaction, open an explicit transaction around the call. If you subscribe to the
+events, expect more than one `Executing` event for a large two-phase operation and read the totals from `Executed`.
 
 ## Breaking changes in 8.4.0 / 9.1.0 / 10.0.0
 

@@ -38,7 +38,10 @@ public class BulkOperationsInheritanceTests(TemporaryDatabaseFixture database)
         public int Age { get; set; }
     }
 
-    private class Cat : Animal;
+    private class Cat : Animal
+    {
+        public int Lives { get; set; }
+    }
 
     private class Dog : Animal;
 
@@ -108,7 +111,7 @@ public class BulkOperationsInheritanceTests(TemporaryDatabaseFixture database)
         Assert.Contains("_t", phase1["pipeline"].ToJson());
         Assert.Contains("dog", phase1["pipeline"].ToJson());
         var delete = Assert.Single(capture.Named("delete"));
-        Assert.Equal(1, delete["deletes"].AsBsonArray.Single()["q"]["_id"]["$in"].AsBsonArray.Count);
+        Assert.Single(delete["deletes"].AsBsonArray.Single()["q"]["_id"]["$in"].AsBsonArray);
         Assert.Equal(0, Count(collection, "dog"));
         Assert.Equal(2, Count(collection, "cat"));
     }
@@ -220,6 +223,34 @@ public class BulkOperationsInheritanceTests(TemporaryDatabaseFixture database)
         Assert.Equal(2, updated);
         Assert.Equal("Rex", db.Animals.OfType<Dog>().Single().Name);
         Assert.All(db.Animals.OfType<Cat>().ToList(), c => Assert.Equal("renamed", c.Name));
+    }
+
+    // A property declared only on the derived type is a valid setter target once the source is narrowed to that type; the write is scoped
+    // to the type, so the other types in the collection are untouched.
+    [Fact]
+    public void ExecuteUpdate_with_OfType_can_set_a_property_declared_only_on_the_derived_type()
+    {
+        var collection = Seed(nameof(ExecuteUpdate_with_OfType_can_set_a_property_declared_only_on_the_derived_type));
+        using var db = SingleEntityDbContext.Create(collection, Configure);
+
+        var updated = db.Entities.OfType<Cat>().ExecuteUpdate(s => s.SetProperty(c => c.Lives, 9));
+
+        Assert.Equal(2, updated);
+        Assert.All(db.Entities.OfType<Cat>().ToList(), c => Assert.Equal(9, c.Lives));
+        Assert.Single(db.Entities.OfType<Dog>().ToList());
+    }
+
+    [Fact]
+    public void ExecuteUpdate_on_a_derived_DbSet_can_set_a_property_declared_only_on_the_derived_type()
+    {
+        var collection = Seed(nameof(ExecuteUpdate_on_a_derived_DbSet_can_set_a_property_declared_only_on_the_derived_type));
+        using var db = CreateRootAndDerivedContext(collection);
+
+        var updated = db.Cats.ExecuteUpdate(s => s.SetProperty(c => c.Lives, 7));
+
+        Assert.Equal(2, updated);
+        Assert.All(db.Cats.ToList(), c => Assert.Equal(7, c.Lives));
+        Assert.Equal(1, Count(collection, "dog"));
     }
 
     // Both the hierarchy root and a derived type as DbSets, over the root's collection.

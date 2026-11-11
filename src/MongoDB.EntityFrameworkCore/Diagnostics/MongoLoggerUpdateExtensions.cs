@@ -187,8 +187,8 @@ internal static class MongoLoggerUpdateExtensions
     /// <param name="collectionNamespace">The <see cref="CollectionNamespace"/> this operation is using.</param>
     /// <param name="strategy">The execution strategy: <c>SingleCommand</c> or <c>TwoPhase</c>.</param>
     /// <param name="targetCount">
-    /// For a two-phase operation, the number of target document ids collected in phase 1;
-    /// <see langword="null"/> for a single-command operation.
+    /// For a two-phase operation, the number of ids in the <c>$in</c> filter of this phase-2 command (a large operation is written in
+    /// batches, each with its own <c>Executing</c> event); <see langword="null"/> for a single-command operation.
     /// </param>
     /// <param name="renderCommand">
     /// Renders the command (already redacted to <c>"?"</c> when sensitive-data logging is off). Only invoked when something is
@@ -341,8 +341,8 @@ internal static class MongoLoggerUpdateExtensions
     /// <param name="collectionNamespace">The <see cref="CollectionNamespace"/> this operation is using.</param>
     /// <param name="strategy">The execution strategy: <c>SingleCommand</c> or <c>TwoPhase</c>.</param>
     /// <param name="targetCount">
-    /// For a two-phase operation, the number of target document ids collected in phase 1;
-    /// <see langword="null"/> for a single-command operation.
+    /// For a two-phase operation, the number of ids in the <c>$in</c> filter of this phase-2 command (a large operation is written in
+    /// batches, each with its own <c>Executing</c> event); <see langword="null"/> for a single-command operation.
     /// </param>
     /// <param name="renderCommand">
     /// Renders the command (already redacted to <c>"?"</c> when sensitive-data logging is off). Only invoked when something is

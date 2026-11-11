@@ -135,6 +135,20 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
     }
 
+    // Resolves a setter target by name. The lambda parameter is typed by the source's element type, so after OfType<Cat>() (or on a
+    // derived DbSet, which the preprocessor narrows to OfType) it is the derived type and a property declared only there is a valid
+    // target. The two-phase path then scopes the write to that type. The key/discriminator guards still run against the root.
+    private static IPropertyBase? FindSetterProperty(IEntityType rootType, Type parameterType, string name)
+    {
+        var property = rootType.FindProperty(name);
+        if (property != null || parameterType == rootType.ClrType)
+        {
+            return property;
+        }
+
+        return rootType.GetDerivedTypes().FirstOrDefault(d => d.ClrType == parameterType)?.FindProperty(name);
+    }
+
     /// <summary>
     /// Parses a <c>SetProperty(selector, value)</c> into a <see cref="MongoNonQueryExpression.Setter"/>. The selector must
     /// target a mapped root scalar property; anything else produces EF's canonical non-query translation failure.
@@ -159,7 +173,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             && propertySelector.Parameters.Count == 1
             && IsParameterReference(memberSource, propertySelector.Parameters[0]))
         {
-            property = entityType.FindProperty(member.Member.Name);
+            property = FindSetterProperty(entityType, propertySelector.Parameters[0].Type, member.Member.Name);
         }
         // Also accept an EF.Property<TProperty>(entity, "Name") selector, e.g.
         // SetProperty(c => EF.Property<string>(c, "ContactName"), ...).
@@ -169,7 +183,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
                  && IsParameterReference(efPropertyCall.Arguments[0], propertySelector.Parameters[0])
                  && efPropertyCall.Arguments[1] is ConstantExpression { Value: string efPropertyName })
         {
-            property = entityType.FindProperty(efPropertyName);
+            property = FindSetterProperty(entityType, propertySelector.Parameters[0].Type, efPropertyName);
         }
 
         // A complex target: a scalar leaf through single complex hops (`c => c.Address.City`, `c.Address.Location.Lat`), or
