@@ -289,7 +289,15 @@ public static class SpecFails
     {
         if (messageFragment != null)
         {
-            Assert.Contains(messageFragment, exception.ToString());
+            // xunit's ThrowsAnyException keeps the exception it caught as InnerException but leaves it out of ToString(),
+            // so search the whole chain: a fragment can then pin the real cause (for example a server error message).
+            var text = new System.Text.StringBuilder(exception.ToString());
+            for (var inner = exception.InnerException; inner != null; inner = inner.InnerException)
+            {
+                text.Append('\n').Append(inner.GetType().FullName).Append(": ").Append(inner.Message);
+            }
+
+            Assert.Contains(messageFragment, text.ToString());
         }
     }
 

@@ -45,7 +45,13 @@ public static class MongoSpecModelHelpers
     /// models expect identity columns. Pass <see langword="false"/> to leave key generation as the provider has it, as
     /// when the failure of key generation is itself what a test class asserts.
     /// </param>
-    public static void MapSingleKeysToId(ModelBuilder modelBuilder, bool generateIntegerKeys)
+    /// <param name="temporaryIntegerKeys">
+    /// With <paramref name="generateIntegerKeys"/>, selects the entity types whose generated keys are temporary, as a relational provider's are.
+    /// Needed where the upstream test relies on a store-generated key being read-only before it has been saved (<c>StoreGeneratedTestBase</c>
+    /// with <c>Gumball</c>): a non-temporary generated value makes <c>SaveChanges</c> throw before the property under test is reached. Other
+    /// entity types in the same model must not be selected: EF Core rejects a temporary value on a key that is not generated on add.
+    /// </param>
+    public static void MapSingleKeysToId(ModelBuilder modelBuilder, bool generateIntegerKeys, Func<IReadOnlyEntityType, bool>? temporaryIntegerKeys = null)
     {
         foreach (var entityType in modelBuilder.Model.GetEntityTypes().Where(e => !e.IsOwned() && e.BaseType == null).ToList())
         {
@@ -66,15 +72,15 @@ public static class MongoSpecModelHelpers
 
             if (property.ClrType == typeof(int))
             {
-                propertyBuilder.HasValueGenerator(typeof(TestIntegerValueGenerator<int>));
+                propertyBuilder.HasValueGenerator(temporaryIntegerKeys?.Invoke(entityType) == true ? typeof(TestTemporaryIntegerValueGenerator<int>) : typeof(TestIntegerValueGenerator<int>));
             }
             else if (property.ClrType == typeof(long))
             {
-                propertyBuilder.HasValueGenerator(typeof(TestIntegerValueGenerator<long>));
+                propertyBuilder.HasValueGenerator(temporaryIntegerKeys?.Invoke(entityType) == true ? typeof(TestTemporaryIntegerValueGenerator<long>) : typeof(TestIntegerValueGenerator<long>));
             }
             else if (property.ClrType == typeof(short))
             {
-                propertyBuilder.HasValueGenerator(typeof(TestIntegerValueGenerator<short>));
+                propertyBuilder.HasValueGenerator(temporaryIntegerKeys?.Invoke(entityType) == true ? typeof(TestTemporaryIntegerValueGenerator<short>) : typeof(TestIntegerValueGenerator<short>));
             }
         }
     }
@@ -311,4 +317,15 @@ public class TestIntegerValueGenerator<TValue> : ValueGenerator<TValue>
 
     public override TValue Next(EntityEntry entry)
         => (TValue)Convert.ChangeType(Interlocked.Increment(ref _current), typeof(TValue));
+}
+
+/// <summary>
+/// <see cref="TestIntegerValueGenerator{TValue}"/> whose values EF Core treats as temporary, like the ones a relational provider
+/// generates. The provider never replaces them, so they are stored as they are.
+/// </summary>
+public class TestTemporaryIntegerValueGenerator<TValue> : TestIntegerValueGenerator<TValue>
+    where TValue : struct
+{
+    public override bool GeneratesTemporaryValues
+        => true;
 }

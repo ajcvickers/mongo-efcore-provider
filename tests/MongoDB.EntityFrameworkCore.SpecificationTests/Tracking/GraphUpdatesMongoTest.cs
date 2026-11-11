@@ -117,22 +117,28 @@ public class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMongoFixtur
         => base.Can_add_valid_second_dependent_when_multiple_possible_principal_sides();
 #endif
 
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    [ConditionalTheory(Skip = "The upstream model for this test (the Cruiser entity types with a default-value foreign key) is registered only by the relational fixtures, so it does not exist in this fixture and the test cannot run. EF-X118")]
+    [InlineData(false)]
+    [InlineData(true)]
     public override Task Can_insert_when_FK_has_default_value(bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_when_FK_has_default_value(async));
+        => base.Can_insert_when_FK_has_default_value(async);
 
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    [ConditionalTheory(Skip = "The upstream model for this test (the Cruiser entity types with a default-value foreign key) is registered only by the relational fixtures, so it does not exist in this fixture and the test cannot run. EF-X118")]
+    [InlineData(false)]
+    [InlineData(true)]
     public override Task Can_insert_when_FK_has_sentinel_value(bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_when_FK_has_sentinel_value(async));
+        => base.Can_insert_when_FK_has_sentinel_value(async);
 
 #if (EF10 || EF11) || EF9
     public override Task Can_insert_when_bool_PK_in_composite_key_has_sentinel_value(bool async, bool initialValue)
         => base.Can_insert_when_bool_PK_in_composite_key_has_sentinel_value(async, initialValue);
 #endif
 
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    [ConditionalTheory(Skip = "The upstream model for this test (the Cruiser entity types with a default-value foreign key) is registered only by the relational fixtures, so it does not exist in this fixture and the test cannot run. EF-X118")]
+    [InlineData(false)]
+    [InlineData(true)]
     public override Task Can_insert_when_composite_FK_has_default_value_for_one_part(bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_insert_when_composite_FK_has_default_value_for_one_part(async));
+        => base.Can_insert_when_composite_FK_has_default_value_for_one_part(async);
 
 #if (EF10 || EF11) || EF9
     public override Task Can_insert_when_int_PK_in_composite_key_has_sentinel_value(bool async, int initialValue)

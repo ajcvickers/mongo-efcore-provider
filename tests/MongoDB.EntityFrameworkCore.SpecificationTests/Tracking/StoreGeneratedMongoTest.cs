@@ -55,7 +55,7 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
-            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true, temporaryIntegerKeys: e => e.ClrType.Name == "Gumball");
             MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
             modelBuilder.RelaxUniqueForeignKeyIndexes();
         }

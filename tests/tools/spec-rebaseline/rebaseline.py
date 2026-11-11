@@ -230,11 +230,11 @@ def classify(rows):
             return ('TRANSLATION',)
         if len(types) == 1:
             t = throws[0]
-            return ('THROW', t[1], t[2], t[3])
+            return ('THROW', t[1], t[2], t[3], [r[3] for r in throws])
         return ('MULTI',)
     # mixed pass + throw
     if len(types) == 1:
-        return ('MIXED', throws[0][1])
+        return ('MIXED', throws[0][1], [r[3] for r in throws])
     return ('MULTI',)
 
 
@@ -242,6 +242,58 @@ def classify(rows):
 def gt(t):
     t = re.sub(r'`\d+\[\[([^,\]]+),[^\]]*\]\]', lambda m: '<global::' + m.group(1) + '>', t)
     return 'global::' + t.replace('+', '.')
+
+
+def fragment(messages):
+    """A message fragment that every observed failure message contains, so the wrapper pins the cause and not just the exception type.
+
+    The harvest records one line per message with line breaks replaced by spaces, so a fragment never spans two spaces. Quoted names,
+    numbers after 'Expected' and the like vary between runs, so the message is cut at quotes and at 'Expected'/'Actual'.
+    """
+    if not messages or not messages[0]:
+        return ''
+    first = re.split(r"Expected|Actual", messages[0])[0]
+    segments = [seg.strip() for part in re.split(r"['\"]", first) for seg in re.split(r'\s{2,}', part)]
+    for seg in sorted({x for x in segments if len(x) >= 12}, key=len, reverse=True):
+        if all(seg in m for m in messages):
+            return seg[:90].rstrip()
+    return ''
+
+
+def frag_arg(messages):
+    f = fragment(messages)
+    if not f:
+        return None
+    return '"' + f.replace(chr(92), chr(92) * 2).replace('"', chr(92) + '"') + '"'
+
+
+GENERIC_TICKETS = {tid for tid, _ in NEW_TICKETS.values()}
+
+
+def preserved_comment(d, cl):
+    """The declaration's existing `// Fails:` comment when it names a specific ticket that the observed failure still matches.
+
+    Kept when the old wrapper's message fragment occurs in every observed message, or when it had no fragment and its exception type is
+    unchanged. Generic tickets (the NEW_TICKETS ones) and comments whose cause has changed are regenerated.
+    """
+    old = d.fails_comment
+    if not old:
+        return None
+    ticket = re.search(r'(EF-[A-Za-z0-9]+|CSHARP-\d+)\s*$', old)
+    if not ticket or ticket.group(1) in GENERIC_TICKETS:
+        return None
+    calls = ' '.join(l for l in d.text if 'SpecFails.' in l)
+    literals = [x for x in re.findall(r'"((?:[^"\]|\.)*)"', calls) if x]
+    if cl[0] == 'THROW':
+        messages = cl[4]
+    elif cl[0] == 'MIXED':
+        messages = cl[2]
+    else:
+        return None
+    if literals:
+        return old if all(lit in m for lit in literals for m in messages) else None
+    typed = re.search(r'SpecFails\.\w+<([\w.:]+)>', calls)
+    return old if typed and typed.group(1).split('.')[-1] == cl[1].split('.')[-1] else None
 
 
 def gen_code(d, cl):
@@ -257,11 +309,11 @@ def gen_code(d, cl):
     elif kind in ('THROW',):
         key = ticket_key(cl[1], cl[2], cl[3])
         tid, desc = NEW_TICKETS[key]
-        comment = f'// Fails: {desc} {tid}'
+        comment = preserved_comment(d, cl) or f'// Fails: {desc} {tid}'
     else:
         key = 'OTHER'
         tid, desc = NEW_TICKETS[key]
-        comment = f'// Fails: {desc} {tid}'
+        comment = (preserved_comment(d, cl) if kind == 'MIXED' else None) or f'// Fails: {desc} {tid}'
 
     if kind == 'PASS':
         stmt_a = f'await {call};'
@@ -273,14 +325,17 @@ def gen_code(d, cl):
         expr_v = f'SpecFails.TranslationFailed(() => {call})'
     elif kind == 'THROW':
         t = gt(cl[1])
-        stmt_a = f'await SpecFails.ThrowsAsync<{t}>(() => {call});'
-        expr_t = f'SpecFails.ThrowsAsync<{t}>(() => {call})'
-        expr_v = f'SpecFails.Throws<{t}>(() => {call})'
+        fa = frag_arg(cl[4])
+        extra = f', {fa}' if fa else ''
+        stmt_a = f'await SpecFails.ThrowsAsync<{t}>(() => {call}{extra});'
+        expr_t = f'SpecFails.ThrowsAsync<{t}>(() => {call}{extra})'
+        expr_v = f'SpecFails.Throws<{t}>(() => {call}{extra})'
     elif kind == 'MIXED':
         t = gt(cl[1])
-        stmt_a = f'await SpecFails.AsyncSomeRows<{t}>(() => {call}, string.Empty);'
-        expr_t = f'SpecFails.AsyncSomeRows<{t}>(() => {call}, string.Empty)'
-        expr_v = f'SpecFails.SyncSomeRows<{t}>(() => {call}, string.Empty)'
+        fa = frag_arg(cl[2]) or 'string.Empty'
+        stmt_a = f'await SpecFails.AsyncSomeRows<{t}>(() => {call}, {fa});'
+        expr_t = f'SpecFails.AsyncSomeRows<{t}>(() => {call}, {fa})'
+        expr_v = f'SpecFails.SyncSomeRows<{t}>(() => {call}, {fa})'
     else:  # MULTI
         stmt_a = f'await SpecFails.ThrowsAsync(() => {call});'
         expr_t = f'SpecFails.ThrowsAsync(() => {call})'

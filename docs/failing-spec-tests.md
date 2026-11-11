@@ -262,6 +262,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X115 | Concurrency exception message differs from the relational wording asserted by `UpdatesTestBase` | 4 |
 | EF-X116 | A conflicting write between two contexts surfaces as a raw `MongoCommandException` (server write conflict) instead of `DbUpdateConcurrencyException` | 15 |
 | EF-X117 | Inserting a duplicate key surfaces as a raw `MongoBulkWriteException` instead of `DbUpdateException` | 1 |
+| EF-X118 | **Skipped, not failing.** The upstream test's model (the `Cruiser` / `CruiserWithSentinel` entity types with a default-value foreign key) is registered only by the relational fixtures, so it does not exist in the Mongo `GraphUpdates` fixture and the test cannot run. `Can_insert_when_FK_has_default_value`, `Can_insert_when_FK_has_sentinel_value`, `Can_insert_when_composite_FK_has_default_value_for_one_part`. Whether the provider handles a foreign key left at its CLR default is therefore untested | 0 |
 | EF-X500 | Primitive-collection projection/SelectMany/Union/Concat/ordering not translated | 10 |
 | EF-X501 | Inline List<T> collection (Min/Max/Contains/index) not translated or serialized | 6 |
 | EF-X502 | Single/SingleOrDefault over a primitive collection not translated | 2 |
