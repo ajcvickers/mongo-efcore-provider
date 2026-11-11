@@ -146,5 +146,55 @@ public class ComplexTypeDiscriminatorTests(TemporaryDatabaseFixture database) : 
             }
         }
     }
+
+    private (IMongoCollection<Ent> Collection, Guid Present, Guid[] NullIds) SeedNullCheckRows(string name)
+    {
+        var collection = database.CreateCollection<Ent>(
+            TemporaryDatabaseFixtureBase.CreateCollectionName(name) + Guid.NewGuid().ToString("N")[..6]);
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
+        Guid present, discriminatorNulled, clrNull;
+        using (var db = Context(collection, MongoQueryMode.Native, QueryTrackingBehavior.TrackAll))
+        {
+            var a = new Ent { Id = Guid.NewGuid(), Prop = new OptProp { OptionalValue = true } };
+            var b = new Ent { Id = Guid.NewGuid(), Prop = new OptProp { OptionalValue = true } };
+            var c = new Ent { Id = Guid.NewGuid(), Prop = null };
+            db.Entities.AddRange(a, b, c);
+            (present, discriminatorNulled, clrNull) = (a.Id, b.Id, c.Id);
+            db.Entry(b).ComplexProperty(e => e.Prop!).Property("Discriminator").CurrentValue = null;
+            db.SaveChanges();
+        }
+
+        var missing = Guid.NewGuid();
+        raw.InsertOne(new BsonDocument { { "_id", new BsonBinaryData(missing, GuidRepresentation.Standard) }, { "Prop", new BsonDocument("OptionalValue", true) } });
+        return (collection, present, new[] { discriminatorNulled, clrNull, missing }.Order().ToArray());
+    }
+
+    [Fact]
+    public void Null_check_filter_agrees_with_materialization_for_a_null_or_missing_discriminator()
+    {
+        var (collection, present, nullIds) = SeedNullCheckRows(nameof(Null_check_filter_agrees_with_materialization_for_a_null_or_missing_discriminator));
+
+        foreach (var mode in new[] { MongoQueryMode.NativeOnly, MongoQueryMode.Native })
+        {
+            using var db = Context(collection, mode, QueryTrackingBehavior.NoTracking);
+
+            // The same rows that materialize as a null property must satisfy `Prop == null`, and only those.
+            Assert.Equal(nullIds, db.Entities.Where(e => e.Prop == null).Select(e => e.Id).ToList().Order().ToArray());
+            Assert.Equal(new[] { present }, db.Entities.Where(e => e.Prop != null).Select(e => e.Id).ToList());
+        }
+    }
+
+    // Characterization: explicit DriverLinq translates the null check through the driver, which tests the stored element only,
+    // so a subdocument whose discriminator is null or missing still satisfies `Prop != null` although it materializes as null.
+    [Fact]
+    public void Null_check_filter_under_explicit_DriverLinq_tests_the_stored_element_not_the_discriminator()
+    {
+        var (collection, present, nullIds) = SeedNullCheckRows(nameof(Null_check_filter_under_explicit_DriverLinq_tests_the_stored_element_not_the_discriminator));
+
+        using var db = Context(collection, MongoQueryMode.DriverLinq, QueryTrackingBehavior.NoTracking);
+        var notNull = db.Entities.Where(e => e.Prop != null).Select(e => e.Id).ToList().Order().ToArray();
+        Assert.Equal(3, notNull.Length);
+        Assert.Contains(present, notNull);
+    }
 }
 #endif

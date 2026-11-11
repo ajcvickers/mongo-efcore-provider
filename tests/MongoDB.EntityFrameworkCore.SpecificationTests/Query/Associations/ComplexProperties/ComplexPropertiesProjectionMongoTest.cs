@@ -65,18 +65,12 @@ RootEntity.?
 
     public override async Task Select_value_type_property_on_null_associate_throws(QueryTrackingBehavior queryTrackingBehavior)
     {
-#if EF10
-        // Fails: Throws NullReferenceException where InvalidOperationException is expected #41
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Select_value_type_property_on_null_associate_throws(queryTrackingBehavior), typeof(global::Xunit.Sdk.ThrowsException));
-#else
         await base.Select_value_type_property_on_null_associate_throws(queryTrackingBehavior);
 
         AssertMql(
 """
 RootEntity.?
 """);
-    
-#endif
     }
 
     public override async Task Select_nullable_value_type_property_on_null_associate(QueryTrackingBehavior queryTrackingBehavior)

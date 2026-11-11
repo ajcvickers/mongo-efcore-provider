@@ -286,8 +286,11 @@ internal static class NativeCardinalityBinder
             // A non-nullable Min/Max/Average of a Length/IndexOf over a possibly-null string reduces all-null rows to null, read back as 0 where EF throws,
             // as for grouped accumulators; Sum skips null like EF's SUM. An operand reading a flagged upstream alias carries the flag on its element
             // reference (MongoElementRefExpression.ThrowsOnNull), so this one check covers it.
+            // A bare leaf under an optional complex property is exempt: the reduction skips the rows whose parent is null or missing, as SQL's
+            // aggregates do, and an all-null input reads strictly (NativeAggregateReadBack.ReducesWrappedValue leaves it unwrapped).
             if (op is not MongoAggregateOperator.Sum
-                && MongoAggregationExpressionRenderer.ReadsNullAsDefault(resultType, operand))
+                && MongoAggregationExpressionRenderer.ReadsNullAsDefault(resultType, operand)
+                && !NativeAggregateReadBack.IsBareLeafUnderOptionalComplexParent(operand))
                 return false;
         }
 

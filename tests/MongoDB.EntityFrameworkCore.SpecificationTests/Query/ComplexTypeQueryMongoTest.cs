@@ -14,6 +14,9 @@
  */
 
 using Microsoft.EntityFrameworkCore.Query;
+#if EF8 || EF9
+using Microsoft.EntityFrameworkCore.TestModels.ComplexTypeModel;
+#endif
 using Microsoft.EntityFrameworkCore.TestUtilities;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Query;
@@ -76,7 +79,7 @@ EntityType.
 
         AssertMql(
             """
-EntityType.{ "$match" : { "AllOptionalsComplexType" : null } }, { "$limit" : 2 }
+EntityType.{ "$match" : { "$or" : [{ "AllOptionalsComplexType" : null }, { "AllOptionalsComplexType.Discriminator" : null }] } }, { "$limit" : 2 }
 """,
             //
             """
@@ -244,18 +247,17 @@ CustomerGroup.{ "$lookup" : { "from" : "Customer", "localField" : "RequiredCusto
             return;
         }
 
-#if EF8 || EF9
-        // Fails: Projection through an optional navigation throws NullReferenceException on EF8/EF9 #41
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_complex_type_via_optional_navigation(async), typeof(NullReferenceException));
-#else
-        await base.Project_complex_type_via_optional_navigation(async);
+        // The fixture's Address sorter dereferences null, and this query yields a null row for a group without an optional customer.
+        await AssertQuery(
+            async,
+            ss => from cg in ss.Set<CustomerGroup>() select cg.OptionalCustomer.ShippingAddress,
+            e => e?.ZipCode,
+            assertOrder: false);
 
         AssertMql(
 """
-CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
+CustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "Customer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
-    
-#endif
     }
 #endif
 
@@ -570,18 +572,19 @@ ValuedCustomerGroup.{ "$lookup" : { "from" : "ValuedCustomer", "localField" : "R
             return;
         }
 
-#if EF8 || EF9
-        // Fails: Projection through an optional navigation throws NullReferenceException on EF8/EF9 #41
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_struct_complex_type_via_optional_navigation(async), typeof(NullReferenceException));
-#else
-        await base.Project_struct_complex_type_via_optional_navigation(async);
+        // The expected (in-memory) query of the upstream test dereferences the null optional customer and throws before any result is
+        // compared, because a struct projection cannot be null. Project a nullable struct so that the null row is represented.
+        await AssertQuery(
+            async,
+            ss => from cg in ss.Set<ValuedCustomerGroup>()
+                  select cg.OptionalCustomer == null ? (AddressStruct?)null : cg.OptionalCustomer.ShippingAddress,
+            e => e?.ZipCode,
+            assertOrder: false);
 
         AssertMql(
 """
-ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
+ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
-    
-#endif
     }
 #endif
 
@@ -607,20 +610,19 @@ ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$loo
 #if EF10 || EF11
     public override async Task Project_nullable_struct_complex_type_via_optional_navigation(bool async)
     {
-#if EF10 || EF11
-        // Fails: Driver-LINQ fallback returns different rows (NativeOnly refuses) #41
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Project_nullable_struct_complex_type_via_optional_navigation(async),
-            // Native serves different rows (a wrong answer); NativeOnly refuses cleanly.
-            MongoSpecTestHelpers.IsNativeOnly ? null : typeof(global::Xunit.Sdk.TrueException));
-#else
+        if (MongoSpecTestHelpers.IsNativeOnly)
+        {
+            // NativeOnly: the shape is not natively representable, so the driver-LINQ fallback it needs is refused.
+            await AssertTranslationFailed(() => base.Project_nullable_struct_complex_type_via_optional_navigation(async));
+            return;
+        }
+
         await base.Project_nullable_struct_complex_type_via_optional_navigation(async);
 
         AssertMql(
 """
-ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }, { "$project" : { "_v" : { "$map" : { "input" : { "$cond" : { "if" : { "$eq" : [{ "$size" : "$_inner" }, 0] }, "then" : [null], "else" : "$_inner" } }, "as" : "i", "in" : { "_outer" : "$_outer", "_inner" : "$$i" } } }, "_id" : 0 } }, { "$unwind" : "$_v" }, { "$project" : { "_v" : "$_v._inner.ShippingAddress", "_id" : 0 } }
+ValuedCustomerGroup.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "ValuedCustomer", "localField" : "_outer.OptionalCustomerId", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
 """);
-    
-#endif
     }
 #endif
 
@@ -990,18 +992,16 @@ Customer.{ "$match" : { "ShippingAddress.Country.Code" : "DE" } }
 #if !EF10 && !EF11
     public override async Task Complex_type_equals_null(bool async)
     {
-#if EF8 || EF9
-        // Fails: Not supported yet #35
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Complex_type_equals_null(async), typeof(InvalidOperationException), "Query returned no results");
-#else
-        await base.Complex_type_equals_null(async);
+        // EF8/EF9 complex types are required, so `ComplexProperty == null` matches nothing on either side.
+        await AssertQuery(
+            async,
+            ss => from c in ss.Set<Customer>() where c.ShippingAddress == null select c,
+            assertEmpty: true);
 
         AssertMql(
 """
-Customer.
+Customer.{ "$match" : { "ShippingAddress" : null } }
 """);
-    
-#endif
     }
 #endif
 
