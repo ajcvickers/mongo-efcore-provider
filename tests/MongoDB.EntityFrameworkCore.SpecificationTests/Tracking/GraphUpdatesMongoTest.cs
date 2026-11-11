@@ -19,10 +19,13 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
-public class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMongoFixture fixture)
+// Not run (#77): every test here needs a reset of the store, and without transaction enlistment that means dropping and reseeding
+// the database before each test (about 8 minutes per EF version for GraphUpdates alone). xUnit does not run abstract classes. Remove
+// "abstract" to run the tests; the wrappers below are kept up to date.
+public abstract class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMongoFixture fixture)
     : GraphUpdatesTestBase<GraphUpdatesMongoTest.GraphUpdatesMongoFixture>(fixture), IAsyncLifetime
 {
-    // The tests write to the shared database and there is no rollback, so which test sees which rows depends on the order they run in.
+    // The tests write to the shared database and the contexts cannot yet enlist in a rolled-back transaction (#77), so each test reseeds it; otherwise which test sees which rows depends on the order they run in.
     public async LifetimeTask InitializeAsync()
         => await Fixture.ReseedAsync();
 

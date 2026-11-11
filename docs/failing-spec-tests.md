@@ -849,7 +849,7 @@ Common mechanics, none of which are provider changes: `MongoSpecModelHelpers.Map
 upstream models to `_id` (otherwise model validation rejects every model) with a client-side integer generator; `RelaxNullableUniqueIndexes` and
 `RelaxUniqueForeignKeyIndexes` drop the uniqueness that MongoDB cannot honour for `null` (EF-X207); `DoNotOwnTypes` stops relationship discovery
 owning types that the tests model as entities (EF-X102/EF-X538/EF-X539); and the fixtures that run tests which write reseed the database before each
-test, because MongoDB has no transaction rollback to undo them. `InitFailureGuard` is still available for a fixture whose model/seed/store
+test, because the tests cannot yet enlist several contexts in one rolled-back transaction (#77). `GraphUpdatesMongoTest` and `ProxyGraphUpdatesMongoTest` are abstract, so they are not run, because their reseed costs about 8 minutes per EF version. `InitFailureGuard` is still available for a fixture whose model/seed/store
 creation fails (it re-throws that failure from the first `CreateContext()`); no ported fixture needs it now. `ProxyGraphUpdates` additionally registers
 the EF proxy services and uses lazy-loading and change-tracking proxies. A few upstream tests are `public` but not `virtual` (e.g. `PropertyValuesTestBase.Reload_when_entity_deleted_in_store_can_happen_for_any_state`),
 so they cannot be overridden; where they fail they are hidden by a `new` method with `Skip` carrying the ticket id.

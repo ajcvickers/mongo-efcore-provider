@@ -23,7 +23,7 @@ namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture fixture)
     : OptimisticConcurrencyTestBase<OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture, byte[]>(fixture), IAsyncLifetime
 {
-    // The tests write to the shared database and there is no rollback, so which test sees which rows depends on the order they run in.
+    // The tests write to the shared database and the contexts cannot yet enlist in a rolled-back transaction (#77), so each test reseeds it; otherwise which test sees which rows depends on the order they run in.
     public async LifetimeTask InitializeAsync()
         => await Fixture.ReseedAsync();
 
