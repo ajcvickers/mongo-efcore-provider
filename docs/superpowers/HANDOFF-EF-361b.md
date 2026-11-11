@@ -95,7 +95,17 @@ Task 9 (`FindProperty(MemberInfo)`, declaring-typed `SetProperty` match) is stil
   - Task 19: `Setter` is now a sealed class (a record field would join equality) with a `volatile` cached compiled delegate for the fallback, plus a cache of the
     generic aggregate renderer. What is cached is the delegate, never a value. A value lambda that ignores its parameter is evaluated once per execution, not
     per document (pre-existing; a follow-up ticket candidate).
-  - Next: Phase 6 coverage (Tasks 20-24), then Phase 7 docs.
+- **Phase 6, coverage (Tasks 20-24)** is ported (Task 20 as `BulkOperationsQueryFilterTests`; the compliance exclusions were already correct on `release`).
+  - Global query filters ARE honoured by single-command and two-phase delete and update, and `IgnoreQueryFilters` widens the scope (no production change).
+  - Task 22: bulk and `SaveChanges` store byte-identical BSON for enum, Guid and DateTime (`ExecuteUpdateSetterShapeTests`). The owned-target-throws test is obsolete.
+  - Task 23: `BulkOperationsEventDataTests` asserts `MongoBulkDeleteEventData`/`MongoBulkUpdateEventData` through a `DiagnosticListener` (the `DiagnosticSourceSpy` was not needed).
+  - Task 24 was RUN, not assumed (`CRYPT_SHARED_LIB_PATH`/`MONGODB_BINARIES` from `tests/tools/fetch-crypt-shared.sh`, both crypt providers, EF9 and EF10). Observed:
+    `ExecuteDelete` WORKS on a Queryable Encryption collection (an equality filter on an encrypted field matches exactly the intended documents), while
+    `ExecuteUpdate` is rejected with `MongoEncryptionException` "Multi-document updates are not allowed with Queryable Encryption" and changes nothing.
+    **For Task 25:** the README must say this (updates unsupported on QE, deletes supported), not the old "QE forbids multi-document writes" for both.
+  - Final-wave items still to do: the derived-TPH `DbSet` bulk guard (`entityType.BaseType != null`, verify with a test first), delete the empty
+    `ExecuteDelete_two_phase_on_standalone_throws_actionable_error` skipped test and ticket its coverage.
+  - Next: Phase 7 docs (Tasks 25-26).
 - Known unrelated failure on one checkout: two EF11 `ConferencePlannerMongoTest` SpecFails wrappers, tracked in issue #63.
 
 ## Recorded decisions from the old work (do not re-litigate)
