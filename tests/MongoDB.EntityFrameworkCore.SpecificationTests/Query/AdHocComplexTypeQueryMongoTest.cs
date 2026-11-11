@@ -14,8 +14,11 @@
  */
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.TestUtilities;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 using MongoDB.EntityFrameworkCore.SpecificationTests.Utilities;
 
@@ -60,15 +63,16 @@ EntityType.{ "$project" : { "Complex" : "$Complex", "_id" : 0 } }
 
     public override async Task Optional_complex_type_with_discriminator()
     {
-#if EF10
-        // Fails: Not supported yet #35
-        await global::MongoDB.EntityFrameworkCore.SpecificationTests.Query.MongoSpecTestHelpers.AssertKnownGapAsync(() => base.Optional_complex_type_with_discriminator());
-#else
         await base.Optional_complex_type_with_discriminator();
 
-        AssertMql();
-    
-#endif
+        AssertMql(
+"""
+EntityType.{ "$match" : { "$or" : [{ "AllOptionalsComplexType" : null }, { "AllOptionalsComplexType.Discriminator" : null }] } }, { "$limit" : 2 }
+""",
+            //
+"""
+EntityType.
+""");
     }
 
     public override async Task Complex_type_equality_with_non_default_type_mapping()
@@ -206,6 +210,23 @@ EntityType.{ "$limit" : 2 }
     private void AssertMql(params string[] expected)
         => TestMqlLoggerFactory.AssertBaseline(expected);
 
+#if EF10
+    // The seed saves three EntityType rows with an int key, which the provider does not generate (EF-X205); without a client-side
+    // generator all three get Id 0 and the seed fails with an identity conflict before any query runs.
+    protected override IServiceCollection AddServices(IServiceCollection serviceCollection)
+        => base.AddServices(serviceCollection)
+            .Replace(ServiceDescriptor.Singleton<IModelCustomizer, IntegerKeyModelCustomizer>());
+
+    private sealed class IntegerKeyModelCustomizer(ModelCustomizerDependencies dependencies) : ModelCustomizer(dependencies)
+    {
+        public override void Customize(ModelBuilder modelBuilder, DbContext context)
+        {
+            base.Customize(modelBuilder, context);
+            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+        }
+    }
+
+#endif
     protected static Task AssertTranslationFailed(Func<Task> query)
         => MongoSpecTestHelpers.AssertNativeTranslationFailedAsync(query);
 
