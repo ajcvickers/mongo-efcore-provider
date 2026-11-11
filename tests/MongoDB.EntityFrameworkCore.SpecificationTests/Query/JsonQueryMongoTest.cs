@@ -168,19 +168,19 @@ JsonEntitiesSingleOwned.{ "$lookup" : { "from" : "JsonEntitiesBasic", "localFiel
 """);
     }
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Project_json_entity_FirstOrDefault_subquery(bool async)
         => SpecFails.ThrowsAsync(() => base.Project_json_entity_FirstOrDefault_subquery(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Project_json_entity_FirstOrDefault_subquery_deduplication(bool async)
         => SpecFails.ThrowsAsync(() => base.Project_json_entity_FirstOrDefault_subquery_deduplication(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Project_json_entity_FirstOrDefault_subquery_deduplication_and_outer_reference(bool async)
         => SpecFails.ThrowsAsync(() => base.Project_json_entity_FirstOrDefault_subquery_deduplication_and_outer_reference(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Project_json_entity_FirstOrDefault_subquery_deduplication_outer_reference_and_pruning(bool async)
         => SpecFails.ThrowsAsync(() => base.Project_json_entity_FirstOrDefault_subquery_deduplication_outer_reference_and_pruning(async), "could not be translated");
 
@@ -188,7 +188,7 @@ JsonEntitiesSingleOwned.{ "$lookup" : { "from" : "JsonEntitiesBasic", "localFiel
     public override Task Json_collection_SelectMany(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_SelectMany(async));
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_nested_collection_SelectMany(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_nested_collection_SelectMany(async), "could not be translated");
 #endif
@@ -197,7 +197,7 @@ JsonEntitiesSingleOwned.{ "$lookup" : { "from" : "JsonEntitiesBasic", "localFiel
     public override Task Entity_including_collection_with_json_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Entity_including_collection_with_json_AsNoTrackingWithIdentityResolution(async));
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Entity_including_collection_with_json_and_separate_json_projection_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Entity_including_collection_with_json_and_separate_json_projection_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
@@ -655,7 +655,7 @@ JsonEntitiesSingleOwned.{ "$lookup" : { "from" : "JsonEntitiesBasic", "localFiel
 #endif
 
 #if EF10 || EF11
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task RightJoin_json_entities(bool async)
         => SpecFails.ThrowsAsync(() => base.RightJoin_json_entities(async), "could not be translated");
 #endif
@@ -678,7 +678,7 @@ JsonEntitiesBasic.{ "$lookup" : { "from" : "JsonEntitiesSingleOwned", "localFiel
     public override Task Left_join_json_entities_complex_projection_json_being_inner(bool async)
         => SpecFails.ThrowsAsync(() => base.Left_join_json_entities_complex_projection_json_being_inner(async));
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Project_json_entity_FirstOrDefault_subquery_with_binding_on_top(bool async)
         => SpecFails.ThrowsAsync(() => base.Project_json_entity_FirstOrDefault_subquery_with_binding_on_top(async), "could not be translated");
 
@@ -736,75 +736,75 @@ JsonEntitiesInheritance.{ "$match" : { "_t" : "JsonEntityInheritanceDerived" } }
         AssertMql();
     }
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_basic(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_basic(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_ElementAt_in_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_ElementAt_in_projection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_ElementAtOrDefault_in_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_ElementAtOrDefault_in_projection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_project_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_project_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_ElementAt_project_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_ElementAt_project_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_ElementAtOrDefault_project_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_ElementAtOrDefault_project_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_using_parameter(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_using_parameter(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_using_column(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_using_column(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_using_untranslatable_client_method(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_using_untranslatable_client_method(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_using_untranslatable_client_method2(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_using_untranslatable_client_method2(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_outside_bounds(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_outside_bounds(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_outside_bounds2(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_outside_bounds2(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_outside_bounds_with_property_access(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_outside_bounds_with_property_access(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_nested(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_nested(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_nested_project_scalar(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_nested_project_scalar(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_nested_project_reference(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_nested_project_reference(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_nested_project_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_nested_project_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_nested_project_collection_anonymous_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_nested_project_collection_anonymous_projection(async), "could not be translated");
 
@@ -872,7 +872,7 @@ JsonEntitiesBasic.{ "$match" : { "$expr" : { "$eq" : [{ "$arrayElemAt" : [{ "$le
 """);
     }
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_ElementAt_and_pushdown(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_ElementAt_and_pushdown(async), "could not be translated");
 
@@ -950,19 +950,19 @@ JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }, { "$project" : { "_v" : { "$size"
     public override Task Json_collection_in_projection_with_anonymous_projection_of_scalars(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_in_projection_with_anonymous_projection_of_scalars(async));
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_in_projection_with_composition_where_and_anonymous_projection_of_scalars(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_in_projection_with_composition_where_and_anonymous_projection_of_scalars(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_in_projection_with_composition_where_and_anonymous_projection_of_primitive_arrays(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_in_projection_with_composition_where_and_anonymous_projection_of_primitive_arrays(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_filter_in_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_filter_in_projection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_nested_collection_filter_in_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_nested_collection_filter_in_projection(async), "could not be translated");
 
@@ -970,19 +970,19 @@ JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }, { "$project" : { "_v" : { "$size"
     public override Task Json_nested_collection_anonymous_projection_in_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_nested_collection_anonymous_projection_in_projection(async));
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_skip_take_in_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_skip_take_in_projection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_skip_take_in_projection_project_into_anonymous_type(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_skip_take_in_projection_project_into_anonymous_type(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_skip_take_in_projection_with_json_reference_access_as_final_operation(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_skip_take_in_projection_with_json_reference_access_as_final_operation(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_distinct_in_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_distinct_in_projection(async), "could not be translated");
 
@@ -993,23 +993,23 @@ JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }, { "$project" : { "_v" : { "$size"
         AssertMql();
     }
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_leaf_filter_in_projection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_leaf_filter_in_projection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_multiple_collection_projections(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_multiple_collection_projections(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_branch_collection_distinct_and_other_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_branch_collection_distinct_and_other_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_leaf_collection_distinct_and_other_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_leaf_collection_distinct_and_other_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_of_primitives_SelectMany(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_of_primitives_SelectMany(async), "could not be translated");
 
@@ -1053,95 +1053,95 @@ JsonEntitiesBasic.{ "$match" : { "OwnedReferenceRoot.Names" : "e1_r1" } }
 """);
     }
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_with_parameter_Select_ElementAt(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_with_parameter_Select_ElementAt(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_with_expression_Select_ElementAt(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_with_expression_Select_ElementAt(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_Select_entity_collection_ElementAt(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_Select_entity_collection_ElementAt(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_Select_entity_ElementAt(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_Select_entity_ElementAt(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_Select_entity_in_anonymous_object_ElementAt(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_Select_entity_in_anonymous_object_ElementAt(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_Select_entity_with_initializer_ElementAt(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_Select_entity_with_initializer_ElementAt(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_deduplication_with_collection_indexer_in_original(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_deduplication_with_collection_indexer_in_original(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_deduplication_with_collection_indexer_in_target(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_deduplication_with_collection_indexer_in_target(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_deduplication_with_collection_in_original_and_collection_indexer_in_target(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_deduplication_with_collection_in_original_and_collection_indexer_in_target(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_using_constant_when_owner_is_present(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_using_constant_when_owner_is_present(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_using_constant_when_owner_is_not_present(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_using_constant_when_owner_is_not_present(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_using_parameter_when_owner_is_present(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_using_parameter_when_owner_is_present(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_using_parameter_when_owner_is_not_present(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_using_parameter_when_owner_is_not_present(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_after_collection_index_in_projection_using_constant_when_owner_is_present(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_after_collection_index_in_projection_using_constant_when_owner_is_present(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_after_collection_index_in_projection_using_constant_when_owner_is_not_present(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_after_collection_index_in_projection_using_constant_when_owner_is_not_present(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_after_collection_index_in_projection_using_parameter_when_owner_is_present(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_after_collection_index_in_projection_using_parameter_when_owner_is_present(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_after_collection_index_in_projection_using_parameter_when_owner_is_not_present(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_after_collection_index_in_projection_using_parameter_when_owner_is_not_present(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_when_owner_is_present_misc1(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_when_owner_is_present_misc1(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_when_owner_is_not_present_misc1(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_when_owner_is_not_present_misc1(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_when_owner_is_present_misc2(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_when_owner_is_present_misc2(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_when_owner_is_not_present_misc2(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_when_owner_is_not_present_misc2(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_when_owner_is_present_multiple(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_when_owner_is_present_multiple(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_index_in_projection_when_owner_is_not_present_multiple(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_collection_index_in_projection_when_owner_is_not_present_multiple(async), "could not be translated");
 
@@ -1252,31 +1252,31 @@ JsonEntitiesBasic.{ "$lookup" : { "from" : "JsonEntitiesBasicForReference", "loc
 """);
     }
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_with_projection_of_json_reference_leaf_and_entity_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_with_projection_of_json_reference_leaf_and_entity_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_with_projection_of_json_reference_and_entity_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_with_projection_of_json_reference_and_entity_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_with_projection_of_multiple_json_references_and_entity_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_with_projection_of_multiple_json_references_and_entity_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_with_projection_of_json_collection_leaf_and_entity_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_with_projection_of_json_collection_leaf_and_entity_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_with_projection_of_json_collection_and_entity_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_with_projection_of_json_collection_and_entity_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_with_projection_of_json_collection_element_and_entity_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_with_projection_of_json_collection_element_and_entity_collection(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_with_projection_of_mix_of_json_collections_json_references_and_entity_collection(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_with_projection_of_mix_of_json_collections_json_references_and_entity_collection(async), "could not be translated");
 
@@ -1553,7 +1553,7 @@ JsonEntitiesConverters.{ "$match" : { "Reference.StringYNConvertedToBool" : fals
 """);
     }
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_collection_element_and_reference_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_collection_element_and_reference_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
@@ -1581,43 +1581,43 @@ JsonEntitiesBasic.{ "$project" : { "Id" : "$_id", "x" : "$$ROOT", "_id" : 0 } }
     public override Task Json_nested_collection_anonymous_projection_of_primitives_in_projection_NoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_nested_collection_anonymous_projection_of_primitives_in_projection_NoTrackingWithIdentityResolution(async));
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_second_element_through_collection_element_constant_projected_after_owner_nested_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_second_element_through_collection_element_constant_projected_after_owner_nested_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_reference_collection_and_collection_element_nested_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_reference_collection_and_collection_element_nested_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_second_element_through_collection_element_parameter_correctly_projected_after_owner_nested_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_second_element_through_collection_element_parameter_correctly_projected_after_owner_nested_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_only_second_element_through_collection_element_constant_projected_nested_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_only_second_element_through_collection_element_constant_projected_nested_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_only_second_element_through_collection_element_parameter_projected_nested_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_only_second_element_through_collection_element_parameter_projected_nested_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_second_element_through_collection_element_constant_different_values_projected_before_owner_nested_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_second_element_through_collection_element_constant_different_values_projected_before_owner_nested_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_nested_collection_and_element_correct_order_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_nested_collection_and_element_correct_order_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_nested_collection_element_using_parameter_and_the_owner_in_correct_order_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_nested_collection_element_using_parameter_and_the_owner_in_correct_order_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_second_element_projected_before_owner_as_well_as_root_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_second_element_projected_before_owner_as_well_as_root_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: the query over JSON-owned data is not translated EF-X526
+    // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_projection_second_element_projected_before_owner_nested_as_well_as_root_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_second_element_projected_before_owner_nested_as_well_as_root_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 

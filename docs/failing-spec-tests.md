@@ -48,7 +48,7 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 
 | Ticket | Methods | Subject |
 | --- | --- | --- |
-| EF-X526 | 792 | Query shape (navigation/projection/set operation) not translated |
+| EF-X526 | 711 | Query shape (navigation/projection/set operation) not translated |
 | EF-X101 | 8 | Entities added without an explicit key get Id 0 (no int/long key generation), so tracking/saving them ... |
 | EF-X530 | 238 | Wrong results compared with the reference (client) evaluation |
 | EF-216 | 245 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
@@ -286,7 +286,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 45 |
 | EF-X523 | Model validation rejects the relationship (owned/nested owned or ambiguous FK) | 2 |
 | EF-X525 | EF8/EF9: filtered query with multiple filtered entities returns duplicate rows | 1 |
-| EF-X526 | Query shape (navigation/projection/set operation) not translated | 792 |
+| EF-X526 | Query shape (navigation/projection/set operation) not translated | 711 |
 | EF-X527 | Expression not supported by the driver LINQ translator | 185 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
 | EF-X529 | NullReferenceException during query execution/materialization | 10 |
@@ -308,6 +308,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
 | EF-X538 | A type that derives from an entity type, and is first reached through a navigation before it is in the model (the base type's navigation to its derived type, with no `DbSet` for the derived type), is owned by convention. That breaks the explicit one-to-one between the two ("the dependent side could not be determined"). `InheritanceRelationshipsQueryMongoFixture` replaces the convention so such a type is not owned; the default is unchanged, because making it the provider default also changes the model of `GraphUpdates` | 0 |
 | EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
+| EF-X549 | A JSON-owned collection that is indexed (`ElementAt`/indexer), projected or composed in a subquery is not translated (`The LINQ expression 'EF.Property<List<JsonOwned...>>(...)' could not be translated`) | 81 |
 | EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 209 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 38 |
