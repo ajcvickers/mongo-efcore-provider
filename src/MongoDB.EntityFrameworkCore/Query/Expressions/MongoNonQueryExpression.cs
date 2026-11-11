@@ -165,5 +165,10 @@ internal sealed class MongoNonQueryExpression : Expression
     public override System.Type Type => typeof(int);
     public override bool CanReduce => false;
 
+    /// <summary>
+    /// This node is an opaque marker: its source query and setters are consumed directly by
+    /// <see cref="Visitors.MongoShapedQueryCompilingExpressionVisitor"/> and must not be rewritten by generic visitors,
+    /// so no children are visited.
+    /// </summary>
     protected override Expression VisitChildren(System.Linq.Expressions.ExpressionVisitor visitor) => this;
 }

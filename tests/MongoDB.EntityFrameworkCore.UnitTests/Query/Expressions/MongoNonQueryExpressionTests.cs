@@ -119,4 +119,17 @@ public static class MongoNonQueryExpressionTests
         Assert.Equal(MongoNonQueryExpression.BulkStrategy.TwoPhase, node.Strategy);
         Assert.Equal(MongoNonQueryExpression.OperationKind.Update, node.Kind);
     }
+
+    [Fact]
+    public static void VisitChildren_returns_the_same_node_without_visiting()
+    {
+        using var db = new NonQueryDbContext();
+        var node = new MongoNonQueryExpression(new MongoQueryExpression(db.Model.GetEntityTypes().First()));
+
+        var actual = new NoOpVisitor().Visit(node);
+
+        Assert.Same(node, actual);
+    }
+
+    sealed class NoOpVisitor : System.Linq.Expressions.ExpressionVisitor;
 }
