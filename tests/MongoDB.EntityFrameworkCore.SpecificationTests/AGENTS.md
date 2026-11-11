@@ -118,8 +118,17 @@ var to confirm green.
   comparing (see `AssertMqlIgnoringGeneratedKeys` in `FiltersInheritanceQueryMongoTest`).
 - Ported suites are pinned to the default query mode, so `NativeOnly` does not reveal fallbacks. To find them, temporarily set
   `pinDefaultQueryMode: false`, run with `MONGODB_EF_QUERY_MODE=NativeOnly`, note the failing tests in a comment, then restore the pin.
-- Always scope with a tight `--filter`, then `git diff` and rebuild before trusting it: it can corrupt files or
-  mis-place output, truncates at 9 statements, and needs to resolve source file+line from the stack trace.
+- Always scope with a tight `--filter`, then `git diff` and rebuild before trusting it. The rewriter (`Utilities/QueryBaselineRewriter`,
+  tested by `QueryBaselineRewriterTests`, #64) changes only the argument list of the `AssertMql(...)` call that *starts* on the line the
+  stack trace names, and otherwise leaves the file untouched and prints `Baseline NOT rewritten (...)` in the test output. It refuses when
+  the source was modified after the test assembly was built (**rebuild after every edit, and after each rewrite**), when something other
+  than the rewriter changed the file during the run (do not run several EF versions with the variable set against one checkout at the
+  same time: the first writer wins), or when the new text would not parse (for example MQL containing `"""`). It keeps the layout of the
+  baseline it replaces (opening `"""` indented or in column 0), so regenerating an unchanged baseline is a no-op. It still truncates the
+  console baseline at 9 statements.
+- **If the rewriter ever damages a file, misplaces a baseline, or refuses for a reason that looks wrong, add a comment to issue #64** (the
+  issue is deliberately left open): the test, the line, `git diff` of the damage and the `Baseline NOT rewritten` text. Then restore the file with
+  `git checkout`. #64 stays open until a period without reports, after which the fix is ported to dotnet/efcore's `TestSqlLoggerFactory`.
 
 ## Test folder mirror
 
