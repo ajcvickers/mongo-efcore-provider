@@ -462,7 +462,7 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
     /// <summary>
     /// Classifies the captured source chain of a bulk delete/update. <c>Where</c> scopes the operation directly. Ordering and
     /// <c>Distinct</c> do not change which documents are affected (<see cref="MongoNonQueryExpression.IsAffectedSetNeutral"/>), so on
-    /// their own they stay on the atomic single-command path. <c>Skip</c>/<c>Take</c> do change the affected set and cannot be
+    /// their own they stay on the single-command path (one <c>deleteMany</c>/<c>updateMany</c>, atomic per document only). <c>Skip</c>/<c>Take</c> do change the affected set and cannot be
     /// expressed as one <c>deleteMany</c>/<c>updateMany</c>, so they need the two-phase path (query the target <c>_id</c>s, then act by
     /// <c>$in</c>). Anything else produces EF's canonical non-query translation failure.
     /// </summary>
