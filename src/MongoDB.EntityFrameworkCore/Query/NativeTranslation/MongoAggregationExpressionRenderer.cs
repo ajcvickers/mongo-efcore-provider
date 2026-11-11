@@ -1113,6 +1113,10 @@ internal static class MongoAggregationExpressionRenderer
             // field): the operator propagates its null, which a non-nullable read would take as 0 where EF throws.
             // A non-nullable property's field answers false (so `x.A + x.B` is not flagged) unless missingFields.
             // Projection leaves only (storedFields): group keys and accumulators are unchanged.
+            // A field under an optional complex property is the exception: a null or missing parent leaves it MISSING wherever it is read, so
+            // a group key over it groups those rows under null (flagged to throw) and a Min/Max/Average accumulator over it can reduce an
+            // all-missing group to null (declined), as for a Length over a possibly-null string.
+            MongoFieldExpression when ReadsThroughOptionalComplexParent(node) => new NullBehindNonNullable(true, false),
             MongoFieldExpression or MongoOuterFieldExpression when dateParts && storedFields
                 => new NullBehindNonNullable(MayBeNullUnlessProven(node, nonNull, missingFields) || ReadsThroughOptionalComplexParent(node), false),
             MongoMathExpression math => WalkMath(math, nonNull, dateParts, missingFields, storedFields),
@@ -1155,7 +1159,7 @@ internal static class MongoAggregationExpressionRenderer
 
     // Whether a stored field sits under an optional complex property (EF10): a null or missing parent element leaves the field missing, so
     // reading it as a non-nullable value type must throw like EF rather than read default(T).
-    private static bool ReadsThroughOptionalComplexParent(MongoExpression node)
+    internal static bool ReadsThroughOptionalComplexParent(MongoExpression node)
     {
         if (node is not MongoFieldExpression field)
             return false;

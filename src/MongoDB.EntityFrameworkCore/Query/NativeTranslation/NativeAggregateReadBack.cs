@@ -67,7 +67,17 @@ internal static class NativeAggregateReadBack
     internal static bool ReducesWrappedValue(MongoCardinality cardinality)
         => cardinality is { Aggregate: MongoAggregateOperator.Min or MongoAggregateOperator.Max }
            && cardinality.ResultType.IsValueType
-           && Nullable.GetUnderlyingType(cardinality.ResultType) is null;
+           && Nullable.GetUnderlyingType(cardinality.ResultType) is null
+           && !IsBareLeafUnderOptionalComplexParent(cardinality.Selector);
+
+    /// <summary>
+    /// Whether <paramref name="operand"/> is a stored field under an optional complex property. A null or missing parent is ordinary data
+    /// there, and the reduction must skip it as SQL's <c>MIN</c>/<c>MAX</c> do rather than let a MISSING <c>{_v: ...}</c> document win as
+    /// the smallest value (read as <c>default</c>). The bare <c>$min</c>/<c>$max</c> skips it, and a result with no non-null operand
+    /// reads as null, which a non-nullable result throws on like LINQ's <c>Min</c> over an empty sequence.
+    /// </summary>
+    internal static bool IsBareLeafUnderOptionalComplexParent(MongoExpression? operand)
+        => operand is MongoFieldExpression && MongoAggregationExpressionRenderer.ReadsThroughOptionalComplexParent(operand);
 
     /// <summary>
     /// The operand a terminal aggregate's <c>$group</c> accumulator reduces. For a <see cref="ReducesWrappedValue"/> aggregate whose

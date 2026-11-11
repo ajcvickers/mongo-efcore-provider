@@ -708,7 +708,8 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
                 ["<null>", "a", "d"]),
             ["sum_lat"] = (q => new[] { q.Sum(c => c.Address!.Location.Lat).ToString() }, ["4"]),
             ["max_lat"] = (q => new[] { q.Max(c => c.Address!.Location.Lat).ToString() }, ["3"]),
-            ["min_lat"] = (q => new[] { q.Min(c => c.Address!.Location.Lat).ToString() }, ["0"]),
+            // `min_lat` moved to Optional_parent_value_type_aggregates_skip_a_missing_or_null_parent : a missing parent is not the smallest
+            // value (the pinned 0 was the `{_v: ...}` reduction's MISSING winner read as default); the driver still answers 0.
             ["avg_lat"] = (q => new[] { q.Average(c => c.Address!.Location.Lat).ToString() }, ["2"]),
             ["max_city"] = (q => new[] { q.Max(c => c.Address!.City) ?? "<null>" }, ["d"]),
             ["orderby_city"] = (q => q.OrderBy(c => c.Address!.City).ThenBy(c => c.Name).Select(c => c.Name), ["Missing", "Null", "A", "D"]),
@@ -786,6 +787,97 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
             q => q.OrderBy(c => c.Name).Select(c => (double?)c.Address!.Location.Lat)));
     }
 
+    // The same rule for a group key: a non-nullable value-type leaf under an optional complex property groups the missing/null parents
+    // under null, which must not read back as 0 (EF throws "Nullable object must have a value." for that group's key). A nullable
+    // spelling keeps the null group, and rows that all have a parent group normally.
+    [Theory]
+    [InlineData(MongoQueryMode.Native)]
+    [InlineData(MongoQueryMode.NativeOnly)]
+    public void Optional_parent_value_type_group_key_throws_for_a_missing_or_null_parent(MongoQueryMode mode)
+    {
+        var collection = SeedOptional(nameof(Optional_parent_value_type_group_key_throws_for_a_missing_or_null_parent) + mode);
+
+        var shapes = new Dictionary<string, Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<string>>>
+        {
+            ["bare_key"] = q => q.GroupBy(c => c.Address!.Location.Lat).Select(g => new { g.Key, C = g.Count() })
+                .ToList().Select(x => x.Key + ":" + x.C),
+            ["anonymous_key"] = q => q.GroupBy(c => new { c.Address!.Location.Lat }).Select(g => new { g.Key.Lat, C = g.Count() })
+                .ToList().Select(x => x.Lat + ":" + x.C)
+        };
+
+        foreach (var (shape, query) in shapes)
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => Optional(collection, mode, query));
+            Assert.True(NullableValueMessage.Text == exception.Message, shape + ": " + exception.Message);
+        }
+
+        Assert.Equal(["1:1", "3:1"], Optional(collection, mode,
+            q => q.Where(c => c.Address != null).GroupBy(c => c.Address!.Location.Lat).Select(g => new { g.Key, C = g.Count() })
+                .ToList().Select(x => x.Key + ":" + x.C).OrderBy(x => x)));
+        Assert.Equal(["<null>:2", "1:1", "3:1"], Optional(collection, mode,
+            q => q.GroupBy(c => (double?)c.Address!.Location.Lat).Select(g => new { g.Key, C = g.Count() })
+                .ToList().Select(x => (x.Key?.ToString() ?? "<null>") + ":" + x.C).OrderBy(x => x)));
+    }
+
+    // Min/Max/Average/Sum over such a leaf skip the missing/null parents, as SQL's aggregates do and the nullable spelling does; when no row
+    // has a parent a non-nullable Min/Max/Average throws (LINQ over an empty sequence) and Sum is 0. A missing parent must not read as the
+    // smallest value, 0 (Min was answered from the `{_v: ...}` document the reduction compares).
+    [Theory]
+    [InlineData(MongoQueryMode.Native)]
+    [InlineData(MongoQueryMode.NativeOnly)]
+    public void Optional_parent_value_type_aggregates_skip_a_missing_or_null_parent(MongoQueryMode mode)
+    {
+        var collection = SeedOptional(nameof(Optional_parent_value_type_aggregates_skip_a_missing_or_null_parent) + mode);
+
+        Assert.Equal([1.0], Optional(collection, mode, q => new[] { q.Min(c => c.Address!.Location.Lat) }));
+        Assert.Equal([3.0], Optional(collection, mode, q => new[] { q.Max(c => c.Address!.Location.Lat) }));
+        Assert.Equal([2.0], Optional(collection, mode, q => new[] { q.Average(c => c.Address!.Location.Lat) }));
+        Assert.Equal([4.0], Optional(collection, mode, q => new[] { q.Sum(c => c.Address!.Location.Lat) }));
+
+        Assert.Equal([0.0], Optional(collection, mode, q => new[] { q.Where(c => c.Address == null).Sum(c => c.Address!.Location.Lat) }));
+        var shapes = new Dictionary<string, Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<double>>>
+        {
+            ["min"] = q => new[] { q.Where(c => c.Address == null).Min(c => c.Address!.Location.Lat) },
+            ["max"] = q => new[] { q.Where(c => c.Address == null).Max(c => c.Address!.Location.Lat) },
+            ["average"] = q => new[] { q.Where(c => c.Address == null).Average(c => c.Address!.Location.Lat) }
+        };
+
+        foreach (var (shape, query) in shapes)
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => Optional(collection, mode, query));
+            Assert.True(NullableValueMessage.Text == exception.Message, shape + ": " + exception.Message);
+        }
+    }
+
+    // A group of parents that are all missing/null reduces Min/Max/Average to null, which a non-nullable read must not take as 0.
+    // The accumulator over such a leaf is not answered natively (it declines, as for a Length over a possibly-null string), so NativeOnly
+    // refuses and Native reaches the driver, which fails on the null group; neither returns the 0.
+    [Theory]
+    [InlineData(MongoQueryMode.Native)]
+    [InlineData(MongoQueryMode.NativeOnly)]
+    public void Optional_parent_value_type_group_accumulators_never_read_a_missing_parent_as_default(MongoQueryMode mode)
+    {
+        var collection = SeedOptional(nameof(Optional_parent_value_type_group_accumulators_never_read_a_missing_parent_as_default) + mode);
+
+        var shapes = new Dictionary<string, Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<string>>>
+        {
+            ["min"] = q => q.GroupBy(c => c.Name).Select(g => new { g.Key, V = g.Min(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V),
+            ["max"] = q => q.GroupBy(c => c.Name).Select(g => new { g.Key, V = g.Max(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V),
+            ["average"] = q => q.GroupBy(c => c.Name).Select(g => new { g.Key, V = g.Average(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V)
+        };
+
+        foreach (var (shape, query) in shapes)
+            Assert.ThrowsAny<Exception>(() => Optional(collection, mode, query));
+
+        // Sum skips a missing value like SQL's SUM, so its 0 for such a group is right and stays native.
+        Assert.Equal(["A:1", "D:3", "Missing:0", "Null:0"], Optional(collection, mode,
+            q => q.GroupBy(c => c.Name).Select(g => new { g.Key, V = g.Sum(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V).OrderBy(x => x)));
+    }
+
     // Characterization, not a goal: explicit DriverLinq still reads the absent leaf as 0 (the driver's own deserialization).
     [Fact]
     public void Optional_parent_value_type_leaf_reads_default_under_explicit_DriverLinq()
@@ -794,6 +886,9 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
 
         Assert.Equal([1.0, 3.0, 0.0, 0.0], Optional(collection, MongoQueryMode.DriverLinq,
             q => q.OrderBy(c => c.Name).Select(c => c.Address!.Location.Lat)));
+
+        // The same for Min: explicit DriverLinq answers 0 for the smallest, where the native modes answer 1 (the smallest present value).
+        Assert.Equal([0.0], Optional(collection, MongoQueryMode.DriverLinq, q => new[] { q.Min(c => c.Address!.Location.Lat) }));
     }
 #endif
 
