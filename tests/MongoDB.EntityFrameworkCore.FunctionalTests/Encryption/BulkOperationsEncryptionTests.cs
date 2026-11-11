@@ -34,6 +34,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using MongoDB.Bson;
@@ -84,7 +85,8 @@ public class BulkOperationsEncryptionTests(TemporaryDatabaseFixture database)
 
         var optionsBuilder = new DbContextOptionsBuilder<MedicalContext>()
             .UseMongoDB(mongoOptions)
-            .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>();
+            .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+            .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
 
         return new MedicalContext(optionsBuilder.Options, modelBuilderAction);
     }
