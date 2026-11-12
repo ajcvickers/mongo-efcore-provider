@@ -61,6 +61,15 @@ public class MiscellaneousOperatorTranslationsMongoTest : MiscellaneousOperatorT
     public override Task Conditional_uncoalesce_with_string()
         => base.Conditional_uncoalesce_with_string();
 
+    public override Task Conditional_uncoalesce_is_null()
+        => base.Conditional_uncoalesce_is_null();
+
+    public override Task Conditional_uncoalesce_is_not_null_with_nullable_column()
+        => base.Conditional_uncoalesce_is_not_null_with_nullable_column();
+
+    public override Task Conditional_uncoalesce_with_coalesce()
+        => base.Conditional_uncoalesce_with_coalesce();
+
 #endif
 
     // <generated>

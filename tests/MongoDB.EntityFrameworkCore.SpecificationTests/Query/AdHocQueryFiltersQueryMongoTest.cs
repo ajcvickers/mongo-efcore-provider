@@ -40,14 +40,16 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
     public override Task Query_filter_with_EF_Constant_literal_throws()
         => base.Query_filter_with_EF_Constant_literal_throws();
 
+    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Query_filter_with_EF_Constant_over_context_property()
-        => base.Query_filter_with_EF_Constant_over_context_property();
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Query_filter_with_EF_Constant_over_context_property(), "The instance of entity type 'Entity38151' cannot be tracked");
 
     public override Task Query_filter_with_EF_Parameter_literal_throws()
         => base.Query_filter_with_EF_Parameter_literal_throws();
 
+    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Query_filter_with_EF_Parameter_over_context_property()
-        => base.Query_filter_with_EF_Parameter_over_context_property();
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Query_filter_with_EF_Parameter_over_context_property(), "The instance of entity type 'Entity38151' cannot be tracked");
 #endif
 
 #if (EF10 || EF11)

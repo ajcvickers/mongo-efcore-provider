@@ -259,6 +259,16 @@ public class JsonTypesMongoTest
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_char_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
+#if EF11
+    // Fails: Property type (collection of non-primitive/exotic element, geometry) cannot be mapped by the provider EF-X316 (new in the EF Core 11.0.0 package)
+    public override void Can_read_write_collection_of_nullable_int_with_null_returning_converter(bool existingCollection)
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_write_collection_of_nullable_int_with_null_returning_converter(existingCollection), "The 'List<int?>' property 'NullableInt32CollectionType.Int32' could");
+
+    // Fails: Property type (collection of non-primitive/exotic element, geometry) cannot be mapped by the provider EF-X316 (new in the EF Core 11.0.0 package)
+    public override void Can_read_write_collection_of_nullable_struct_with_null_returning_converter(bool existingCollection)
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_write_collection_of_nullable_struct_with_null_returning_converter(existingCollection), "The 'IList<DddId?>' property 'NullableDddIdCollectionType.DddId' could");
+#endif
+
 #if (EF10 || EF11) || EF9
     // Fails: Property type (collection of non-primitive/exotic element, geometry) cannot be mapped by the provider EF-X316
     public override Task Can_read_write_collection_of_DateOnly_JSON_values()
