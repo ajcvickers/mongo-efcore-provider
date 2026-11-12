@@ -22,11 +22,12 @@ Only Storage may call the driver client/collection/session types directly.
   `UseTransaction` has a current transaction, so it takes the explicit-transaction path (no implicit transaction).
 - **A `MongoTransaction` is owned or non-owned (`IsOwner`).** A non-owned one (from `UseTransaction`, built by
   `MongoTransaction.Enlist`) only detaches on `Dispose` (never ends the transaction or disposes the session) and rejects
-  `Commit`/`Rollback` with "not started by this context"; only the owner ends the transaction.
-- **Read the transaction's session only through `MongoTransaction.ActiveSession`**, never a cached session: it throws
+  `Commit`/`Rollback` with "not started by this context"; only the owner ends the transaction. Sessions are not thread-safe:
+  contexts sharing one are used sequentially.
+- **Issue commands on the transaction's session only through `MongoTransaction.ActiveSession`**, never a cached session: it throws
   `InvalidOperationException` ("is no longer active") if the driver has ended the transaction, instead of letting commands run
   outside one. It does not detect a server-side abort after a failed write; that `TransientTransactionError` must surface
-  unchanged (no wrapping, no swallowing). Sessions are not thread-safe: contexts sharing one are used sequentially.
+  unchanged (no wrapping, no swallowing).
 - **Owned-entity root promotion** (`GetAllChangedRootEntries`): an Unchanged root with a modified owned child is
   promoted to Modified; don't filter the entry list before promotion.
 - **Concurrency-filter values are *original* values** (`GetOriginalValue`); current values corrupt conflict

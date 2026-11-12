@@ -99,7 +99,7 @@ Entity Framework Core and MongoDB have a wide variety of features. This provider
   owner.Blogs.Add(new Blog { Name = "Mongo" });
   owner.SaveChanges();
 
-  other.Database.UseTransaction(owner.Database.CurrentTransaction!);
+  other.Database.UseTransaction(transaction);
   other.Authors.Add(new Author { Name = "Ada" });
   other.SaveChanges();
 
@@ -107,7 +107,7 @@ Entity Framework Core and MongoDB have a wide variety of features. This provider
   ```
 
   - The transaction is not owned by the context that joins it: disposing it (or the context) only detaches, and `Commit`/`Rollback` on it, or `Database.CommitTransaction()`/`RollbackTransaction()` on the joining context, throw `InvalidOperationException`. Only the owner (or the code that supplied the session) commits or aborts
-  - Once the owner commits or aborts, `SaveChanges`, queries and bulk `ExecuteUpdate`/`ExecuteDelete` on a joined context throw `InvalidOperationException` ("is no longer active") rather than silently running outside a transaction. This also applies to a context's own transaction ended through the driver
+  - Once the owner commits or aborts, `SaveChanges`, queries and bulk `ExecuteUpdate`/`ExecuteDelete` on a joined context throw `InvalidOperationException` ("is no longer active") rather than silently running outside a transaction
   - MongoDB has no savepoints: a failed write aborts the whole transaction. The next operation (or, on a sharded cluster, possibly only the commit) fails with the server's `TransientTransactionError`, and nothing from the transaction becomes visible
   - Server limits apply: `$search`/`$vectorSearch` queries are rejected inside a multi-document transaction, and some DDL is restricted (`createIndexes` on an existing collection and `drop` are rejected; `createCollection`/`createIndexes` on a collection created in the same transaction work, so `EnsureCreated` inside a transaction works only in that narrow case). The provider passes the server error through unchanged
   - A client session is not thread-safe: contexts sharing a transaction must be used one at a time, never concurrently
