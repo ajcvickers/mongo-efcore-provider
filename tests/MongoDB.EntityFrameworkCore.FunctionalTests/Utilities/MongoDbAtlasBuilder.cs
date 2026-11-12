@@ -68,7 +68,7 @@ public sealed class MongoDbAtlasBuilder : ContainerBuilder<MongoDbAtlasBuilder, 
             ? builder
             : builder.WithCreateParameterModifier(parameters =>
             {
-                parameters.HostConfig.Tmpfs ??= new Dictionary<string, string>();
+                parameters.HostConfig!.Tmpfs ??= new Dictionary<string, string>();
                 parameters.HostConfig.Tmpfs["/data/db"] = TmpfsOptions;
                 parameters.HostConfig.Tmpfs["/data/mongot"] = TmpfsOptions;
             });

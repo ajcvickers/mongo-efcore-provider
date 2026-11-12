@@ -197,41 +197,41 @@ public class WhereTests(ReadOnlySampleGuidesFixture database)
     [Fact]
     public void Where_string_array_contains()
     {
-        var results = _db.Planets.Where(p => p.mainAtmosphere.Contains("H2")).ToArray();
+        var results = _db.Planets.Where(p => p.mainAtmosphere!.Contains("H2")).ToArray();
         Assert.Equal(4, results.Length);
-        Assert.All(results, p => Assert.Contains("H2", p.mainAtmosphere));
+        Assert.All(results, p => Assert.Contains("H2", p.mainAtmosphere!));
     }
 
     [Fact]
     public void Where_string_array_not_contains()
     {
-        var results = _db.Planets.Where(p => !p.mainAtmosphere.Contains("H2")).ToArray();
+        var results = _db.Planets.Where(p => !p.mainAtmosphere!.Contains("H2")).ToArray();
         Assert.Equal(4, results.Length);
-        Assert.All(results, p => Assert.DoesNotContain("H2", p.mainAtmosphere));
+        Assert.All(results, p => Assert.DoesNotContain("H2", p.mainAtmosphere!));
     }
 
     [Fact]
     public void Where_string_array_length()
     {
-        var results = _db.Planets.Where(p => p.mainAtmosphere.Length == 3).ToArray();
+        var results = _db.Planets.Where(p => p.mainAtmosphere!.Length == 3).ToArray();
         Assert.Equal(6, results.Length);
-        Assert.All(results, p => Assert.Equal(3, p.mainAtmosphere.Length));
+        Assert.All(results, p => Assert.Equal(3, p.mainAtmosphere!.Length));
     }
 
     [Fact]
     public void Where_string_array_count()
     {
-        var results = _db.Planets.Where(p => p.mainAtmosphere.Count() == 2).ToArray();
+        var results = _db.Planets.Where(p => p.mainAtmosphere!.Count() == 2).ToArray();
         Assert.Single(results);
-        Assert.Equal(2, results[0].mainAtmosphere.Length);
+        Assert.Equal(2, results[0].mainAtmosphere!.Length);
     }
 
     [Fact]
     public void Where_string_array_any()
     {
-        var results = _db.Planets.Where(p => p.mainAtmosphere.Any()).ToArray();
+        var results = _db.Planets.Where(p => p.mainAtmosphere!.Any()).ToArray();
         Assert.Equal(7, results.Length);
-        Assert.All(results, p => Assert.NotEmpty(p.mainAtmosphere));
+        Assert.All(results, p => Assert.NotEmpty(p.mainAtmosphere!));
     }
 
     [Fact]
@@ -256,36 +256,36 @@ public class WhereTests(ReadOnlySampleGuidesFixture database)
     public void Where_string_list_contains()
     {
         using var db = SingleEntityDbContext.Create(_mongoDatabase.GetCollection<PlanetListVersion>("planets"));
-        var results = db.Entities.Where(p => p.mainAtmosphere.Contains("H2")).ToArray();
+        var results = db.Entities.Where(p => p.mainAtmosphere!.Contains("H2")).ToArray();
         Assert.Equal(4, results.Length);
-        Assert.All(results, p => Assert.Contains("H2", p.mainAtmosphere));
+        Assert.All(results, p => Assert.Contains("H2", p.mainAtmosphere!));
     }
 
     [Fact]
     public void Where_string_list_not_contains()
     {
         using var db = SingleEntityDbContext.Create(_mongoDatabase.GetCollection<PlanetListVersion>("planets"));
-        var results = db.Entities.Where(p => !p.mainAtmosphere.Contains("H2")).ToArray();
+        var results = db.Entities.Where(p => !p.mainAtmosphere!.Contains("H2")).ToArray();
         Assert.Equal(4, results.Length);
-        Assert.All(results, p => Assert.DoesNotContain("H2", p.mainAtmosphere));
+        Assert.All(results, p => Assert.DoesNotContain("H2", p.mainAtmosphere!));
     }
 
     [Fact]
     public void Where_string_list_count()
     {
         using var db = SingleEntityDbContext.Create(_mongoDatabase.GetCollection<PlanetListVersion>("planets"));
-        var results = db.Entities.Where(p => p.mainAtmosphere.Count == 2).ToArray();
+        var results = db.Entities.Where(p => p.mainAtmosphere!.Count == 2).ToArray();
         Assert.Single(results);
-        Assert.Equal(2, results[0].mainAtmosphere.Count);
+        Assert.Equal(2, results[0].mainAtmosphere!.Count);
     }
 
     [Fact]
     public void Where_string_list_any()
     {
         using var db = SingleEntityDbContext.Create(_mongoDatabase.GetCollection<PlanetListVersion>("planets"));
-        var results = db.Entities.Where(p => p.mainAtmosphere.Any()).ToArray();
+        var results = db.Entities.Where(p => p.mainAtmosphere!.Any()).ToArray();
         Assert.Equal(7, results.Length);
-        Assert.All(results, p => Assert.NotEmpty(p.mainAtmosphere));
+        Assert.All(results, p => Assert.NotEmpty(p.mainAtmosphere!));
     }
 
     [Fact]

@@ -106,7 +106,7 @@ public class NativeOwnedThenIncludeTests(TemporaryDatabaseFixture database) : IC
             {
                 using var db = new Ctx(database, orders, buyers, regions, mode);
                 return db.Orders.AsNoTracking()
-                    .Include(o => o.Buyer).ThenInclude(b => b.Address).ThenInclude(a => a.Region)
+                    .Include(o => o.Buyer).ThenInclude(b => b!.Address).ThenInclude(a => a!.Region)
                     .AsEnumerable()
                     .OrderBy(o => o.Name)
                     .Select(o => $"{o.Name}:{o.Buyer?.Name ?? "-"}:{o.Buyer?.Address?.City ?? "-"}:{o.Buyer?.Address?.Region?.Name ?? "-"}")

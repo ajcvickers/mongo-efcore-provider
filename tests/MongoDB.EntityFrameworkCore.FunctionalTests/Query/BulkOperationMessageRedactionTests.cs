@@ -23,8 +23,6 @@ using MongoDB.EntityFrameworkCore.Extensions;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 
-#nullable enable
-
 /// <summary>
 /// Every bulk-operation failure wraps its detail in EF's "The LINQ expression '...' could not be translated" with the
 /// captured query printed; the print redacts inlined literals (<c>?</c>), so a filter or setter literal (a password, PII)

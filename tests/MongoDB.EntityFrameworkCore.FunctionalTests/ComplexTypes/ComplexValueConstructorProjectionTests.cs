@@ -21,8 +21,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Constructor, record and member-init projections of a whole complex value, per mode (the source of the constructor
 /// sentence in docs/complex-types.md). A ONE-argument constructor or record of a whole complex value, and a member-init

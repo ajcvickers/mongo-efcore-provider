@@ -24,8 +24,6 @@ using MongoDB.EntityFrameworkCore.Infrastructure;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// The complex collection CLR types EF10 accepts, end to end: save, raw stored shape, read (no-tracking and tracked),
 /// replace, in-place mutation, an element quantifier in every query mode, and a bulk update. The source of the supported

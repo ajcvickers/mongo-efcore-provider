@@ -3812,9 +3812,9 @@ Customers.{ "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField
             async,
             ss => ss.Set<Customer>().Where(c => c.CustomerID.StartsWith("A")
                                                 && ss.Set<Order>().Where(o => o.OrderID < 10300).OrderBy(o => o.OrderID)
-                                                    .FirstOrDefault().OrderDetails
+                                                    .FirstOrDefault()!.OrderDetails
                                                 == ss.Set<Order>().Where(o => o.OrderID > 10500).OrderBy(o => o.OrderID)
-                                                    .FirstOrDefault().OrderDetails)));
+                                                    .FirstOrDefault()!.OrderDetails)));
     }
 
     public override async Task Inner_parameter_in_nested_lambdas_gets_preserved(bool async)

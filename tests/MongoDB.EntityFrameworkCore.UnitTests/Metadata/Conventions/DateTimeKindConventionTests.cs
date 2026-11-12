@@ -33,7 +33,7 @@ public class DateTimeKindConventionTests
 
         var entity = modelBuilder.Model.FindEntityType(typeof(TestEntity));
 
-        Assert.Equal(value, entity.GetProperty(nameof(TestEntity.DateTimeProperty)).GetDateTimeKind());
+        Assert.Equal(value, entity!.GetProperty(nameof(TestEntity.DateTimeProperty)).GetDateTimeKind());
         Assert.Equal(value, entity.GetProperty(nameof(TestEntity.NullableDateTimeProperty)).GetDateTimeKind());
         Assert.Equal(DateTimeKind.Unspecified, entity.GetProperty(nameof(TestEntity.StringProperty)).GetDateTimeKind());
     }

@@ -72,7 +72,7 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         {
             await db.Database.BeginTransactionAsync();
             var entity = await db.Entities.FirstOrDefaultAsync();
-            entity.name = "updated";
+            entity!.name = "updated";
             await db.SaveChangesAsync();
             await db.Database.CommitTransactionAsync();
         }
@@ -80,7 +80,7 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         await using (var db = SingleEntityDbContext.Create(collection))
         {
             var entity = await db.Entities.FirstOrDefaultAsync();
-            Assert.Equal("updated", entity.name);
+            Assert.Equal("updated", entity!.name);
         }
     }
 
@@ -138,7 +138,7 @@ public class TransactionTests(TemporaryDatabaseFixture database)
             var options = new Driver.TransactionOptions(readConcern: new Optional<ReadConcern>(ReadConcern.Majority));
             var transaction = await db.Database.BeginTransactionAsync(options);
             var entity = await db.Entities.FirstOrDefaultAsync();
-            entity.name = "updated";
+            entity!.name = "updated";
             await db.SaveChangesAsync();
             await transaction.CommitAsync();
         }
@@ -154,7 +154,7 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         await using (var db = SingleEntityDbContext.Create(collection))
         {
             var entity = await db.Entities.FirstOrDefaultAsync();
-            Assert.Equal("updated", entity.name);
+            Assert.Equal("updated", entity!.name);
         }
     }
 

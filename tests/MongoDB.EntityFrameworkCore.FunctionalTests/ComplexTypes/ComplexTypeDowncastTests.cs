@@ -25,8 +25,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// A member read through a DOWNCAST of a TPH root (<c>((Derived)b).Detours</c>, <c>(a as Cat)!.Vet.Code</c>) must be
 /// resolved against the CAST type, never the operand's (base) type: the walkers that key the null-element and collection-null refusal scanner, the bulk

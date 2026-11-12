@@ -25,8 +25,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Tests that kill mutants of the complex type support that survived the rest of the suite (found by mutation testing):
 /// the wrong-BSON-type rules for complex collections, the one-pass reader's per-element reset of complex locals, the bulk

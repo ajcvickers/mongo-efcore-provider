@@ -87,7 +87,7 @@ public class ShadowPropertyTests(TemporaryDatabaseFixture database)
     [InlineData(1.1)]
     public void Shadow_properties_use_has_conversion<T>(T value)
     {
-        var expected = new KeyedDocWithActualProperty<string> {StoredValue = value.ToString()!};
+        var expected = new KeyedDocWithActualProperty<string> {StoredValue = value!.ToString()!};
         var collection = database.CreateCollection<KeyedEntity>(values: value);
         collection.InsertOne(expected);
 
@@ -105,7 +105,7 @@ public class ShadowPropertyTests(TemporaryDatabaseFixture database)
     [InlineData(1.1)]
     public void Shadow_properties_use_bson_type_representation<T>(T value)
     {
-        var expected = new KeyedDocWithActualProperty<string> {StoredValue = value.ToString()!};
+        var expected = new KeyedDocWithActualProperty<string> {StoredValue = value!.ToString()!};
         var collection = database.CreateCollection<KeyedEntity>(values: value);
         collection.InsertOne(expected);
 
@@ -160,7 +160,7 @@ public class ShadowPropertyTests(TemporaryDatabaseFixture database)
 
         {
             var db = SingleEntityDbContext.Create(collection, ConfigureModel);
-            var actual = db.Entities.First(e => EF.Property<T>(e, "storedValue").Equals(value));
+            var actual = db.Entities.First(e => EF.Property<T>(e, "storedValue")!.Equals(value));
             Assert.Equal(expected.Id, actual.Id);
             Assert.Equal(value, db.Entry(actual).Property<T>("storedValue").CurrentValue);
         }
@@ -186,7 +186,7 @@ public class ShadowPropertyTests(TemporaryDatabaseFixture database)
 
         {
             var db = SingleEntityDbContext.Create(collection, ConfigureModel);
-            var actual = db.Entities.First(e => EF.Property<T>(e, "storedValue").Equals(value));
+            var actual = db.Entities.First(e => EF.Property<T>(e, "storedValue")!.Equals(value));
             Assert.Equal(expected.Id, actual.Id);
             Assert.Equal(value, db.Entry(actual).Property<T>("storedValue").CurrentValue);
         }
@@ -219,7 +219,7 @@ public class ShadowPropertyTests(TemporaryDatabaseFixture database)
 
         {
             var db = SingleEntityDbContext.Create(collection, ConfigureModel);
-            var actual = db.Entities.First(e => EF.Property<T>(e, "valueOne").Equals(EF.Property<T>(e, "valueTwo")));
+            var actual = db.Entities.First(e => EF.Property<T>(e, "valueOne")!.Equals(EF.Property<T>(e, "valueTwo")));
             Assert.Equal(expected.Id, actual.Id);
             Assert.Equal(value, db.Entry(actual).Property<T>("valueTwo").CurrentValue);
         }

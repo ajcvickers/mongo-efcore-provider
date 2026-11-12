@@ -526,7 +526,7 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
                 {
                     LineQuantity = e.l.Quantity,
                     OrderTotal = e.r.Total,
-                    OwnerRank = o.Rank
+                    OwnerRank = o!.Rank
                 })
                 .AsEnumerable()
                 .OrderBy(x => x.LineQuantity)
@@ -624,7 +624,7 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
             .LeftJoin(db.Owners, e => e.r.OwnerId, o2 => o2.Id, (e, o2) => new { e.o, e.r, o2 })
             .Take(1)
             .AsEnumerable()
-            .Select(x => (x.o.Name, x.r.Total, x.o2.Name))
+            .Select(x => (x.o.Name, x.r.Total, x.o2!.Name))
             .ToList();
 
         var allJoined = seed.Owners
@@ -1134,7 +1134,7 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
         var result = db.Orders
             .LeftJoin(db.Owners, r => r.OwnerId, o => o.Id, (r, o) => new { r, o })
             .Where(x => x.r.Total > 10m)
-            .Select(x => new { x.o.Name, x.r.Total })
+            .Select(x => new { x.o!.Name, x.r.Total })
             .AsEnumerable()
             .OrderBy(x => x.Name).ThenBy(x => x.Total)
             .ToList();
@@ -1142,7 +1142,7 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
         var expected = seed.Orders
             .LeftJoin(seed.Owners, r => r.OwnerId, o => o.Id, (r, o) => new { r, o })
             .Where(x => x.r.Total > 10m)
-            .Select(x => new { x.o.Name, x.r.Total })
+            .Select(x => new { x.o!.Name, x.r.Total })
             .OrderBy(x => x.Name).ThenBy(x => x.Total)
             .ToList();
 
@@ -1735,7 +1735,7 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
 
         var nullableRows = dl.Orders
             .LeftJoin(dl.Owners, r => r.OwnerId, o => o.Id, (r, o) => new { r, o })
-            .Select(x => new { x.r, x.o.Rank })
+            .Select(x => new { x.r, x.o!.Rank })
             .AsEnumerable().OrderBy(x => x.r.Total)
             .Select(x => (x.r.Total, x.Rank)).ToList();
 
@@ -1748,7 +1748,7 @@ public class NativeJoinTests(TemporaryDatabaseFixture database) : IClassFixture<
             {
                 return (false, null, db.Orders
                     .LeftJoin(db.Owners, r => r.OwnerId, o => o.Id, (r, o) => new { r, o })
-                    .Select(x => new { x.r, x.o.Region })
+                    .Select(x => new { x.r, x.o!.Region })
                     .AsEnumerable().OrderBy(x => x.r.Total)
                     .Select(x => (x.r.Total, (string?)x.Region)).ToList());
             }

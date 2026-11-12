@@ -71,7 +71,7 @@ public static class Exerciser
 
         {
             using var db = SingleEntityDbContext.Create(collection, modelConfig);
-            var found = db.Entities.First(e => e.value.Equals(expectedValue));
+            var found = db.Entities.First(e => e.value!.Equals(expectedValue));
             Assert.Equal(roundForComparison(expectedValue), roundForComparison(found.value));
             Assert.Equal(expected._id, found._id);
         }
@@ -123,7 +123,7 @@ public static class Exerciser
 
         {
             using var db = SingleEntityDbContext.Create(collection, modelConfig);
-            var found = db.Entities.First(e => e._id.Equals(expectedId));
+            var found = db.Entities.First(e => e._id!.Equals(expectedId));
             Assert.Equal(expected._id, found._id);
         }
 

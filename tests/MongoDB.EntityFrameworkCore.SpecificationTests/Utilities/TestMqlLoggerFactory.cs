@@ -14,8 +14,6 @@ using MongoDB.EntityFrameworkCore.Diagnostics;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Utilities;
 
-#nullable disable
-
 public class TestMqlLoggerFactory : ListLoggerFactory
 {
     private const string FileNewLine = @"
@@ -147,15 +145,16 @@ public class TestMqlLoggerFactory : ListLoggerFactory
         protected override void UnsafeLog<TState>(
             LogLevel logLevel,
             EventId eventId,
-            string message,
+            string? message,
             TState state,
-            Exception exception)
+            Exception? exception)
         {
             if (eventId.Id == MongoEventId.ExecutedMqlQuery)
             {
                 if (message != null)
                 {
-                    var structure = (IReadOnlyList<KeyValuePair<string, object>>)state;
+                    var structure = (IReadOnlyList<KeyValuePair<string, object>>?)state
+                                    ?? throw new InvalidOperationException("Expected a structured log state.");
                     var collectionName = structure.Where(i => i.Key == "collectionNamespace")
                         .Select(i => (CollectionNamespace)i.Value).First().CollectionName;
 

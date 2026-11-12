@@ -1375,7 +1375,7 @@ public class ValueConverterTests(TemporaryDatabaseFixture database)
             => new(BitConverter.GetBytes(DateTime.Now.Ticks).Reverse().Concat(RandomNumberGenerator.GetBytes(8)).ToArray());
 
         public bool Equals(HexClass? other)
-            => _keyBytes.SequenceEqual(other._keyBytes);
+            => _keyBytes.SequenceEqual(other!._keyBytes);
 
         public override bool Equals(object? obj)
             => obj is HexStruct other && Equals(other);

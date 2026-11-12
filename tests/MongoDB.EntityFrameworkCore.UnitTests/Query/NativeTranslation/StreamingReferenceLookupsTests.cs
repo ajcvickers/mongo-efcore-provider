@@ -106,7 +106,7 @@ public class StreamingReferenceLookupsTests
         Assert.Single(result);
 
         var lookup = result[0];
-        Assert.False(lookup.Navigation.IsCollection);
+        Assert.False(lookup.Navigation!.IsCollection);
         Assert.Equal("Customer", lookup.Navigation.Name);
         Assert.Equal("_lookup_Customer", lookup.As);
         var expectedFrom = customerEntityType.GetCollectionName();

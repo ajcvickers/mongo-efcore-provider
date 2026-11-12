@@ -191,8 +191,8 @@ public class Ef372DeepReferenceIncludeTests(TemporaryDatabaseFixture database)
 
         var query = db.OptRoots
             .Include(r => r.Mid)
-            .ThenInclude(m => m.Leaf)
-            .ThenInclude(l => l.Tip);
+            .ThenInclude(m => m!.Leaf)
+            .ThenInclude(l => l!.Tip);
 
         var results = query.ToList();
 

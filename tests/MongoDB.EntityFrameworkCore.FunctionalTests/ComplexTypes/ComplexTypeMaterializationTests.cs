@@ -27,8 +27,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Materializing entities that have complex properties, and whole complex values (bare, inside anonymous types, beside
 /// the entity), on the native path: the one-pass streaming materializer and the DOM shaper. Each query shape runs under

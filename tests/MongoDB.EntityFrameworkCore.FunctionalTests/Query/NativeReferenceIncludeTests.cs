@@ -763,7 +763,7 @@ public class NativeReferenceIncludeTests(TemporaryDatabaseFixture database)
         // degrade to the ThenBy key (see NativeSlotPopulator's innerSortScope arm).
         using var nativeOnlyDb = CreateContext(MongoQueryMode.NativeOnly,
             nameof(Plain_bool_null_check_sort_key_over_optional_join_inner_matches_oracle) + "_NativeOnly");
-        var nativeResults = nativeOnlyDb.Orders.OrderBy(o => o.Carrier.Name != null).ThenBy(o => o.Total).ToList();
+        var nativeResults = nativeOnlyDb.Orders.OrderBy(o => o.Carrier!.Name != null).ThenBy(o => o.Total).ToList();
 
         using var oracleDb = CreateContext(MongoQueryMode.DriverLinq,
             nameof(Plain_bool_null_check_sort_key_over_optional_join_inner_matches_oracle) + "_Oracle");

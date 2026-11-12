@@ -32,7 +32,7 @@ public static class PrimaryKeyDiscoveryConventionTests
         var expectedProperty = Utilities.GetPropertyInfo((Vendor v) => v._id);
 
         Assert.Single(keys);
-        Assert.Single(keys[0].Properties, p => p.PropertyInfo.Equals(expectedProperty));
+        Assert.Single(keys[0].Properties, p => p.PropertyInfo!.Equals(expectedProperty));
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public static class PrimaryKeyDiscoveryConventionTests
         var expectedProperty = Utilities.GetPropertyInfo((Customer c) => c._id);
 
         Assert.Single(keys);
-        Assert.Single(keys[0].Properties, p => p.PropertyInfo.Equals(expectedProperty));
+        Assert.Single(keys[0].Properties, p => p.PropertyInfo!.Equals(expectedProperty));
     }
 
     [Fact]

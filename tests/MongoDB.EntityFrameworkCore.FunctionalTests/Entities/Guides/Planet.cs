@@ -17,16 +17,14 @@ using MongoDB.Bson;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Entities.Guides;
 
-#nullable disable
-
 internal class Planet
 {
     public ObjectId _id { get; set; }
     public string name { get; set; }
     public int orderFromSun { get; set; }
     public bool hasRings { get; set; }
-    public string[] mainAtmosphere { get; set; }
-    public ParkingCar parkingCar { get; set; }
+    public string[]? mainAtmosphere { get; set; }
+    public ParkingCar? parkingCar { get; set; }
     public List<ParkingCar> parkingCars { get; } = new();
 }
 
@@ -35,7 +33,7 @@ internal class Moon
     public ObjectId planetId { get; set; }
     public string label { get; set; }
     public string name { get; set; }
-    public float[] embedding { get; set; }
+    public float[]? embedding { get; set; }
     public int? yearOfDiscovery { get; set; }
 }
 

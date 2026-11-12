@@ -23,8 +23,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 #if !EF8 && !EF9
 /// <summary>
 /// Two read-side rules for projected complex values: a REQUIRED complex collection stored missing or null reads empty

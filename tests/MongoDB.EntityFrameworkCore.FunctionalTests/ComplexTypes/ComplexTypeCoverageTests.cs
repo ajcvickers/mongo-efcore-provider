@@ -23,8 +23,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Shapes that the other complex type test classes do not reach: a complex collection on a TPH-derived type, a complex
 /// property reached through a private backing field, the full lifecycle of an optional nullable-struct complex

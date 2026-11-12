@@ -282,9 +282,9 @@ public class SearchIndexExamplesTests(AtlasTemporaryDatabaseFixture database)
 
                 b.IndexAsEmbedded(e => e.Awards, b =>
                 {
-                    b.IndexAsNumber(e => e.Wins);
-                    b.IndexAsNumber(e => e.Nominations).WithRepresentation(SearchNumberRepresentation.Int64);
-                    b.IndexAsString(e => e.Text).UseAnalyzer(BuiltInSearchAnalyzer.LuceneEnglish).IgnoreAbove(255);
+                    b.IndexAsNumber(e => e!.Wins);
+                    b.IndexAsNumber(e => e!.Nominations).WithRepresentation(SearchNumberRepresentation.Int64);
+                    b.IndexAsString(e => e!.Text).UseAnalyzer(BuiltInSearchAnalyzer.LuceneEnglish).IgnoreAbove(255);
                 });
 
                 b.IndexAsString(e => e.Title)
@@ -4473,7 +4473,7 @@ public class SearchIndexExamplesTests(AtlasTemporaryDatabaseFixture database)
                 .HasSearchIndex(b =>
                 {
                     b.IsDynamic().StoreSourceFor(e => e.Title);
-                    b.IndexAsEmbedded(e => e.Awards).IsDynamic().StoreSourceFor(e => e.Wins);
+                    b.IndexAsEmbedded(e => e.Awards).IsDynamic().StoreSourceFor(e => e!.Wins);
                 });
         });
 
@@ -4519,7 +4519,7 @@ public class SearchIndexExamplesTests(AtlasTemporaryDatabaseFixture database)
                 .HasSearchIndex(b =>
                 {
                     b.IsDynamic().StoreSourceFor(e => e.Title, false);
-                    b.IndexAsEmbedded(e => e.Awards).IsDynamic().StoreSourceFor(e => e.Wins, false);
+                    b.IndexAsEmbedded(e => e.Awards).IsDynamic().StoreSourceFor(e => e!.Wins, false);
                 });
         });
 

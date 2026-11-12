@@ -22,8 +22,6 @@ using MongoDB.EntityFrameworkCore.Infrastructure;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// A shaper of a type DERIVED from the query root (a TPH subtype) that belongs to a JOINED row must read the joined
 /// sub-document, never the outer root document, even though the derived type is in the root's hierarchy. Every inner row

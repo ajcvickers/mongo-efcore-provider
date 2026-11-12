@@ -19,8 +19,6 @@ using MongoDB.Driver.Core.Events;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// A client on the test server that records every command it sends, so tests can inspect the exact
 /// <c>update</c>/<c>delete</c> commands SaveChanges issues.

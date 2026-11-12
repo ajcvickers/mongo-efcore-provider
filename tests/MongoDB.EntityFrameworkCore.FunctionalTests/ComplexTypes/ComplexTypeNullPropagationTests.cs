@@ -26,8 +26,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Null propagation (an absent parent reads its children as null; a null element reads its members as
 /// null) where the native path compared a MISSING value raw against a null-normalized one: (a) a correlated ROOT field

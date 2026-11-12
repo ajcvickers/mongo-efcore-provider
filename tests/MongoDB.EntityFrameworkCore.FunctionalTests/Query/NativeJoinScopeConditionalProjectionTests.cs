@@ -470,25 +470,25 @@ public class NativeJoinScopeConditionalProjectionTests(TemporaryDatabaseFixture 
                 .AsEnumerable().Select(s => s ?? "<null>").ToList(),
             "LeftJoinThenLeftJoinBareTernary" => orders
                 .LeftJoin(customers, o => o.CustomerId, c => (ObjectId?)c.Id, (o, c) => new { o, c })
-                .LeftJoin(regions, x => x.c.RegionId, r => (ObjectId?)r.Id, (x, r) => new { x.o, x.c, r })
+                .LeftJoin(regions, x => x.c!.RegionId, r => (ObjectId?)r.Id, (x, r) => new { x.o, x.c, r })
                 .OrderBy(x => x.o.OrderNo)
                 .Select(x => x.r != null ? x.r.Name : NoneSentinel)
                 .AsEnumerable().Select(s => s ?? "<null>").ToList(),
             "LeftJoinThenLeftJoinFirstLevelTernary" => orders
                 .LeftJoin(customers, o => o.CustomerId, c => (ObjectId?)c.Id, (o, c) => new { o, c })
-                .LeftJoin(regions, x => x.c.RegionId, r => (ObjectId?)r.Id, (x, r) => new { x.o, x.c, r })
+                .LeftJoin(regions, x => x.c!.RegionId, r => (ObjectId?)r.Id, (x, r) => new { x.o, x.c, r })
                 .OrderBy(x => x.o.OrderNo)
                 .Select(x => x.c != null ? x.c.Name : NoneSentinel)
                 .AsEnumerable().Select(s => s ?? "<null>").ToList(),
             "LeftJoinThenLeftJoinWrappedTernary" => orders
                 .LeftJoin(customers, o => o.CustomerId, c => (ObjectId?)c.Id, (o, c) => new { o, c })
-                .LeftJoin(regions, x => x.c.RegionId, r => (ObjectId?)r.Id, (x, r) => new { x.o, x.c, r })
+                .LeftJoin(regions, x => x.c!.RegionId, r => (ObjectId?)r.Id, (x, r) => new { x.o, x.c, r })
                 .OrderBy(x => x.o.OrderNo)
                 .Select(x => new { x.o.OrderNo, Region = x.r != null ? x.r.Name : NoneSentinel })
                 .AsEnumerable().Select(x => x.OrderNo + ":" + (x.Region ?? "<null>")).ToList(),
             "LeftJoinThenLeftJoinResultSelectorTernary" => orders
                 .LeftJoin(customers, o => o.CustomerId, c => (ObjectId?)c.Id, (o, c) => new { o, c })
-                .LeftJoin(regions, x => x.c.RegionId, r => (ObjectId?)r.Id,
+                .LeftJoin(regions, x => x.c!.RegionId, r => (ObjectId?)r.Id,
                     (x, r) => new { x.o.OrderNo, Region = r != null ? r.Name : NoneSentinel })
                 .OrderBy(x => x.OrderNo)
                 .AsEnumerable().Select(x => x.OrderNo + ":" + (x.Region ?? "<null>")).ToList(),

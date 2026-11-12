@@ -24,8 +24,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// A <c>SelectMany</c> whose ITEM type is the query root's own type or a TPH type derived from it. The item shaper
 /// <c>BuildBareNavWrappedShaper</c> builds is bound to THIS query's empty projection member, so

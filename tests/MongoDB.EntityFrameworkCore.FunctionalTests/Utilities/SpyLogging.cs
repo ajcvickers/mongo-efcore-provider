@@ -42,7 +42,7 @@ internal class SpyLoggerProvider : ILoggerProvider
 
     public string GetLogMessageByEventId(EventId eventId)
     {
-        var key = eventId.Name[..eventId.Name.LastIndexOf('.')];
+        var key = eventId.Name![..eventId.Name!.LastIndexOf('.')];
         var logger = Assert.Single(Loggers, s => s.Key == key).Value;
         return Assert.Single(logger.Records, log => log.EventId == eventId && log.Exception == null).Message;
     }
@@ -62,7 +62,7 @@ internal class SpyLoggerProvider : ILoggerProvider
     /// </summary>
     public IReadOnlyList<string> GetLogMessagesByEventId(EventId eventId)
     {
-        var key = eventId.Name[..eventId.Name.LastIndexOf('.')];
+        var key = eventId.Name![..eventId.Name!.LastIndexOf('.')];
         var logger = Assert.Single(Loggers, s => s.Key == key).Value;
         return logger.Records
             .Where(log => log.EventId == eventId && log.Exception == null)

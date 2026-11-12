@@ -26,8 +26,6 @@ using MongoDB.EntityFrameworkCore.Metadata;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Robustness of complex types on the tracking, model-caching, compiled-query and SaveChanges side: tracking
 /// behaviours, shared value instances, two models with different element names in one process, concurrency over the

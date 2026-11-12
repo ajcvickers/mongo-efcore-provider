@@ -28,8 +28,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// <c>ExecuteUpdate</c>/<c>ExecuteDelete</c> over complex COLLECTIONS. The filter and every <c>SetProperty</c> value run on
 /// the driver-LINQ bridge, which evaluates a NULL element's members as MISSING (ordered below every value, never equal to

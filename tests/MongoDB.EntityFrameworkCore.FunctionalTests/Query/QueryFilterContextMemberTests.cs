@@ -22,8 +22,6 @@ using MongoDB.EntityFrameworkCore.Infrastructure;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 
-#nullable enable
-
 /// <summary>
 /// EF-X701: a query filter that reads a list member of the context (<c>Foo == 1 ? Baz.Contains(e.Bar) : e.Bar == Bar</c>)
 /// threw <see cref="NullReferenceException"/> while building the pipeline whenever that list was unset, even when the

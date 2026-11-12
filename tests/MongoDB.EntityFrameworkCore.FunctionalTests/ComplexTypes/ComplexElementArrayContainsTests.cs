@@ -26,8 +26,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// <c>list.Contains(item)</c> over a primitive collection that is a member of a complex collection's element (#40), compared
 /// with an in-memory LINQ oracle over data that holds a NULL element, an element whose lists are missing or BSON null, an

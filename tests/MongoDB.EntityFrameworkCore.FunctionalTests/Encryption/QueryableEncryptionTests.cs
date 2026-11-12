@@ -362,7 +362,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.SSN, actual.SSN);
+                Assert.Equal(expected!.SSN, actual.SSN);
             }
         }
 
@@ -405,7 +405,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.Sequence, actual.Sequence);
+                Assert.Equal(expected!.Sequence, actual.Sequence);
             }
         }
 
@@ -457,7 +457,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.Balance, actual.Balance);
+                Assert.Equal(expected!.Balance, actual.Balance);
             }
         }
 
@@ -503,7 +503,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.DateOfBirth, actual.DateOfBirth);
+                Assert.Equal(expected!.DateOfBirth, actual.DateOfBirth);
             }
         }
 
@@ -543,7 +543,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.ExternalRef, actual.ExternalRef);
+                Assert.Equal(expected!.ExternalRef, actual.ExternalRef);
             }
         }
 
@@ -582,7 +582,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.ExternalObjectId, actual.ExternalObjectId);
+                Assert.Equal(expected!.ExternalObjectId, actual.ExternalObjectId);
             }
         }
 
@@ -621,7 +621,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.IsActive == actual.IsActive);
-                Assert.Equal(expected.IsActive, actual.IsActive);
+                Assert.Equal(expected!.IsActive, actual.IsActive);
                 Assert.Equal(expected.Id, actual.Id);
             }
         }
@@ -661,7 +661,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.LongTermCarePlan.Room, actual.LongTermCarePlan.Room);
+                Assert.Equal(expected!.LongTermCarePlan!.Room, actual.LongTermCarePlan!.Room);
                 Assert.Equal(expected.LongTermCarePlan.Instructions, actual.LongTermCarePlan.Instructions);
             }
         }
@@ -726,7 +726,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.LongTermCarePlan.Instructions, actual.LongTermCarePlan.Instructions);
+                Assert.Equal(expected!.LongTermCarePlan!.Instructions, actual.LongTermCarePlan!.Instructions);
             }
         }
 
@@ -768,7 +768,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.LongTermCarePlan.Room, actual.LongTermCarePlan.Room);
+                Assert.Equal(expected!.LongTermCarePlan!.Room, actual.LongTermCarePlan!.Room);
             }
         }
 
@@ -812,7 +812,7 @@ public class QueryableEncryptionTests(TemporaryDatabaseFixture database)
             foreach (var actual in db.Patients)
             {
                 var expected = samplePatients.FirstOrDefault(p => p.Id == actual.Id);
-                Assert.Equal(expected.SSN, actual.SSN);
+                Assert.Equal(expected!.SSN, actual.SSN);
             }
         }
 

@@ -19,8 +19,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// <c>ElementAt</c>, <c>ElementAtOrDefault</c> and <c>DefaultIfEmpty</c> read no projected VALUE, but after a projected whole
 /// complex value they stay refused with the whole-value message in every mode (documented as not supported): none of them has a native

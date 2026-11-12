@@ -22,8 +22,6 @@ using MongoDB.EntityFrameworkCore.Metadata.Conventions;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// The stored (raw BSON) shape of complex properties written by <c>SaveChanges</c> on insert.
 /// </summary>

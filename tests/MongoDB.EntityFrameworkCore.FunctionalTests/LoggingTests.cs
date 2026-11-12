@@ -502,13 +502,13 @@ public class LoggingTests(SampleGuidesFixture fixture, ITestOutputHelper testOut
 
     private static void AssertNoLogMessageForEventId(SpyLoggerProvider spyLogger, EventId eventId)
     {
-        var key = eventId.Name.Substring(0, eventId.Name.LastIndexOf('.'));
+        var key = eventId.Name!.Substring(0, eventId.Name.LastIndexOf('.'));
         var logger = spyLogger.Loggers.First(s => s.Key == key).Value;
         Assert.DoesNotContain(logger.Records, log => log.EventId == eventId);
     }
 
     private static string AssertSingleLogEntry(List<string> logs, EventId eventId)
-        => Assert.Single(logs, l => l.Contains(nameof(MongoEventId) + "." + eventId.Name.Split('.').Last()));
+        => Assert.Single(logs, l => l.Contains(nameof(MongoEventId) + "." + eventId.Name!.Split('.').Last()));
 
     // ContextInitialized logs the provider's informational version, which embeds the commit SHA, so a digit
     // sequence like "1901" can appear there regardless of what the query logs.

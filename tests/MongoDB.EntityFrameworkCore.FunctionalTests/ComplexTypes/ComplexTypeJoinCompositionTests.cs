@@ -24,8 +24,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Complex properties on the OUTER and the INNER side of <c>Join</c>, <c>GroupJoin</c>, left joins and <c>SelectMany</c>:
 /// complex leaves as join keys (alone and inside anonymous keys), in result selectors, in predicates on either side and

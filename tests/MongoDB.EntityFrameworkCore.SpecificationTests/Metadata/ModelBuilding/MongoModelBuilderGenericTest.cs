@@ -15,8 +15,6 @@
 
 #if !EF8
 
-#nullable enable
-
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ModelBuilding;
