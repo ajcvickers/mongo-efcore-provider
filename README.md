@@ -106,7 +106,22 @@ Entity Framework Core and MongoDB have a wide variety of features. This provider
   owner.Database.CommitTransaction(); // only the owner ends the transaction
   ```
 
-  - The transaction is not owned by the context that joins it: disposing it (or the context) only detaches, and `Commit`/`Rollback` on it, or `Database.CommitTransaction()`/`RollbackTransaction()` on the joining context, throw `InvalidOperationException`. Only the owner (or the code that supplied the session) commits or aborts
+  - The transaction is not owned by the context that joins it: disposing it (or the context) only detaches, and `Commit`/`Rollback` on it, or `Database.CommitTransaction()`/`RollbackTransaction()` on the joining context, throw `InvalidOperationException`. Only the owner (or the code that supplied the session) commits or aborts. This differs from relational providers, where `Commit`/`Rollback` on a transaction joined with `UseTransaction` act on it and only `Dispose` is skipped
+  - A joined context is detached by disposing the transaction `UseTransaction` returned (or by disposing the context); `UseTransaction(null)` is not supported
+  - Disposing a context rolls back a transaction that context started and has not committed or rolled back (as relational providers do), so contexts that joined it can no longer write; commit before disposing the owner
+  - With the driver's `session.WithTransaction(...)`, a retry (after a `TransientTransactionError`) aborts the transaction and starts a new one on the same session, and a context enlisted before the retry then throws `InvalidOperationException` ("is no longer active"); that exception carries no `TransientTransactionError` label, so the retry stops. Create the context and call `UseTransaction(session)` inside the callback, and dispose it with the callback:
+
+    ```csharp
+    session.WithTransaction((s, ct) =>
+    {
+        using var db = new BlogContext(blogOptions);
+        db.Database.UseTransaction(s); // enlist inside the callback, so every retry gets a fresh context
+        db.Blogs.Add(new Blog { Name = "Mongo" });
+        db.SaveChanges();
+        return 0;
+    });
+    ```
+
   - Once the owner commits or aborts, `SaveChanges`, queries and bulk `ExecuteUpdate`/`ExecuteDelete` on a joined context throw `InvalidOperationException` ("is no longer active") rather than silently running outside a transaction
   - MongoDB has no savepoints: a failed write aborts the whole transaction. The next operation (or, on a sharded cluster, possibly only the commit) fails with the server's `TransientTransactionError`, and nothing from the transaction becomes visible
   - Schema operations never take part in the transaction: `EnsureCreated`/`EnsureDeleted` and the collection and index creation they perform run outside it, are committed immediately and are not rolled back. Seed data written by `EnsureCreated` does join the transaction
