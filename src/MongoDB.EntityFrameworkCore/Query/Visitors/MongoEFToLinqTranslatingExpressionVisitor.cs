@@ -701,10 +701,10 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
     /// reads from. Returns false for shapes it doesn't recognize, so the caller falls back to default
     /// translation (and the original driver error).
     /// </summary>
-    private bool TryResolveDateTimeOffsetElementAccess(Expression expression, out Expression doc, out string elementName)
+    private bool TryResolveDateTimeOffsetElementAccess(Expression expression, [NotNullWhen(true)] out Expression? doc, [NotNullWhen(true)] out string? elementName)
     {
-        doc = null!;
-        elementName = null!;
+        doc = null;
+        elementName = null;
 
         if (expression is MemberExpression { Member.Name: "Value" } valueMember
             && Nullable.GetUnderlyingType(valueMember.Expression!.Type) == typeof(DateTimeOffset))
@@ -1110,9 +1110,9 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
     /// <c>b.Posts.Count</c>) into <c>Enumerable.Count</c> over a <c>??</c>-normalized array read, because the
     /// driver renders a bare Count as <c>$size</c>, which throws on a missing or null array.
     /// </summary>
-    private bool TryRewriteEmbeddedCollectionNavigationCount(MethodCallExpression node, out Expression result)
+    private bool TryRewriteEmbeddedCollectionNavigationCount(MethodCallExpression node, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         if (!IsBareQueryableCount(node))
         {
@@ -1178,9 +1178,9 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
     /// <c>c.Opt!.Any()</c> over a null one has no C# answer), as does anything that isn't a complex collection read off
     /// an entity. The same normalization the owned-collection Count rewrite (EF-358) applies, for the complex case.
     /// </remarks>
-    private bool TryRewriteRequiredComplexCollectionSource(MethodCallExpression node, out Expression result)
+    private bool TryRewriteRequiredComplexCollectionSource(MethodCallExpression node, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         // EF leaves a complex collection as a plain member access (`c.Addresses`); the EF.Property spelling is accepted too.
         // The owner is an entity (root or owned), a complex hop, or an element of another complex collection (a nested
@@ -1362,9 +1362,9 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor : System
                && d == typeof(Queryable);
     }
 
-    private bool TryRewriteCollectionNavigationCount(MethodCallExpression node, out Expression result)
+    private bool TryRewriteCollectionNavigationCount(MethodCallExpression node, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         if (!IsBareQueryableCount(node))
         {

@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -51,9 +52,9 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
     /// Only the correlation the binder staged the lookup for may read its array (re-verified by
     /// <see cref="TryResolveNavigationLookupArray"/>); any other subquery over that type is left alone and fails as it always did.
     /// </remarks>
-    private bool TryRewriteReferencedCollectionOperator(MethodCallExpression node, out Expression result)
+    private bool TryRewriteReferencedCollectionOperator(MethodCallExpression node, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         // A correlated subquery inside the lambda of another one (`c.Orders.Sum(o => o.Details.Sum(d => d.Qty))`) correlates with the
         // element, not the root document the arrays hang off, so it is never resolved here.
@@ -93,10 +94,10 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
     /// correlation (<c>GroupJoin(db.Rates.Where(f), ..)</c>) or after it. Two predicates that read the outer entity are ambiguous.
     /// </summary>
     private static bool TryFindCorrelationBase(
-        Expression chain, out MethodCallExpression correlationWhere, out EntityQueryRootExpression root)
+        Expression chain, [NotNullWhen(true)] out MethodCallExpression? correlationWhere, [NotNullWhen(true)] out EntityQueryRootExpression? root)
     {
-        correlationWhere = null!;
-        root = null!;
+        correlationWhere = null;
+        root = null;
 
         MethodCallExpression? candidate = null;
         var current = chain;
@@ -135,9 +136,9 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
     /// for its navigation, and builds the typed read of that array off the outer document.
     /// </summary>
     private bool TryResolveNavigationLookupArray(
-        MethodCallExpression correlationWhere, EntityQueryRootExpression rootExpression, out Expression array)
+        MethodCallExpression correlationWhere, EntityQueryRootExpression rootExpression, [NotNullWhen(true)] out Expression? array)
     {
-        array = null!;
+        array = null;
 
         // The outer document reference: the parameter that is NOT the inner Where lambda's parameter.
         var predicate = correlationWhere.Arguments[1].UnwrapLambdaFromQuote();
@@ -267,9 +268,9 @@ internal sealed partial class MongoEFToLinqTranslatingExpressionVisitor
         }
 
         /// <summary>The query root at the bottom of a chain of <see cref="ReferencedCollectionChainOperators"/>.</summary>
-        private static bool TryGetChainRoot(Expression chain, out EntityQueryRootExpression root)
+        private static bool TryGetChainRoot(Expression chain, [NotNullWhen(true)] out EntityQueryRootExpression? root)
         {
-            root = null!;
+            root = null;
 
             var current = chain;
             while (current is MethodCallExpression { Method: { DeclaringType: var declaring } method } call

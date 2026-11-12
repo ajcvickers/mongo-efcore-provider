@@ -261,7 +261,7 @@ internal static class NativeSelectManyBinder
     /// </remarks>
     private static bool TrySplitCorrelation(
         Expression predicateBody, IEntityType outerEntityType, ParameterExpression outerParam,
-        IEntityType targetEntityType, out INavigation navigation, out Expression? userBody)
+        IEntityType targetEntityType, [NotNullWhen(true)] out INavigation? navigation, out Expression? userBody)
     {
         userBody = null;
 
@@ -269,23 +269,29 @@ internal static class NativeSelectManyBinder
             return NativeCorrelationMatcher.TryMatchCorrelatedCollection(
                 predicateBody, outerEntityType, outerParam, targetEntityType, requireEmbedded: false, out navigation);
 
-        navigation = null!;
+        navigation = null;
         var conjuncts = predicateBody.RemoveConvert()!.FlattenAndAlso();
 
         Expression? fkConjunct = null;
+        INavigation? matchedNavigation = null;
         var rest = new List<Expression>();
         foreach (var conjunct in conjuncts)
         {
             if (fkConjunct == null
                 && NativeCorrelationMatcher.TryMatchCorrelatedCollection(
-                    conjunct, outerEntityType, outerParam, targetEntityType, requireEmbedded: false, out navigation))
+                    conjunct, outerEntityType, outerParam, targetEntityType, requireEmbedded: false, out var conjunctNavigation))
+            {
                 fkConjunct = conjunct;
+                matchedNavigation = conjunctNavigation;
+            }
             else
                 rest.Add(conjunct);
         }
 
-        if (fkConjunct == null)
+        if (fkConjunct == null || matchedNavigation == null)
             return false;
+
+        navigation = matchedNavigation;
 
         var userConjuncts = rest.Where(c => !IsCorrelationNullGuard(c, fkConjunct, outerParam)).ToList();
         if (userConjuncts.Count > 0)
@@ -560,13 +566,13 @@ internal static class NativeSelectManyBinder
     /// <summary>Translates a member access rooted on its scope's parameter with the outer or inner translator, prefixing an inner field with <paramref name="unwindPath"/>.</summary>
     private static bool TryTranslateScopedField(
         MongoExpressionTranslator outerTranslator, MongoExpressionTranslator innerTranslator,
-        string unwindPath, Expression memberAccess, bool isInner, out MongoFieldExpression field)
+        string unwindPath, Expression memberAccess, bool isInner, [NotNullWhen(true)] out MongoFieldExpression? field)
     {
         if (!isInner)
         {
             if (!outerTranslator.TryTranslateField(memberAccess, out var outerField))
             {
-                field = null!;
+                field = null;
                 return false;
             }
 
@@ -576,7 +582,7 @@ internal static class NativeSelectManyBinder
 
         if (!innerTranslator.TryTranslateField(memberAccess, out var innerField))
         {
-            field = null!;
+            field = null;
             return false;
         }
 

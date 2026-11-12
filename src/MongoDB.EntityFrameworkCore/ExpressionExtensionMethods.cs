@@ -263,7 +263,7 @@ internal static class ExpressionExtensionMethods
     /// <c>EF.Property&lt;T&gt;(root, "Name")</c> — yielding the receiver and name, so both spellings resolve
     /// identically wherever a member chain is walked.
     /// </summary>
-    internal static bool TryGetMemberOrEFProperty(this Expression expression, out Expression receiver, out string name)
+    internal static bool TryGetMemberOrEFProperty(this Expression expression, [NotNullWhen(true)] out Expression? receiver, [NotNullWhen(true)] out string? name)
     {
         switch (expression)
         {
@@ -280,8 +280,8 @@ internal static class ExpressionExtensionMethods
                 return true;
 
             default:
-                receiver = null!;
-                name = null!;
+                receiver = null;
+                name = null;
                 return false;
         }
     }

@@ -16,6 +16,7 @@
 #if !EF8 && !EF9
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
@@ -439,7 +440,7 @@ internal static class ComplexElementNullGuardRefusal
         // collection. NOT a string receiver: `hay.Contains(s.City)` is a substring test (`$indexOfCP`, a server error over a
         // missing member, possibly after earlier writes), and `Enumerable.Contains<char>` over a string tests a char; a
         // string is an IEnumerable<char> of a value type, which the bulk allow-list would take for a list that can't hold null.
-        private static bool TryGetContainsOperands(MethodCallExpression call, out Expression sequence, out Expression value)
+        private static bool TryGetContainsOperands(MethodCallExpression call, [NotNullWhen(true)] out Expression? sequence, [NotNullWhen(true)] out Expression? value)
         {
             switch (call)
             {
@@ -457,7 +458,7 @@ internal static class ComplexElementNullGuardRefusal
                     return true;
 
                 default:
-                    sequence = value = null!;
+                    sequence = value = null;
                     return false;
             }
         }
@@ -683,9 +684,9 @@ internal static class ComplexElementNullGuardRefusal
         // A mapped scalar (not a collection) read off a keyed complex element parameter, directly or through single complex
         // hops of the element (`s.City`, `s.Location.Lat`, EF.Property spellings), under converts. Resolved structurally
         // against the element's complex type(s).
-        private bool IsElementLeafRead(Expression expression, out IReadOnlyProperty leaf)
+        private bool IsElementLeafRead(Expression expression, [NotNullWhen(true)] out IReadOnlyProperty? leaf)
         {
-            leaf = null!;
+            leaf = null;
             var names = new List<string>();
             var current = expression.RemoveConvert()!;
             while (current.TryGetMemberOrEFProperty(out var receiver, out var name))

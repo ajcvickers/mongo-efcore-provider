@@ -13,10 +13,9 @@
  * limitations under the License.
  */
 
-#nullable disable
-
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -48,9 +47,9 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// </summary>
     private bool TryBindProjectedCollectionNavigation(
         MethodCallExpression methodCallExpression,
-        out Expression result)
+        [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         if (methodCallExpression.Method.DeclaringType != typeof(Enumerable)
             || methodCallExpression.Arguments.Count != 1)
@@ -114,25 +113,25 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         var lookup = new LookupExpression(navigation);
         ExtractFilteredIncludePipeline(selectCall.Arguments[0], lookup, targetEntityType);
         ExtractThenIncludesFromSubquery(selectCall, lookup);
-        _queryExpression.AddLookup(lookup);
+        QueryExpression.AddLookup(lookup);
 
         // On the native route, Visit(outerShaper) would hit VisitExtension's whole-root-entity leaf arm and, inside
         // VisitNew's per-argument loop, replace this member's array-leaf mapping with the whole entity: resolve the
         // EntityProjectionExpression directly. Other routes never reach that arm.
         _includedNavigations.Push(navigation);
         EntityProjectionExpression outerEntityProjection;
-        if (_queryExpression.Select.Route == NativeRoute.Projection)
+        if (QueryExpression.Select.Route == NativeRoute.Projection)
         {
             // FindOuterShaper only returns shapers bound by a ProjectionBindingExpression.
             var outerProjectionBinding = (ProjectionBindingExpression)outerShaper.ValueBufferExpression;
             if (outerProjectionBinding.Index is int existingOuterIndex
-                && outerProjectionBinding.QueryExpression == _queryExpression)
+                && outerProjectionBinding.QueryExpression == QueryExpression)
             {
-                outerEntityProjection = (EntityProjectionExpression)_queryExpression.Projection[existingOuterIndex].Expression;
+                outerEntityProjection = (EntityProjectionExpression)QueryExpression.Projection[existingOuterIndex].Expression;
             }
             else if (outerProjectionBinding.ProjectionMember is not null)
             {
-                outerEntityProjection = (EntityProjectionExpression)_queryExpression.GetMappedProjection(
+                outerEntityProjection = (EntityProjectionExpression)QueryExpression.GetMappedProjection(
                     outerProjectionBinding.ProjectionMember);
             }
             else
@@ -154,7 +153,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 return false;
             }
 
-            outerEntityProjection = (EntityProjectionExpression)_queryExpression.Projection[outerIndex].Expression;
+            outerEntityProjection = (EntityProjectionExpression)QueryExpression.Projection[outerIndex].Expression;
         }
 
         var lookupAlias = LookupExpression.GetLookupAlias(navigation);
@@ -173,7 +172,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             navigation,
             navigation.TargetEntityType.ClrType);
 
-        _queryExpression.AddToProjection(objectArrayProjection);
+        QueryExpression.AddToProjection(objectArrayProjection);
         _includedNavigations.Pop();
 
         result = collectionShaper;
@@ -190,9 +189,9 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// </summary>
     private bool TryBindProjectedCollectionNavigationCount(
         MethodCallExpression methodCallExpression,
-        out Expression result)
+        [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         if (methodCallExpression.Method.DeclaringType != typeof(Queryable)
             || methodCallExpression.Arguments.Count != 1)
@@ -236,7 +235,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         // Flagged so the EF-to-driver translator injects it right after the root source, before downstream stages that
         // read the _lookup_<Nav> array.
         var lookup = new LookupExpression(navigation) { InjectAfterRoot = true };
-        _queryExpression.AddLookup(lookup);
+        QueryExpression.AddLookup(lookup);
 
         // Keeping a plain MethodCallExpression in the mapping leaves the projection push-down-able
         // (ProjectionAnalyzer.CanPushDown stays true); the EF-to-driver translator rewrites it to $size.
@@ -265,7 +264,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// <summary>
     /// Unwrap a (possibly quoted) lambda selector, returning its body and single parameter.
     /// </summary>
-    private static Expression UnwrapLambdaBody(Expression selector, out ParameterExpression parameter)
+    private static Expression UnwrapLambdaBody(Expression selector, out ParameterExpression? parameter)
     {
         var unwrapped = selector.UnwrapQuote();
         if (unwrapped is LambdaExpression { Parameters: [var p] } lambda)
@@ -294,9 +293,9 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// outer entity we want), as opposed to any transient shaper introduced inside the subquery itself.
     /// Returns <see langword="null"/> when no such shaper is present.
     /// </summary>
-    private static StructuralTypeShaperExpression FindOuterShaper(Expression predicate)
+    private static StructuralTypeShaperExpression? FindOuterShaper(Expression predicate)
     {
-        StructuralTypeShaperExpression found = null;
+        StructuralTypeShaperExpression? found = null;
         var finder = new ShaperFinder(shaper =>
         {
             if (found == null && shaper.ValueBufferExpression is ProjectionBindingExpression)
@@ -342,7 +341,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// non-key outer member) would silently answer with the foreign-key rows. Same strict match as the native binders
     /// (<see cref="NativeTranslation.NativeCorrelationMatcher.TryMatchCorrelatedCollection"/>).
     /// </remarks>
-    internal static INavigation ResolveCollectionNavigation(
+    internal static INavigation? ResolveCollectionNavigation(
         StructuralTypeShaperExpression outerShaper,
         IEntityType outerEntityType,
         IEntityType targetEntityType,
@@ -408,7 +407,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// returns the pending forced-unwind <c>$lookup</c> (matched by alias) so the Include's <c>$lookup</c> can nest in its
     /// sub-pipeline; <see langword="null"/> leaves the caller's type-based matching in charge.
     /// </summary>
-    private LookupExpression TryGetDeclaringJoinLookup(IncludeExpression includeExpression)
+    private LookupExpression? TryGetDeclaringJoinLookup(IncludeExpression includeExpression)
     {
         var entityExpression = includeExpression.EntityExpression.UnwrapIncludes();
 
@@ -416,8 +415,8 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             {
                 ValueBufferExpression: ProjectionBindingExpression { Index: int index } binding
             }
-            || binding.QueryExpression != _queryExpression
-            || _queryExpression.Projection[index].Expression is not EntityProjectionExpression
+            || binding.QueryExpression != QueryExpression
+            || QueryExpression.Projection[index].Expression is not EntityProjectionExpression
             {
                 ParentAccessExpression: ObjectAccessExpression { AccessExpression: RootReferenceExpression } access
             }
@@ -426,7 +425,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             return null;
         }
 
-        return _queryExpression.GetPendingLookups().FirstOrDefault(l => l.As == access.Name && l.ShouldUnwind);
+        return QueryExpression.GetPendingLookups().FirstOrDefault(l => l.As == access.Name && l.ShouldUnwind);
     }
 
     /// <summary>
@@ -451,7 +450,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             && shaper.ValueBufferExpression is ProjectionBindingExpression binding
             && binding.Index is int idx)
         {
-            outerEntityProjection = (EntityProjectionExpression)_queryExpression.Projection[idx].Expression;
+            outerEntityProjection = (EntityProjectionExpression)QueryExpression.Projection[idx].Expression;
         }
         else
         {
@@ -476,7 +475,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             navigation,
             navigation.TargetEntityType.ClrType);
 
-        _queryExpression.AddToProjection(objectArrayProjection);
+        QueryExpression.AddToProjection(objectArrayProjection);
         _includedNavigations.Pop();
 
         return includeExpression.Update(visitedEntity, collectionShaper);
@@ -732,7 +731,8 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     {
         public bool ReferencesOuter { get; private set; }
 
-        public override Expression Visit(Expression node)
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
         {
             if (ReferencesOuter || node == null)
             {

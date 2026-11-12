@@ -1007,7 +1007,7 @@ internal static class NativeProjectionBinder
         Expression leafExpression,
         string alias,
         PendingProjectionStaging staged,
-        out MongoExpression result,
+        [NotNullWhen(true)] out MongoExpression? result,
         out bool isArrayLeaf,
         out bool isOwnedNavEntityLeaf,
         out bool throwsOnNull,
@@ -1045,7 +1045,7 @@ internal static class NativeProjectionBinder
         Expression leafExpression,
         string alias,
         PendingProjectionStaging staged,
-        out MongoExpression result,
+        [NotNullWhen(true)] out MongoExpression? result,
         out bool isArrayLeaf,
         out bool isOwnedNavEntityLeaf,
         bool allowWholeRootEntityLeaf = false)
@@ -1164,7 +1164,7 @@ internal static class NativeProjectionBinder
         if (TryTranslateProjectedCollectionCount(
                 mongoQ, outerParameter, leafExpression, staged, out var sizeExpression))
         {
-            result = sizeExpression!;
+            result = sizeExpression;
             return true;
         }
 
@@ -1175,7 +1175,7 @@ internal static class NativeProjectionBinder
             && TryTranslateProjectedCollectionCount(
                 mongoQ, outerParameter, countCall, staged, out var comparedSize))
         {
-            result = new MongoBinaryExpression(countOperator, comparedSize!, new MongoConstantExpression(countBound.Value, null));
+            result = new MongoBinaryExpression(countOperator, comparedSize, new MongoConstantExpression(countBound.Value, null));
             return true;
         }
 
@@ -1268,7 +1268,7 @@ internal static class NativeProjectionBinder
             return true;
         }
 
-        result = null!;
+        result = null;
         return false;
     }
 
@@ -1280,9 +1280,9 @@ internal static class NativeProjectionBinder
     private static bool TryRecognizeVectorScoreLeaf(
         Expression leafExpression,
         ParameterExpression outerParameter,
-        out Type scoreType)
+        [NotNullWhen(true)] out Type? scoreType)
     {
-        scoreType = null!;
+        scoreType = null;
 
         if (leafExpression is not MethodCallExpression call)
         {
@@ -1457,7 +1457,7 @@ internal static class NativeProjectionBinder
     /// <param name="navigation">The candidate navigation; <see langword="null"/> (e.g. a skip navigation) declines.</param>
     /// <param name="rootEntityType">The query root's entity type.</param>
     /// <param name="alias">The <c>$project</c> alias; both sides derive it from the same member name.</param>
-    internal static bool IsNativeArrayProjectionLeaf(INavigation? navigation, IEntityType rootEntityType, string? alias)
+    internal static bool IsNativeArrayProjectionLeaf([NotNullWhen(true)] INavigation? navigation, IEntityType rootEntityType, string? alias)
         => navigation is not null
            && navigation.IsEmbedded()
            && navigation.IsCollection
@@ -1989,7 +1989,7 @@ internal static class NativeProjectionBinder
     /// Admits a <see cref="MongoFieldExpression"/> (scalar or primitive collection) or <see cref="MongoElementRefExpression"/> (owned array leaf, vector-search <c>__score</c>). Dotted paths decline: the shaper
     /// looks a dotted alias up as a literal key while <c>$project</c> renders it nested. Computed leaves have no path and go to <see cref="TryDeriveSyntheticAlias"/>, whose correctness argument is the opposite.
     /// </remarks>
-    private static bool TryDeriveDocumentPathAlias(MongoExpression leaf, out string alias)
+    private static bool TryDeriveDocumentPathAlias(MongoExpression leaf, [NotNullWhen(true)] out string? alias)
     {
         switch (leaf)
         {
@@ -2002,7 +2002,7 @@ internal static class NativeProjectionBinder
                 return true;
 
             default:
-                alias = null!;
+                alias = null;
                 return false;
         }
     }
@@ -2033,9 +2033,9 @@ internal static class NativeProjectionBinder
         MongoExpression leaf,
         LambdaExpression selector,
         PendingProjectionStaging staged,
-        out string alias)
+        [NotNullWhen(true)] out string? alias)
     {
-        alias = null!;
+        alias = null;
 
         switch (leaf)
         {
@@ -2508,7 +2508,7 @@ internal static class NativeProjectionBinder
         ParameterExpression outerParameter,
         Expression leafExpression,
         PendingProjectionStaging staged,
-        out MongoExpression? result)
+        [NotNullWhen(true)] out MongoExpression? result)
     {
         result = null;
 

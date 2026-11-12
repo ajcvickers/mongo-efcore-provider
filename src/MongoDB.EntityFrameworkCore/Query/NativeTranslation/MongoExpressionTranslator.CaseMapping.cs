@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 
@@ -55,9 +56,9 @@ internal sealed partial class MongoExpressionTranslator
         return true;
     }
 
-    private static bool IsCaseMappingCall(Expression node, out Expression receiver, out bool toUpper)
+    private static bool IsCaseMappingCall(Expression node, [NotNullWhen(true)] out Expression? receiver, out bool toUpper)
     {
-        receiver = null!;
+        receiver = null;
         toUpper = false;
         if (Unwrap(node) is not MethodCallExpression call || !NativeCaseMapping.IsCaseMappingCall(call))
             return false;
