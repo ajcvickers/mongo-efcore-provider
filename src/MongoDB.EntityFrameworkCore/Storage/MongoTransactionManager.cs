@@ -141,6 +141,39 @@ public class MongoTransactionManager : IMongoTransactionManager
         }
     }
 
+    /// <inheritdoc />
+    public IDbContextTransaction UseTransaction(IClientSessionHandle session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        EnsureNoTransactions();
+        if (!session.IsInTransaction)
+        {
+            throw new InvalidOperationException(
+                "The supplied session does not have an active transaction. Start a transaction on the session with "
+                + "'StartTransaction' before enlisting a context in it.");
+        }
+
+        return CurrentTransaction = MongoTransaction.Enlist(
+            session, _context, "the code that supplied the session", this, _logger);
+    }
+
+    /// <inheritdoc />
+    public IDbContextTransaction UseTransaction(IDbContextTransaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+
+        EnsureNoTransactions();
+        if (transaction is not MongoTransaction owner)
+        {
+            throw new InvalidOperationException(
+                $"Only a MongoDB transaction can be shared with a MongoDB context, but a transaction of type '{transaction.GetType().Name}' was supplied.");
+        }
+
+        return CurrentTransaction = MongoTransaction.Enlist(
+            owner.ActiveSession, _context, owner.OwnerDescription, this, _logger);
+    }
+
     private IDbContextTransaction GetRequiredCurrentTransaction()
         => CurrentTransaction
            ?? throw new InvalidOperationException("No transaction is in progress. Call BeginTransaction to start a transaction.");

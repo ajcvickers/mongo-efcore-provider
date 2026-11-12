@@ -211,6 +211,41 @@ public static class MongoDatabaseFacadeExtensions
         CancellationToken cancellationToken = default)
         => GetMongoTransactionManager(databaseFacade).BeginTransactionAsync(transactionOptions, cancellationToken);
 
+    /// <summary>
+    /// Makes the context participate in the transaction already in progress on the supplied <paramref name="session"/>, so that its
+    /// writes and queries run inside that transaction. The caller that started the transaction remains responsible for committing or
+    /// aborting it and for disposing the session: committing or rolling back through the returned transaction or
+    /// the context is rejected, and disposing the returned transaction (or the context) only detaches the context from the transaction.
+    /// </summary>
+    /// <param name="databaseFacade">The <see cref="DatabaseFacade" /> for the context.</param>
+    /// <param name="session">A session on which a transaction has been started.</param>
+    /// <returns>The <see cref="IDbContextTransaction"/> through which the context participates in the transaction.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The context is already in a transaction, an ambient transaction exists,
+    /// or the session has no active transaction.</exception>
+    public static IDbContextTransaction UseTransaction(
+        this DatabaseFacade databaseFacade,
+        IClientSessionHandle session)
+        => GetMongoTransactionManager(databaseFacade).UseTransaction(session);
+
+    /// <summary>
+    /// Makes the context participate in a transaction started by another context (for example the other context's
+    /// <c>Database.CurrentTransaction</c>), so that its writes and queries run inside that transaction. The context that started the
+    /// transaction remains responsible for committing or rolling it back: committing or rolling back through the returned transaction
+    /// or this context is rejected, and disposing the returned transaction (or this context) only detaches it from the transaction.
+    /// If the owner ends the transaction, the next operation of this context throws.
+    /// </summary>
+    /// <param name="databaseFacade">The <see cref="DatabaseFacade" /> for the context.</param>
+    /// <param name="transaction">The transaction to participate in. It must be a transaction of a MongoDB context.</param>
+    /// <returns>The <see cref="IDbContextTransaction"/> through which the context participates in the transaction.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="transaction"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The context is already in a transaction, an ambient transaction exists,
+    /// <paramref name="transaction"/> is not a MongoDB transaction, or it is no longer active.</exception>
+    public static IDbContextTransaction UseTransaction(
+        this DatabaseFacade databaseFacade,
+        IDbContextTransaction transaction)
+        => GetMongoTransactionManager(databaseFacade).UseTransaction(transaction);
+
     private static IMongoTransactionManager GetMongoTransactionManager(DatabaseFacade databaseFacade)
         => (IMongoTransactionManager)((IDatabaseFacadeDependenciesAccessor)databaseFacade).Dependencies.TransactionManager;
 

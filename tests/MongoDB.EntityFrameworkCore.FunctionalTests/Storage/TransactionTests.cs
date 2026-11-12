@@ -15,6 +15,7 @@
 
 using System.Transactions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
@@ -829,5 +830,367 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         Assert.Null(db.Database.CurrentTransaction);
         await using var next = await db.Database.BeginTransactionAsync();
         await next.RollbackAsync();
+    }
+
+    private static IClientSessionHandle StartSessionWithTransaction(IMongoClient client)
+    {
+        var session = client.StartSession();
+        session.StartTransaction();
+        return session;
+    }
+
+    private sealed class StubTransaction : IDbContextTransaction
+    {
+        public Guid TransactionId { get; } = Guid.NewGuid();
+        public void Commit() { }
+        public void Rollback() { }
+        public void Dispose() { }
+        public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RollbackAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    [Fact]
+    public void UseTransaction_with_a_session_enlists_the_context_and_leaves_the_session_to_its_owner()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = StartSessionWithTransaction(database.Client);
+
+        using (var db = SingleEntityDbContext.Create(collection))
+        {
+            var transaction = db.Database.UseTransaction(session);
+            Assert.Same(transaction, db.Database.CurrentTransaction);
+
+            db.Entities.Add(new SimpleEntity { name = "enlisted" });
+            db.SaveChanges();
+
+            using var outsider = SingleEntityDbContext.Create(collection);
+            Assert.Equal(0, outsider.Entities.Count());
+        }
+
+        Assert.True(session.IsInTransaction);
+        session.CommitTransaction();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(1, check.Entities.Count());
+    }
+
+    [Fact]
+    public void Two_contexts_can_share_one_transaction_and_disposing_one_does_not_end_it()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+
+        using (var second = SingleEntityDbContext.Create(collection))
+        {
+            second.Database.UseTransaction(owner.Database.CurrentTransaction!);
+            second.Entities.Add(new SimpleEntity { name = "second" });
+            second.SaveChanges();
+        }
+
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        owner.SaveChanges();
+
+        using (var third = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, third.Entities.Count());
+        }
+
+        owner.Database.CommitTransaction();
+
+        using var fourth = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["owner", "second"], fourth.Entities.Select(e => e.name).OrderBy(n => n).ToList());
+    }
+
+    [Fact]
+    public void Rolling_back_the_owner_discards_writes_of_enlisted_contexts_and_their_next_SaveChanges_throws()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        enlisted.Entities.Add(new SimpleEntity { name = "enlisted" });
+        enlisted.SaveChanges();
+
+        owner.Database.RollbackTransaction();
+
+        using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, check.Entities.Count());
+        }
+
+        enlisted.Entities.Add(new SimpleEntity { name = "too-late" });
+        var ex = Assert.Throws<InvalidOperationException>(() => enlisted.SaveChanges());
+        Assert.Contains("is no longer active", ex.Message);
+
+        using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, check.Entities.Count());
+        }
+    }
+
+    [Fact]
+    public void Commit_and_Rollback_are_rejected_on_an_enlisted_transaction()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = StartSessionWithTransaction(database.Client);
+
+        using var db = SingleEntityDbContext.Create(collection);
+        var transaction = db.Database.UseTransaction(session);
+        db.Entities.Add(new SimpleEntity { name = "enlisted" });
+        db.SaveChanges();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => transaction.Commit());
+        Assert.Contains("not started by this context", ex.Message);
+        Assert.Contains("the code that supplied the session", ex.Message);
+        ex = Assert.Throws<InvalidOperationException>(() => transaction.Rollback());
+        Assert.Contains("not started by this context", ex.Message);
+        ex = Assert.Throws<InvalidOperationException>(() => db.Database.CommitTransaction());
+        Assert.Contains("not started by this context", ex.Message);
+        ex = Assert.Throws<InvalidOperationException>(() => db.Database.RollbackTransaction());
+        Assert.Contains("not started by this context", ex.Message);
+
+        Assert.Same(transaction, db.Database.CurrentTransaction);
+        Assert.True(session.IsInTransaction);
+
+        session.CommitTransaction();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(1, check.Entities.Count());
+    }
+
+    [Fact]
+    public async Task Commit_and_Rollback_are_rejected_on_an_enlisted_transaction_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        await using var owner = SingleEntityDbContext.Create(collection);
+        await owner.Database.BeginTransactionAsync();
+
+        await using var db = SingleEntityDbContext.Create(collection);
+        var transaction = db.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        db.Entities.Add(new SimpleEntity { name = "enlisted" });
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => transaction.CommitAsync());
+        Assert.Contains("not started by this context", ex.Message);
+        Assert.Contains(nameof(SingleEntityDbContext<SimpleEntity>), ex.Message);
+        Assert.Contains(owner.Database.CurrentTransaction!.TransactionId.ToString(), ex.Message);
+        ex = await Assert.ThrowsAsync<InvalidOperationException>(() => transaction.RollbackAsync());
+        Assert.Contains("not started by this context", ex.Message);
+        ex = await Assert.ThrowsAsync<InvalidOperationException>(() => db.Database.CommitTransactionAsync());
+        Assert.Contains("not started by this context", ex.Message);
+        ex = await Assert.ThrowsAsync<InvalidOperationException>(() => db.Database.RollbackTransactionAsync());
+        Assert.Contains("not started by this context", ex.Message);
+
+        Assert.Same(transaction, db.Database.CurrentTransaction);
+
+        await owner.Database.CommitTransactionAsync();
+
+        await using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(1, await check.Entities.CountAsync());
+    }
+
+    [Fact]
+    public void Disposing_the_returned_transaction_detaches_without_ending_the_session()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = StartSessionWithTransaction(database.Client);
+
+        using var db = SingleEntityDbContext.Create(collection);
+        using (db.Database.UseTransaction(session))
+        {
+            Assert.NotNull(db.Database.CurrentTransaction);
+        }
+
+        Assert.Null(db.Database.CurrentTransaction);
+        Assert.True(session.IsInTransaction);
+
+        // The context can enlist again, and the session is still usable by its owner.
+        using (db.Database.UseTransaction(session))
+        {
+        }
+
+        session.CommitTransaction();
+    }
+
+    [Fact]
+    public async Task Disposing_the_returned_transaction_detaches_without_ending_the_session_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = StartSessionWithTransaction(database.Client);
+
+        await using var db = SingleEntityDbContext.Create(collection);
+        await using (db.Database.UseTransaction(session))
+        {
+            Assert.NotNull(db.Database.CurrentTransaction);
+        }
+
+        Assert.Null(db.Database.CurrentTransaction);
+        Assert.True(session.IsInTransaction);
+
+        session.CommitTransaction();
+    }
+
+    [Fact]
+    public void UseTransaction_rejects_invalid_arguments_without_changing_state()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var db = SingleEntityDbContext.Create(collection);
+
+        // A session with no transaction in progress
+        using (var plainSession = database.Client.StartSession())
+        {
+            var ex = Assert.Throws<InvalidOperationException>(() => db.Database.UseTransaction(plainSession));
+            Assert.Contains("active transaction", ex.Message);
+            Assert.Null(db.Database.CurrentTransaction);
+        }
+
+        // A transaction that is not a MongoDB transaction
+        var stubEx = Assert.Throws<InvalidOperationException>(() => db.Database.UseTransaction(new StubTransaction()));
+        Assert.Contains("MongoDB transaction", stubEx.Message);
+        Assert.Null(db.Database.CurrentTransaction);
+
+        // Null arguments
+        Assert.Throws<ArgumentNullException>(() => db.Database.UseTransaction((IClientSessionHandle)null!));
+        Assert.Throws<ArgumentNullException>(() => db.Database.UseTransaction((IDbContextTransaction)null!));
+        Assert.Null(db.Database.CurrentTransaction);
+
+        // A transaction that has already ended
+        using (var ownerDb = SingleEntityDbContext.Create(collection))
+        {
+            var ended = ownerDb.Database.BeginTransaction();
+            ownerDb.Database.RollbackTransaction();
+
+            var ex = Assert.Throws<InvalidOperationException>(() => db.Database.UseTransaction(ended));
+            Assert.Contains("is no longer active", ex.Message);
+            Assert.Null(db.Database.CurrentTransaction);
+        }
+
+        // The context is already in a transaction
+        using var session = StartSessionWithTransaction(database.Client);
+        var own = db.Database.BeginTransaction();
+
+        var nestedEx = Assert.Throws<InvalidOperationException>(() => db.Database.UseTransaction(session));
+        Assert.Contains("already in a transaction", nestedEx.Message);
+        Assert.Same(own, db.Database.CurrentTransaction);
+
+        nestedEx = Assert.Throws<InvalidOperationException>(() => db.Database.UseTransaction(own));
+        Assert.Contains("already in a transaction", nestedEx.Message);
+        Assert.Same(own, db.Database.CurrentTransaction);
+
+        Assert.True(session.IsInTransaction);
+        session.AbortTransaction();
+        own.Rollback();
+    }
+
+    [Fact]
+    public void Contexts_on_different_client_instances_can_share_a_transaction()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        var otherClient = new MongoClient(database.Client.Settings.Clone());
+        var otherCollection = otherClient
+            .GetDatabase(collection.Database.DatabaseNamespace.DatabaseName)
+            .GetCollection<SimpleEntity>(collection.CollectionNamespace.CollectionName);
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+
+        using var second = SingleEntityDbContext.Create(otherCollection);
+        second.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        owner.SaveChanges();
+        second.Entities.Add(new SimpleEntity { name = "second" });
+        second.SaveChanges();
+
+        owner.Database.CommitTransaction();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["owner", "second"], check.Entities.Select(e => e.name).OrderBy(n => n).ToList());
+    }
+
+    [Fact]
+    public void Enlisted_context_queries_run_inside_the_shared_transaction()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        owner.Entities.Add(new SimpleEntity { name = "uncommitted" });
+        owner.SaveChanges();
+
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        Assert.Equal(1, enlisted.Entities.Count());
+
+        using (var outsider = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, outsider.Entities.Count());
+        }
+
+        owner.Database.RollbackTransaction();
+    }
+
+#if !EF8
+    [Fact]
+    public void Enlisted_context_bulk_deletes_run_inside_the_shared_transaction()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        collection.InsertMany([new SimpleEntity { name = "committed-1" }, new SimpleEntity { name = "committed-2" }]);
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        owner.Entities.Add(new SimpleEntity { name = "uncommitted" });
+        owner.SaveChanges();
+
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        Assert.Equal(3, enlisted.Entities.ExecuteDelete());
+        Assert.Equal(0, enlisted.Entities.Count());
+
+        using (var outsider = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(2, outsider.Entities.Count());
+        }
+
+        owner.Database.RollbackTransaction();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["committed-1", "committed-2"], check.Entities.Select(e => e.name).OrderBy(n => n).ToList());
+    }
+#endif
+
+    [Fact]
+    public void A_failed_write_in_a_shared_transaction_aborts_it_and_nothing_is_persisted()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        var id = ObjectId.GenerateNewId();
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        owner.Entities.Add(new SimpleEntity { _id = id, name = "a" });
+        owner.SaveChanges();
+
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        enlisted.Entities.Add(new SimpleEntity { _id = id, name = "duplicate" });
+        Assert.ThrowsAny<Exception>(() => enlisted.SaveChanges());
+
+        // The server aborted the transaction. The provider can not know that, so the server's own error must surface unchanged.
+        owner.Entities.Add(new SimpleEntity { name = "b" });
+        var ex = Assert.Throws<MongoCommandException>(() => owner.SaveChanges());
+        Assert.Contains("TransientTransactionError", ex.ErrorLabels);
+        Assert.DoesNotContain("is no longer active", ex.Message);
+
+        Assert.ThrowsAny<Exception>(() => owner.Database.CommitTransaction());
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(0, check.Entities.Count());
     }
 }

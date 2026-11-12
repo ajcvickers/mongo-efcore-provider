@@ -43,4 +43,29 @@ public interface IMongoTransactionManager : IDbContextTransactionManager
     /// <returns>A task that represents the asynchronous operation. The task result contains the newly begun <see cref="IDbContextTransaction"/>.</returns>
     /// <exception cref="OperationCanceledException">If the <see cref="CancellationToken" /> is canceled.</exception>
     Task<IDbContextTransaction> BeginTransactionAsync(TransactionOptions transactionOptions, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Makes the context participate in the transaction already in progress on the supplied <paramref name="session"/>.
+    /// The context's writes and queries use that transaction, but the caller that started it remains responsible for committing or
+    /// aborting it and for disposing the session. Committing, rolling back or disposing the returned transaction never ends it:
+    /// commit and rollback are rejected, and disposal only detaches the context from the transaction.
+    /// </summary>
+    /// <param name="session">A session on which a transaction has been started.</param>
+    /// <returns>The <see cref="IDbContextTransaction"/> through which the context participates in the transaction.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The context is already in a transaction, an ambient transaction exists,
+    /// or the session has no active transaction.</exception>
+    IDbContextTransaction UseTransaction(IClientSessionHandle session);
+
+    /// <summary>
+    /// Makes the context participate in a transaction started by another context, which remains responsible for committing or aborting
+    /// it. Committing, rolling back or disposing the returned transaction never ends it: commit and rollback are rejected, and
+    /// disposal only detaches the context from the transaction.
+    /// </summary>
+    /// <param name="transaction">A <see cref="MongoTransaction"/>, such as the <c>CurrentTransaction</c> of another context.</param>
+    /// <returns>The <see cref="IDbContextTransaction"/> through which the context participates in the transaction.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="transaction"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The context is already in a transaction, an ambient transaction exists,
+    /// <paramref name="transaction"/> is not a <see cref="MongoTransaction"/>, or it is no longer active.</exception>
+    IDbContextTransaction UseTransaction(IDbContextTransaction transaction);
 }
