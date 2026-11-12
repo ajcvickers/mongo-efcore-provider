@@ -367,11 +367,11 @@ public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongo
 
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X101")]
     public new Task Reload_when_entity_deleted_in_store_can_happen_for_any_state(global::Microsoft.EntityFrameworkCore.EntityState state, bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 
     public override Task Scalar_current_values_can_be_accessed_as_a_non_generic_property_dictionary()
@@ -652,20 +652,20 @@ public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongo
 
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalFact(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X101")]
     public new Task Store_values_really_are_store_values_not_current_or_original_values()
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalFact(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X101")]
     public new Task Store_values_really_are_store_values_not_current_or_original_values_async()
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 
     public override void Using_bad_IProperty_instances_throws()
@@ -692,11 +692,11 @@ public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongo
 
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X101")]
     public new Task Values_can_be_reloaded_from_database_for_entity_in_any_state(global::Microsoft.EntityFrameworkCore.EntityState state, bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 
 #if (EF10 || EF11) || EF9

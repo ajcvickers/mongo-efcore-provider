@@ -1,0 +1,60 @@
+# Dependabot version updates. This fork's default branch is `release`, so updates target it directly.
+# See https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # NuGet packages. Package versions live in Versions.props (EF Core, MongoDB.Driver), tests/Directory.Build.props
+  # and the individual project files; the solution at the root pulls all of them in.
+  - package-ecosystem: "nuget"
+    directory: "/"
+    target-branch: "release"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "Deps"
+    groups:
+      # EF Core 8, 9, 10 and 11 ship in parallel (one property per major in Versions.props), so keep each package
+      # on its own major line. Within a line, take patch and minor updates together.
+      ef-core:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+      mongodb-driver:
+        patterns:
+          - "MongoDB.Driver*"
+      xunit:
+        patterns:
+          - "xunit*"
+      test-tooling:
+        patterns:
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.*"
+          - "JunitXml.TestLogger"
+          - "Testcontainers*"
+    ignore:
+      # Never jump an EF Core line to the next major: EF8Version, EF9Version, EF10Version and EF11Version are separate
+      # supported targets, and the next EF Core major is a deliberate port, not a dependency bump.
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      # xunit.v3 4.x only runs under Microsoft.Testing.Platform, which `dotnet test` on the SDK 10 rejects for the
+      # UnitTests and FunctionalTests projects (see AGENTS.md). The EF11 spec tests pin 4.x by hand.
+      - dependency-name: "xunit.v3"
+        update-types: ["version-update:semver-major"]
+
+  # Actions used by the workflows in .github/workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "release"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "Deps"
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -140,40 +140,40 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #if (EF10 || EF11)
 #if !EF11
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X108")]
     public new Task Ignore_before_save_property_is_still_generated(bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #elif EF9
 #if !EF11
     // Fails: Cross-collection query not translated on EF8/EF9 (works on EF10) EF-X020 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X020")]
     public new Task Ignore_before_save_property_is_still_generated(bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #endif
 
 #if (EF10 || EF11)
 #if !EF11
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X105")]
     public new Task Ignore_before_save_property_is_still_generated_graph(bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #elif EF9
 #if !EF11
     // Fails: Cross-collection query not translated on EF8/EF9 (works on EF10) EF-X020 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X020")]
     public new Task Ignore_before_save_property_is_still_generated_graph(bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #endif
 
@@ -227,20 +227,20 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X101")]
     public new Task SaveChanges_false_processes_all_tracked_entities_without_calling_AcceptAllChanges(bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X101")]
     public new Task SaveChanges_processes_all_tracked_entities(bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 
 #if (EF10 || EF11) || EF9

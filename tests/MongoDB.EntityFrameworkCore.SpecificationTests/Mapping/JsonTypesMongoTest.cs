@@ -259,6 +259,16 @@ public class JsonTypesMongoTest
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_char_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
+#if EF11
+    // Fails: Property type (collection of non-primitive/exotic element, geometry) cannot be mapped by the provider EF-X316 (new in the EF Core 11.0.0 package)
+    public override void Can_read_write_collection_of_nullable_int_with_null_returning_converter(bool existingCollection)
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_write_collection_of_nullable_int_with_null_returning_converter(existingCollection), "The 'List<int?>' property 'NullableInt32CollectionType.Int32' could");
+
+    // Fails: Property type (collection of non-primitive/exotic element, geometry) cannot be mapped by the provider EF-X316 (new in the EF Core 11.0.0 package)
+    public override void Can_read_write_collection_of_nullable_struct_with_null_returning_converter(bool existingCollection)
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_write_collection_of_nullable_struct_with_null_returning_converter(existingCollection), "The 'IList<DddId?>' property 'NullableDddIdCollectionType.DddId' could");
+#endif
+
 #if (EF10 || EF11) || EF9
     // Fails: Property type (collection of non-primitive/exotic element, geometry) cannot be mapped by the provider EF-X316
     public override Task Can_read_write_collection_of_DateOnly_JSON_values()
@@ -1413,181 +1423,181 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_DateOnly_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_DateOnly_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateOnly_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_DateOnly_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_DateOnly_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateOnly_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_DateOnly_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_DateOnly_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateOnly_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_DateOnly_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_DateOnly_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateOnly_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_DateTimeOffset_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_DateTimeOffset_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateTimeOffset_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_DateTimeOffset_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_DateTimeOffset_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateTimeOffset_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_DateTimeOffset_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_DateTimeOffset_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateTimeOffset_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_DateTimeOffset_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_DateTimeOffset_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateTimeOffset_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_DateTime_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_DateTime_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateTime_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_DateTime_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_DateTime_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateTime_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_DateTime_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_DateTime_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateTime_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_DateTime_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_DateTime_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_DateTime_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_GUID_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_GUID_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_GUID_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_GUID_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_GUID_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_GUID_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_IP_address_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_IP_address_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_IP_address_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_IP_address_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_IP_address_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_IP_address_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_IP_address_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_IP_address_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_IP_address_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_IP_address_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_IP_address_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_IP_address_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_TimeOnly_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_TimeOnly_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_TimeOnly_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_TimeOnly_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_TimeOnly_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_TimeOnly_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_TimeOnly_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_TimeOnly_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_TimeOnly_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_TimeOnly_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_TimeOnly_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_TimeOnly_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_TimeSpan_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_TimeSpan_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_TimeSpan_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_TimeSpan_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_TimeSpan_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_TimeSpan_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_TimeSpan_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_TimeSpan_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_TimeSpan_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_TimeSpan_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_TimeSpan_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_TimeSpan_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_URI_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_URI_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_URI_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_URI_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_URI_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_URI_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_URI_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_URI_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_URI_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_URI_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_URI_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_URI_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_as_string_GUID_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_as_string_GUID_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_as_string_GUID_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_as_string_GUID_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_as_string_GUID_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_as_string_GUID_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_binary_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_binary_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_binary_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_binary_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_binary_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_binary_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_binary_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_binary_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_binary_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_binary_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_binary_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_binary_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -1633,21 +1643,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_byte_enum_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_byte_enum_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_byte_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_byte_enum_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_byte_enum_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_byte_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_byte_enum_as_string_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_byte_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_byte_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_byte_enum_as_string_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_byte_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_byte_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -1683,21 +1693,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_decimal_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_decimal_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_decimal_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_decimal_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_decimal_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_decimal_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_decimal_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_decimal_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_decimal_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_decimal_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_decimal_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_decimal_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -1763,21 +1773,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_int_enum_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_int_enum_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_int_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_int_enum_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_int_enum_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_int_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_int_enum_as_string_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_int_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_int_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_int_enum_as_string_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_int_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_int_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -1823,21 +1833,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_long_enum_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_long_enum_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_long_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_long_enum_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_long_enum_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_long_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_long_enum_as_string_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_long_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_long_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_long_enum_as_string_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_long_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_long_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -1863,21 +1873,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_physical_address_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_physical_address_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_physical_address_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_physical_address_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_physical_address_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_physical_address_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_physical_address_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_physical_address_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_physical_address_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_physical_address_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_physical_address_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_physical_address_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -1943,21 +1953,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_sbyte_enum_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_sbyte_enum_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_sbyte_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_sbyte_enum_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_sbyte_enum_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_sbyte_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_sbyte_enum_as_string_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_sbyte_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_sbyte_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_sbyte_enum_as_string_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_sbyte_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_sbyte_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -1983,41 +1993,41 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_short_enum_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_short_enum_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_short_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_short_enum_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_short_enum_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_short_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_short_enum_as_string_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_short_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_short_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_short_enum_as_string_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_short_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_short_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_string_as_string_JSON_values(string value, string json)
+    public override Task Can_read_write_nullable_string_as_string_JSON_values(string? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_string_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_string_as_string_JSON_values(string value, string json)
+    public override void Can_read_write_nullable_string_as_string_JSON_values(string? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_string_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -2043,21 +2053,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_uint_enum_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_uint_enum_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_uint_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_uint_enum_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_uint_enum_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_uint_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_uint_enum_as_string_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_uint_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_uint_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_uint_enum_as_string_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_uint_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_uint_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -2083,21 +2093,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_ulong_enum_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_ulong_enum_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_ulong_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_ulong_enum_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_ulong_enum_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_ulong_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_ulong_enum_as_string_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_ulong_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_ulong_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_ulong_enum_as_string_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_ulong_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_ulong_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
@@ -2123,21 +2133,21 @@ public class JsonTypesMongoTest
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_ushort_enum_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_ushort_enum_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_ushort_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_ushort_enum_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_ushort_enum_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_ushort_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override Task Can_read_write_nullable_ushort_enum_as_string_JSON_values(object value, string json)
+    public override Task Can_read_write_nullable_ushort_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.AsyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_ushort_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
     // Fails (some data rows): NullReferenceException in JSON type round-trip (not triaged) EF-X317
-    public override void Can_read_write_nullable_ushort_enum_as_string_JSON_values(object value, string json)
+    public override void Can_read_write_nullable_ushort_enum_as_string_JSON_values(object? value, string json)
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Can_read_write_nullable_ushort_enum_as_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 

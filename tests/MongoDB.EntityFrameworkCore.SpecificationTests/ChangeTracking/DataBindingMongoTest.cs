@@ -43,11 +43,11 @@ public class DataBindingMongoTest(DataBindingMongoTest.DataBindingMongoFixture f
     [ConditionalTheory(Skip = "Base test is non-virtual; fails with InvalidCastException (DriverProxy to TestDriver) because the base proxy type is created for derived-type documents, EF-X216")]
     [InlineData(false)]
     [InlineData(true)]
-#pragma warning disable xUnit1024
+#pragma warning disable xUnit1024, xUnit1026
     public new void LocalView_is_initialized_with_entities_from_the_context(bool toObservableCollection)
     {
     }
-#pragma warning restore xUnit1024
+#pragma warning restore xUnit1024, xUnit1026
 #endif
 
     public override void Entities_materialized_into_context_are_reflected_in_local_view(bool toObservableCollection)

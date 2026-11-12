@@ -251,7 +251,7 @@ CustomerGroup.{ "$lookup" : { "from" : "Customer", "localField" : "RequiredCusto
         await AssertQuery(
             async,
             ss => from cg in ss.Set<CustomerGroup>() select cg.OptionalCustomer.ShippingAddress,
-            e => e?.ZipCode,
+            e => e?.ZipCode!,
             assertOrder: false);
 
         AssertMql(
@@ -578,7 +578,7 @@ ValuedCustomerGroup.{ "$lookup" : { "from" : "ValuedCustomer", "localField" : "R
             async,
             ss => from cg in ss.Set<ValuedCustomerGroup>()
                   select cg.OptionalCustomer == null ? (AddressStruct?)null : cg.OptionalCustomer.ShippingAddress,
-            e => e?.ZipCode,
+            e => e?.ZipCode!,
             assertOrder: false);
 
         AssertMql(

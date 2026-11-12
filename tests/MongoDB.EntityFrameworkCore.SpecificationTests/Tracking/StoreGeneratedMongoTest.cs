@@ -64,64 +64,64 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
 #if (EF10 || EF11) || EF9
 #if EF11
     // Fails: Other unexpected exception from query execution EF-X605 (non-deterministic: depends on the graph traversal order) EF-X721
-    public override Task After_save_ignore_ignores_value_even_if_modified(string propertyName, string expectedValue)
+    public override Task After_save_ignore_ignores_value_even_if_modified(string propertyName, string? expectedValue)
         => SpecFails.AnyOutcomeAsync(() => base.After_save_ignore_ignores_value_even_if_modified(propertyName, expectedValue));
 #else
     // Fails: Query translates natively but returns different data than the expected result EF-X600
-    public override Task After_save_ignore_ignores_value_even_if_modified(string propertyName, string expectedValue)
+    public override Task After_save_ignore_ignores_value_even_if_modified(string propertyName, string? expectedValue)
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.After_save_ignore_ignores_value_even_if_modified(propertyName, expectedValue));
 #endif
 #elif EF8
     // Fails: Query translates natively but returns different data than the expected result EF-X600
-    public override void After_save_ignore_ignores_value_even_if_modified(string propertyName, string expectedValue)
+    public override void After_save_ignore_ignores_value_even_if_modified(string propertyName, string? expectedValue)
         => SpecFails.Throws<global::Xunit.Sdk.EqualException>(() => base.After_save_ignore_ignores_value_even_if_modified(propertyName, expectedValue));
 #endif
 
 #if (EF10 || EF11) || EF9
 #if EF11
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
-    public override Task After_save_ignore_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override Task After_save_ignore_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.AnyOutcomeAsync(() => base.After_save_ignore_ignores_value_if_not_modified(propertyName, expectedValue), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
     // Fails: Other unexpected exception from query execution EF-X605
-    public override Task After_save_ignore_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override Task After_save_ignore_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.After_save_ignore_ignores_value_if_not_modified(propertyName, expectedValue), string.Empty);
 #endif
 #elif EF8
     // Fails: Other unexpected exception from query execution EF-X605
-    public override void After_save_ignore_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override void After_save_ignore_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.After_save_ignore_ignores_value_if_not_modified(propertyName, expectedValue), string.Empty);
 #endif
 
 #if (EF10 || EF11) || EF9
 #if EF11
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
-    public override Task After_save_throw_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override Task After_save_throw_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.AnyOutcomeAsync(() => base.After_save_throw_ignores_value_if_not_modified(propertyName, expectedValue), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
     // Fails: Other unexpected exception from query execution EF-X605
-    public override Task After_save_throw_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override Task After_save_throw_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.After_save_throw_ignores_value_if_not_modified(propertyName, expectedValue), string.Empty);
 #endif
 #elif EF8
     // Fails: Other unexpected exception from query execution EF-X605
-    public override void After_save_throw_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override void After_save_throw_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.After_save_throw_ignores_value_if_not_modified(propertyName, expectedValue), string.Empty);
 #endif
 
 #if (EF10 || EF11) || EF9
 #if EF11
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
-    public override Task After_save_use_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override Task After_save_use_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.AnyOutcomeAsync(() => base.After_save_use_ignores_value_if_not_modified(propertyName, expectedValue), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
     // Fails: Other unexpected exception from query execution EF-X605
-    public override Task After_save_use_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override Task After_save_use_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.After_save_use_ignores_value_if_not_modified(propertyName, expectedValue), string.Empty);
 #endif
 #elif EF8
     // Fails: Other unexpected exception from query execution EF-X605
-    public override void After_save_use_ignores_value_if_not_modified(string propertyName, string expectedValue)
+    public override void After_save_use_ignores_value_if_not_modified(string propertyName, string? expectedValue)
         => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.After_save_use_ignores_value_if_not_modified(propertyName, expectedValue), string.Empty);
 #endif
 
@@ -302,11 +302,11 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
 #if (EF10 || EF11) || EF9
 #if EF11
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
-    public override Task Before_save_ignore_ignores_value_even_if_set(string propertyName, string expectedValue)
+    public override Task Before_save_ignore_ignores_value_even_if_set(string propertyName, string? expectedValue)
         => SpecFails.AnyOutcomeAsync(() => base.Before_save_ignore_ignores_value_even_if_set(propertyName, expectedValue), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
     // Fails: Query translates natively but returns different data than the expected result EF-X600
-    public override Task Before_save_ignore_ignores_value_even_if_set(string propertyName, string expectedValue)
+    public override Task Before_save_ignore_ignores_value_even_if_set(string propertyName, string? expectedValue)
         => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Before_save_ignore_ignores_value_even_if_set(propertyName, expectedValue));
 #endif
 #elif EF8
@@ -318,11 +318,11 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
 #if (EF10 || EF11) || EF9
 #if EF11
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
-    public override Task Before_save_ignore_ignores_value_if_not_set(string propertyName, string expectedValue)
+    public override Task Before_save_ignore_ignores_value_if_not_set(string propertyName, string? expectedValue)
         => SpecFails.AnyOutcomeAsync(() => base.Before_save_ignore_ignores_value_if_not_set(propertyName, expectedValue), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
     // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Before_save_ignore_ignores_value_if_not_set(string propertyName, string expectedValue)
+    public override Task Before_save_ignore_ignores_value_if_not_set(string propertyName, string? expectedValue)
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Before_save_ignore_ignores_value_if_not_set(propertyName, expectedValue), string.Empty);
 #endif
 #elif EF8
@@ -334,11 +334,11 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
 #if (EF10 || EF11) || EF9
 #if EF11
     // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
-    public override Task Before_save_throw_ignores_value_if_not_set(string propertyName, string expectedValue)
+    public override Task Before_save_throw_ignores_value_if_not_set(string propertyName, string? expectedValue)
         => SpecFails.AnyOutcomeAsync(() => base.Before_save_throw_ignores_value_if_not_set(propertyName, expectedValue), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
     // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Before_save_throw_ignores_value_if_not_set(string propertyName, string expectedValue)
+    public override Task Before_save_throw_ignores_value_if_not_set(string propertyName, string? expectedValue)
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Before_save_throw_ignores_value_if_not_set(propertyName, expectedValue), string.Empty);
 #endif
 #elif EF8
@@ -365,7 +365,7 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
 #if EF11
 #if EF11
     // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Before_save_use_ignores_value_if_not_set(string propertyName, string expectedValue)
+    public override Task Before_save_use_ignores_value_if_not_set(string propertyName, string? expectedValue)
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Before_save_use_ignores_value_if_not_set(propertyName, expectedValue), string.Empty);
 #else
     // Fails: Other unexpected exception from query execution EF-X605
@@ -374,52 +374,52 @@ public class StoreGeneratedMongoTest(StoreGeneratedMongoTest.StoreGeneratedMongo
 #endif
 #else
     // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Before_save_use_ignores_value_if_not_set(string propertyName, string expectedValue)
+    public override Task Before_save_use_ignores_value_if_not_set(string propertyName, string? expectedValue)
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Before_save_use_ignores_value_if_not_set(propertyName, expectedValue), string.Empty);
 #endif
 #elif EF8
     // Fails: Other unexpected exception from query execution EF-X605
-    public override void Before_save_use_ignores_value_if_not_set(string propertyName, string expectedValue)
+    public override void Before_save_use_ignores_value_if_not_set(string propertyName, string? expectedValue)
         => SpecFails.SyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.Before_save_use_ignores_value_if_not_set(propertyName, expectedValue), string.Empty);
 #endif
 
 #if (EF10 || EF11) || EF9
 #if !EF11
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X108")]
     public new Task Change_state_of_entity_with_temp_non_key_does_not_throw(global::Microsoft.EntityFrameworkCore.EntityState targetState)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #elif EF8
 #if !EF11
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X108")]
     public new void Change_state_of_entity_with_temp_non_key_does_not_throw(global::Microsoft.EntityFrameworkCore.EntityState targetState)
     { }
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #endif
 
 #if (EF10 || EF11) || EF9
 #if !EF11
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalFact(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X108")]
     public new Task Clearing_optional_FK_does_not_leave_temporary_value()
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #elif EF8
 #if !EF11
     // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalFact(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X108")]
     public new void Clearing_optional_FK_does_not_leave_temporary_value()
     { }
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #endif
 

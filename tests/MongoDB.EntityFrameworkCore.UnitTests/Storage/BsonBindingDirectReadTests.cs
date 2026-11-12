@@ -125,7 +125,7 @@ public class BsonBindingDirectReadTests
         AssertSameAsDriver<double>(new BsonInt64(7));
         AssertSameAsDriver<bool>(new BsonInt32(1));
         AssertSameAsDriver<string>(new BsonInt32(7));          // the driver throws
-        AssertSameAsDriver<string>(BsonSymbolTable.Lookup("sym"));
+        AssertSameAsDriver<string>((BsonSymbol)"sym");
         AssertSameAsDriver<ObjectId>(new BsonString(ObjectId.GenerateNewId().ToString()));
     }
 
