@@ -1,82 +1,49 @@
 ---
 name: test-all
-description: Build and run tests against all four EF version targets (EF8, EF9, EF10, EF11)
-argument-hint: "[optional: test filter or project name] [--model haiku|sonnet|opus] [--native]"
-allowed-tools: Bash(dotnet *), Bash(docker info), Bash(printenv:*), Read, Glob, Grep, Agent
+description: Build and run the tests for EF8, EF9, EF10 and EF11 in both Default and NativeOnly query modes (8 parallel runs, each test process in its own Docker container) via test-all.sh
+argument-hint: "[--versions 10,11] [--mode both|default|native] [--projects unit,functional,spec] [--filter TEXT] [--parallel N] [--no-build]"
+allowed-tools: Bash(bash ./test-all.sh), Bash(bash ./test-all.sh *), Read, Glob, Grep
 ---
 
 # Test All EF Versions
 
-`$SLN` = `{working directory}/MongoDB.EFCoreProvider.sln`
+All the work is done by `test-all.sh` / `test-all.cmd` in the repository root (a thin wrapper over `tests/tools/test-all.py`).
+The same script runs from any command prompt without this skill, so **do not re-implement any of it here**: no sub-agents, no
+hand-built `dotnet` command lines, no log scraping, no adding up of counts. The script reads TRX result files, which is why
+its numbers are the ones to report.
 
-## Arguments
+By default it runs **8 runs in parallel** — EF8, EF9, EF10, EF11 × Default and NativeOnly (`MONGODB_EF_QUERY_MODE=NativeOnly`,
+the native translator with no driver-LINQ fallback; CI runs it and it must have no failures) — each running UnitTests,
+FunctionalTests and SpecificationTests. Every test process starts its own MongoDB Atlas Local container, and the script
+clears `MONGODB_URI`/`ATLAS_URI` so no run touches a shared server. It also fetches `crypt_shared` + `mongocryptd` so the
+encryption tests run. EF11's SpecificationTests are run as an executable (xUnit v3 4.x cannot run under `dotnet test`); the
+script handles that.
 
-Parse `$ARGUMENTS`:
-1. `--model <model>`: extract and remove it; use it as the `model` for spawned agents (default `haiku`).
-2. `--native`: extract and remove it; set `NATIVE = true`. Each version then runs a second test pass with `MONGODB_EF_QUERY_MODE=NativeOnly` (the native translator with no driver-LINQ fallback; CI runs this mode too, and it must have no failures). Default `false`.
-3. Remaining text is an optional filter: empty runs everything on all four versions; a project name (e.g. "UnitTests") runs only that project; otherwise pass it via `--filter`.
+## Run it
 
-## Phase 1: Pre-flight (must pass first)
+`$ARGUMENTS` are passed through unchanged (`--help` lists them). Common ones: `--versions 10,11`, `--mode native`,
+`--projects unit,functional` (skips the long SpecificationTests), `--filter <text or VSTest expression>`, `--parallel N` on a
+small machine, `--no-build`, `--shared-db` (use `MONGODB_URI`; runs serially).
 
-A variable is a **real external database** only if it is set, not empty/whitespace, and not `"Disabled"` (case-insensitive; that is the skip-Atlas sentinel). This mirrors `TestServer.GetOrInitialize`.
+1. Run it **in the background** (Bash `run_in_background: true`), because a full run takes far longer than the 10-minute
+   foreground limit of the Bash tool:
 
-1. `dotnet --list-sdks` must show a 10.x SDK and an 11.x SDK, else stop: "net10.0 / net11.0 SDK is not installed."
-2. `docker info` succeeds OR `MONGODB_URI` (via `printenv`) is a real external database, else stop: "No database available. Start Docker or set `MONGODB_URI`." `ATLAS_URI` alone does not satisfy this: the default server every test uses comes from `MONGODB_URI` or a testcontainer.
-3. `SHARED_DB = true` if `MONGODB_URI` **or** `ATLAS_URI` is a real external database (tests then hit a shared database); otherwise `false` (each EF version gets its own testcontainer).
-4. Encryption libraries: CSFLE / Queryable Encryption tests skip unless **both** `CRYPT_SHARED_LIB_PATH` and `MONGODB_BINARIES` (folder containing `mongocryptd`) are set; with only the first, the `Mongocryptd` cases fail instead of skipping. Check both via `printenv`:
-   - Both non-empty: `ENCRYPTION_ENV = ""` (sub-agents inherit them).
-   - Otherwise run `{working directory}/tests/tools/fetch-crypt-shared.sh` (absolute path; same libraries CI downloads, cached after the first run, which can take a minute or two). Its **stdout** is two `export NAME='value'` lines; record `ENCRYPTION_ENV = "CRYPT_SHARED_LIB_PATH='<value>' MONGODB_BINARIES='<value>'"` from them.
-   - If the script fails (offline, no Python or git), do **not** stop: record `ENCRYPTION_ENV = "CRYPT_SHARED_LIB_PATH= MONGODB_BINARIES="` (both explicitly empty, so a half-set inherited pair cannot make the `Mongocryptd` cases fail instead of skip), and state in the final summary that encryption tests were skipped and why.
+   `bash ./test-all.sh $ARGUMENTS`
 
-## Phase 2: Build & test via sub-agents
+   Use the working directory's script (never a sibling checkout's). Do not poll; you are notified when it exits. The script
+   prints a progress line per finished test project and a "still running" line every 5 minutes, and ends with a report.
+2. When it exits, read the report (the end of the output, or the `summary.md` named on its last line) and relay it: the
+   Default and NativeOnly tables, the "Problems" section, the NativeOnly-only failures section, and the
+   `Encryption: ...` line, which says whether the encryption tests ran. Exit code 0 = all green, 1 = failures or incomplete
+   runs, 2 = usage or pre-flight error (message on stderr; relay it, usually Docker is not running or an SDK/runtime is
+   missing).
+3. A run marked `INCOMPLETE`, `NO RESULTS` or `TIMEOUT` is not a pass and not a small number of failures: the test process
+   crashed, hung or never started. Say so; the log path is in the report.
+4. With eight runs sharing one machine, a failure can be load (timeouts, container start-up) rather than real. Before
+   reporting a failure as real, re-run only that run with the command the report prints under "re-run alone" (for example
+   `bash ./test-all.sh --versions 10 --mode native --projects functional --no-build`). Report both outcomes if they differ.
+5. A failure under NativeOnly that does not fail in Default needs an `IsNativeOnly` branch in the test (or is a translator
+   gap); a failure in both modes is a plain failure. The report already separates the two.
 
-One build+test pass per EF version (EF8, EF9, EF10, EF11), each via the Agent tool with `model` set.
-
-- `SHARED_DB = false`: spawn all four **in parallel** (one message, four `Agent` blocks); separate output dirs and containers mean no contention.
-- `SHARED_DB = true`: run **serially** (dispatch, wait, dispatch next). The versions would race on shared global state in the same database (intra-assembly parallelization is disabled for that reason, `tests/.../FunctionalTests/Usings.cs`).
-
-Each agent runs, against the whole `$SLN` (all of `UnitTests`, `FunctionalTests`, `SpecificationTests`; don't narrow unless the user passed a filter):
-
-1. `dotnet build $SLN -c "Debug EF{version}" -v quiet`
-2. `$ENCRYPTION_ENV dotnet test  $SLN -c "Debug EF{version}" --no-build --logger "console;verbosity=normal" -v quiet`
-   (`$ENCRYPTION_ENV` is the literal prefix from Phase 1 step 4, written inline before `dotnet` so it applies to that process; omit it only when both variables were already set. Pass it to every sub-agent verbatim.)
-
-**EF11 exception:** the EF11 `SpecificationTests` project cannot run under `dotnet test` (xUnit v3 4.x is Microsoft.Testing.Platform only; see AGENTS.md).
-For EF11 run `dotnet test` on `UnitTests` and `FunctionalTests`, then run the spec executable directly:
-`tests/MongoDB.EntityFrameworkCore.SpecificationTests/bin/Debug EF11/net11.0/MongoDB.EntityFrameworkCore.SpecificationTests.exe -noColor > <logfile> 2>&1`,
-and take the totals from its `=== TEST EXECUTION SUMMARY ===` line. A whole-solution `dotnet test` on EF11 prints an error for the spec project; that is expected.
-
-**`NATIVE = true`:** after the default test pass (same build, no rebuild), the agent repeats the test step with `MONGODB_EF_QUERY_MODE=NativeOnly` set inline before `dotnet` (for EF11, set it for the spec executable and the `dotnet test` runs alike), with logs named `*-native.log`, and reports the totals separately. Never set `MONGODB_EF_NATIVE_ONLY` as well: the resolver throws on a conflict. Tests that need a mode-specific expectation branch on `MongoSpecTestHelpers.IsNativeOnly`.
-
-Append the user's `--filter "<expr>"` or project path to the test command if given. Drop `--no-build` if the build step did not run in the same invocation (stale binaries give a false green).
-
-### Execution hygiene (include verbatim in every sub-agent's prompt)
-
-Run build+test in the **foreground** and report only **after the test process has exited**:
-
-- Do NOT background the run (no `&`, `nohup`, background-run tool, or "I'll report when it notifies me"). A reply sent while the run is going is a failed dispatch; the controller must re-run it.
-- Write output to a log file and parse the log, not scrollback: `dotnet test ... > <logfile> 2>&1`.
-- A whole-solution run prints **three** summary blocks (one per test assembly: `UnitTests`, `FunctionalTests`, `SpecificationTests`). Find each `Passed!`/`Failed!` block and sum the `Passed`/`Failed`/`Skipped` totals. `SpecificationTests` is usually last and about half the tests, so reading only it undercounts by thousands.
-
-## Rules
-
-- Use absolute paths; never `cd`. Quote configuration names ("Debug EF8").
-- Run the full solution by default.
-- Continue on failure: if one version fails, still report the others.
-
-## Phase 3: Console summary
-
-Fill the table from real results. Sum all three assembly blocks per version; if a sub-agent reports a single block, the run is incomplete or it read the wrong block, so send it back. `Build` is `OK` or `FAILED`.
-
-| Version | Build  | Passed | Failed | Skipped |
-|---------|--------|--------|--------|---------|
-| EF8     | <actual> | <actual> | <actual> | <actual> |
-| EF9     | <actual> | <actual> | <actual> | <actual> |
-| EF10    | <actual> | <actual> | <actual> | <actual> |
-| EF11    | <actual> | <actual> | <actual> | <actual> |
-
-With `NATIVE = true`, add a second table of the same shape titled "NativeOnly" with the totals from the NativeOnly passes. A NativeOnly failure that also fails in the default pass is a plain failure; one that only fails under NativeOnly means a test needs an `IsNativeOnly` branch (or a translator gap).
-
-If any version had failures, list failing test names grouped by version.
-
-Add one line under the table stating whether encryption tests ran: "Encryption: ran (crypt_shared + mongocryptd)" or "Encryption: SKIPPED — <reason>" (the test output also contains a `WARNING: CRYPT_SHARED_LIB_PATH is not set` line when they skip; if a sub-agent's log shows it, report it here).
+Never edit tests, baselines or product code from this skill; it only runs and reports. Do not stop or remove Docker
+containers: the ones the tests start are cleaned up by TestContainers, and others may belong to other sessions.
