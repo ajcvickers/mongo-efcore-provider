@@ -22,11 +22,13 @@ Only Storage may call the driver client/collection/session types directly.
   `UseTransaction` has a current transaction, so it takes the explicit-transaction path (no implicit transaction).
 - **A `MongoTransaction` is owned or non-owned (`IsOwner`).** A non-owned one (from `UseTransaction`, built by
   `MongoTransaction.Enlist`) only detaches on `Dispose` (never ends the transaction or disposes the session) and rejects
-  `Commit`/`Rollback` with "not started by this context"; only the owner ends the transaction. Sessions are not thread-safe:
+  `Commit`/`Rollback` with "not started by this context"; only the owner ends the transaction. A `MongoTransaction` is bound to the
+  session's transaction number as well as the session: if the caller ends it and starts another on the same session, `ActiveSession`
+  still throws. Sessions are not thread-safe:
   contexts sharing one are used sequentially.
 - **Issue commands on the transaction's session only through `MongoTransaction.ActiveSession`**, never a cached session: it throws
-  `InvalidOperationException` ("is no longer active") if the driver has ended the transaction, instead of letting commands run
-  outside one. It does not detect a server-side abort after a failed write; that `TransientTransactionError` must surface
+  `InvalidOperationException` ("is no longer active") if the driver has ended the transaction (or the session now holds a different
+  one), instead of letting commands run outside the transaction. It does not detect a server-side abort after a failed write; that `TransientTransactionError` must surface
   unchanged (no wrapping, no swallowing).
 - **Owned-entity root promotion** (`GetAllChangedRootEntries`): an Unchanged root with a modified owned child is
   promoted to Modified; don't filter the entry list before promotion.
@@ -38,8 +40,9 @@ Only Storage may call the driver client/collection/session types directly.
 - **`AutoTransactionBehavior.Never` removes optimistic concurrency's atomicity**, not the tokens.
 - **Cross-collection atomicity comes from the transaction**, not `BulkWrite` (one per collection).
 - **Implicit transactions roll back on Dispose**; don't wrap the commit in a swallowing `catch`. Ambient
-  `System.Transactions` are rejected; `MongoTransaction` has a strict `Active → Committed | RolledBack | Failed →
-  Disposed` state machine.
+  `System.Transactions` are rejected; an owned `MongoTransaction` follows the `Active → Committed | RolledBack | Failed →
+  Disposed` state machine, except that one whose session transaction was ended elsewhere goes `Active → Disposed`, and a non-owned
+  one only goes `Active → Disposed` (it never commits or rolls back).
 - **`EnsureCreated` is idempotent by design** (re-applies seeds, re-creates indexes, tolerates duplicate-key errors
   while seeding). Seeding goes through the normal update pipeline.
 - **Query → Storage seam is `MongoClientWrapper.Execute(MongoExecutableQuery)`**; the wrapper doesn't translate.

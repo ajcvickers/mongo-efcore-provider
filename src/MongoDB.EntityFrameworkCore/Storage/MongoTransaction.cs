@@ -136,32 +136,42 @@ public sealed class MongoTransaction(
 
     /// <summary>
     /// The underlying <see cref="IClientSession"/> this transaction is using which is required
-    /// to issue commands against. Throws if the session's transaction has ended (committed or aborted) since this
-    /// <see cref="MongoTransaction"/> was started, because a command issued on a session with no transaction in progress
-    /// would silently run outside any transaction.
+    /// to issue commands against. Throws if the transaction this <see cref="MongoTransaction"/> was started for or enlisted in
+    /// has ended (committed or aborted), including when the session has since started a different transaction, because a command
+    /// issued then would silently run outside the transaction this context believes it is in.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The session is no longer in a transaction.</exception>
+    /// <exception cref="InvalidOperationException">The session is no longer in the transaction.</exception>
     internal IClientSessionHandle ActiveSession
-        => SessionIsInTransaction
+        => SessionIsInOurTransaction
             ? session
             : throw new InvalidOperationException(
                 $"MongoTransaction {TransactionId} is no longer active: the transaction on its session has already been committed or aborted. "
                 + "Commands can not be issued on this transaction because they would run outside of any transaction.");
 
+    // The number the session gave the transaction this MongoTransaction was created for, which identifies it uniquely on the
+    // session. Null if the session was not in a transaction when this was created.
+    private readonly long? _sessionTransactionNumber = CurrentTransactionNumber(session);
+
     // The owner of a session shared with a non-owning context disposes it when it ends the transaction, and asking a disposed
     // session whether it is in a transaction throws ObjectDisposedException. A disposed session is not in a transaction.
-    private bool SessionIsInTransaction
+    // A session whose owner committed or aborted and then started another transaction is in a transaction, but not ours.
+    private bool SessionIsInOurTransaction
+        => CurrentTransactionNumber(session) is { } current
+           && (_sessionTransactionNumber is not { } ours || current == ours);
+
+    // The number of the transaction in progress on the session, or null if there is none (or the session is disposed).
+    // CurrentTransaction is only read while the session is in a transaction.
+    private static long? CurrentTransactionNumber(IClientSessionHandle session)
     {
-        get
+        try
         {
-            try
-            {
-                return session.IsInTransaction;
-            }
-            catch (ObjectDisposedException)
-            {
-                return false;
-            }
+            return session.IsInTransaction
+                ? session.WrappedCoreSession.CurrentTransaction?.TransactionNumber
+                : null;
+        }
+        catch (ObjectDisposedException)
+        {
+            return null;
         }
     }
 
@@ -393,16 +403,17 @@ public sealed class MongoTransaction(
         }
     }
 
-    // The session's transaction may have been committed or aborted by something else holding the session. There is then
-    // nothing to roll back (attempting it would make Dispose throw), but the manager must still be told to let go of us.
-    private bool SessionTransactionHasEnded => !session.IsInTransaction;
+    // The session's transaction may have been committed or aborted by something else holding the session (which may even have
+    // started another transaction on it). There is then nothing of ours to roll back (attempting it would make Dispose throw or
+    // abort someone else's transaction), but the manager must still be told to let go of us.
+    private bool SessionTransactionHasEnded => !SessionIsInOurTransaction;
 
     private void AssertIsOwner(string action)
     {
         if (!IsOwner)
             throw new InvalidOperationException(
                 $"Can not {action} MongoTransaction {TransactionId} because it was not started by this context. "
-                + $"It is owned by {_ownerDescription}, which must {action.ToLowerInvariant()} it; this context only participates in it.");
+                + $"It is owned by {_ownerDescription}, which must {(action == "Commit" ? "commit" : "roll back")} it; this context only participates in it.");
     }
 
     private void AssertCorrectState(string action, TransactionState validState)

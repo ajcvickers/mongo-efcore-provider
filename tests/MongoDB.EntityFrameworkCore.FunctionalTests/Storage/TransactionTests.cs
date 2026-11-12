@@ -1093,7 +1093,7 @@ public class TransactionTests(TemporaryDatabaseFixture database)
     public void Contexts_on_different_client_instances_can_share_a_transaction()
     {
         var collection = database.CreateCollection<SimpleEntity>();
-        var otherClient = new MongoClient(database.Client.Settings.Clone());
+        using var otherClient = new MongoClient(database.Client.Settings.Clone());
         var otherCollection = otherClient
             .GetDatabase(collection.Database.DatabaseNamespace.DatabaseName)
             .GetCollection<SimpleEntity>(collection.CollectionNamespace.CollectionName);
@@ -1180,7 +1180,7 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         using var enlisted = SingleEntityDbContext.Create(collection);
         enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
         enlisted.Entities.Add(new SimpleEntity { _id = id, name = "duplicate" });
-        Assert.ThrowsAny<Exception>(() => enlisted.SaveChanges());
+        Assert.Throws<MongoBulkWriteException<BsonDocument>>(() => enlisted.SaveChanges());
 
         // The server aborted the transaction. The provider can not know that, so the server's own error must surface unchanged.
         owner.Entities.Add(new SimpleEntity { name = "b" });
@@ -1188,7 +1188,116 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         Assert.Contains("TransientTransactionError", ex.ErrorLabels);
         Assert.DoesNotContain("is no longer active", ex.Message);
 
-        Assert.ThrowsAny<Exception>(() => owner.Database.CommitTransaction());
+        // The server aborted the transaction, so the owner's commit fails with the server's error, not the guard's.
+        // (On a sharded cluster the failure of the owner's write may appear only here; this test targets a replica set.)
+        Assert.Throws<MongoCommandException>(() => owner.Database.CommitTransaction());
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(0, check.Entities.Count());
+    }
+
+    [Fact]
+    public void Enlisted_context_throws_when_the_caller_starts_a_new_transaction_on_the_same_session()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = StartSessionWithTransaction(database.Client);
+
+        using var db = SingleEntityDbContext.Create(collection);
+        db.Database.UseTransaction(session);
+        db.Entities.Add(new SimpleEntity { name = "first-transaction" });
+
+        // The caller ends the transaction the context enlisted in and starts another one on the same session.
+        session.CommitTransaction();
+        session.StartTransaction();
+        try
+        {
+            Assert.True(session.IsInTransaction);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
+            Assert.Contains("is no longer active", ex.Message);
+
+            using var check = SingleEntityDbContext.Create(collection);
+            Assert.Equal(0, check.Entities.Count());
+        }
+        finally
+        {
+            session.AbortTransaction();
+        }
+
+        using var after = SingleEntityDbContext.Create(collection);
+        Assert.Equal(0, after.Entities.Count());
+    }
+
+    [Fact]
+    public async Task Enlisted_context_throws_when_the_caller_starts_a_new_transaction_on_the_same_session_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = StartSessionWithTransaction(database.Client);
+
+        await using var db = SingleEntityDbContext.Create(collection);
+        db.Database.UseTransaction(session);
+        db.Entities.Add(new SimpleEntity { name = "first-transaction" });
+
+        await session.CommitTransactionAsync();
+        session.StartTransaction();
+        try
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+            Assert.Contains("is no longer active", ex.Message);
+        }
+        finally
+        {
+            await session.AbortTransactionAsync();
+        }
+
+        await using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(0, await check.Entities.CountAsync());
+    }
+
+    [Fact]
+    public void Committing_the_owner_ends_the_transaction_for_enlisted_contexts_and_their_next_SaveChanges_throws()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        owner.SaveChanges();
+
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        owner.Database.CommitTransaction();
+
+        enlisted.Entities.Add(new SimpleEntity { name = "too-late" });
+        var ex = Assert.Throws<InvalidOperationException>(() => enlisted.SaveChanges());
+        Assert.Contains("is no longer active", ex.Message);
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["owner"], check.Entities.Select(e => e.name).ToList());
+    }
+
+    [Fact]
+    public void Disposing_the_owners_transaction_without_committing_rolls_back_and_enlisted_contexts_SaveChanges_throws()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        using (var owner = SingleEntityDbContext.Create(collection))
+        {
+            // Disposing the transaction without committing is what rolls it back; disposing the context alone does not end it.
+            using var ownerTransaction = owner.Database.BeginTransaction();
+            owner.Entities.Add(new SimpleEntity { name = "owner" });
+            owner.SaveChanges();
+
+            enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+            enlisted.Entities.Add(new SimpleEntity { name = "enlisted" });
+            enlisted.SaveChanges();
+        }
+
+        enlisted.Entities.Add(new SimpleEntity { name = "too-late" });
+        var ex = Assert.Throws<InvalidOperationException>(() => enlisted.SaveChanges());
+        Assert.Contains("is no longer active", ex.Message);
 
         using var check = SingleEntityDbContext.Create(collection);
         Assert.Equal(0, check.Entities.Count());
