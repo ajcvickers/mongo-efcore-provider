@@ -149,15 +149,17 @@ public sealed class MongoTransaction(
                 + "Commands can not be issued on this transaction because they would run outside of any transaction.");
 
     // The number the session gave the transaction this MongoTransaction was created for, which identifies it uniquely on the
-    // session. Null if the session was not in a transaction when this was created.
+    // session. Null if the session was not in a transaction when this was created, in which case there is no transaction for
+    // this MongoTransaction to be active in and it never is.
     private readonly long? _sessionTransactionNumber = CurrentTransactionNumber(session);
 
     // The owner of a session shared with a non-owning context disposes it when it ends the transaction, and asking a disposed
     // session whether it is in a transaction throws ObjectDisposedException. A disposed session is not in a transaction.
     // A session whose owner committed or aborted and then started another transaction is in a transaction, but not ours.
     private bool SessionIsInOurTransaction
-        => CurrentTransactionNumber(session) is { } current
-           && (_sessionTransactionNumber is not { } ours || current == ours);
+        => _sessionTransactionNumber is { } ours
+           && CurrentTransactionNumber(session) is { } current
+           && current == ours;
 
     // The number of the transaction in progress on the session, or null if there is none (or the session is disposed).
     // CurrentTransaction is only read while the session is in a transaction.

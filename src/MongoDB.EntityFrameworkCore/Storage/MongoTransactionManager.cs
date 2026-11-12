@@ -27,7 +27,7 @@ namespace MongoDB.EntityFrameworkCore.Storage;
 /// <summary>
 /// Explicit transaction manager for MongoDB EF Core provider.
 /// </summary>
-public class MongoTransactionManager : IMongoTransactionManager
+public class MongoTransactionManager : IMongoTransactionManager, IDisposable, IAsyncDisposable
 {
     private readonly IMongoClientWrapper _client;
     private readonly DbContext _context;
@@ -64,6 +64,20 @@ public class MongoTransactionManager : IMongoTransactionManager
 
         CurrentTransaction = null;
     }
+
+    /// <summary>
+    /// Ends the use of this transaction manager when its context is disposed. As with relational providers, a transaction the context
+    /// owns and has not committed or rolled back is rolled back (and its session disposed), so the server does not keep it open; a
+    /// transaction the context only joined (see <see cref="UseTransaction(IClientSessionHandle)"/>) is detached and left to its owner.
+    /// </summary>
+    public void Dispose()
+        => ResetState();
+
+    /// <summary>
+    /// Asynchronous version of <see cref="Dispose"/>.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+        => await ResetStateAsync().ConfigureAwait(false);
 
     /// <inheritdoc />
     public IDbContextTransaction BeginTransaction()

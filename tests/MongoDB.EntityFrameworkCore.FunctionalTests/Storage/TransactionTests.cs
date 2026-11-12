@@ -15,10 +15,14 @@
 
 using System.Transactions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Extensions;
+using MongoDB.EntityFrameworkCore.Infrastructure;
 using MongoDB.EntityFrameworkCore.Storage;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Storage;
@@ -1285,7 +1289,8 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         using var enlisted = SingleEntityDbContext.Create(collection);
         using (var owner = SingleEntityDbContext.Create(collection))
         {
-            // Disposing the transaction without committing is what rolls it back; disposing the context alone does not end it.
+            // Disposing the transaction without committing rolls it back. (Disposing the owner context rolls it back too: see
+            // Disposing_the_owner_context_without_disposing_its_transaction_rolls_it_back.)
             using var ownerTransaction = owner.Database.BeginTransaction();
             owner.Entities.Add(new SimpleEntity { name = "owner" });
             owner.SaveChanges();
@@ -1301,5 +1306,143 @@ public class TransactionTests(TemporaryDatabaseFixture database)
 
         using var check = SingleEntityDbContext.Create(collection);
         Assert.Equal(0, check.Entities.Count());
+    }
+
+    [Fact]
+    public void Disposing_the_owner_context_without_disposing_its_transaction_rolls_it_back()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var participant = SingleEntityDbContext.Create(collection);
+        var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        owner.SaveChanges();
+
+        participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        participant.Entities.Add(new SimpleEntity { name = "participant" });
+        participant.SaveChanges();
+
+        // Neither the transaction nor the session is disposed by the caller, as relational EF: disposing the context ends it.
+        owner.Dispose();
+
+        using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, check.Entities.Count());
+        }
+
+        participant.Entities.Add(new SimpleEntity { name = "too-late" });
+        var ex = Assert.Throws<InvalidOperationException>(() => participant.SaveChanges());
+        Assert.Contains("is no longer active", ex.Message);
+
+        using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, check.Entities.Count());
+        }
+    }
+
+    [Fact]
+    public async Task Disposing_the_owner_context_without_disposing_its_transaction_rolls_it_back_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        await using var participant = SingleEntityDbContext.Create(collection);
+        var owner = SingleEntityDbContext.Create(collection);
+        await owner.Database.BeginTransactionAsync();
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        await owner.SaveChangesAsync();
+
+        participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        participant.Entities.Add(new SimpleEntity { name = "participant" });
+        await participant.SaveChangesAsync();
+
+        await owner.DisposeAsync();
+
+        await using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, await check.Entities.CountAsync());
+        }
+
+        participant.Entities.Add(new SimpleEntity { name = "too-late" });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => participant.SaveChangesAsync());
+        Assert.Contains("is no longer active", ex.Message);
+
+        await using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, await check.Entities.CountAsync());
+        }
+    }
+
+    [Fact]
+    public void Disposing_a_participant_context_does_not_end_the_owner_transaction()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        owner.SaveChanges();
+
+        var participant = SingleEntityDbContext.Create(collection);
+        participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        participant.Entities.Add(new SimpleEntity { name = "participant" });
+        participant.SaveChanges();
+        participant.Dispose();
+
+        // The owner's transaction is untouched: it can still write, and commit everything.
+        owner.Entities.Add(new SimpleEntity { name = "owner-2" });
+        owner.SaveChanges();
+        owner.Database.CommitTransaction();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["owner", "owner-2", "participant"], check.Entities.Select(e => e.name).OrderBy(n => n).ToList());
+    }
+
+    [Fact]
+    public async Task Disposing_a_participant_context_does_not_end_the_owner_transaction_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        await using var owner = SingleEntityDbContext.Create(collection);
+        await owner.Database.BeginTransactionAsync();
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        await owner.SaveChangesAsync();
+
+        var participant = SingleEntityDbContext.Create(collection);
+        participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        participant.Entities.Add(new SimpleEntity { name = "participant" });
+        await participant.SaveChangesAsync();
+        await participant.DisposeAsync();
+
+        owner.Entities.Add(new SimpleEntity { name = "owner-2" });
+        await owner.SaveChangesAsync();
+        await owner.Database.CommitTransactionAsync();
+
+        await using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["owner", "owner-2", "participant"], (await check.Entities.Select(e => e.name).ToListAsync()).Order().ToList());
+    }
+
+    [Fact]
+    public void A_MongoTransaction_built_on_a_session_that_had_no_transaction_is_never_active()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var db = SingleEntityDbContext.Create(collection);
+        var logger = db.GetService<IDiagnosticsLogger<DbLoggerCategory.Database.Transaction>>();
+
+        using var session = database.Client.StartSession();
+        var transaction = new MongoTransaction(session, db, Guid.NewGuid(), null, logger);
+
+        // A transaction the session starts later is not the one the MongoTransaction was built for (it was built for none).
+        session.StartTransaction();
+        try
+        {
+            Assert.True(session.IsInTransaction);
+            var ex = Assert.Throws<InvalidOperationException>(() => transaction.ActiveSession);
+            Assert.Contains("is no longer active", ex.Message);
+        }
+        finally
+        {
+            session.AbortTransaction();
+        }
     }
 }

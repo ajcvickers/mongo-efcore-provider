@@ -43,6 +43,11 @@ Only Storage may call the driver client/collection/session types directly.
   `System.Transactions` are rejected; an owned `MongoTransaction` follows the `Active → Committed | RolledBack | Failed →
   Disposed` state machine, except that one whose session transaction was ended elsewhere goes `Active → Disposed`, and a non-owned
   one only goes `Active → Disposed` (it never commits or rolls back).
+- **Disposing a context disposes its transaction manager**: `MongoTransactionManager` is `IDisposable`/`IAsyncDisposable` (the interface
+  `IMongoTransactionManager` is not), and EF disposes scoped services with a non-pooled context, so `Dispose` is `ResetState`: it rolls back
+  an owned `CurrentTransaction` (and disposes its session) and only detaches a non-owned one, never touching the owner's session. A pooled
+  context is reset (`ResetState`) rather than disposed, with the same effect. Don't swallow exceptions from this path.
+  A `MongoTransaction` built on a session with no transaction has no transaction number and is never active.
 - **`EnsureCreated` is idempotent by design** (re-applies seeds, re-creates indexes, tolerates duplicate-key errors
   while seeding). Seeding goes through the normal update pipeline.
 - **Query → Storage seam is `MongoClientWrapper.Execute(MongoExecutableQuery)`**; the wrapper doesn't translate.
