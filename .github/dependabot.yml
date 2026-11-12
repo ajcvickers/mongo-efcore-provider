@@ -42,6 +42,13 @@ updates:
       # UnitTests and FunctionalTests projects (see AGENTS.md). The EF11 spec tests pin 4.x by hand.
       - dependency-name: "xunit.v3"
         update-types: ["version-update:semver-major"]
+      # JunitXml.TestLogger 8.x drops Microsoft.Testing.Platform v1 and needs a newer MTP than xunit.v3 3.x brings in, which
+      # fails the UnitTests and FunctionalTests builds with CS1705. Revisit when those projects move to xunit.v3 4.x.
+      - dependency-name: "JunitXml.TestLogger"
+        update-types: ["version-update:semver-major"]
+      # Microsoft.SourceLink.GitHub is pinned at 1.1.1 in src/Directory.Build.props (and removed by the main csproj). The
+      # latest line now follows the .NET SDK (11.x); moving to it is a deliberate change, not a weekly bump.
+      - dependency-name: "Microsoft.SourceLink.GitHub"
 
   # Actions used by the workflows in .github/workflows.
   - package-ecosystem: "github-actions"
