@@ -32,7 +32,7 @@ public class FieldMappingMongoTest(FieldMappingMongoTest.FieldMappingMongoFixtur
 
     // Enlists the context in the rollback transaction opened by the base class (as NorthwindBulkUpdatesMongoFixture does).
     protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
-        => ((MongoTransactionManager)facade.GetService<IDbContextTransactionManager>()).CurrentTransaction = transaction;
+        => facade.UseTransaction(transaction);
 
     public override void Field_mapping_with_conversion_does_not_throw()
         => base.Field_mapping_with_conversion_does_not_throw();
@@ -370,9 +370,8 @@ public class FieldMappingMongoTest(FieldMappingMongoTest.FieldMappingMongoFixtur
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_auto_props()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_auto_props(), "CoreSessionHandle");
+    public override Task Update_auto_props()
+        => base.Update_auto_props();
 #endif
 
 #if !EF8
@@ -382,57 +381,48 @@ public class FieldMappingMongoTest(FieldMappingMongoTest.FieldMappingMongoFixtur
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_full_props()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_full_props(), "CoreSessionHandle");
+    public override Task Update_full_props()
+        => base.Update_full_props();
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_full_props_with_named_fields()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_full_props_with_named_fields(), "CoreSessionHandle");
+    public override Task Update_full_props_with_named_fields()
+        => base.Update_full_props_with_named_fields();
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_read_only_props()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_read_only_props(), "CoreSessionHandle");
+    public override Task Update_read_only_props()
+        => base.Update_read_only_props();
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_props_with_IReadOnlyCollection()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_props_with_IReadOnlyCollection(), "CoreSessionHandle");
+    public override Task Update_props_with_IReadOnlyCollection()
+        => base.Update_props_with_IReadOnlyCollection();
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_read_only_props_with_named_fields()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_read_only_props_with_named_fields(), "CoreSessionHandle");
+    public override Task Update_read_only_props_with_named_fields()
+        => base.Update_read_only_props_with_named_fields();
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_write_only_props()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_write_only_props(), "CoreSessionHandle");
+    public override Task Update_write_only_props()
+        => base.Update_write_only_props();
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_write_only_props_with_named_fields()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_write_only_props_with_named_fields(), "CoreSessionHandle");
+    public override Task Update_write_only_props_with_named_fields()
+        => base.Update_write_only_props_with_named_fields();
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_fields_only()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_fields_only(), "CoreSessionHandle");
+    public override Task Update_fields_only()
+        => base.Update_fields_only();
 #endif
 
 #if !EF8
-    // Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202
-    public override async Task Update_fields_only_only_for_navs_too()
-        => await SpecFails.ThrowsAsync<global::System.ObjectDisposedException>(() => base.Update_fields_only_only_for_navs_too(), "CoreSessionHandle");
+    public override Task Update_fields_only_only_for_navs_too()
+        => base.Update_fields_only_only_for_navs_too();
 #endif
 
     public class FieldMappingMongoFixture : FieldMappingFixtureBase

@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 5,021 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,540 |
+| `// Fails:` tag lines | 1,206 | 5,011 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,530 |
 | ... active in the EF8 build | 1,064 | 2,646 |
-| ... active in the EF9 build | 1,141 | 3,179 |
-| ... active in the EF10 build | 882 | 3,323 |
-| ... active in the EF11 build | not measured | 3,349 |
+| ... active in the EF9 build | 1,141 | 3,169 |
+| ... active in the EF10 build | 882 | 3,313 |
+| ... active in the EF11 build | not measured | 3,339 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 60 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -232,7 +232,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X324 | `byte[].Length` query returns no rows | 1 |
 | EF-X200 | `Find`/derived-type `Set<T>` over a type hierarchy does not filter by discriminator (a base-type document is materialized as the derived type) | 0 |
 | EF-X201 | Single-property primary key set by explicit `HasKey`/constructor binding is not mapped to element `_id` (model validation fails); ported fixtures work around it with a test convention | 0 |
-| EF-X202 | Explicit transaction cannot be shared by a second context (session disposed with the first context) | 10 |
+| EF-X202 | ~~Explicit transaction cannot be shared by a second context (session disposed with the first context)~~ — resolved by `UseTransaction`, no remaining tags | 0 |
 | EF-X203 | Property hiding (`new Id` on a derived type) conflicts in the BSON class map | 9 |
 | EF-X205 | `int` keys are not store-generated (upstream models expect identity-style keys); ported fixtures work around it with a counter generator | 1 |
 | EF-X206 | Lazy-load/`Single` query over a type hierarchy returns more than one element | 0 |
@@ -786,8 +786,7 @@ Affected: `FindMongoTest.Find_base_type_using_derived_set_from_store` (+ `_async
 Not tagged on tests: ported fixtures (`FieldMapping`, `WithConstructors`, the `Load`/`ManyToManyLoad`/`LazyLoadProxy` families, `DataBinding`) add the test convention `MongoSpecModelHelpers.MapSinglePropertyKeysToElementId` (or `FixExternalModel`) which sets the key element name to `_id`. Without it model validation throws `The entity type 'X' primary key property 'Id' must be mapped to element '_id'` for models that call `HasKey(...)` explicitly or whose key is found by constructor/field binding. Count 0 because no test asserts it.
 
 ### EF-X202 — Explicit transaction cannot be shared by a second context
-Comment pattern: `// Fails: Explicit transaction cannot be shared by a second context: session disposed with the first context EF-X202`.
-Affected: the `Update_*` tests in `FieldMappingMongoTest` (EF9/EF10). The base opens a transaction, runs the test in a first context and a verification in a second one that is enlisted with `UseTransaction`; the second use throws `ObjectDisposedException` (`CoreSessionHandle`). The first-context writes are rolled back (no shared-state leak). On EF8 the sync base completes and the tests pass.
+**Resolved** — no `// Fails:` tags remain and the tests pass. Formerly: the `Update_*` tests in `FieldMappingMongoTest` (EF9/EF10) enlisted a second context by assigning the owner's transaction to `CurrentTransaction` directly, and the session was disposed with the first context (`ObjectDisposedException`, `CoreSessionHandle`). The spec fixtures now call `Database.UseTransaction(transaction)`, which makes the second context a non-owning participant of the shared transaction.
 
 ### EF-X203 — Property hiding conflicts in the BSON class map
 Comment pattern: `// Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203`.

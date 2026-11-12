@@ -28,11 +28,10 @@ public class ComplexTypesTrackingMongoTest(ComplexTypesTrackingMongoFixture fixt
 {
     // EF's ExecuteWithStrategyInTransaction begins a transaction on one context and passes it to a
     // *second* context via UseTransaction; this hook enlists that second context in the same MongoDB
-    // session so its saves participate in — and are rolled back with — the outer transaction. Both
-    // contexts are built against the shared TestServer.Client, so the session handle is valid across
-    // them (CurrentTransaction's internal setter is reachable here via InternalsVisibleTo).
+    // transaction so its saves participate in, and are rolled back with, the outer transaction. The
+    // second context only participates, so disposing it does not end the outer context's transaction.
     protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
-        => ((MongoTransactionManager)facade.GetService<IDbContextTransactionManager>()).CurrentTransaction = transaction;
+        => facade.UseTransaction(transaction);
 
 #if EF10
     public override async Task Can_change_state_from_Deleted_with_complex_collection(EntityState newState, bool async)

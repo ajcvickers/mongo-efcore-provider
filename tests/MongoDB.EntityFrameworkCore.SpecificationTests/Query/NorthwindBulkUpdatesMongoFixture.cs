@@ -65,7 +65,7 @@ public class NorthwindBulkUpdatesMongoFixture<TModelCustomizer> : NorthwindBulkU
     // enlist the second in the same session so DeleteMany/UpdateMany roll back with it (the executor reads
     // Database.CurrentTransaction; see PrepareBulk). Requires a transaction-capable deployment (replica set / mongos).
     public override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
-        => ((MongoTransactionManager)facade.GetService<IDbContextTransactionManager>()).CurrentTransaction = transaction;
+        => facade.UseTransaction(transaction);
 
     protected override Task SeedAsync(NorthwindContext context)
     {

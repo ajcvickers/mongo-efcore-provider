@@ -64,12 +64,11 @@ public class ComplexPropertiesMongoFixture : ComplexPropertiesFixtureBase
     // The transaction is begun on one context and the bulk operation is executed on a *second*
     // context; this hook enlists that second context in the same MongoDB session so DeleteMany /
     // UpdateMany participate in — and are rolled back with — the outer transaction. Both contexts
-    // are built against the shared TestServer.Client, so the session handle is valid across them
-    // (CurrentTransaction's internal setter is reachable here via InternalsVisibleTo). The bulk
-    // executor reads the session from Database.CurrentTransaction (see PrepareBulk in
+    // are built against the shared TestServer.Client, so the session handle is valid across them.
+    // The bulk executor reads the session from Database.CurrentTransaction (see PrepareBulk in
     // MongoShapedQueryCompilingExpressionVisitor).
     public override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
-        => ((MongoTransactionManager)facade.GetService<IDbContextTransactionManager>()).CurrentTransaction = transaction;
+        => facade.UseTransaction(transaction);
 }
 
 #endif

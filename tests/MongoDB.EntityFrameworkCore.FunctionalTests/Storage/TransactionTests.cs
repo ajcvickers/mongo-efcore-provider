@@ -1664,6 +1664,7 @@ public class TransactionTests(TemporaryDatabaseFixture database)
 
         var options = new DbContextOptionsBuilder<PooledEntityContext>()
             .UseMongoDB(database.Client, databaseName)
+            .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning))
             .Options;
         var factory = new PooledDbContextFactory<PooledEntityContext>(options);
 
