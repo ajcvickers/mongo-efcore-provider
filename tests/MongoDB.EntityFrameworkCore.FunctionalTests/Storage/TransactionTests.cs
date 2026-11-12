@@ -1445,4 +1445,583 @@ public class TransactionTests(TemporaryDatabaseFixture database)
             session.AbortTransaction();
         }
     }
+
+    // Dispose order of the owner context and a participant context, in both orders and with the participant's transaction disposed on
+    // its own, none of which may throw whatever has already happened to the shared session.
+
+    [Fact]
+    public void Owner_disposed_first_then_participant_does_not_throw()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        owner.SaveChanges();
+
+        var participant = SingleEntityDbContext.Create(collection);
+        participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        participant.Entities.Add(new SimpleEntity { name = "participant" });
+        participant.SaveChanges();
+
+        // The owner's disposal rolls the transaction back and disposes the session the participant still refers to.
+        owner.Dispose();
+        participant.Dispose();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(0, check.Entities.Count());
+    }
+
+    [Fact]
+    public async Task Owner_disposed_first_then_participant_does_not_throw_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        var owner = SingleEntityDbContext.Create(collection);
+        await owner.Database.BeginTransactionAsync();
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        await owner.SaveChangesAsync();
+
+        var participant = SingleEntityDbContext.Create(collection);
+        participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        participant.Entities.Add(new SimpleEntity { name = "participant" });
+        await participant.SaveChangesAsync();
+
+        await owner.DisposeAsync();
+        await participant.DisposeAsync();
+
+        await using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(0, await check.Entities.CountAsync());
+    }
+
+    [Fact]
+    public void Participant_first_then_owner()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+
+        var participant = SingleEntityDbContext.Create(collection);
+        participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        participant.Entities.Add(new SimpleEntity { name = "participant" });
+        participant.SaveChanges();
+        participant.Dispose();
+
+        owner.Database.CommitTransaction();
+        owner.Dispose();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["participant"], check.Entities.Select(e => e.name).ToList());
+    }
+
+    [Fact]
+    public async Task Participant_first_then_owner_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        var owner = SingleEntityDbContext.Create(collection);
+        await owner.Database.BeginTransactionAsync();
+
+        var participant = SingleEntityDbContext.Create(collection);
+        participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        participant.Entities.Add(new SimpleEntity { name = "participant" });
+        await participant.SaveChangesAsync();
+        await participant.DisposeAsync();
+
+        await owner.Database.CommitTransactionAsync();
+        await owner.DisposeAsync();
+
+        await using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["participant"], await check.Entities.Select(e => e.name).ToListAsync());
+    }
+
+    [Fact]
+    public void Disposing_participant_transaction_after_the_owner_disposed_the_session_does_not_throw()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+
+        using var participant = SingleEntityDbContext.Create(collection);
+        var participantTransaction = participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        owner.Dispose();
+
+        participantTransaction.Dispose();
+        Assert.Null(participant.Database.CurrentTransaction);
+
+        // A second dispose is a no-op.
+        participantTransaction.Dispose();
+        Assert.Null(participant.Database.CurrentTransaction);
+    }
+
+    [Fact]
+    public async Task Disposing_participant_transaction_after_the_owner_disposed_the_session_does_not_throw_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        var owner = SingleEntityDbContext.Create(collection);
+        await owner.Database.BeginTransactionAsync();
+
+        await using var participant = SingleEntityDbContext.Create(collection);
+        var participantTransaction = participant.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        await owner.DisposeAsync();
+
+        await participantTransaction.DisposeAsync();
+        Assert.Null(participant.Database.CurrentTransaction);
+
+        await participantTransaction.DisposeAsync();
+        Assert.Null(participant.Database.CurrentTransaction);
+    }
+
+    // Async parity of the tests above that only had a synchronous form.
+
+    [Fact]
+    public async Task Query_after_the_transaction_session_was_aborted_throws_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        await using var db = SingleEntityDbContext.Create(collection);
+        await db.Database.BeginTransactionAsync();
+        EndTransactionBehindTheContextsBack(db);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => db.Entities.ToListAsync());
+        Assert.Contains("is no longer active", ex.Message);
+    }
+
+    [Fact]
+    public async Task Two_contexts_can_share_one_transaction_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        await using var owner = SingleEntityDbContext.Create(collection);
+        await owner.Database.BeginTransactionAsync();
+
+        await using (var second = SingleEntityDbContext.Create(collection))
+        {
+            second.Database.UseTransaction(owner.Database.CurrentTransaction!);
+            second.Entities.Add(new SimpleEntity { name = "second" });
+            await second.SaveChangesAsync();
+        }
+
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        await owner.SaveChangesAsync();
+
+        await using (var third = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, await third.Entities.CountAsync());
+        }
+
+        await owner.Database.CommitTransactionAsync();
+
+        await using var fourth = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["owner", "second"], (await fourth.Entities.Select(e => e.name).ToListAsync()).Order().ToList());
+    }
+
+    [Fact]
+    public async Task Committing_the_owner_then_SaveChangesAsync_on_the_enlisted_context_throws()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        await using var owner = SingleEntityDbContext.Create(collection);
+        await owner.Database.BeginTransactionAsync();
+        owner.Entities.Add(new SimpleEntity { name = "owner" });
+        await owner.SaveChangesAsync();
+
+        await using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        await owner.Database.CommitTransactionAsync();
+
+        enlisted.Entities.Add(new SimpleEntity { name = "too-late" });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => enlisted.SaveChangesAsync());
+        Assert.Contains("is no longer active", ex.Message);
+
+        await using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["owner"], await check.Entities.Select(e => e.name).ToListAsync());
+    }
+
+    // Pooled contexts are reset, not disposed, when they go back to the pool. A pooled context that enlisted in a transaction must
+    // let go of it without ending it, and must not carry it to the next lease.
+
+    private sealed class PooledEntityContext(DbContextOptions<PooledEntityContext> options) : DbContext(options)
+    {
+        public DbSet<SimpleEntity> Entities { get; set; } = null!;
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+            => modelBuilder.Entity<SimpleEntity>().ToCollection("pooled_entities");
+    }
+
+    [Fact]
+    public void Pooled_enlisted_context_returned_to_pool_detaches_without_ending_the_transaction()
+    {
+        var databaseName = TestDatabaseNamer.GetUniqueDatabaseName();
+        var rows = database.Client.GetDatabase(databaseName).GetCollection<BsonDocument>("pooled_entities");
+        database.Client.GetDatabase(databaseName).CreateCollection("pooled_entities");
+
+        var options = new DbContextOptionsBuilder<PooledEntityContext>()
+            .UseMongoDB(database.Client, databaseName)
+            .Options;
+        var factory = new PooledDbContextFactory<PooledEntityContext>(options);
+
+        using var session = StartSessionWithTransaction(database.Client);
+
+        var first = factory.CreateDbContext();
+        first.Database.UseTransaction(session);
+        first.Entities.Add(new SimpleEntity { name = "pooled" });
+        first.SaveChanges();
+        Assert.NotNull(first.Database.CurrentTransaction);
+
+        // Returns the context to the pool, which resets it.
+        first.Dispose();
+
+        Assert.True(session.IsInTransaction);
+
+        var second = factory.CreateDbContext();
+        try
+        {
+            Assert.Same(first, second);
+            Assert.Null(second.Database.CurrentTransaction);
+        }
+        finally
+        {
+            second.Dispose();
+        }
+
+        // Still uncommitted and still usable by its owner.
+        Assert.Equal(0, rows.CountDocuments(FilterDefinition<BsonDocument>.Empty));
+        session.CommitTransaction();
+        Assert.Equal(1, rows.CountDocuments(FilterDefinition<BsonDocument>.Empty));
+    }
+
+#if !EF8
+    // OrderBy + Take makes the bulk operation two-phase: it reads the target ids, then writes by id. Both phases must run in the
+    // transaction the context joined, and the bulk executor must leave it to its owner to end.
+
+    private static async Task<int> SetNamesToUpdated(IQueryable<SimpleEntity> query, bool async)
+        => async
+            ? await query.ExecuteUpdateAsync(s => s.SetProperty(e => e.name, "updated"))
+            : query.ExecuteUpdate(s => s.SetProperty(e => e.name, "updated"));
+
+    private static async Task<int> DeleteAll(IQueryable<SimpleEntity> query, bool async)
+        => async ? await query.ExecuteDeleteAsync() : query.ExecuteDelete();
+
+    private static void SeedABC(IMongoCollection<SimpleEntity> collection)
+        => collection.InsertMany([new SimpleEntity { name = "a" }, new SimpleEntity { name = "b" }, new SimpleEntity { name = "c" }]);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Enlisted_context_two_phase_ExecuteUpdate_runs_inside_the_shared_transaction(bool async)
+    {
+        var collection = database.CreateCollection<SimpleEntity>($"{nameof(Enlisted_context_two_phase_ExecuteUpdate_runs_inside_the_shared_transaction)}_{async}");
+        SeedABC(collection);
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        var updated = await SetNamesToUpdated(enlisted.Entities.OrderBy(e => e.name).Take(2), async);
+
+        Assert.Equal(2, updated);
+        Assert.Equal(["c", "updated", "updated"], enlisted.Entities.Select(e => e.name).ToList().Order().ToList());
+
+        // The bulk executor joined the transaction and did not end it.
+        Assert.NotNull(owner.Database.CurrentTransaction);
+        Assert.NotNull(enlisted.Database.CurrentTransaction);
+        using (var outsider = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(["a", "b", "c"], outsider.Entities.Select(e => e.name).ToList().Order().ToList());
+        }
+
+        owner.Database.CommitTransaction();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["c", "updated", "updated"], check.Entities.Select(e => e.name).ToList().Order().ToList());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Enlisted_context_two_phase_ExecuteUpdate_is_discarded_when_the_owner_rolls_back(bool async)
+    {
+        var collection = database.CreateCollection<SimpleEntity>($"{nameof(Enlisted_context_two_phase_ExecuteUpdate_is_discarded_when_the_owner_rolls_back)}_{async}");
+        SeedABC(collection);
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        Assert.Equal(2, await SetNamesToUpdated(enlisted.Entities.OrderBy(e => e.name).Take(2), async));
+        Assert.NotNull(owner.Database.CurrentTransaction);
+
+        owner.Database.RollbackTransaction();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["a", "b", "c"], check.Entities.Select(e => e.name).ToList().Order().ToList());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Enlisted_context_two_phase_ExecuteDelete_runs_inside_the_shared_transaction(bool async)
+    {
+        var collection = database.CreateCollection<SimpleEntity>($"{nameof(Enlisted_context_two_phase_ExecuteDelete_runs_inside_the_shared_transaction)}_{async}");
+        SeedABC(collection);
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        Assert.Equal(2, await DeleteAll(enlisted.Entities.OrderBy(e => e.name).Take(2), async));
+        Assert.Equal(["c"], enlisted.Entities.Select(e => e.name).ToList());
+        Assert.NotNull(owner.Database.CurrentTransaction);
+
+        using (var outsider = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(3, outsider.Entities.Count());
+        }
+
+        owner.Database.RollbackTransaction();
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(3, check.Entities.Count());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteUpdate_after_the_owner_committed_throws_no_longer_active(bool async)
+    {
+        var collection = database.CreateCollection<SimpleEntity>($"{nameof(ExecuteUpdate_after_the_owner_committed_throws_no_longer_active)}_{async}");
+        SeedABC(collection);
+
+        using var owner = SingleEntityDbContext.Create(collection);
+        owner.Database.BeginTransaction();
+        using var enlisted = SingleEntityDbContext.Create(collection);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+
+        owner.Database.CommitTransaction();
+
+        var ex = async
+            ? await Assert.ThrowsAsync<InvalidOperationException>(
+                () => SetNamesToUpdated(enlisted.Entities.OrderBy(e => e.name).Take(2), async))
+            : Assert.Throws<InvalidOperationException>(
+                () => SetNamesToUpdated(enlisted.Entities.OrderBy(e => e.name).Take(2), async).GetAwaiter().GetResult());
+        Assert.Contains("is no longer active", ex.Message);
+
+        // The plain (single command) form is guarded the same way.
+        ex = async
+            ? await Assert.ThrowsAsync<InvalidOperationException>(() => DeleteAll(enlisted.Entities, async))
+            : Assert.Throws<InvalidOperationException>(() => DeleteAll(enlisted.Entities, async).GetAwaiter().GetResult());
+        Assert.Contains("is no longer active", ex.Message);
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["a", "b", "c"], check.Entities.Select(e => e.name).ToList().Order().ToList());
+    }
+#endif
+
+    // A Join the native translator would turn into a $lookup runs through the driver's LINQ provider under MongoQueryMode.DriverLinq,
+    // with the inner collection as a second source that must also be bound to the shared transaction's session.
+
+    private class JoinLeft
+    {
+        public ObjectId _id { get; set; }
+        public int key { get; set; }
+        public string name { get; set; } = null!;
+    }
+
+    private class JoinRight
+    {
+        public ObjectId _id { get; set; }
+        public int key { get; set; }
+        public string label { get; set; } = null!;
+    }
+
+    private sealed class JoinContext(TemporaryDatabaseFixture fixture, string leftCollection, string rightCollection)
+        : DbContext(new DbContextOptionsBuilder<JoinContext>()
+            .UseMongoDB(
+                fixture.Client,
+                fixture.MongoDatabase.DatabaseNamespace.DatabaseName,
+                b => b.UseQueryMode(MongoQueryMode.DriverLinq))
+            .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
+            .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning))
+            .Options)
+    {
+        public DbSet<JoinLeft> Lefts { get; set; } = null!;
+        public DbSet<JoinRight> Rights { get; set; } = null!;
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<JoinLeft>().ToCollection(leftCollection);
+            modelBuilder.Entity<JoinRight>().ToCollection(rightCollection);
+        }
+
+        public List<string> JoinedLabels()
+            => Lefts
+                .Join(Rights, l => l.key, r => r.key, (l, r) => new { l.name, r.label })
+                .AsEnumerable()
+                .Select(x => $"{x.name}:{x.label}")
+                .OrderBy(x => x)
+                .ToList();
+    }
+
+    private (string Left, string Right) SetupJoinCollections()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var left = "JoinLefts" + suffix;
+        var right = "JoinRights" + suffix;
+        database.MongoDatabase.GetCollection<JoinLeft>(left).InsertOne(new JoinLeft { key = 1, name = "L1" });
+        database.MongoDatabase.GetCollection<JoinRight>(right).InsertOne(new JoinRight { key = 1, label = "committed" });
+        return (left, right);
+    }
+
+    [Fact]
+    public void Enlisted_context_join_query_sees_uncommitted_inner_rows()
+    {
+        var (left, right) = SetupJoinCollections();
+
+        using var owner = new JoinContext(database, left, right);
+        owner.Database.BeginTransaction();
+        owner.Rights.Add(new JoinRight { key = 1, label = "uncommitted" });
+        owner.SaveChanges();
+
+        using var enlisted = new JoinContext(database, left, right);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        Assert.Equal(["L1:committed", "L1:uncommitted"], enlisted.JoinedLabels());
+
+        using (var outsider = new JoinContext(database, left, right))
+        {
+            Assert.Equal(["L1:committed"], outsider.JoinedLabels());
+        }
+
+        owner.Database.RollbackTransaction();
+    }
+
+    [Fact]
+    public void Join_query_after_the_owner_ended_throws()
+    {
+        var (left, right) = SetupJoinCollections();
+
+        using var owner = new JoinContext(database, left, right);
+        owner.Database.BeginTransaction();
+        using var enlisted = new JoinContext(database, left, right);
+        enlisted.Database.UseTransaction(owner.Database.CurrentTransaction!);
+        Assert.Equal(["L1:committed"], enlisted.JoinedLabels());
+
+        owner.Database.CommitTransaction();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => enlisted.JoinedLabels());
+        Assert.Contains("is no longer active", ex.Message);
+    }
+
+    // The driver's WithTransaction retries its callback on a TransientTransactionError by aborting the transaction and starting a new
+    // one on the same session. A context enlisted in the aborted one is bound to it (its writes would otherwise leak outside the new
+    // transaction), so each attempt must create and enlist its own context.
+
+    private static MongoException TransientError()
+    {
+        var ex = new MongoException("transient failure");
+        ex.AddErrorLabel("TransientTransactionError");
+        return ex;
+    }
+
+    [Fact]
+    public void Context_enlisted_inside_a_WithTransaction_callback_survives_a_retry()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = database.Client.StartSession();
+        var attempts = 0;
+
+        session.WithTransaction<object?>((s, _) =>
+        {
+            attempts++;
+            using var db = SingleEntityDbContext.Create(collection);
+            db.Database.UseTransaction(s);
+            db.Entities.Add(new SimpleEntity { name = $"attempt-{attempts}" });
+            db.SaveChanges();
+
+            if (attempts == 1)
+            {
+                throw TransientError();
+            }
+
+            return null;
+        });
+
+        Assert.Equal(2, attempts);
+        Assert.False(session.IsInTransaction);
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["attempt-2"], check.Entities.Select(e => e.name).ToList());
+    }
+
+    [Fact]
+    public async Task Context_enlisted_inside_a_WithTransaction_callback_survives_a_retry_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = database.Client.StartSession();
+        var attempts = 0;
+
+        await session.WithTransactionAsync<object?>(async (s, ct) =>
+        {
+            attempts++;
+            await using var db = SingleEntityDbContext.Create(collection);
+            db.Database.UseTransaction(s);
+            db.Entities.Add(new SimpleEntity { name = $"attempt-{attempts}" });
+            await db.SaveChangesAsync(ct);
+
+            if (attempts == 1)
+            {
+                throw TransientError();
+            }
+
+            return null;
+        });
+
+        Assert.Equal(2, attempts);
+        await using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(["attempt-2"], await check.Entities.Select(e => e.name).ToListAsync());
+    }
+
+    [Fact]
+    public void Context_enlisted_before_a_WithTransaction_retry_throws_no_longer_active()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        using var session = database.Client.StartSession();
+        using var db = SingleEntityDbContext.Create(collection);
+        var attempts = 0;
+        InvalidOperationException? staleContextError = null;
+
+        session.WithTransaction<object?>((s, _) =>
+        {
+            attempts++;
+            if (attempts == 1)
+            {
+                // Enlisted in the first attempt's transaction, and kept across the retry.
+                db.Database.UseTransaction(s);
+                db.Entities.Add(new SimpleEntity { name = "first-attempt" });
+                db.SaveChanges();
+                throw TransientError();
+            }
+
+            // The retry is a new transaction on the same session; the context is still bound to the aborted one.
+            db.Entities.Add(new SimpleEntity { name = "second-attempt" });
+            staleContextError = Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
+            return null;
+        });
+
+        Assert.Equal(2, attempts);
+        Assert.NotNull(staleContextError);
+        Assert.Contains("is no longer active", staleContextError.Message);
+        Assert.DoesNotContain("already in a transaction", staleContextError.Message);
+
+        using var check = SingleEntityDbContext.Create(collection);
+        Assert.Equal(0, check.Entities.Count());
+    }
 }
