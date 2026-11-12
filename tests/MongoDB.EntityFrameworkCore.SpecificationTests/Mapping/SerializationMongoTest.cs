@@ -32,9 +32,8 @@ public class SerializationMongoTest(SerializationMongoTest.SerializationMongoFix
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
     // <generated>
-    // Fails: Concurrency token on an owned entity is rejected; round trip differs (not triaged) EF-X319
     public override void Can_round_trip_through_JSON(bool useNewtonsoft, bool ignoreLoops, bool writeIndented)
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.Can_round_trip_through_JSON(useNewtonsoft, ignoreLoops, writeIndented), "Assert.Equal() Failure: Values differ");
+        => base.Can_round_trip_through_JSON(useNewtonsoft, ignoreLoops, writeIndented);
     // </generated>
 
     public class SerializationMongoFixture : F1FixtureBase<byte[]>
@@ -50,15 +49,7 @@ public class SerializationMongoTest(SerializationMongoTest.SerializationMongoFix
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
-            try
-            {
-                await base.InitializeAsync();
-            }
-            catch (NotSupportedException)
-            {
-                // Fails: Model/seeding fails during fixture initialization EF-X319
-                // The tests then run (and fail) against an uninitialized database.
-            }
+            await base.InitializeAsync();
         }
 
         public override TestHelpers TestHelpers
@@ -67,10 +58,26 @@ public class SerializationMongoTest(SerializationMongoTest.SerializationMongoFix
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
+        // From EF9 the F1 data is added through UseSeeding / UseAsyncSeeding, which the provider's EnsureCreated does not run, so seed it here.
+#if !EF8
+        protected override async Task SeedAsync(Microsoft.EntityFrameworkCore.TestModels.ConcurrencyModel.F1Context context)
         {
-            base.OnModelCreating(modelBuilder, context);
-            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+            Microsoft.EntityFrameworkCore.TestModels.ConcurrencyModel.F1Context.AddSeedData(context);
+            await context.SaveChangesAsync();
+        }
+#endif
+
+        // The F1 model is built outside the normal pipeline (UseModel), so OnModelCreating is not part of it.
+        protected override void BuildModelExternal(ModelBuilder modelBuilder)
+        {
+            base.BuildModelExternal(modelBuilder);
+
+            // EF-X201: single-property keys must be mapped to _id. EF-X214: concurrency tokens are supported only on the document root.
+            modelBuilder.FixExternalModel(dropOwnedConcurrencyTokens: true);
+
+            // EF-X207: a unique index on a nullable foreign key treats every null as a duplicate.
+            MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
+            modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
     }
 }

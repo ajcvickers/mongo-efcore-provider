@@ -24,8 +24,15 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Update;
 
 public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
-    : UpdatesTestBase<UpdatesMongoTest.UpdatesMongoFixture>(fixture)
+    : UpdatesTestBase<UpdatesMongoTest.UpdatesMongoFixture>(fixture), IAsyncLifetime
 {
+    // The tests write to the shared database and the contexts cannot yet enlist in a rolled-back transaction (#77), so each test reseeds it; otherwise which test sees which rows depends on the order they run in.
+    public async LifetimeTask InitializeAsync()
+        => await Fixture.ReseedAsync();
+
+    public LifetimeTask DisposeAsync()
+        => LifetimeTask.CompletedTask;
+
 #if EF11
     private readonly object? _ef11Skips = Ef11TestSkips.SkipIfListed("xUnit v3 (EF11) cannot hide this non-virtual upstream test; it fails here for the reasons in EF-X101, EF-X600, EF-X605 (see the New-method override on EF8 to EF10)", "Ignore_before_save_property_is_still_generated", "Ignore_before_save_property_is_still_generated_graph", "SaveChanges_false_processes_all_tracked_entities_without_calling_AcceptAllChanges", "SaveChanges_processes_all_tracked_entities");
 #endif
@@ -38,7 +45,6 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 
     public class UpdatesMongoFixture : UpdatesFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("Updates");
@@ -50,17 +56,11 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
-
-        public override UpdatesContext CreateContext()
-        {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
-        }
 
 #if EF11
         // EF11 reports this model validation warning before the relationship errors the other versions hit first.
@@ -72,24 +72,23 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
-            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: false);
+            MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
+            MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
+            modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
     }
 
 #if (EF10 || EF11) || EF9
 #if EF11
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (non-deterministic: depends on the graph traversal order) EF-X721
     public override Task Can_add_and_remove_self_refs()
-        => SpecFails.AnyOutcomeAsync(() => base.Can_add_and_remove_self_refs(), "The instance of entity type 'Person' cannot be tracked because another instance with the k");
+        => base.Can_add_and_remove_self_refs();
 #else
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override Task Can_add_and_remove_self_refs()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Can_add_and_remove_self_refs(), "The instance of entity type 'Person' cannot be tracked because another instance with the k");
+        => base.Can_add_and_remove_self_refs();
 #endif
 #elif EF8
-    // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101
     public override void Can_add_and_remove_self_refs()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Can_add_and_remove_self_refs(), "The instance of entity type 'Person' cannot be tracked because another instance with the k");
+        => base.Can_add_and_remove_self_refs();
 #endif
 
 #if (EF10 || EF11)
@@ -98,20 +97,12 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
     public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
         => SpecFails.AnyOutcomeAsync(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
 #else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
     public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
+        => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async);
 #endif
-#elif EF9 || EF8
-#if EF8
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async));
 #else
-    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Can_change_type_of__dependent_by_replacing_with_new_dependent(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async));
-#endif
+        => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async);
 #endif
 
 #if (EF10 || EF11)
@@ -254,18 +245,15 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 
 #if (EF10 || EF11) || EF9
 #if EF11
-    // Fails: Partial update of a tracked entity reports a concurrency conflict EF-X114 (non-deterministic: depends on the graph traversal order) EF-X721
     public override Task Save_partial_update()
-        => SpecFails.AnyOutcomeAsync(() => base.Save_partial_update(), "Conflicts were detected when performing updates to 'EF");
+        => base.Save_partial_update();
 #else
-    // Fails: Partial update of a tracked entity reports a concurrency conflict EF-X114
     public override Task Save_partial_update()
-        => SpecFails.ThrowsAsync<global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException>(() => base.Save_partial_update(), "Conflicts were detected when performing updates to 'EF");
+        => base.Save_partial_update();
 #endif
 #elif EF8
-    // Fails: Partial update of a tracked entity reports a concurrency conflict EF-X114
     public override void Save_partial_update()
-        => SpecFails.Throws<global::Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException>(() => base.Save_partial_update(), "Conflicts were detected when performing updates to 'EF");
+        => base.Save_partial_update();
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -301,18 +289,12 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
-#if EF11
-    // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108 (non-deterministic: depends on the graph traversal order) EF-X721
+    // Fails: replacing a principal (delete and add the same key in one SaveChanges) throws MongoBulkWriteException (duplicate key) EF-X518
     public override Task Save_replaced_principal()
-        => SpecFails.AnyOutcomeAsync(() => base.Save_replaced_principal(), "Assert.Equal() Failure: Values differ");
-#else
-    // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108
-    public override Task Save_replaced_principal()
-        => SpecFails.ThrowsAsync<global::Xunit.Sdk.XunitException>(() => base.Save_replaced_principal(), "Assert.Equal() Failure: Values differ");
-#endif
+        => SpecFails.ThrowsAsync(() => base.Save_replaced_principal(), "DuplicateKey");
 #elif EF8
-    // Fails: Store-generated/computed value or update semantics differ (no database defaults, computed columns or generated keys) EF-X108
+    // Fails: replacing a principal (delete and add the same key in one SaveChanges) throws MongoBulkWriteException (duplicate key) EF-X518
     public override void Save_replaced_principal()
-        => SpecFails.Throws<global::Xunit.Sdk.XunitException>(() => base.Save_replaced_principal(), "Assert.Equal() Failure: Values differ");
+        => SpecFails.Throws(() => base.Save_replaced_principal(), "DuplicateKey");
 #endif
 }

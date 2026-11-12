@@ -18,6 +18,9 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using MongoDB.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.ValueGeneration;
 using MongoDB.EntityFrameworkCore.Extensions;
 
@@ -42,7 +45,13 @@ public static class MongoSpecModelHelpers
     /// models expect identity columns. Pass <see langword="false"/> to leave key generation as the provider has it, as
     /// when the failure of key generation is itself what a test class asserts.
     /// </param>
-    public static void MapSingleKeysToId(ModelBuilder modelBuilder, bool generateIntegerKeys)
+    /// <param name="temporaryIntegerKeys">
+    /// With <paramref name="generateIntegerKeys"/>, selects the entity types whose generated keys are temporary, as a relational provider's are.
+    /// Needed where the upstream test relies on a store-generated key being read-only before it has been saved (<c>StoreGeneratedTestBase</c>
+    /// with <c>Gumball</c>): a non-temporary generated value makes <c>SaveChanges</c> throw before the property under test is reached. Other
+    /// entity types in the same model must not be selected: EF Core rejects a temporary value on a key that is not generated on add.
+    /// </param>
+    public static void MapSingleKeysToId(ModelBuilder modelBuilder, bool generateIntegerKeys, Func<IReadOnlyEntityType, bool>? temporaryIntegerKeys = null)
     {
         foreach (var entityType in modelBuilder.Model.GetEntityTypes().Where(e => !e.IsOwned() && e.BaseType == null).ToList())
         {
@@ -63,15 +72,15 @@ public static class MongoSpecModelHelpers
 
             if (property.ClrType == typeof(int))
             {
-                propertyBuilder.HasValueGenerator(typeof(TestIntegerValueGenerator<int>));
+                propertyBuilder.HasValueGenerator(temporaryIntegerKeys?.Invoke(entityType) == true ? typeof(TestTemporaryIntegerValueGenerator<int>) : typeof(TestIntegerValueGenerator<int>));
             }
             else if (property.ClrType == typeof(long))
             {
-                propertyBuilder.HasValueGenerator(typeof(TestIntegerValueGenerator<long>));
+                propertyBuilder.HasValueGenerator(temporaryIntegerKeys?.Invoke(entityType) == true ? typeof(TestTemporaryIntegerValueGenerator<long>) : typeof(TestIntegerValueGenerator<long>));
             }
             else if (property.ClrType == typeof(short))
             {
-                propertyBuilder.HasValueGenerator(typeof(TestIntegerValueGenerator<short>));
+                propertyBuilder.HasValueGenerator(temporaryIntegerKeys?.Invoke(entityType) == true ? typeof(TestTemporaryIntegerValueGenerator<short>) : typeof(TestIntegerValueGenerator<short>));
             }
         }
     }
@@ -162,6 +171,80 @@ public static class MongoSpecModelHelpers
         return configurationBuilder;
     }
 
+    /// <summary>
+    /// The provider rejects a value converter whose model type is a nullable value type (what <c>HasConversion(x =&gt; ..., y =&gt; ...)</c> with
+    /// inline expressions builds for a nullable property, EF-X300). Replaces each such converter with an equivalent over the underlying
+    /// non-nullable types; EF Core already leaves null out of the conversion. Call after the model is built.
+    /// </summary>
+    public static ModelBuilder UnwrapNullableValueConverters(this ModelBuilder modelBuilder)
+    {
+        foreach (var property in modelBuilder.Model.GetEntityTypes().SelectMany(e => e.GetDeclaredProperties()).ToList())
+        {
+            if (property.GetValueConverter() is not { } converter || !converter.ModelClrType.IsNullableValueType())
+            {
+                continue;
+            }
+
+            var modelType = Nullable.GetUnderlyingType(converter.ModelClrType)!;
+            var providerType = Nullable.GetUnderlyingType(converter.ProviderClrType) ?? converter.ProviderClrType;
+
+            var model = System.Linq.Expressions.Expression.Parameter(modelType, "m");
+            var provider = System.Linq.Expressions.Expression.Parameter(providerType, "p");
+            var toProvider = System.Linq.Expressions.Expression.Lambda(
+                System.Linq.Expressions.Expression.GetFuncType(modelType, providerType),
+                System.Linq.Expressions.Expression.Convert(
+                    System.Linq.Expressions.Expression.Invoke(
+                        converter.ConvertToProviderExpression,
+                        System.Linq.Expressions.Expression.Convert(model, converter.ModelClrType)),
+                    providerType),
+                model);
+            var fromProvider = System.Linq.Expressions.Expression.Lambda(
+                System.Linq.Expressions.Expression.GetFuncType(providerType, modelType),
+                System.Linq.Expressions.Expression.Convert(
+                    System.Linq.Expressions.Expression.Invoke(
+                        converter.ConvertFromProviderExpression,
+                        System.Linq.Expressions.Expression.Convert(provider, converter.ProviderClrType)),
+                    modelType),
+                provider);
+
+            var converterType = typeof(Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<,>).MakeGenericType(modelType, providerType);
+            // The constructor's trailing parameters (mapping hints, and on later versions more) are all optional.
+            var constructor = converterType.GetConstructors()
+                .Where(c => c.GetParameters() is { Length: >= 2 } p
+                            && p[0].ParameterType.IsInstanceOfType(toProvider) && p[1].ParameterType.IsInstanceOfType(fromProvider))
+                .OrderBy(c => c.GetParameters().Length)
+                .First();
+            ((IMutableProperty)property).SetValueConverter(
+                (Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter)constructor.Invoke(
+                    constructor.GetParameters().Select((p, i) => i == 0 ? toProvider : i == 1 ? fromProvider : null).ToArray()));
+        }
+
+        return modelBuilder;
+    }
+
+    /// <summary>
+    /// The provider owns, by convention, any non-generic type it reaches through a navigation that is not yet in the model. This
+    /// replaces that convention so the types selected by <paramref name="isEntityType"/> are independent entity types instead
+    /// (upstream models rely on a type with no <c>DbSet</c> being discovered through a navigation, then configured explicitly).
+    /// </summary>
+    public static ModelConfigurationBuilder DoNotOwnTypes(
+        this ModelConfigurationBuilder configurationBuilder, Func<Type, IConventionModel, bool> isEntityType)
+    {
+        configurationBuilder.Conventions.Replace<RelationshipDiscoveryConvention>(
+            sp => new SelectivelyOwningConvention(sp.GetRequiredService<ProviderConventionSetBuilderDependencies>(), isEntityType));
+        return configurationBuilder;
+    }
+
+    private sealed class SelectivelyOwningConvention(
+        ProviderConventionSetBuilderDependencies dependencies, Func<Type, IConventionModel, bool> isEntityType)
+        : MongoRelationshipDiscoveryConvention(dependencies)
+    {
+        protected override bool? ShouldBeOwned(Type targetType, IConventionModel model)
+            => !model.IsOwned(targetType) && !targetType.IsDefined(typeof(OwnedAttribute), inherit: false) && isEntityType(targetType, model)
+                ? false
+                : base.ShouldBeOwned(targetType, model);
+    }
+
     private sealed class MapKeysToElementIdConvention(bool generateIntKeys, bool dropOwnedConcurrencyTokens) : IModelFinalizingConvention
     {
         public void ProcessModelFinalizing(IConventionModelBuilder modelBuilder, IConventionContext<IConventionModelBuilder> context)
@@ -234,4 +317,15 @@ public class TestIntegerValueGenerator<TValue> : ValueGenerator<TValue>
 
     public override TValue Next(EntityEntry entry)
         => (TValue)Convert.ChangeType(Interlocked.Increment(ref _current), typeof(TValue));
+}
+
+/// <summary>
+/// <see cref="TestIntegerValueGenerator{TValue}"/> whose values EF Core treats as temporary, like the ones a relational provider
+/// generates. The provider never replaces them, so they are stored as they are.
+/// </summary>
+public class TestTemporaryIntegerValueGenerator<TValue> : TestIntegerValueGenerator<TValue>
+    where TValue : struct
+{
+    public override bool GeneratesTemporaryValues
+        => true;
 }

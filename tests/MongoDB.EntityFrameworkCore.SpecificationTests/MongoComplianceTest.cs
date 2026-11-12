@@ -32,6 +32,11 @@ public class MongoComplianceTest : ComplianceTestBase
     [
         // Provider-wide non-query test bases (present across EF8/EF9/EF10).
         typeof(ComplexTypesTrackingTestBase<>), // Complex types: covered by the separate complex type work.
+        // GraphUpdatesMongoTest and ProxyGraphUpdatesMongoTest exist but are abstract (not run) until contexts can enlist in a rolled-back
+        // transaction, because the per-test drop and reseed costs minutes per EF version; see
+        // https://github.com/ajcvickers/mongo-efcore-provider/issues/77. The compliance test only counts concrete derived classes.
+        typeof(GraphUpdatesTestBase<>),
+        typeof(ProxyGraphUpdatesTestBase<>),
 
         // Query test bases (present across EF8/EF9/EF10).
         typeof(ComplexTypeQueryTestBase<>), // Complex types: covered by the separate complex type work.
@@ -39,12 +44,6 @@ public class MongoComplianceTest : ComplianceTestBase
 #if EF11
         // Complex type inheritance is not supported; tracked in https://github.com/ajcvickers/mongo-efcore-provider/issues/22
         typeof(InheritanceComplexTypesQueryTestBase<>),
-#endif
-#if EF8 || EF9
-        // Blocked on EF8/EF9, EF-X539: the join entity is configured as owned, and the upstream test constructor builds its expected data
-        // through the fixture, so no test can be constructed. Ported for EF10+ (ManyToManyQueryMongoTest), where the failure is per test.
-        typeof(ManyToManyNoTrackingQueryTestBase<>),
-        typeof(ManyToManyQueryTestBase<>),
 #endif
         typeof(QueryTestBase<>),
 #if !EF11

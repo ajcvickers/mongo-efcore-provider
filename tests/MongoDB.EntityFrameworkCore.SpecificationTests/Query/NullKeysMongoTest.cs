@@ -25,7 +25,6 @@ public class NullKeysMongoTest(NullKeysMongoTest.NullKeysMongoFixture fixture)
 {
     public class NullKeysMongoFixture : NullKeysFixtureBase
     {
-        private readonly InitFailureGuard _initFailure = new();
         private ITestStoreFactory? _testStoreFactory;
 
         protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("NullKeys");
@@ -37,42 +36,34 @@ public class NullKeysMongoTest(NullKeysMongoTest.NullKeysMongoFixture fixture)
             TestServer = await TestServer.GetOrInitializeTestServerAsync(MongoCondition.None);
             _testStoreFactory = new MongoTestStoreFactory(TestServer, pinDefaultQueryMode: true);
 
-            await _initFailure.RunAsync(base.InitializeAsync);
+            await base.InitializeAsync();
         }
 
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        public override PoolableDbContext CreateContext()
-        {
-            _initFailure.ThrowIfFailed();
-            return base.CreateContext();
-        }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
             MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: false);
+            // EF-X106 / EF-X207: a unique index on a nullable key or foreign key treats every null as a duplicate, so the index build fails.
+            MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
+            modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
     }
 
-    // Fails: Unique index build fails on null/missing key values EF-X106
     public override void Include_with_non_nullable_FKs_and_nullable_PK()
-        => SpecFails.Throws<global::MongoDB.Driver.MongoCommandException>(() => base.Include_with_non_nullable_FKs_and_nullable_PK(), "Command createIndexes failed: Index build failed");
+        => base.Include_with_non_nullable_FKs_and_nullable_PK();
 
-    // Fails: Unique index build fails on null/missing key values EF-X106
     public override void Include_with_null_FKs_and_nullable_PK()
-        => SpecFails.Throws<global::MongoDB.Driver.MongoCommandException>(() => base.Include_with_null_FKs_and_nullable_PK(), "Command createIndexes failed: Index build failed");
+        => base.Include_with_null_FKs_and_nullable_PK();
 
-    // Fails: Unique index build fails on null/missing key values EF-X106
     public override void Include_with_null_fKs_and_non_nullable_PK()
-        => SpecFails.Throws<global::MongoDB.Driver.MongoCommandException>(() => base.Include_with_null_fKs_and_non_nullable_PK(), "Command createIndexes failed: Index build failed");
+        => base.Include_with_null_fKs_and_non_nullable_PK();
 
-    // Fails: Unique index build fails on null/missing key values EF-X106
     public override void Include_with_null_fKs_and_nullable_PK()
-        => SpecFails.Throws<global::MongoDB.Driver.MongoCommandException>(() => base.Include_with_null_fKs_and_nullable_PK(), "Command createIndexes failed: Index build failed");
+        => base.Include_with_null_fKs_and_nullable_PK();
 
-    // Fails: Unique index build fails on null/missing key values EF-X106
     public override void One_to_one_self_ref_Include()
-        => SpecFails.Throws<global::MongoDB.Driver.MongoCommandException>(() => base.One_to_one_self_ref_Include(), "Command createIndexes failed: Index build failed");
+        => base.One_to_one_self_ref_Include();
 }

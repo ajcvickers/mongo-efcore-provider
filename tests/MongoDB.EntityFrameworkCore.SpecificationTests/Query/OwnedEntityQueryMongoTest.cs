@@ -27,13 +27,6 @@ public class OwnedEntityQueryMongoTest : OwnedEntityQueryTestBase
     public OwnedEntityQueryMongoTest(NonSharedFixture fixture)
         : base(fixture)
     {
-        // The class-level fixture would reuse the first test's (already seeded) test store for every test;
-        // give each test its own uniquely named database instead.
-#if EF11
-        NonSharedFixture = null;
-#else
-        Fixture = null;
-#endif
     }
 
 #endif

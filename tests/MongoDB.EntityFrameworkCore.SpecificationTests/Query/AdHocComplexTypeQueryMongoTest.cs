@@ -31,9 +31,8 @@ public class AdHocComplexTypeQueryMongoTest : AdHocComplexTypeQueryTestBase
 #if EF10
     public AdHocComplexTypeQueryMongoTest(NonSharedFixture fixture)
         : base(fixture)
-        // Do not share the (never-cleaned, seed-once) store across tests: the base defines a different inline
-        // context per test, so each test gets its own uniquely-named database, like every other Mongo spec test.
-        => Fixture = null;
+    {
+    }
 #endif
 
     [ConditionalFact]
