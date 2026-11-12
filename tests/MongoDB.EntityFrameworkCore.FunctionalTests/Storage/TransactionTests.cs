@@ -18,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Storage;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Storage;
 
@@ -710,5 +711,114 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         {
             Assert.Equal(expectedCount, db.Entities.Count());
         }
+    }
+
+    // Ends the session's transaction without telling the MongoTransaction or the context, as happens when something else
+    // holding the same session aborts or commits it.
+    private static void EndTransactionBehindTheContextsBack(DbContext db)
+        => ((MongoTransaction)db.Database.CurrentTransaction!).ActiveSession.AbortTransaction();
+
+    [Fact]
+    public void SaveChanges_after_the_transaction_session_was_aborted_throws_instead_of_writing_outside_a_transaction()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using (var db = SingleEntityDbContext.Create(collection))
+        {
+            db.Database.BeginTransaction();
+            db.Entities.Add(new SimpleEntity { name = "test" });
+            EndTransactionBehindTheContextsBack(db);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
+            Assert.Contains("is no longer active", ex.Message);
+            Assert.Contains(db.Database.CurrentTransaction!.TransactionId.ToString(), ex.Message);
+        }
+
+        using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, check.Entities.Count());
+        }
+    }
+
+    [Fact]
+    public async Task SaveChanges_after_the_transaction_session_was_aborted_throws_instead_of_writing_outside_a_transaction_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        await using (var db = SingleEntityDbContext.Create(collection))
+        {
+            await db.Database.BeginTransactionAsync();
+            db.Entities.Add(new SimpleEntity { name = "test" });
+            EndTransactionBehindTheContextsBack(db);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+            Assert.Contains("is no longer active", ex.Message);
+            Assert.Contains(db.Database.CurrentTransaction!.TransactionId.ToString(), ex.Message);
+        }
+
+        await using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(0, await check.Entities.CountAsync());
+        }
+    }
+
+    [Fact]
+    public void Query_after_the_transaction_session_was_aborted_throws()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var db = SingleEntityDbContext.Create(collection);
+        db.Database.BeginTransaction();
+        EndTransactionBehindTheContextsBack(db);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => db.Entities.ToList());
+        Assert.Contains("is no longer active", ex.Message);
+    }
+
+#if !EF8
+    [Fact]
+    public void ExecuteDelete_after_the_transaction_session_was_aborted_throws()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+        collection.InsertOne(new SimpleEntity { name = "test" });
+
+        using (var db = SingleEntityDbContext.Create(collection))
+        {
+            db.Database.BeginTransaction();
+            EndTransactionBehindTheContextsBack(db);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => db.Entities.ExecuteDelete());
+            Assert.Contains("is no longer active", ex.Message);
+        }
+
+        using (var check = SingleEntityDbContext.Create(collection))
+        {
+            Assert.Equal(1, check.Entities.Count());
+        }
+    }
+#endif
+
+    [Fact]
+    public void Disposing_a_transaction_whose_session_was_already_aborted_does_not_throw()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        using var db = SingleEntityDbContext.Create(collection);
+        var transaction = db.Database.BeginTransaction();
+        EndTransactionBehindTheContextsBack(db);
+
+        transaction.Dispose();
+    }
+
+    [Fact]
+    public async Task Disposing_a_transaction_whose_session_was_already_aborted_does_not_throw_async()
+    {
+        var collection = database.CreateCollection<SimpleEntity>();
+
+        await using var db = SingleEntityDbContext.Create(collection);
+        var transaction = await db.Database.BeginTransactionAsync();
+        EndTransactionBehindTheContextsBack(db);
+
+        await transaction.DisposeAsync();
     }
 }

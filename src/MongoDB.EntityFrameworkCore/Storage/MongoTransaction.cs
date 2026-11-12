@@ -99,9 +99,17 @@ public sealed class MongoTransaction(
 
     /// <summary>
     /// The underlying <see cref="IClientSession"/> this transaction is using which is required
-    /// to issue commands against.
+    /// to issue commands against. Throws if the session's transaction has ended (committed or aborted) since this
+    /// <see cref="MongoTransaction"/> was started, because a command issued on a session with no transaction in progress
+    /// would silently run outside any transaction.
     /// </summary>
-    internal IClientSessionHandle Session => session;
+    /// <exception cref="InvalidOperationException">The session is no longer in a transaction.</exception>
+    internal IClientSessionHandle ActiveSession
+        => session.IsInTransaction
+            ? session
+            : throw new InvalidOperationException(
+                $"MongoTransaction {TransactionId} is no longer active: the transaction on its session has already been committed or aborted. "
+                + "Commands can not be issued on this transaction because they would run outside of any transaction.");
 
     /// <inheritdoc />
     public Guid TransactionId { get; } = transactionId;
@@ -232,7 +240,12 @@ public sealed class MongoTransaction(
                 return;
 
             case TransactionState.Active:
-                Rollback();
+                // The session's transaction may already have ended behind our back; there is then nothing to roll back
+                // and attempting it would make Dispose throw.
+                if (session.IsInTransaction)
+                {
+                    Rollback();
+                }
                 break;
 
             case TransactionState.Committed:
@@ -254,7 +267,11 @@ public sealed class MongoTransaction(
                 return;
 
             case TransactionState.Active:
-                await RollbackAsync();
+                // See Dispose: nothing to roll back if the session's transaction has already ended.
+                if (session.IsInTransaction)
+                {
+                    await RollbackAsync().ConfigureAwait(false);
+                }
                 break;
 
             case TransactionState.Committed:

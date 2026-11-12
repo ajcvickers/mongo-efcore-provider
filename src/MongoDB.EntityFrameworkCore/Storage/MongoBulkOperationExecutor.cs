@@ -504,7 +504,7 @@ internal static class MongoBulkOperationExecutor
     // read from CurrentTransaction with an `as MongoTransaction` cast (GetBulkCollectionAndSession), which yields null for any other
     // IDbContextTransaction, and a null session means both phases quietly run outside the transaction. Fail closed instead.
     private static IClientSessionHandle RequireBulkSession(DatabaseFacade database)
-        => (database.CurrentTransaction as MongoTransaction)?.Session
+        => (database.CurrentTransaction as MongoTransaction)?.ActiveSession
            ?? throw new InvalidOperationException(
                "This bulk delete or update requires a MongoDB transaction, but the ambient transaction on this DbContext is not a "
                + "MongoDB transaction with an active session. Open the transaction with Database.BeginTransaction() on a "
@@ -566,7 +566,7 @@ internal static class MongoBulkOperationExecutor
         QueryContext queryContext, string collectionName)
     {
         var collection = queryContext.Context.GetService<IMongoClientWrapper>().GetCollection<BsonDocument>(collectionName);
-        var session = (queryContext.Context.Database.CurrentTransaction as MongoTransaction)?.Session;
+        var session = (queryContext.Context.Database.CurrentTransaction as MongoTransaction)?.ActiveSession;
         return (collection, session);
     }
 
