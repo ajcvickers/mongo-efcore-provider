@@ -11,17 +11,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="JunitXml.TestLogger" Version="2.1.81" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1"/>
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+    <PackageReference Include="JunitXml.TestLogger" Version="7.1.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0"/>
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="coverlet.collector" Version="3.2.0">
+    <PackageReference Include="coverlet.collector" Version="10.1.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Testcontainers" Version="4.9.0" />
+    <PackageReference Include="Testcontainers" Version="4.16.0" />
   </ItemGroup>
 
   <!-- SSH.NET 2025.1.0 arrives transitively via Testcontainers (test-only, never shipped, and the SSH client is not used by

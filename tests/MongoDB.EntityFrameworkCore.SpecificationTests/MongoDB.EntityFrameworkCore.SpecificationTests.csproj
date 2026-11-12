@@ -45,7 +45,7 @@
   <!-- EF11's Specification.Tests package depends on xunit.v3.assert/extensibility.core 4.0.0-pre.108, so use the 4.x line here
        (the 3.x xunit.v3 core would otherwise run against newer assert/common assemblies). -->
   <ItemGroup Condition=" '$(Configuration)' == 'Release EF11' Or '$(Configuration)' == 'Debug EF11' ">
-    <PackageReference Include="xunit.v3" Version="4.0.2" />
+    <PackageReference Include="xunit.v3" Version="4.0.3" />
   </ItemGroup>
 
   <ItemGroup Condition=" '$(Configuration)' == 'Release EF8' Or '$(Configuration)' == 'Debug EF8' ">

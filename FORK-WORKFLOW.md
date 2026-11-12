@@ -206,9 +206,10 @@ Notes:
 - Published versions can be unlisted but never deleted. Don't use real version tags for experiments.
 - Don't move a tag that has been published. Fix `release` and bump the revision.
 - A `.0` revision publishes as the three-part version (`v10.0.5.0` → `10.0.5`). Start at `.1`.
-- EF11 has no upstream release to base a version on. Use `11.0.0` as the base (e.g. `v11.0.0.1`), and while EF Core 11 itself is
-  a release candidate publish a prerelease (`v11.0.0.1-rc.1`): a stable package that depends on a prerelease EF Core triggers NuGet's NU5104
-  warning and misleads consumers. The tag pattern and the first-number rule work with the suffix.
+- EF11 has no upstream release to base a version on. Use `11.0.0` as the base (e.g. `v11.0.0.1`). EF Core 11 is GA, so publish it as a
+  stable version. If `Versions.props` ever points at a prerelease EF Core again, publish a prerelease too (`v11.0.0.1-rc.1`): a stable
+  package that depends on a prerelease EF Core triggers NuGet's NU5104 warning and misleads consumers. The tag pattern and the
+  first-number rule work with the suffix.
 - The publish workflow lives on `release` only. Never put it on an upstream-bound branch.
 
 ---

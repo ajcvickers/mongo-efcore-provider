@@ -23,21 +23,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
             10.0.x
 
-      # EF11 builds for net11.0. Quality 'preview' also resolves release candidates; drop it once .NET 11 is GA.
+      # EF11 builds for net11.0.
       - name: Setup .NET 11
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 11.0.x
-          dotnet-quality: preview
 
       - name: Resolve version and configuration
         run: |

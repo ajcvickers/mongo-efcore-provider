@@ -37,11 +37,17 @@ public class AdHocQueryFiltersQueryMongoTest : AdHocQueryFiltersQueryTestBase
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
 #if EF11
-    public override Task Query_filter_with_EF_Constant_throws()
-        => base.Query_filter_with_EF_Constant_throws();
+    public override Task Query_filter_with_EF_Constant_literal_throws()
+        => base.Query_filter_with_EF_Constant_literal_throws();
 
-    public override Task Query_filter_with_EF_Parameter_throws()
-        => base.Query_filter_with_EF_Parameter_throws();
+    public override Task Query_filter_with_EF_Constant_over_context_property()
+        => base.Query_filter_with_EF_Constant_over_context_property();
+
+    public override Task Query_filter_with_EF_Parameter_literal_throws()
+        => base.Query_filter_with_EF_Parameter_literal_throws();
+
+    public override Task Query_filter_with_EF_Parameter_over_context_property()
+        => base.Query_filter_with_EF_Parameter_over_context_property();
 #endif
 
 #if (EF10 || EF11)
