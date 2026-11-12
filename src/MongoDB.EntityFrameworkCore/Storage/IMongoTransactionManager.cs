@@ -55,6 +55,11 @@ public interface IMongoTransactionManager : IDbContextTransactionManager
     /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The context is already in a transaction, an ambient transaction exists,
     /// or the session has no active transaction.</exception>
+    /// <exception cref="ObjectDisposedException"><paramref name="session"/> has been disposed.</exception>
+    /// <remarks>
+    /// <paramref name="session"/> must not be <see langword="null"/>. To detach the context from the transaction, dispose the returned
+    /// transaction.
+    /// </remarks>
     IDbContextTransaction UseTransaction(IClientSessionHandle session);
 
     /// <summary>
@@ -67,5 +72,9 @@ public interface IMongoTransactionManager : IDbContextTransactionManager
     /// <exception cref="ArgumentNullException"><paramref name="transaction"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The context is already in a transaction, an ambient transaction exists,
     /// <paramref name="transaction"/> is not a <see cref="MongoTransaction"/>, or it is no longer active.</exception>
+    /// <remarks>
+    /// <paramref name="transaction"/> must not be <see langword="null"/>. To detach the context from the transaction, dispose the returned
+    /// transaction.
+    /// </remarks>
     IDbContextTransaction UseTransaction(IDbContextTransaction transaction);
 }

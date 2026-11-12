@@ -223,6 +223,11 @@ public static class MongoDatabaseFacadeExtensions
     /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The context is already in a transaction, an ambient transaction exists,
     /// or the session has no active transaction.</exception>
+    /// <exception cref="ObjectDisposedException"><paramref name="session"/> has been disposed.</exception>
+    /// <remarks>
+    /// <paramref name="session"/> must not be <see langword="null"/>. To detach the context from the transaction, dispose the returned
+    /// transaction.
+    /// </remarks>
     public static IDbContextTransaction UseTransaction(
         this DatabaseFacade databaseFacade,
         IClientSessionHandle session)
@@ -241,6 +246,10 @@ public static class MongoDatabaseFacadeExtensions
     /// <exception cref="ArgumentNullException"><paramref name="transaction"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The context is already in a transaction, an ambient transaction exists,
     /// <paramref name="transaction"/> is not a MongoDB transaction, or it is no longer active.</exception>
+    /// <remarks>
+    /// <paramref name="transaction"/> must not be <see langword="null"/>. To detach the context from the transaction, dispose the returned
+    /// transaction.
+    /// </remarks>
     public static IDbContextTransaction UseTransaction(
         this DatabaseFacade databaseFacade,
         IDbContextTransaction transaction)

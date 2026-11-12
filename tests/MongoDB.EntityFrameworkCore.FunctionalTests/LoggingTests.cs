@@ -473,7 +473,9 @@ public class LoggingTests(SampleGuidesFixture fixture, ITestOutputHelper testOut
         Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionCommitted"));
         Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRollingBack"));
         Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRolledBack"));
-        Assert.DoesNotContain(logs, l => l.Contains(session.ServerSession.Id["id"].ToString()!));
+        // The session id must not leak into the log; compare its GUID text, the form that would appear in a log line.
+        var sessionId = session.ServerSession.Id["id"].AsGuid.ToString();
+        Assert.DoesNotContain(logs, l => l.Contains(sessionId, StringComparison.OrdinalIgnoreCase));
 
         Assert.True(session.IsInTransaction);
         session.AbortTransaction();
