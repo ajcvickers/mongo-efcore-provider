@@ -25,6 +25,6 @@ public partial class SimpleContextModel
         EveryTypeEntityType.CreateAnnotations(everyType);
         OwnedEntityEntityType.CreateAnnotations(ownedEntity);
 
-        AddAnnotation("ProductVersion", "11.0.0-rc.3.26522.148");
+        AddAnnotation("ProductVersion", "11.0.0");
     }
 }
