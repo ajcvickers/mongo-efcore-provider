@@ -289,18 +289,12 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
 #endif
 
 #if (EF10 || EF11) || EF9
-#if EF11
-    // Fails: the provider throws 0, Culture=neutral, PublicKeyToken=94992a530f44e321]] where the base expects another outcome EF-X518
+    // Fails: replacing a principal (delete and add the same key in one SaveChanges) throws MongoBulkWriteException (duplicate key) EF-X518
     public override Task Save_replaced_principal()
-        => SpecFails.ThrowsAsync(() => base.Save_replaced_principal());
-#else
-    // Fails: the provider throws 0, Culture=neutral, PublicKeyToken=94992a530f44e321]] where the base expects another outcome EF-X518
-    public override Task Save_replaced_principal()
-        => SpecFails.ThrowsAsync(() => base.Save_replaced_principal());
-#endif
+        => SpecFails.ThrowsAsync(() => base.Save_replaced_principal(), "DuplicateKey");
 #elif EF8
-    // Fails: the provider throws 0, Culture=neutral, PublicKeyToken=94992a530f44e321]] where the base expects another outcome EF-X518
+    // Fails: replacing a principal (delete and add the same key in one SaveChanges) throws MongoBulkWriteException (duplicate key) EF-X518
     public override void Save_replaced_principal()
-        => SpecFails.Throws(() => base.Save_replaced_principal());
+        => SpecFails.Throws(() => base.Save_replaced_principal(), "DuplicateKey");
 #endif
 }

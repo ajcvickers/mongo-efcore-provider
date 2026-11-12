@@ -20,7 +20,7 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 5,022 |
+| `// Fails:` tag lines | 1,206 | 5,021 |
 | Distinct tagged test methods, any EF version | 1,175 | 3,540 |
 | ... active in the EF8 build | 1,064 | 2,646 |
 | ... active in the EF9 build | 1,141 | 3,179 |
@@ -222,7 +222,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X314 | Driver LINQ translation rejects expression over converted property, indexer or subquery | 6 |
 | EF-X315 | Value-converter behavior differs from the provider-agnostic expectation (not triaged) | 5 |
 | EF-X316 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) | 121 |
-| EF-X317 | `NullReferenceException` in JSON type round-trip (not triaged) | 60 |
+| EF-X317 | `JsonTypesTestBase` round-trips values through the type mapping's `JsonValueReaderWriter`, which Mongo type mappings do not have (it is `null`), so the base test throws `NullReferenceException`. Confirmed by decompiling the base and running `Can_read_write_DateOnly_JSON_values`; the other wrappers share that code path | 60 |
 | EF-X318 | Bad JSON value does not throw on materialization | 0 |
 | EF-X319 | Concurrency token on an owned entity is rejected (Serialization). The fixture drops the owned token (`FixExternalModel`) and seeds the F1 data itself, and `SerializationMongoTest` passes as the base | 0 |
 | EF-X320 | NetTopologySuite spatial types are not supported: the provider would own them. `SpatialQueryMongoFixture` stores them as well-known binary through a value converter so the data seeds and loads, but every spatial operation (area, distance, union, ...) is then rejected as not translatable | 88 |
@@ -749,8 +749,8 @@ data rows (or depends on the machine time zone) the override uses `SpecFails.*So
 
 - **EF-X309**: no database-side constraints, so inserting a null/too-long value does not raise `DbUpdateException`.
 
-- **EF-X310/X311/X315/X317/X319**: failures inside the test body that were not triaged further (`Sequence contains no elements`, `Operation is not valid...`,
-  `NullReferenceException` in the 125 JSON round-trip tests, value differences).
+- **EF-X310/X311/X315/X319**: failures inside the test body that were not triaged further (`Sequence contains no elements`, `Operation is not valid...`,
+  value differences). **EF-X317** (the JSON round-trip tests) is triaged: the Mongo type mappings have no `JsonValueReaderWriter`.
 
 - **EF-X312**: `[Column(TypeName = ...)]` is raised as an error (`ColumnAttributeWithTypeUsed`) unless the warning is ignored; `DataAnnotation` models use it.
 
@@ -910,7 +910,7 @@ Assertion failures (`Assert.Equal`/`Assert.True`) in `StoreGenerated` (computed/
 `UpdatesTestBase.Remove_partial_*`/`Update_*` compare the full exception message with the relational text (`The database operation was expected to affect 1 row(s)...`); the provider says `Conflicts were detected when performing updates to ...` (4 tests).
 
 ### EF-X116 — Conflicting writes between two contexts are not reported as a concurrency conflict
-`OptimisticConcurrencyTestBase.ConcurrencyTestAsync` changes the row through a second context and then saves the first. Here the first save fails with `MongoDB.Driver.MongoCommandException: Command update failed: Caused by :: Write conflict during plan execution and yielding is disabled`, so the `DbUpdateConcurrencyException` the 15 tests expect is never thrown. The cause was not investigated further: both contexts write inside the test store's transaction, so it may be how the spec fixtures share a transaction rather than provider behaviour, and a write conflict is in any case not translated to a concurrency exception.
+`OptimisticConcurrencyTestBase.ConcurrencyTestAsync` changes the row through a second context and then saves the first. Here the first save fails with `MongoDB.Driver.MongoCommandException: Command update failed: Caused by :: Write conflict during plan execution and yielding is disabled`, so the `DbUpdateConcurrencyException` the 15 tests expect is never thrown. The 15 wrappers pin the server's `Write conflict` message, so they fail if the provider ever starts translating it. The cause was not investigated further: both contexts write inside the test store's transaction, so it may be how the spec fixtures share a transaction rather than provider behaviour, and a write conflict is in any case not translated to a concurrency exception.
 
 ### EF-X117 — Duplicate key is not reported as `DbUpdateException`
 `OptimisticConcurrencyMongoTest.Adding_the_same_entity_twice_results_in_DbUpdateException` expects a `DbUpdateException`; the provider lets the driver's `MongoBulkWriteException` (duplicate key) escape. The cause was not investigated further.

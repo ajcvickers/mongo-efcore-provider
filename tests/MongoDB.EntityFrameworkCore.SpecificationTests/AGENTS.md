@@ -64,9 +64,10 @@ in behavior (including the test starting to pass) is detected.
   in whichever form the active query mode reports it).
   `Capture<T>`/`CaptureAsync<T>` return the exception when the override must inspect it. Never use raw `Assert.Throws*` in a `// Fails:`
   method: `python tests/tools/count-spec-fails.py --check` rejects it.
-- **Model adaptation lives in `Utilities/MongoSpecModelHelpers`**: `MapSingleKeysToId(modelBuilder, generateIntegerKeys)` (single-property
+- **Model adaptation lives in `Utilities/MongoSpecModelHelpers`**: `MapSingleKeysToId(modelBuilder, generateIntegerKeys, temporaryIntegerKeys)` (single-property
   keys must map to `_id`; `true` also uses the client-side `TestIntegerValueGenerator<T>`, because the provider generates no integer
-  keys), `RelaxNullableUniqueIndexes`, `RelaxUniqueForeignKeyIndexes`, `FixExternalModel` and the `MapSinglePropertyKeysToElementId`
+  keys; the optional `temporaryIntegerKeys` predicate picks the entity types whose keys use `TestTemporaryIntegerValueGenerator<T>`,
+  which EF Core treats as temporary like a relational provider's generated values, e.g. `Gumball` in `StoreGeneratedMongoTest`), `RelaxNullableUniqueIndexes`, `RelaxUniqueForeignKeyIndexes`, `FixExternalModel` and the `MapSinglePropertyKeysToElementId`
   convention. Every workaround is a gap with a ticket: remove it when the provider no longer needs it. `Utilities/InitFailureGuard`
   lets a fixture whose model, seed or store creation fails still be constructed and rethrows the failure from the first `CreateContext()`,
   so it can be asserted per test.
@@ -93,8 +94,8 @@ in behavior (including the test starting to pass) is detected.
   not assert MQL.
 - **Database names are limited to 63 characters.** `TestDatabaseNamer.GetUniqueDatabaseName` truncates the caller's part to fit and never
   truncates the unique counter, so a long fixture name cannot fail late in a long run.
-- **EF10 `NonShared*TestBase` classes** cache the first test's seeded store in a shared fixture; set `Fixture = null` in the constructor
-  (EF10 only) to get a store per test.
+- **EF10 `NonShared*TestBase` classes** cache the first test's seeded store in a shared fixture. The ported classes no longer work
+  around this with `Fixture = null`; don't add per-test fixture resets to them.
 - **Counts:** `python tests/tools/count-spec-fails.py` regenerates the figures in `docs/failing-spec-tests.md`.
 
 ## Regenerating MQL baselines

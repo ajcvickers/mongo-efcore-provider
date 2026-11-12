@@ -66,81 +66,81 @@ public class JsonTypesMongoTest
 
     // <generated>
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_DateOnly_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_DateOnly_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_DateOnly_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_DateOnly_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_DateTimeOffset_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_DateTimeOffset_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_DateTimeOffset_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_DateTimeOffset_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_DateTime_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_DateTime_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_DateTime_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_DateTime_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_GUID_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_GUID_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_GUID_JSON_values(global::System.Guid value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_GUID_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_IP_address_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_IP_address_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_IP_address_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_IP_address_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_TimeOnly_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_TimeOnly_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_TimeOnly_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_TimeOnly_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_TimeSpan_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_TimeSpan_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_TimeSpan_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_TimeSpan_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_URI_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_URI_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_URI_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_URI_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
@@ -200,17 +200,17 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_binary_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_binary_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_binary_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_binary_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_binary_as_collection()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_binary_as_collection(), "Object reference not set to an instance of an object.");
 #elif EF8
@@ -220,41 +220,41 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_bool_JSON_values(bool value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_bool_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_bool_JSON_values(bool value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_bool_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_byte_JSON_values(byte value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_byte_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_byte_JSON_values(byte value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_byte_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_byte_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.EnumU8 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_byte_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_byte_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.EnumU8 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_byte_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_char_JSON_values(global::System.Char value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_char_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_char_JSON_values(global::System.Char value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_char_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
@@ -270,11 +270,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_DateOnly_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_DateOnly_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_DateOnly_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_DateOnly_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -300,11 +300,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_DateTime_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_DateTime_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_DateTime_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_DateTime_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -384,11 +384,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_binary_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_binary_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_binary_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_binary_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -404,11 +404,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_bool_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_bool_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_bool_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_bool_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -444,11 +444,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_char_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_char_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_char_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_char_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -484,11 +484,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_double_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_double_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_double_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_double_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -524,21 +524,21 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_int_enum_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_int_enum_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_int_enum_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_int_enum_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_int_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_int_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_int_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_int_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -584,11 +584,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_DateOnly_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_DateOnly_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_DateOnly_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_DateOnly_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -614,11 +614,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_DateTime_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_DateTime_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_DateTime_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_DateTime_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -688,11 +688,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_binary_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_binary_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_binary_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_binary_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -708,11 +708,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_bool_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_bool_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_bool_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_bool_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -748,11 +748,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_char_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_char_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_char_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_char_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -778,11 +778,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_double_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_double_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_double_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_double_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -818,21 +818,21 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_int_enum_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_int_enum_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_int_enum_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_int_enum_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_int_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_int_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_int_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_int_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -898,11 +898,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_sbyte_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_sbyte_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_sbyte_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_sbyte_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -938,11 +938,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_string_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_string_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_string_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_string_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -988,21 +988,21 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_ulong_enum_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_ulong_enum_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_ulong_enum_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_ulong_enum_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_nullable_ulong_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_ulong_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_nullable_ulong_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_nullable_ulong_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -1058,11 +1058,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_sbyte_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_sbyte_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_sbyte_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_sbyte_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -1098,11 +1098,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_string_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_string_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_string_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_string_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -1148,21 +1148,21 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_ulong_enum_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_ulong_enum_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_ulong_enum_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_ulong_enum_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_collection_of_ulong_values_with_converter_as_JSON_string()
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_ulong_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_collection_of_ulong_values_with_converter_as_JSON_string()
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_collection_of_ulong_values_with_converter_as_JSON_string(), "Object reference not set to an instance of an object.");
 #endif
@@ -1188,81 +1188,81 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_converted_type_JSON_values(int value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_converted_type_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_converted_type_JSON_values(int value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_converted_type_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_custom_converted_type_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_custom_converted_type_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_custom_converted_type_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_custom_converted_type_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_decimal_JSON_values(decimal value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_decimal_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_decimal_JSON_values(decimal value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_decimal_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_double_JSON_values(double value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_double_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_double_JSON_values(double value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_double_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_enum_char_converted_type_JSON_values(int value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_enum_char_converted_type_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_enum_char_converted_type_JSON_values(int value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_enum_char_converted_type_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_float_JSON_values(float value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_float_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_float_JSON_values(float value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_float_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_int_JSON_values(int value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_int_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_int_JSON_values(int value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_int_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_int_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.Enum32 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_int_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_int_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.Enum32 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_int_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
@@ -1372,21 +1372,21 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_long_JSON_values(long value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_long_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_long_JSON_values(long value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_long_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_long_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.Enum64 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_long_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_long_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.Enum64 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_long_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
@@ -2142,11 +2142,11 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_physical_address_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_physical_address_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_physical_address_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_physical_address_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
@@ -2292,111 +2292,111 @@ public class JsonTypesMongoTest
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_sbyte_JSON_values(global::System.SByte value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_sbyte_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_sbyte_JSON_values(global::System.SByte value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_sbyte_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_sbyte_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.Enum8 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_sbyte_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_sbyte_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.Enum8 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_sbyte_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_short_JSON_values(short value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_short_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_short_JSON_values(short value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_short_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_short_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.Enum16 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_short_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_short_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.Enum16 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_short_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_string_JSON_values(string value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_string_JSON_values(string value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_string_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_uint_JSON_values(global::System.UInt32 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_uint_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_uint_JSON_values(global::System.UInt32 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_uint_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_uint_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.EnumU32 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_uint_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_uint_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.EnumU32 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_uint_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_ulong_JSON_values(global::System.UInt64 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_ulong_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_ulong_JSON_values(global::System.UInt64 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_ulong_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_ulong_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.EnumU64 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_ulong_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_ulong_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.EnumU64 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_ulong_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_ushort_JSON_values(global::System.UInt16 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_ushort_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_ushort_JSON_values(global::System.UInt16 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_ushort_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override Task Can_read_write_ushort_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.EnumU16 value, string json)
         => SpecFails.Async<global::System.NullReferenceException>(() => base.Can_read_write_ushort_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #elif EF8
-    // Fails: NullReferenceException in JSON type round-trip (not triaged) EF-X317
+    // Fails: the Mongo type mapping has no JsonValueReaderWriter, so JsonTypesTestBase throws NullReferenceException EF-X317
     public override void Can_read_write_ushort_enum_JSON_values(global::Microsoft.EntityFrameworkCore.JsonTypesTestBase.EnumU16 value, string json)
         => SpecFails.Sync<global::System.NullReferenceException>(() => base.Can_read_write_ushort_enum_JSON_values(value, json), "Object reference not set to an instance of an object.");
 #endif
