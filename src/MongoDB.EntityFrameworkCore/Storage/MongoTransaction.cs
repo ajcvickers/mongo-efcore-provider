@@ -234,15 +234,18 @@ public sealed class MongoTransaction(
     /// <inheritdoc />
     public void Dispose()
     {
+        var endedBehindOurBack = false;
         switch (_transactionState)
         {
             case TransactionState.Disposed:
                 return;
 
             case TransactionState.Active:
-                // The session's transaction may already have ended behind our back; there is then nothing to roll back
-                // and attempting it would make Dispose throw.
-                if (session.IsInTransaction)
+                if (SessionTransactionHasEnded)
+                {
+                    endedBehindOurBack = true;
+                }
+                else
                 {
                     Rollback();
                 }
@@ -256,19 +259,30 @@ public sealed class MongoTransaction(
 
         _transactionState = TransactionState.Disposed;
         session.Dispose();
+
+        if (endedBehindOurBack)
+        {
+            // Rollback is what normally detaches this transaction from the manager; it was skipped, so do it here.
+            // The state is already Disposed, so the manager's call back into Dispose returns immediately.
+            transactionManager?.ResetState();
+        }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        var endedBehindOurBack = false;
         switch (_transactionState)
         {
             case TransactionState.Disposed:
                 return;
 
             case TransactionState.Active:
-                // See Dispose: nothing to roll back if the session's transaction has already ended.
-                if (session.IsInTransaction)
+                if (SessionTransactionHasEnded)
+                {
+                    endedBehindOurBack = true;
+                }
+                else
                 {
                     await RollbackAsync().ConfigureAwait(false);
                 }
@@ -282,7 +296,17 @@ public sealed class MongoTransaction(
 
         _transactionState = TransactionState.Disposed;
         session.Dispose();
+
+        if (endedBehindOurBack && transactionManager is not null)
+        {
+            // See Dispose.
+            await transactionManager.ResetStateAsync().ConfigureAwait(false);
+        }
     }
+
+    // The session's transaction may have been committed or aborted by something else holding the session. There is then
+    // nothing to roll back (attempting it would make Dispose throw), but the manager must still be told to let go of us.
+    private bool SessionTransactionHasEnded => !session.IsInTransaction;
 
     private void AssertCorrectState(string action, TransactionState validState)
     {

@@ -808,6 +808,11 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         EndTransactionBehindTheContextsBack(db);
 
         transaction.Dispose();
+
+        // The context must have let go of the disposed transaction and be usable again.
+        Assert.Null(db.Database.CurrentTransaction);
+        using var next = db.Database.BeginTransaction();
+        next.Rollback();
     }
 
     [Fact]
@@ -820,5 +825,9 @@ public class TransactionTests(TemporaryDatabaseFixture database)
         EndTransactionBehindTheContextsBack(db);
 
         await transaction.DisposeAsync();
+
+        Assert.Null(db.Database.CurrentTransaction);
+        await using var next = await db.Database.BeginTransactionAsync();
+        await next.RollbackAsync();
     }
 }
