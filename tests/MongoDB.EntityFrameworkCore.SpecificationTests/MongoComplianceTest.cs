@@ -32,6 +32,11 @@ public class MongoComplianceTest : ComplianceTestBase
     [
         // Provider-wide non-query test bases (present across EF8/EF9/EF10).
         typeof(ComplexTypesTrackingTestBase<>), // Complex types: covered by the separate complex type work.
+        // GraphUpdatesMongoTest and ProxyGraphUpdatesMongoTest exist but are abstract (not run) until contexts can enlist in a rolled-back
+        // transaction, because the per-test drop and reseed costs minutes per EF version; see
+        // https://github.com/ajcvickers/mongo-efcore-provider/issues/77. The compliance test only counts concrete derived classes.
+        typeof(GraphUpdatesTestBase<>),
+        typeof(ProxyGraphUpdatesTestBase<>),
 
         // Query test bases (present across EF8/EF9/EF10).
         typeof(ComplexTypeQueryTestBase<>), // Complex types: covered by the separate complex type work.
