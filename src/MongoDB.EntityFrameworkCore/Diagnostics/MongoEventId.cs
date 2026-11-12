@@ -55,6 +55,7 @@ public static class MongoEventId
         ExecutedBulkDelete,
         ExecutingBulkUpdate,
         ExecutedBulkUpdate,
+        TransactionEnlisted,
     }
 
     private static EventId MakeDatabaseCommandId(Id id)
@@ -161,6 +162,15 @@ public static class MongoEventId
     ///     <para>This event uses the <see cref="MongoTransactionErrorEventData" /> payload when used with a <see cref="DiagnosticSource" />.</para>
     /// </remarks>
     public static readonly EventId TransactionError = MakeTransactionId(Id.TransactionError);
+
+    /// <summary>
+    /// A context has enlisted in a MongoDB transaction that is owned by someone else.
+    /// </summary>
+    /// <remarks>
+    ///     <para>This event is in the <see cref="DbLoggerCategory.Database.Transaction" /> category.</para>
+    ///     <para>This event uses the <see cref="MongoTransactionEventData" /> payload when used with a <see cref="DiagnosticSource" />.</para>
+    /// </remarks>
+    public static readonly EventId TransactionEnlisted = MakeTransactionId(Id.TransactionEnlisted);
 
     private static EventId MakeValidationId(Id id)
         => new((int)id, DbLoggerCategory.Model.Validation.Name + "." + id);

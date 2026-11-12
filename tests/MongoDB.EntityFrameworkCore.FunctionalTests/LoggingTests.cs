@@ -446,6 +446,39 @@ public class LoggingTests(SampleGuidesFixture fixture, ITestOutputHelper testOut
         }
     }
 
+    [Fact]
+    public void UseTransaction_logs_TransactionEnlisted_and_no_commit_events()
+    {
+        List<string> logs = [];
+        using var session = fixture.MongoDatabase.Client.StartSession();
+        session.StartTransaction();
+
+        Guid transactionId;
+        using (var db = GuidesDbContext.Create(fixture.MongoDatabase, s =>
+               {
+                   logs.Add(s);
+                   testOutputHelper.WriteLine(s);
+               }))
+        {
+            var transaction = db.Database.UseTransaction(session);
+            transactionId = transaction.TransactionId;
+
+            var enlisted = AssertSingleLogEntry(logs, MongoEventId.TransactionEnlisted);
+            Assert.Contains($"Enlisted in transaction {transactionId}.", enlisted);
+        }
+
+        // The context only participates in the transaction, so detaching it must not log that it was committed or rolled back.
+        Assert.Single(logs, l => l.Contains("MongoEventId.TransactionEnlisted"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionCommitting"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionCommitted"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRollingBack"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRolledBack"));
+        Assert.DoesNotContain(logs, l => l.Contains(session.ServerSession.Id["id"].ToString()!));
+
+        Assert.True(session.IsInTransaction);
+        session.AbortTransaction();
+    }
+
     [AtlasTheory]
     [InlineData(false)]
     [InlineData(true)]

@@ -419,4 +419,56 @@ internal static class MongoLoggerTransactionExtensions
                          level,
                          MongoEventId.TransactionError,
                          "An error occurred using a transaction."))));
+
+    /// <summary>
+    /// Logs for the <see cref="MongoEventId.TransactionEnlisted" /> event.
+    /// </summary>
+    /// <param name="diagnostics">The diagnostics logger to use.</param>
+    /// <param name="transaction">The <see cref="MongoTransaction"/> that the context enlisted in.</param>
+    internal static void TransactionEnlisted(
+        this IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> diagnostics,
+        MongoTransaction transaction)
+    {
+        var definition = LogEnlistedTransaction(diagnostics);
+
+        if (diagnostics.ShouldLog(definition))
+        {
+            definition.Log(diagnostics, transaction.TransactionId);
+        }
+
+        if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+        {
+            var eventData = new MongoTransactionEventData(
+                definition,
+                TransactionEnlisted,
+                transaction,
+                false,
+                DateTimeOffset.UtcNow);
+
+            diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
+        }
+    }
+
+    private static string TransactionEnlisted(EventDefinitionBase definition, EventData payload)
+    {
+        var d = (EventDefinition<Guid>)definition;
+        var p = (MongoTransactionEventData)payload;
+        return d.GenerateMessage(p.Transaction.TransactionId);
+    }
+
+    private static EventDefinition<Guid> LogEnlistedTransaction(IDiagnosticsLogger logger)
+        => (EventDefinition<Guid>)
+            (((MongoLoggingDefinitions)logger.Definitions).LogEnlistedTransaction
+             ?? NonCapturingLazyInitializer.EnsureInitialized(
+                 ref ((MongoLoggingDefinitions)logger.Definitions).LogEnlistedTransaction,
+                 logger,
+                 static logger => new EventDefinition<Guid>(
+                     logger.Options,
+                     MongoEventId.TransactionEnlisted,
+                     LogLevel.Information,
+                     "MongoEventId.TransactionEnlisted",
+                     level => LoggerMessage.Define<Guid>(
+                         level,
+                         MongoEventId.TransactionEnlisted,
+                         "Enlisted in transaction {transactionId}."))));
 }

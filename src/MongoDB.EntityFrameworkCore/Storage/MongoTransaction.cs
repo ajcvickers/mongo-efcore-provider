@@ -117,11 +117,16 @@ public sealed class MongoTransaction(
         string ownerDescription,
         IMongoTransactionManager? transactionManager,
         IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> transactionLogger)
-        => new(session, context, Guid.NewGuid(), transactionManager, transactionLogger)
+    {
+        var transaction = new MongoTransaction(session, context, Guid.NewGuid(), transactionManager, transactionLogger)
         {
             IsOwner = false,
             _ownerDescription = ownerDescription
         };
+
+        transactionLogger.TransactionEnlisted(transaction);
+        return transaction;
+    }
 
     private const string TransactionByDefault =
         "The MongoDB EF Core Provider now uses transactions to ensure all updates in a SaveChanges operation are applied together or not at all.";
