@@ -49,7 +49,7 @@ git switch -c EF-nnnn release          # use fork-<name> if there is no JIRA num
 - Keep the branch **linear and focused on one feature**, with meaningful commits. You may want to extract those commits later
   (section 5).
 - If `release` moves while you work, `git rebase release` is fine on this branch, because it is private to you and the fork.
-- Build and test: `dotnet build MongoDB.EFCoreProvider.sln -c "Debug EF10"`, or run `/test-all` for EF8, EF9, EF10 and EF11.
+- Build and test: `dotnet build MongoDB.EFCoreProvider.sln -c "Debug EF10"`, or run `test-all.cmd` / `./test-all.sh` (or `/test-all`) for EF8, EF9, EF10 and EF11 in both query modes.
 
 ### 2.2 In-fork PR
 
@@ -232,7 +232,7 @@ Rules for an agent in any checkout:
    two sessions don't open duplicates, and reference the existing one.
 4. **Docker and ports.** Every test process starts its own container on a random port, so concurrent runs don't collide. Don't
    stop, remove or prune containers you did not start in this session: they may belong to a run in another checkout. If
-   `MONGODB_URI` or `ATLAS_URI` points at a real server, all checkouts share it: run serially (see `/test-all`, `SHARED_DB`).
+   `MONGODB_URI` or `ATLAS_URI` points at a real server, all checkouts share it: run serially (`test-all --shared-db` does this; by default `test-all` ignores them and uses a container per test process).
 5. **Expect load.** Two full test runs at once are slow and can cause timeouts that are not real failures; if a failure looks
    like a timeout or a Docker error, re-run it alone before concluding anything.
 6. **Checkouts differ.** An older branch may lack files and conventions that exist elsewhere (this document included). Read the

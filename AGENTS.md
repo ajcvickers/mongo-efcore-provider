@@ -31,10 +31,13 @@ dotnet test  MongoDB.EFCoreProvider.sln -c "Debug EF10" --no-build
 dotnet test  MongoDB.EFCoreProvider.sln -c "Debug EF10" --no-build --filter "FullyQualifiedName~ClassName"
 ```
 
-For all four versions in parallel, invoke the `/test-all` skill. EF11 needs the .NET 11 SDK.
-Every suite must also pass with `MONGODB_EF_QUERY_MODE=NativeOnly` (no driver-LINQ fallback): `/test-all --native` adds that
-pass, and CI runs it (GitHub Actions `native-only` job for EF10 and EF11, Evergreen for EF10). A test whose expected outcome
-differs by mode branches on `MongoSpecTestHelpers.IsNativeOnly`.
+For all four versions, run `test-all.cmd` (Windows) or `./test-all.sh` from a command prompt, or invoke the `/test-all` skill,
+which only wraps that script. By default it runs 8 runs in parallel: EF8, EF9, EF10, EF11 × Default and NativeOnly, each test
+process in its own Docker container (`--help` lists the options; results are read from TRX files into `bin/test-all/<timestamp>/`).
+EF11 needs the .NET 11 SDK.
+Every suite must also pass with `MONGODB_EF_QUERY_MODE=NativeOnly` (no driver-LINQ fallback), which is why the script's default
+includes it (`--mode default` skips it); CI runs it (GitHub Actions `native-only` job for EF10 and EF11, Evergreen for EF10). A
+test whose expected outcome differs by mode branches on `MongoSpecTestHelpers.IsNativeOnly`.
 
 **EF11 SpecificationTests run through their own executable, not `dotnet test`.** They use xUnit v3 4.x (EF11's
 Specification.Tests package requires it), which only supports Microsoft.Testing.Platform, and `dotnet test` on SDK 10+ rejects that
