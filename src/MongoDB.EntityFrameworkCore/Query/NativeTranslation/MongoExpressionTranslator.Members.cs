@@ -356,6 +356,11 @@ internal sealed partial class MongoExpressionTranslator
             if (projection.Expression is MongoDocumentConstructionExpression)
                 return false;
 
+            // A strict grouped accumulator (NativeGroupByBinder, #73): a comparison would silently drop the null group that reading this output must
+            // throw for. A throw-on-null group KEY is not declined (it is still read, so its null group throws), as before.
+            if (projection.Expression is MongoElementRefExpression { ThrowsOnNull: true })
+                return false;
+
             // The lambda's view must agree with the projection's read up to nullability; the nullable side is kept so
             // the null-ordering guard still fires.
             var readType = projection.Expression.Type;

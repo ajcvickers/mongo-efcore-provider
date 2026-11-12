@@ -690,9 +690,10 @@ returns `null` for the absent parent.
 A group key over such a leaf (`GroupBy(c => c.Address!.Location.Lat)`) throws the same exception when a parent is null or absent,
 instead of reading `0` for that group. `Min`, `Max` and `Average` of such a leaf skip the rows with no parent, as SQL's aggregates
 do, and throw the same exception when no row has a parent; `Min` used to answer `0` whenever a parent was absent. `Sum` skips
-those rows too and is `0` when none has a parent. A grouped `Min`/`Max`/`Average` over such a leaf is no longer translated
-natively (it falls back to the driver, or is refused under `MongoQueryMode.NativeOnly`), because an all-null group would read as
-`0`. A leaf read only where a test proves the parent present (`c.Address != null ? c.Address.Location.Lat : -1`) is unaffected.
+those rows too and is `0` when none has a parent. A grouped `Min`/`Max`/`Average` over such a leaf stays native and is read
+strictly: a group with a parent answers its value, and a group in which no row has a parent throws the same exception instead
+of reading `0`. Where that strict read is not possible (the aggregate is compared, used as a sort key or nested in a
+construction) it is not translated natively (it falls back to the driver, or is refused under `MongoQueryMode.NativeOnly`). A leaf read only where a test proves the parent present (`c.Address != null ? c.Address.Location.Lat : -1`) is unaffected.
 
 This applies to the native translator. Explicit `MongoQueryMode.DriverLinq`, and a query the native translator declines, still
 read `default` because the driver deserializes the projection.

@@ -235,8 +235,9 @@ internal static class NativeGroupByBinder
                 }
 
                 var syntheticField = $"_orderAgg{orderIndex++}";
-                if (!TryBindAccumulator(body, syntheticField, orderScope, out var acc, out var flattenRead))
-                    return false; // unsupported ordering shape — fall back to driver-LINQ
+                if (!TryBindAccumulator(body, syntheticField, orderScope, out var acc, out var flattenRead)
+                    || flattenRead is MongoElementRefExpression { ThrowsOnNull: true })
+                    return false; // unsupported ordering shape — fall back to driver-LINQ (an ordering cannot make a null group throw)
 
                 orderAccumulators.Add(acc);
                 resolvedOrderings.Add(new MongoOrdering(flattenRead, ascending));
@@ -280,6 +281,8 @@ internal static class NativeGroupByBinder
                 }
             }
 
+            // An accumulator whose all-null group must throw rather than read 0 (ReducesPossiblyUnmatchedJoinSideToDefault's readsStrictly) is flagged like a throwing key read.
+            readsThrowingKey |= !isKeyRead && memberValue is MongoElementRefExpression { ThrowsOnNull: true };
             flatten.Add(new MongoProjection(memberName, memberValue, ThrowsOnNull: readsThrowingKey));
             if (isKeyRead && isBareBody)
                 isBareBodyKeyMember = true;
@@ -512,6 +515,10 @@ internal static class NativeGroupByBinder
             if (!TryBindGroupMemberValue(
                     nestedValue, accumulatorOutputField: null, scope, accumulators, ref nestedAccumulatorCounter, select,
                     out var translated, out _))
+                return false;
+
+            // A nested member is read by the construction's class map, which cannot make a null group throw.
+            if (translated is MongoElementRefExpression { ThrowsOnNull: true })
                 return false;
 
             translatedMembers.Add((nestedMemberName, translated));
@@ -787,11 +794,11 @@ internal static class NativeGroupByBinder
             return false; // untranslatable selector shape (e.g. a correlated method call) — fall back
         }
 
-        if (ReducesPossiblyUnmatchedJoinSideToDefault(op, call.Method.ReturnType, selector.Body, operand, scope.Translator))
+        if (ReducesPossiblyUnmatchedJoinSideToDefault(op, call.Method.ReturnType, selector.Body, operand, scope.Translator, out var readsStrictly))
             return false;
 
         accumulator = new MongoGroupAccumulator(outputField, op, operand);
-        flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType);
+        flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType, throwsOnNull: readsStrictly);
         return true;
     }
 
@@ -897,15 +904,30 @@ internal static class NativeGroupByBinder
     //   false. Structural, not per operator;
     // - it's computed by an operator that doesn't propagate the missing value ((decimal?)Math.Max(x.Total, 7m): $max answers 7, EF null). See
     //   MongoGroupElementTranslator.MayMiscomputeAnUnmatchedJoinSide.
+    //
+    // readsStrictly: the accumulator is not declined although its all-null group reduces to null, because the operand is a bare leaf under an optional complex property
+    // and the group output is flagged to throw on null (MongoElementRefExpression.ThrowsOnNull), as the terminal Min/Max/Average over it already do (#73).
     private static bool ReducesPossiblyUnmatchedJoinSideToDefault(
-        string op, Type resultType, Expression operandBody, MongoExpression operand, MongoGroupElementTranslator translator)
-        => (((op is "$min" or "$max" or "$avg" && IsNonNullableValueType(resultType))
-                || ConditionFinder.Contains(operandBody))
-               && translator.MayReadAnUnmatchedJoinSide(operandBody))
-           || translator.MayMiscomputeAnUnmatchedJoinSide(operandBody, operand)
-           // Not only over a join: a non-nullable $min/$max/$avg of a Length/IndexOf over a possibly-null string reduces an all-null group to null, read back as 0
-           // (MayBeNullBehindNonNullableType). $sum skips a null as EF does.
-           || (op is "$min" or "$max" or "$avg" && MongoAggregationExpressionRenderer.ReadsNullAsDefault(resultType, operand));
+        string op, Type resultType, Expression operandBody, MongoExpression operand, MongoGroupElementTranslator translator, out bool readsStrictly)
+    {
+        readsStrictly = false;
+        if ((((op is "$min" or "$max" or "$avg" && IsNonNullableValueType(resultType))
+                 || ConditionFinder.Contains(operandBody))
+                && translator.MayReadAnUnmatchedJoinSide(operandBody))
+            || translator.MayMiscomputeAnUnmatchedJoinSide(operandBody, operand))
+        {
+            return true;
+        }
+
+        // Not only over a join: a non-nullable $min/$max/$avg of a Length/IndexOf over a possibly-null string reduces an all-null group to null, read back as 0
+        // (MayBeNullBehindNonNullableType). $sum skips a null as EF does.
+        if (op is not ("$min" or "$max" or "$avg") || !MongoAggregationExpressionRenderer.ReadsNullAsDefault(resultType, operand))
+            return false;
+
+        // A bare field is possibly null here only through an optional complex parent (a missing parent leaves it MISSING), which nothing absorbs: the null group is read strictly.
+        readsStrictly = operand is MongoFieldExpression && MongoAggregationExpressionRenderer.ReadsThroughOptionalComplexParent(operand);
+        return !readsStrictly;
+    }
 
     // Whether reading the key at `path` reads a part flagged ThrowsOnNull (whole: the whole composite key, which a class-map read cannot make throw).
     private static bool KeyPathThrowsOnNull(string? path, GroupBindingScope scope, out bool wholeCompositeRead)
@@ -1245,11 +1267,11 @@ internal static class NativeGroupByBinder
             || !scope.Translator.TryTranslateValue(selector.Body, out var operand))
             return false;
 
-        if (ReducesPossiblyUnmatchedJoinSideToDefault(reduceOp, call.Method.ReturnType, selector.Body, operand, scope.Translator))
+        if (ReducesPossiblyUnmatchedJoinSideToDefault(reduceOp, call.Method.ReturnType, selector.Body, operand, scope.Translator, out var readsStrictly))
             return false;
 
         accumulator = new MongoGroupAccumulator(outputField, reduceOp, operand);
-        flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType);
+        flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType, throwsOnNull: readsStrictly);
         return true;
     }
 
@@ -1311,13 +1333,13 @@ internal static class NativeGroupByBinder
         if (FilterMayEmptyNonNullableReduction(isKeyOnlyCondition, op, call.Method.ReturnType))
             return false;
 
-        if (ReducesPossiblyUnmatchedJoinSideToDefault(op, call.Method.ReturnType, selector.Body, operand, scope.Translator))
+        if (ReducesPossiblyUnmatchedJoinSideToDefault(op, call.Method.ReturnType, selector.Body, operand, scope.Translator, out var readsStrictly))
             return false;
 
         accumulator = new MongoGroupAccumulator(outputField, op,
             new MongoConditionalExpression(condition, operand,
                 new MongoElementRefExpression(MongoElementRefExpression.RemoveSentinelPath, operand.Type)));
-        flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType);
+        flattenRead = new MongoElementRefExpression(outputField, call.Method.ReturnType, throwsOnNull: readsStrictly);
         return true;
     }
 
@@ -1533,7 +1555,9 @@ internal static class NativeGroupByBinder
             return true;
         }
 
-        if (TryBindAccumulator(side, accumulatorOutputField, scope, out var acc, out _))
+        // A strict accumulator is declined here: a comparison of its null group would be false where EF throws.
+        if (TryBindAccumulator(side, accumulatorOutputField, scope, out var acc, out var sideRead)
+            && sideRead is not MongoElementRefExpression { ThrowsOnNull: true })
         {
             accumulator = acc;
             reference = new MongoElementRefExpression(accumulatorOutputField, MongoExpressionTranslator.Unwrap(side).Type);

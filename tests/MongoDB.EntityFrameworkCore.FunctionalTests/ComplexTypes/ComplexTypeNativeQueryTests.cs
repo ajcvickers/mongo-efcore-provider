@@ -865,17 +865,19 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
             q => q.OrderBy(c => c.Name).Select(c => c.Address != null ? c.Address.Location.Lat : -1.0)));
     }
 
-    // A group of parents that are all missing/null reduces Min/Max/Average to null, which a non-nullable read must not take as 0.
-    // The accumulator over such a leaf is not answered natively (it declines, as for a Length over a possibly-null string), so NativeOnly
-    // refuses and Native reaches the driver, which fails on the null group; neither returns the 0.
+    // A group whose parents are all missing/null reduces Min/Max/Average to null, which a non-nullable read must not take as 0:
+    // EF throws "Nullable object must have a value.". The accumulators stay native and read their result strictly, so a group with a
+    // value answers it (a missing parent among others is skipped, as in the terminal aggregates) and an all-null group throws. Sum skips
+    // a missing value like SQL's SUM, so its 0 for such a group is right.
     [Theory]
     [InlineData(MongoQueryMode.Native)]
     [InlineData(MongoQueryMode.NativeOnly)]
-    public void Optional_parent_value_type_group_accumulators_never_read_a_missing_parent_as_default(MongoQueryMode mode)
+    public void Optional_parent_value_type_group_accumulators_read_strictly(MongoQueryMode mode)
     {
-        var collection = SeedOptional(nameof(Optional_parent_value_type_group_accumulators_never_read_a_missing_parent_as_default) + mode);
+        var collection = SeedOptional(nameof(Optional_parent_value_type_group_accumulators_read_strictly) + mode);
 
-        var shapes = new Dictionary<string, Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<string>>>
+        // Name groups: A and D have a parent, Missing and Null do not.
+        var allGroups = new Dictionary<string, Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<string>>>
         {
             ["min"] = q => q.GroupBy(c => c.Name).Select(g => new { g.Key, V = g.Min(x => x.Address!.Location.Lat) })
                 .ToList().Select(x => x.Key + ":" + x.V),
@@ -885,13 +887,72 @@ public class ComplexTypeNativeQueryTests(TemporaryDatabaseFixture database) : IC
                 .ToList().Select(x => x.Key + ":" + x.V)
         };
 
-        foreach (var (shape, query) in shapes)
-            Assert.ThrowsAny<Exception>(() => Optional(collection, mode, query));
+        foreach (var (shape, query) in allGroups)
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => Optional(collection, mode, query));
+            Assert.True(NullableValueMessage.Text == exception.Message, shape + ": " + exception.Message);
+        }
 
-        // Sum skips a missing value like SQL's SUM, so its 0 for such a group is right and stays native.
+        // Groups that all have a parent answer their value.
+        Assert.Equal(["A:1", "D:3"], Optional(collection, mode,
+            q => q.Where(c => c.Name == "A" || c.Name == "D").GroupBy(c => c.Name)
+                .Select(g => new { g.Key, V = g.Min(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V).OrderBy(x => x)));
+        Assert.Equal(["A:1", "D:3"], Optional(collection, mode,
+            q => q.Where(c => c.Name == "A" || c.Name == "D").GroupBy(c => c.Name)
+                .Select(g => new { g.Key, V = g.Max(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V).OrderBy(x => x)));
+        Assert.Equal(["A:1", "D:3"], Optional(collection, mode,
+            q => q.Where(c => c.Name == "A" || c.Name == "D").GroupBy(c => c.Name)
+                .Select(g => new { g.Key, V = g.Average(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V).OrderBy(x => x)));
+
+        // A query that proves the parent present (the issue's second example) reads no null at all.
+        Assert.Equal(["a:1", "d:3"], Optional(collection, mode,
+            q => q.Where(c => c.Address != null).GroupBy(c => c.Address!.City)
+                .Select(g => new { g.Key, V = g.Max(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V).OrderBy(x => x)));
+
+        // A missing parent among others is skipped, not the smallest value: True = {A, Missing}, False = {D, Null}.
+        Assert.Equal(["False:3", "True:1"], Optional(collection, mode,
+            q => q.GroupBy(c => c.Name == "A" || c.Name == "Missing")
+                .Select(g => new { g.Key, V = g.Min(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V).OrderBy(x => x)));
+        Assert.Equal(["False:3", "True:1"], Optional(collection, mode,
+            q => q.GroupBy(c => c.Name == "A" || c.Name == "Missing")
+                .Select(g => new { g.Key, V = g.Max(x => x.Address!.Location.Lat) })
+                .ToList().Select(x => x.Key + ":" + x.V).OrderBy(x => x)));
+
+        // Sum is unaffected: a missing value contributes 0.
         Assert.Equal(["A:1", "D:3", "Missing:0", "Null:0"], Optional(collection, mode,
             q => q.GroupBy(c => c.Name).Select(g => new { g.Key, V = g.Sum(x => x.Address!.Location.Lat) })
                 .ToList().Select(x => x.Key + ":" + x.V).OrderBy(x => x)));
+    }
+
+    // Where the strict read cannot be made (the accumulator is compared, ordered by, or nested in a construction), the accumulator is not
+    // answered natively, so NativeOnly refuses rather than drop or misplace the null group, or read it as 0. (Under Native these shapes reach
+    // the driver, whose server-side filter and sort are not contract.)
+    [Fact]
+    public void Optional_parent_value_type_group_accumulators_that_cannot_read_strictly_are_refused()
+    {
+        const MongoQueryMode mode = MongoQueryMode.NativeOnly;
+        var collection = SeedOptional(nameof(Optional_parent_value_type_group_accumulators_that_cannot_read_strictly_are_refused));
+
+        var shapes = new Dictionary<string, Func<IQueryable<CustomerWithOptionalAddress>, IEnumerable<string>>>
+        {
+            ["having"] = q => q.GroupBy(c => c.Name).Where(g => g.Min(x => x.Address!.Location.Lat) > -1).Select(g => g.Key),
+            ["post_group_where"] = q => q.GroupBy(c => c.Name).Select(g => new { g.Key, V = g.Max(x => x.Address!.Location.Lat) })
+                .Where(x => x.V > -1).ToList().Select(x => x.Key + ":" + x.V),
+            ["order_by"] = q => q.GroupBy(c => c.Name).OrderBy(g => g.Max(x => x.Address!.Location.Lat)).Select(g => g.Key),
+            ["nested"] = q => q.GroupBy(c => c.Name).Select(g => new { g.Key, N = new { V = g.Min(x => x.Address!.Location.Lat) } })
+                .ToList().Select(x => x.Key + ":" + x.N.V)
+        };
+
+        foreach (var (shape, query) in shapes)
+        {
+            var exception = Record.Exception(() => Optional(collection, mode, query));
+            Assert.True(exception != null, shape + ": answered instead of throwing");
+        }
     }
 
     // Characterization, not a goal: explicit DriverLinq still reads the absent leaf as 0 (the driver's own deserialization).

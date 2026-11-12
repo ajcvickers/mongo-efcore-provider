@@ -1115,7 +1115,7 @@ internal static class MongoAggregationExpressionRenderer
             // Projection leaves only (storedFields): group keys and accumulators are unchanged.
             // A field under an optional complex property is the exception: a null or missing parent leaves it MISSING wherever it is read, so
             // a group key over it groups those rows under null (flagged to throw) and a Min/Max/Average accumulator over it can reduce an
-            // all-missing group to null (declined), as for a Length over a possibly-null string.
+            // all-missing group to null, so the group output is flagged to throw too (NativeGroupByBinder, #73); a computed operand declines.
             // A test that proves every optional ancestor present (`c.Address != null ? c.Address.Lat : 0`) lifts it on that branch.
             MongoFieldExpression when ReadsThroughUnprovenOptionalComplexParent(node, nonNull) => new NullBehindNonNullable(true, false),
             MongoFieldExpression or MongoOuterFieldExpression when dateParts && storedFields
