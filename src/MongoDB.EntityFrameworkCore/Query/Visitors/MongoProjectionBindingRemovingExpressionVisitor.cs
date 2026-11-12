@@ -739,7 +739,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
 
     // A non-null stand-in for an absent owner key: default for a non-nullable value type, "" for string. Other key
     // types have no safe stand-in, so the read stays required.
-    private static bool TryGetOwnerKeyPlaceholder(Type keyType, out object placeholder)
+    private static bool TryGetOwnerKeyPlaceholder(Type keyType, [NotNullWhen(true)] out object? placeholder)
     {
         if (keyType == typeof(string))
         {
@@ -753,7 +753,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
             return true;
         }
 
-        placeholder = null!;
+        placeholder = null;
         return false;
     }
 

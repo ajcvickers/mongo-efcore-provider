@@ -16,6 +16,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
@@ -440,9 +441,9 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
     /// left-outer row reads as a null scalar). No-op when alias equals path or with <c>UsesDriverJoinFields</c>.
     /// </remarks>
     private bool TryBindNativeFieldLeafAsDocumentPath(
-        ProjectionBindingExpression projectionBindingExpression, out Expression result)
+        ProjectionBindingExpression projectionBindingExpression, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         // Gated on the join, not just alias/path disagreement: BindProjectionByAlias and BindGroupMember also produce
         // index-bound leaves, where a path read would silently return a raw field instead of failing loudly.
@@ -524,9 +525,9 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
     /// for anything that is not such a navigation member access so the caller can fall back to its other
     /// resolution paths.
     /// </summary>
-    private bool TryBindNavigationMemberAccess(Expression? mappedExpression, Type resultType, out Expression result)
+    private bool TryBindNavigationMemberAccess(Expression? mappedExpression, Type resultType, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         StructuralTypeShaperExpression shaper;
         IProperty? property;
@@ -580,9 +581,9 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
     /// stored array is read from the materialized document and its length taken, treating a missing or null
     /// array as empty. Returns <see langword="false"/> for any other shape (including a filtered count).
     /// </summary>
-    private bool TryBindEmbeddedCollectionCountLeaf(Expression? mappedExpression, Type resultType, out Expression result)
+    private bool TryBindEmbeddedCollectionCountLeaf(Expression? mappedExpression, Type resultType, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         if (mappedExpression is not ConditionalExpression
             {
@@ -618,9 +619,9 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
     // read it null-propagates from is null (NullPropagatingCastRewriter). A non-nullable value over a null
     // (`p.Name.Length`) throws, as EF does. Declines if any entity reference is left, and over a retained pushed-down
     // Select (Distinct, set op): the driver then returns projected documents lacking the properties the leaf reads.
-    private bool TryBindClientComputedLeaf(Expression? mappedExpression, Type resultType, out Expression result)
+    private bool TryBindClientComputedLeaf(Expression? mappedExpression, Type resultType, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         // Stricter than TryBindArithmeticLeaf's guard (which admits a driver Join's whole { _outer, _inner } documents): any
         // retained Select declines here, leaving a Join's arithmetic leaf to TryBindArithmeticLeaf after this arm.
@@ -805,7 +806,7 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
 
     // Reads a scalar property access (member or EF.Property, on the root entity or a joined navigation target) from the
     // materialized document.
-    private bool TryReadScalarProperty(Expression node, Type type, out Expression read)
+    private bool TryReadScalarProperty(Expression node, Type type, [NotNullWhen(true)] out Expression? read)
     {
         if (TryBindNavigationMemberAccess(node, type, out read))
         {
@@ -815,7 +816,7 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
         var fieldAccess = TryResolveFieldAccess(node);
         if (fieldAccess.Property is not { } property)
         {
-            read = null!;
+            read = null;
             return false;
         }
 
@@ -825,9 +826,9 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
 
     // Binds a string-to-char-sequence leaf (`select new { P = b.City.AsEnumerable(), b.Posts }`, also ToList/ToArray) against
     // the whole document: reads through the source IProperty (converters/BsonRepresentation apply) and rebuilds the call.
-    private bool TryBindStringSequenceLeaf(Expression? mappedExpression, Type resultType, out Expression result)
+    private bool TryBindStringSequenceLeaf(Expression? mappedExpression, Type resultType, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         if (mappedExpression is not MethodCallExpression call
             || !NativeProjectionBinder.IsStringSequenceMaterializationCall(call))
@@ -863,9 +864,9 @@ internal sealed class MongoMixedProjectionBindingRemovingExpressionVisitor
     /// rebuilt over the resolved reads. Returns <see langword="false"/> for anything that is not such an
     /// arithmetic leaf so the caller can fall back to its other resolution paths.
     /// </summary>
-    private bool TryBindArithmeticLeaf(Expression? mappedExpression, Type resultType, out Expression result)
+    private bool TryBindArithmeticLeaf(Expression? mappedExpression, Type resultType, [NotNullWhen(true)] out Expression? result)
     {
-        result = null!;
+        result = null;
 
         // Over a retained pushed-down Select the driver returns projected documents ({ R, V }) lacking the operands' source
         // elements: every operand would read as missing and the leaf answer a silently wrong value (EF-460). Decline so the

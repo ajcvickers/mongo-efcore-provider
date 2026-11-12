@@ -78,9 +78,9 @@ internal static class NativeCorrelationMatcher
         Expression outerRoot,
         IEntityType targetEntityType,
         bool requireEmbedded,
-        out INavigation navigation)
+        [NotNullWhen(true)] out INavigation? navigation)
     {
-        navigation = null!;
+        navigation = null;
 
         if (!TryResolveCorrelationSides(whereBody, outerRoot, out var dependentSide, out var outerSideExpression, out var nullGuarded))
             return false;
@@ -642,7 +642,7 @@ internal static class NativeCorrelationMatcher
     /// conjunct declines, so a user-filtered count isn't mistaken for a plain FK correlation.
     /// </summary>
     private static bool TryGetCorrelationEqualitySides(
-        Expression body, out Expression left, out Expression right, out Expression? nullGuarded)
+        Expression body, [NotNullWhen(true)] out Expression? left, [NotNullWhen(true)] out Expression? right, out Expression? nullGuarded)
     {
         var stripped = body.RemoveConvert();
         nullGuarded = null;
@@ -660,7 +660,7 @@ internal static class NativeCorrelationMatcher
                 return true;
         }
 
-        left = right = null!;
+        left = right = null;
         nullGuarded = null;
         return false;
     }
@@ -669,7 +669,7 @@ internal static class NativeCorrelationMatcher
     /// Extracts the two sides of an equality in the spellings EF's nav-expansion produces: <c>==</c>, static <c>object.Equals(x, y)</c>
     /// and instance <c>x.Equals(y)</c>. Also used by <c>NativeSelectManyBinder</c>.
     /// </summary>
-    internal static bool TryExtractEqualitySides(Expression node, out Expression left, out Expression right)
+    internal static bool TryExtractEqualitySides(Expression node, [NotNullWhen(true)] out Expression? left, [NotNullWhen(true)] out Expression? right)
     {
         switch (node.RemoveConvert())
         {
@@ -698,7 +698,7 @@ internal static class NativeCorrelationMatcher
                 return true;
 
             default:
-                left = right = null!;
+                left = right = null;
                 return false;
         }
     }

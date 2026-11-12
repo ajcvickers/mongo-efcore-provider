@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using MongoDB.EntityFrameworkCore.Query.Expressions;
 
@@ -91,9 +92,9 @@ internal sealed partial class MongoExpressionTranslator
         return true;
     }
 
-    private static bool IsCompareCall(Expression node, out Expression a, out Expression b, out bool isString)
+    private static bool IsCompareCall(Expression node, [NotNullWhen(true)] out Expression? a, [NotNullWhen(true)] out Expression? b, out bool isString)
     {
-        a = b = null!;
+        a = b = null;
         isString = false;
         switch (Unwrap(node))
         {

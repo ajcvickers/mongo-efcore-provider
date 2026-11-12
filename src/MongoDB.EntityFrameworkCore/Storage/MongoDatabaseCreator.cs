@@ -264,8 +264,8 @@ public class MongoDatabaseCreator(
     public void CreateMissingIndexes()
     {
         var collectionNames = new List<string>();
-        var existingIndexesMap = new Dictionary<string, List<string>?>();
-        var indexModelsMap = new Dictionary<string, List<CreateIndexModel<BsonDocument>>?>();
+        var existingIndexesMap = new Dictionary<string, List<string>>();
+        var indexModelsMap = new Dictionary<string, List<CreateIndexModel<BsonDocument>>>();
 
         foreach (var entityType in designTimeModel.Model.GetEntityTypes().Where(e => e.IsDocumentRoot()))
         {
@@ -287,7 +287,7 @@ public class MongoDatabaseCreator(
 
         foreach (var collectionName in collectionNames)
         {
-            if (indexModelsMap.TryGetValue(collectionName, out var indexModels) && indexModels!.Count > 0)
+            if (indexModelsMap.TryGetValue(collectionName, out var indexModels) && indexModels.Count > 0)
             {
                 var indexManager = clientWrapper.Database.GetCollection<BsonDocument>(collectionName).Indexes;
                 indexManager.CreateMany(indexModels);
@@ -306,8 +306,8 @@ public class MongoDatabaseCreator(
     private void CreateMissingAtlasIndexes(bool forVectors)
     {
         var collectionNames = new List<string>();
-        var existingIndexesMap = new Dictionary<string, List<string>?>();
-        var indexModelsMap = new Dictionary<string, List<CreateSearchIndexModel>?>();
+        var existingIndexesMap = new Dictionary<string, List<string>>();
+        var indexModelsMap = new Dictionary<string, List<CreateSearchIndexModel>>();
 
         foreach (var entityType in designTimeModel.Model.GetEntityTypes().Where(e => e.IsDocumentRoot()))
         {
@@ -335,7 +335,7 @@ public class MongoDatabaseCreator(
 
         foreach (var collectionName in collectionNames)
         {
-            if (indexModelsMap.TryGetValue(collectionName, out var indexModels) && indexModels!.Count > 0)
+            if (indexModelsMap.TryGetValue(collectionName, out var indexModels) && indexModels.Count > 0)
             {
                 var searchIndexManager = clientWrapper.Database.GetCollection<BsonDocument>(collectionName).SearchIndexes;
                 searchIndexManager.CreateMany(indexModels);
@@ -499,8 +499,8 @@ public class MongoDatabaseCreator(
     public async Task CreateMissingIndexesAsync(CancellationToken cancellationToken = default)
     {
         var collectionNames = new List<string>();
-        var existingIndexesMap = new Dictionary<string, List<string>?>();
-        var indexModelsMap = new Dictionary<string, List<CreateIndexModel<BsonDocument>>?>();
+        var existingIndexesMap = new Dictionary<string, List<string>>();
+        var indexModelsMap = new Dictionary<string, List<CreateIndexModel<BsonDocument>>>();
 
         foreach (var entityType in designTimeModel.Model.GetEntityTypes().Where(e => e.IsDocumentRoot()))
         {
@@ -522,7 +522,7 @@ public class MongoDatabaseCreator(
 
         foreach (var collectionName in collectionNames)
         {
-            if (indexModelsMap.TryGetValue(collectionName, out var indexModels) && indexModels!.Count > 0)
+            if (indexModelsMap.TryGetValue(collectionName, out var indexModels) && indexModels.Count > 0)
             {
                 var indexManager = clientWrapper.Database.GetCollection<BsonDocument>(collectionName).Indexes;
                 await indexManager.CreateManyAsync(indexModels, cancellationToken).ConfigureAwait(false);
@@ -541,8 +541,8 @@ public class MongoDatabaseCreator(
     private async Task CreateMissingAtlasIndexesAsync(bool forVectors, CancellationToken cancellationToken)
     {
         var collectionNames = new List<string>();
-        var existingIndexesMap = new Dictionary<string, List<string>?>();
-        var indexModelsMap = new Dictionary<string, List<CreateSearchIndexModel>?>();
+        var existingIndexesMap = new Dictionary<string, List<string>>();
+        var indexModelsMap = new Dictionary<string, List<CreateSearchIndexModel>>();
 
         foreach (var entityType in designTimeModel.Model.GetEntityTypes().Where(e => e.IsDocumentRoot()))
         {
@@ -570,7 +570,7 @@ public class MongoDatabaseCreator(
 
         foreach (var collectionName in collectionNames)
         {
-            if (indexModelsMap.TryGetValue(collectionName, out var indexModels) && indexModels!.Count > 0)
+            if (indexModelsMap.TryGetValue(collectionName, out var indexModels) && indexModels.Count > 0)
             {
                 var searchIndexManager = clientWrapper.Database.GetCollection<BsonDocument>(collectionName).SearchIndexes;
                 await searchIndexManager.CreateManyAsync(indexModels, cancellationToken).ConfigureAwait(false);
@@ -652,10 +652,10 @@ public class MongoDatabaseCreator(
     private void BuildIndexes(
         IEntityType entityType,
         string collectionName,
-        Dictionary<string, List<string>?> existingIndexesMap,
-        Dictionary<string, List<CreateIndexModel<BsonDocument>>?> indexModelsMap)
+        Dictionary<string, List<string>> existingIndexesMap,
+        Dictionary<string, List<CreateIndexModel<BsonDocument>>> indexModelsMap)
     {
-        var existingIndexes = existingIndexesMap[collectionName]!;
+        var existingIndexes = existingIndexesMap[collectionName];
 
         if (!indexModelsMap.TryGetValue(collectionName, out var indexModels))
         {
@@ -671,7 +671,7 @@ public class MongoDatabaseCreator(
             if (!existingIndexes.Contains(name))
             {
                 existingIndexes.Add(name);
-                indexModels!.Add(index.CreateIndexDocument());
+                indexModels.Add(index.CreateIndexDocument());
             }
         }
 
@@ -681,7 +681,7 @@ public class MongoDatabaseCreator(
             if (!existingIndexes.Contains(name))
             {
                 existingIndexes.Add(name);
-                indexModels!.Add(key.CreateKeyIndexDocument(name));
+                indexModels.Add(key.CreateKeyIndexDocument(name));
             }
         }
 
@@ -696,8 +696,8 @@ public class MongoDatabaseCreator(
     private void BuildAtlasIndexes(
         IEntityType entityType,
         string collectionName,
-        Dictionary<string, List<string>?> existingIndexesMap,
-        Dictionary<string, List<CreateSearchIndexModel>?> indexModelsMap,
+        Dictionary<string, List<string>> existingIndexesMap,
+        Dictionary<string, List<CreateSearchIndexModel>> indexModelsMap,
         bool forVectorIndexes)
     {
         if (!existingIndexesMap.TryGetValue(collectionName, out var existingIndexes))
@@ -719,9 +719,9 @@ public class MongoDatabaseCreator(
                 Debug.Assert(name != null, "Index name should have been set by IndexNamingConvention.");
 
                 var options = index.GetVectorIndexOptions()!.Value;
-                if (!existingIndexes!.Contains(name))
+                if (!existingIndexes.Contains(name))
                 {
-                    indexModels!.Add(index.CreateVectorIndexDocument(options));
+                    indexModels.Add(index.CreateVectorIndexDocument(options));
                     existingIndexes.Add(name);
                 }
             }
@@ -741,9 +741,9 @@ public class MongoDatabaseCreator(
                 var name = index.Name;
                 Debug.Assert(name != null, "Index name should have been set on creation.");
 
-                if (!existingIndexes!.Contains(name))
+                if (!existingIndexes.Contains(name))
                 {
-                    indexModels!.Add(new CreateSearchIndexModel(name, SearchIndexType.Search, index.ToBson().AsBsonDocument));
+                    indexModels.Add(new CreateSearchIndexModel(name, SearchIndexType.Search, index.ToBson().AsBsonDocument));
                     existingIndexes.Add(name);
                 }
             }

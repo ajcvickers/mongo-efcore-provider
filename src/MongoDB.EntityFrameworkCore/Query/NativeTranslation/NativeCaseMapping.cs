@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
@@ -92,10 +93,10 @@ internal static class NativeCaseMapping
     /// client chain, null propagated.
     /// </summary>
     internal static bool TryMatchClientStringConcat(
-        BinaryExpression binary, out Expression chainSide, out ConstantExpression constantSide, out bool chainIsLeft)
+        BinaryExpression binary, [NotNullWhen(true)] out Expression? chainSide, [NotNullWhen(true)] out ConstantExpression? constantSide, out bool chainIsLeft)
     {
-        chainSide = null!;
-        constantSide = null!;
+        chainSide = null;
+        constantSide = null;
         chainIsLeft = false;
         if (binary is not { NodeType: ExpressionType.Add, Type: var type, Method: { Name: "Concat", DeclaringType: var declaringType } }
             || type != typeof(string)

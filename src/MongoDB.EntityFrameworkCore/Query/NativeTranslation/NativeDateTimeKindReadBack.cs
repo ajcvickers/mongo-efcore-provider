@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -352,9 +353,9 @@ internal static class NativeDateTimeKindReadBack
     // Resolves a flattening $min/$max/$size/... over an $addToSet accumulator array to that accumulator's element operand.
     private static bool TryResolveArrayReduce(
         MongoArrayReduceExpression reduce, MongoSelectDefinition select, Level level,
-        out MongoExpression operand, out Level operandLevel)
+        [NotNullWhen(true)] out MongoExpression? operand, out Level operandLevel)
     {
-        operand = null!;
+        operand = null;
         operandLevel = default;
 
         var (grouping, inputLevel) = GroupingAt(select, level);
@@ -383,10 +384,10 @@ internal static class NativeDateTimeKindReadBack
         MongoSelectDefinition select,
         Level level,
         bool valuePreservingOnly,
-        out MongoExpression target,
+        [NotNullWhen(true)] out MongoExpression? target,
         out Level targetLevel)
     {
-        target = null!;
+        target = null;
         targetLevel = default;
 
         switch (level)
@@ -429,9 +430,9 @@ internal static class NativeDateTimeKindReadBack
     }
 
     private static bool TryResolveGroupOutput(
-        MongoGrouping grouping, string path, bool valuePreservingOnly, out MongoExpression target)
+        MongoGrouping grouping, string path, bool valuePreservingOnly, [NotNullWhen(true)] out MongoExpression? target)
     {
-        target = null!;
+        target = null;
 
         if (path == "_id")
         {
