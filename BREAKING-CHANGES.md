@@ -771,6 +771,42 @@ that are.
 None needed. Documents written by SaveChanges always carry the discriminator, so the change only shows for documents written
 another way or whose discriminator was set to null on a tracked entry.
 
+### `IMongoTransactionManager` has two new members
+
+#### Old behavior
+
+`IMongoTransactionManager` declared `BeginTransaction(TransactionOptions)` and `BeginTransactionAsync(TransactionOptions, CancellationToken)` on top of `IDbContextTransactionManager`.
+
+#### New behavior
+
+The interface also declares `UseTransaction(IClientSessionHandle)` and `UseTransaction(IDbContextTransaction)`, which back the new `Database.UseTransaction(...)` extension methods that let a context take part in a transaction it did not start (see the README). A type that implements `IMongoTransactionManager` no longer compiles until it adds both members.
+
+#### Why
+
+Sharing a transaction between contexts needs the transaction manager to enlist a context in an existing transaction, and the manager is resolved from the context's service provider.
+
+#### Mitigations
+
+The interface is documented as internal and users are warned not to implement it, so most code is unaffected. If you have your own implementation, add the two methods, or derive from `MongoTransactionManager` instead.
+
+### A context whose transaction was ended through the driver now throws instead of running outside a transaction
+
+#### Old behavior
+
+If the transaction on a context's session was committed or aborted by something other than the context (for example other code that held the same `IClientSession` and called `CommitTransaction` or `AbortTransaction` on it), the context kept going: `SaveChanges`, queries and bulk `ExecuteUpdate`/`ExecuteDelete` issued their commands on a session with no transaction in progress, so they silently ran outside any transaction and were applied immediately.
+
+#### New behavior
+
+These operations throw `InvalidOperationException` ("MongoTransaction ... is no longer active: the transaction on its session has already been committed or aborted"). This applies to a transaction the context started itself, as well as to one it joined with `UseTransaction`. Disposing such a context or transaction is unaffected. The check cannot see a transaction that the server aborted after a failed write: that still surfaces as the server's `TransientTransactionError`.
+
+#### Why
+
+Running writes outside the transaction the caller believes they are in breaks the all-or-nothing guarantee without any error.
+
+#### Mitigations
+
+Finish the work of every context using a session before ending its transaction through the driver. If a context must continue after the transaction ends, dispose its current transaction (`Database.CurrentTransaction?.Dispose()`) and begin a new one.
+
 ## Breaking changes in 8.4.0 / 9.1.0 / 10.0.0
 
 ### The element name for discriminators may have changed

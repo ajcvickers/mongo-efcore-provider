@@ -89,6 +89,30 @@ Entity Framework Core and MongoDB have a wide variety of features. This provider
 - `EnsureCreated` & `EnsureDeleted` to ensure collections and the database created at app start-up
 - Optimistic concurrency support through `IsConcurrencyToken`/`ConcurrencyCheckAttribute` & `IsRowVersion`/`TimestampAttribute`
 - AutoTransactional `SaveChanges` & `SaveChangesAsync` - all changes committed or rolled-back together
+- Sharing a transaction between contexts: `context.Database.UseTransaction(...)` makes a context write and query inside a transaction it did not start, so several contexts (even on different `MongoClient` instances connected to the same cluster, including a sharded cluster) can take part in one transaction. Pass another context's transaction, or an `IClientSessionHandle` that already has a transaction started:
+
+  ```csharp
+  using var owner = new BlogContext(options);
+  using var other = new AuthorContext(options);
+
+  using var transaction = owner.Database.BeginTransaction();
+  owner.Blogs.Add(new Blog { Name = "Mongo" });
+  owner.SaveChanges();
+
+  other.Database.UseTransaction(owner.Database.CurrentTransaction!);
+  other.Authors.Add(new Author { Name = "Ada" });
+  other.SaveChanges();
+
+  owner.Database.CommitTransaction(); // only the owner ends the transaction
+  ```
+
+  - The transaction is not owned by the context that joins it: disposing it (or the context) only detaches, and `Commit`/`Rollback` on it, or `Database.CommitTransaction()`/`RollbackTransaction()` on the joining context, throw `InvalidOperationException`. Only the owner (or the code that supplied the session) commits or aborts
+  - Once the owner commits or aborts, `SaveChanges`, queries and bulk `ExecuteUpdate`/`ExecuteDelete` on a joined context throw `InvalidOperationException` ("is no longer active") rather than silently running outside a transaction. This also applies to a context's own transaction ended through the driver
+  - MongoDB has no savepoints: a failed write aborts the whole transaction. The next operation (or, on a sharded cluster, possibly only the commit) fails with the server's `TransientTransactionError`, and nothing from the transaction becomes visible
+  - Server limits apply: `$search`/`$vectorSearch` queries are rejected inside a multi-document transaction, and some DDL is restricted (`createIndexes` on an existing collection and `drop` are rejected; `createCollection`/`createIndexes` on a collection created in the same transaction work, so `EnsureCreated` inside a transaction works only in that narrow case). The provider passes the server error through unchanged
+  - A client session is not thread-safe: contexts sharing a transaction must be used one at a time, never concurrently
+  - Ambient `System.Transactions` (`TransactionScope`, `Database.EnlistTransaction`) and savepoints remain unsupported
+  - Joining logs `MongoEventId.TransactionEnlisted` ("Enlisted in transaction {transactionId}.", Information); a joined context logs no commit or rollback events
 - `CamelCaseElementNameConvention` for helping map Pascal-cased C# properties to camel-cased BSON elements
 - Type discriminators including `OfType<T>` and `Where(e => e is T)`
 - Support for EF shadow properties and EF.Proxy for navigation traversal
