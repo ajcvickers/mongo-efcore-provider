@@ -31,6 +31,12 @@
     <TargetFramework>net11.0</TargetFramework>
     <DefineConstants>TRACE;RELEASE;EF11</DefineConstants>
   </PropertyGroup>
+  <!-- EF11's NonSharedModelBulkUpdatesTestBase has a public non-test hook (UseTransaction) that xunit.v3 4.x flags as xUnit1013.
+       The diagnostic is reported against EF Core's type, not ours, so it can only be suppressed here. -->
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release EF11' Or '$(Configuration)' == 'Debug EF11' ">
+    <NoWarn>$(NoWarn);xUnit1013</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\MongoDB.EntityFrameworkCore\MongoDB.EntityFrameworkCore.csproj" />
   </ItemGroup>

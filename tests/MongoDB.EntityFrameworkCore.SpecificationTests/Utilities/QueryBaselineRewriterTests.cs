@@ -144,7 +144,7 @@ public sealed class QueryBaselineRewriterTests : IDisposable
     }
 
     private void AssertNoTempFiles()
-        => Assert.Equal(["T.cs"], Directory.GetFiles(_dir).Select(Path.GetFileName).ToArray());
+        => Assert.Equal("T.cs", Path.GetFileName(Assert.Single(Directory.GetFiles(_dir))));
 
     [Theory]
     [MemberData(nameof(Variants))]

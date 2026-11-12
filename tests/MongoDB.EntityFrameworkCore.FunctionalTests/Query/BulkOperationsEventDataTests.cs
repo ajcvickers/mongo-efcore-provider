@@ -246,7 +246,7 @@ public class BulkOperationsEventDataTests(TemporaryDatabaseFixture database)
             Assert.Equal(2, updated);
             var data = collector.Events.Select(e => e.Data).OfType<MongoBulkUpdateEventData>().ToList();
             var executing = data.Where(d => d.Command != null).ToList();
-            var executed = Assert.Single(data.Where(d => d.Command == null));
+            var executed = Assert.Single(data, d => d.Command == null);
 
             Assert.Equal(2, executing.Count);
             Assert.All(executing, d => Assert.Equal(1, d.TargetCount));

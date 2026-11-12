@@ -415,8 +415,8 @@ public class ComplexElementArrayContainsTests(TemporaryDatabaseFixture database)
             foreach (var tag in new[] { "x", "z", null, "$y", "nope" })
             {
                 Assert.Equal(
-                    [.. oracle.Where(h => h.Many.Any(m => V(m).Tags.Contains(tag))).Select(h => h.Name).OrderBy(x => x, StringComparer.Ordinal)],
-                    db.Entities.Where(h => h.Many.Any(m => m.Tags.Contains(tag))).OrderBy(h => h.Name).Select(h => h.Name).ToList());
+                    [.. oracle.Where(h => h.Many.Any(m => V(m).Tags.Contains(tag!))).Select(h => h.Name).OrderBy(x => x, StringComparer.Ordinal)],
+                    db.Entities.Where(h => h.Many.Any(m => m.Tags.Contains(tag!))).OrderBy(h => h.Name).Select(h => h.Name).ToList());
             }
         }
     }

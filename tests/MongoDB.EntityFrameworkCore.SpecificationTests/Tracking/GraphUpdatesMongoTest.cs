@@ -232,11 +232,11 @@ public abstract class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMo
 #elif EF9 || EF8
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
-#pragma warning disable xUnit1024, xUnit1003
+#pragma warning disable xUnit1024, xUnit1003, xUnit1026
     [ConditionalTheory(Skip = "Upstream test is not virtual so the known failure cannot be asserted. EF-X101")]
     public new Task Discriminator_values_are_not_marked_as_unknown(bool async)
         => Task.CompletedTask;
-#pragma warning restore xUnit1024, xUnit1003
+#pragma warning restore xUnit1024, xUnit1003, xUnit1026
 #endif
 #endif
 

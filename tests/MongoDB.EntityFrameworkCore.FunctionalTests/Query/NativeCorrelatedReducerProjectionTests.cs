@@ -453,7 +453,7 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
             .ToList();
 
         // Fido (no methods) sorts before Rex.
-        Assert.Equal([null, "Microchip"], methods);
+        Assert.Equal(new string?[] { null, "Microchip" }, methods);
     }
 
     // No driver-LINQ oracle: expected values are hand-computed from the seed, with several candidates per case so a
