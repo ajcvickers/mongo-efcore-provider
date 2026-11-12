@@ -513,6 +513,38 @@ PrimitiveCollectionsEntity.{ "$match" : { "Int" : { "$nin" : [10, 999] } } }
     }
 #endif
 
+#if EF10
+    public override async Task Parameter_collection_IReadOnlySet_of_ints_Contains_int()
+    {
+        await base.Parameter_collection_IReadOnlySet_of_ints_Contains_int();
+
+        AssertMql(
+            """
+PrimitiveCollectionsEntity.{ "$match" : { "Int" : { "$in" : [10, 999] } } }
+""",
+            //
+            """
+PrimitiveCollectionsEntity.{ "$match" : { "Int" : { "$nin" : [10, 999] } } }
+""");
+    }
+#endif
+
+#if EF10
+    public override async Task Parameter_collection_ReadOnlyCollectionWithContains_of_ints_Contains_int()
+    {
+        await base.Parameter_collection_ReadOnlyCollectionWithContains_of_ints_Contains_int();
+
+        AssertMql(
+            """
+PrimitiveCollectionsEntity.{ "$match" : { "Int" : { "$in" : [10, 999] } } }
+""",
+            //
+            """
+PrimitiveCollectionsEntity.{ "$match" : { "Int" : { "$nin" : [10, 999] } } }
+""");
+    }
+#endif
+
 #if (EF10 || EF11)
     public override async Task Parameter_collection_HashSet_of_ints_Contains_int()
     {
