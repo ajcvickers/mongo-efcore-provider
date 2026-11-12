@@ -96,14 +96,8 @@ public class ConferencePlannerMongoTest(ConferencePlannerMongoTest.ConferencePla
         => SpecFails.AsyncSomeRows<global::Xunit.Sdk.EqualException>(() => base.SearchController_Search(searchTerm, totalCount, sessionCount), string.Empty);
 #endif
 
-#if EF11
-    // Fails: depends on the time zone: fails in UTC EF-X720
-    public override Task SessionsController_Delete()
-        => SpecFails.FailsInUtcAsync(() => base.SessionsController_Delete());
-#else
     public override Task SessionsController_Delete()
         => base.SessionsController_Delete();
-#endif
 
     public override Task SessionsController_Delete_with_bad_ID()
         => base.SessionsController_Delete_with_bad_ID();
