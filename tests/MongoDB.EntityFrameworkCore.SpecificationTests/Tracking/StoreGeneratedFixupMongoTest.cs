@@ -14,20 +14,20 @@
  */
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
 public class StoreGeneratedFixupMongoTest(StoreGeneratedFixupMongoTest.StoreGeneratedFixupMongoFixture fixture)
-    : StoreGeneratedFixupTestBase<StoreGeneratedFixupMongoTest.StoreGeneratedFixupMongoFixture>(fixture), IAsyncLifetime
+    : StoreGeneratedFixupTestBase<StoreGeneratedFixupMongoTest.StoreGeneratedFixupMongoFixture>(fixture)
 {
-    // The tests write to the shared database and the contexts cannot yet enlist in a rolled-back transaction (#77), so each test reseeds it; otherwise which test sees which rows depends on the order they run in.
-    public async LifetimeTask InitializeAsync()
-        => await Fixture.ReseedAsync();
-
-    public LifetimeTask DisposeAsync()
-        => LifetimeTask.CompletedTask;
+    // EF isolates each test by beginning a transaction on one context and never committing it; a second context the test creates joins
+    // it through this hook (#77, #87) and only participates, so disposing it does not end the transaction. Nothing is reseeded.
+    protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
+        => facade.UseTransaction(transaction);
 
     protected override bool EnforcesFKs => false;
 
@@ -989,13 +989,13 @@ public class StoreGeneratedFixupMongoTest(StoreGeneratedFixupMongoTest.StoreGene
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: the test asserts the keys are temporary (AssertValidFks tempKeys: true), but the fixture's client-side counter generator makes them permanent EF-X205
     public override Task Multi_level_add_replace_and_save()
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Multi_level_add_replace_and_save());
+        => SpecFails.ThrowsAsync<global::Xunit.Sdk.AllException>(() => base.Multi_level_add_replace_and_save(), "did not pass");
 #elif EF8
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
+    // Fails: the test asserts the keys are temporary (AssertValidFks tempKeys: true), but the fixture's client-side counter generator makes them permanent EF-X205
     public override void Multi_level_add_replace_and_save()
-        => SpecFails.Throws<global::System.InvalidOperationException>(() => base.Multi_level_add_replace_and_save());
+        => SpecFails.Throws<global::Xunit.Sdk.AllException>(() => base.Multi_level_add_replace_and_save(), "did not pass");
 #endif
 
     public override void Remove_overlapping_principal()
