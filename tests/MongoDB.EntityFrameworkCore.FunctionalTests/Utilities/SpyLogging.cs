@@ -59,7 +59,7 @@ internal class SpyLoggerProvider : ILoggerProvider
     /// </summary>
     public SpyLogRecord GetLogRecordByEventId(EventId eventId)
     {
-        var key = eventId.Name[..eventId.Name.LastIndexOf('.')];
+        var key = eventId.Name![..eventId.Name!.LastIndexOf('.')];
         var logger = Assert.Single(Loggers, s => s.Key == key).Value;
         return Assert.Single(logger.Records, log => log.EventId == eventId);
     }
