@@ -50,19 +50,32 @@ public class MongoTransactionManager : IMongoTransactionManager, IDisposable, IA
     /// <inheritdoc />
     public void ResetState()
     {
-        CurrentTransaction?.Dispose();
-        CurrentTransaction = null;
+        // The transaction finishes disposing itself even when its rollback throws (see MongoTransaction.Dispose), so the manager
+        // lets go of it whatever happens and the exception still reaches the caller.
+        try
+        {
+            CurrentTransaction?.Dispose();
+        }
+        finally
+        {
+            CurrentTransaction = null;
+        }
     }
 
     /// <inheritdoc />
     public async Task ResetStateAsync(CancellationToken cancellationToken = new())
     {
-        if (CurrentTransaction != null)
+        try
         {
-            await CurrentTransaction.DisposeAsync().ConfigureAwait(false);
+            if (CurrentTransaction != null)
+            {
+                await CurrentTransaction.DisposeAsync().ConfigureAwait(false);
+            }
         }
-
-        CurrentTransaction = null;
+        finally
+        {
+            CurrentTransaction = null;
+        }
     }
 
     /// <summary>
@@ -70,13 +83,17 @@ public class MongoTransactionManager : IMongoTransactionManager, IDisposable, IA
     /// owns and has not committed or rolled back is rolled back (and its session disposed), so the server does not keep it open; a
     /// transaction the context only joined (see <see cref="UseTransaction(IClientSessionHandle)"/>) is detached and left to its owner.
     /// </summary>
-    public void Dispose()
+    /// <remarks>
+    /// This is virtual so that a derived manager can add to it. EF disposes the manager through <see cref="IDisposable"/>, which
+    /// reaches an override but not a method that merely hides this one; call the base implementation from an override.
+    /// </remarks>
+    public virtual void Dispose()
         => ResetState();
 
     /// <summary>
     /// Asynchronous version of <see cref="Dispose"/>.
     /// </summary>
-    public async ValueTask DisposeAsync()
+    public virtual async ValueTask DisposeAsync()
         => await ResetStateAsync().ConfigureAwait(false);
 
     /// <inheritdoc />

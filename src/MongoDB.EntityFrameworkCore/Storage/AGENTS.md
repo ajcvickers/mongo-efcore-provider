@@ -46,7 +46,10 @@ Only Storage may call the driver client/collection/session types directly.
 - **Disposing a context disposes its transaction manager**: `MongoTransactionManager` is `IDisposable`/`IAsyncDisposable` (the interface
   `IMongoTransactionManager` is not), and EF disposes scoped services with a non-pooled context, so `Dispose` is `ResetState`: it rolls back
   an owned `CurrentTransaction` (and disposes its session) and only detaches a non-owned one, never touching the owner's session. A pooled
-  context is reset (`ResetState`) rather than disposed, with the same effect. Don't swallow exceptions from this path.
+  context is reset (`ResetState`) rather than disposed, with the same effect. Don't swallow exceptions from this path, but never let one
+  leave the work half done: `MongoTransaction.Dispose*` always ends in `Disposed` with its session disposed and the manager detached
+  (`try/finally`) even when the rollback throws, and `ResetState*` always clears `CurrentTransaction`. The manager's `Dispose`/`DisposeAsync`
+  are `virtual` (EF disposes through the interfaces, so a hiding method would never run).
   A `MongoTransaction` built on a session with no transaction has no transaction number and is never active.
 - **`EnsureCreated` is idempotent by design** (re-applies seeds, re-creates indexes, tolerates duplicate-key errors
   while seeding). Seeding goes through the normal update pipeline.

@@ -314,41 +314,56 @@ public sealed class MongoTransaction(
             // Only detach: the transaction and its session belong to the owner. The state is set first so that the manager's call
             // back into Dispose returns immediately.
             _transactionState = TransactionState.Disposed;
+            transactionLogger.TransactionDetached(this, false);
             transactionManager?.ResetState();
             return;
         }
 
-        var endedBehindOurBack = false;
-        switch (_transactionState)
+        if (_transactionState == TransactionState.Disposed)
         {
-            case TransactionState.Disposed:
-                return;
+            return;
+        }
 
-            case TransactionState.Active:
+        // Rollback is what normally detaches this transaction from the manager. It is skipped when the session's transaction has
+        // already ended, and it does not get that far when it throws, so Dispose detaches in those cases itself.
+        var detach = false;
+        try
+        {
+            if (_transactionState == TransactionState.Active)
+            {
                 if (SessionTransactionHasEnded)
                 {
-                    endedBehindOurBack = true;
+                    detach = true;
+                    transactionLogger.TransactionRollbackSkipped(this, false);
                 }
                 else
                 {
                     Rollback();
                 }
-                break;
-
-            case TransactionState.Committed:
-            case TransactionState.RolledBack:
-            case TransactionState.Failed:
-                break;
+            }
         }
-
-        _transactionState = TransactionState.Disposed;
-        session.Dispose();
-
-        if (endedBehindOurBack)
+        catch
         {
-            // Rollback is what normally detaches this transaction from the manager; it was skipped, so do it here.
-            // The state is already Disposed, so the manager's call back into Dispose returns immediately.
-            transactionManager?.ResetState();
+            detach = true;
+            throw;
+        }
+        finally
+        {
+            // However the rollback went, this transaction is finished with: the session is released (the server would otherwise keep
+            // the transaction open until it times out) and the manager lets go of us. The state is set first so that the manager's
+            // call back into Dispose returns immediately. An exception from the rollback still reaches the caller.
+            _transactionState = TransactionState.Disposed;
+            try
+            {
+                session.Dispose();
+            }
+            finally
+            {
+                if (detach)
+                {
+                    transactionManager?.ResetState();
+                }
+            }
         }
     }
 
@@ -364,6 +379,7 @@ public sealed class MongoTransaction(
 
             // See Dispose.
             _transactionState = TransactionState.Disposed;
+            transactionLogger.TransactionDetached(this, true);
             if (transactionManager is not null)
             {
                 await transactionManager.ResetStateAsync().ConfigureAwait(false);
@@ -372,36 +388,47 @@ public sealed class MongoTransaction(
             return;
         }
 
-        var endedBehindOurBack = false;
-        switch (_transactionState)
+        if (_transactionState == TransactionState.Disposed)
         {
-            case TransactionState.Disposed:
-                return;
+            return;
+        }
 
-            case TransactionState.Active:
+        // See Dispose.
+        var detach = false;
+        try
+        {
+            if (_transactionState == TransactionState.Active)
+            {
                 if (SessionTransactionHasEnded)
                 {
-                    endedBehindOurBack = true;
+                    detach = true;
+                    transactionLogger.TransactionRollbackSkipped(this, true);
                 }
                 else
                 {
                     await RollbackAsync().ConfigureAwait(false);
                 }
-                break;
-
-            case TransactionState.Committed:
-            case TransactionState.RolledBack:
-            case TransactionState.Failed:
-                break;
+            }
         }
-
-        _transactionState = TransactionState.Disposed;
-        session.Dispose();
-
-        if (endedBehindOurBack && transactionManager is not null)
+        catch
         {
-            // See Dispose.
-            await transactionManager.ResetStateAsync().ConfigureAwait(false);
+            detach = true;
+            throw;
+        }
+        finally
+        {
+            _transactionState = TransactionState.Disposed;
+            try
+            {
+                session.Dispose();
+            }
+            finally
+            {
+                if (detach && transactionManager is not null)
+                {
+                    await transactionManager.ResetStateAsync().ConfigureAwait(false);
+                }
+            }
         }
     }
 

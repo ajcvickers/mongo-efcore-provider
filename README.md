@@ -128,7 +128,7 @@ Entity Framework Core and MongoDB have a wide variety of features. This provider
   - Server limits apply: `$search`/`$vectorSearch` queries are rejected inside a multi-document transaction. The provider passes the server error through unchanged. (The server also restricts `drop` and `createIndexes` inside a transaction, which only matters for your own driver code run on the shared session)
   - A client session is not thread-safe: contexts sharing a transaction must be used one at a time, never concurrently
   - Ambient `System.Transactions` (`TransactionScope`, `Database.EnlistTransaction`) and savepoints remain unsupported
-  - Joining logs `MongoEventId.TransactionEnlisted` ("Enlisted in transaction {transactionId}.", Information); a joined context logs no commit or rollback events
+  - Joining logs `MongoEventId.TransactionEnlisted` and detaching (disposing the joined context or its transaction) logs `MongoEventId.TransactionDetached`, both at Information and both naming the owner; a joined context logs no commit or rollback events. When a context's own transaction is disposed after something else already ended the session's transaction, `MongoEventId.TransactionRollbackSkipped` records that there was nothing to roll back
 - `CamelCaseElementNameConvention` for helping map Pascal-cased C# properties to camel-cased BSON elements
 - Type discriminators including `OfType<T>` and `Where(e => e is T)`
 - Support for EF shadow properties and EF.Proxy for navigation traversal

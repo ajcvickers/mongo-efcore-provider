@@ -56,6 +56,8 @@ public static class MongoEventId
         ExecutingBulkUpdate,
         ExecutedBulkUpdate,
         TransactionEnlisted,
+        TransactionDetached,
+        TransactionRollbackSkipped,
     }
 
     private static EventId MakeDatabaseCommandId(Id id)
@@ -171,6 +173,27 @@ public static class MongoEventId
     ///     <para>This event uses the <see cref="MongoTransactionEventData" /> payload when used with a <see cref="DiagnosticSource" />.</para>
     /// </remarks>
     public static readonly EventId TransactionEnlisted = MakeTransactionId(Id.TransactionEnlisted);
+
+    /// <summary>
+    /// A context that had enlisted in a MongoDB transaction owned by someone else has detached from it. The transaction itself is not
+    /// ended; its owner still controls it.
+    /// </summary>
+    /// <remarks>
+    ///     <para>This event is in the <see cref="DbLoggerCategory.Database.Transaction" /> category.</para>
+    ///     <para>This event uses the <see cref="MongoTransactionEventData" /> payload when used with a <see cref="DiagnosticSource" />.</para>
+    /// </remarks>
+    public static readonly EventId TransactionDetached = MakeTransactionId(Id.TransactionDetached);
+
+    /// <summary>
+    /// A MongoDB transaction owned by a context was disposed while still active from the context's point of view, but the transaction
+    /// on its session had already been committed or aborted by something else (or the session had been disposed), so there was nothing
+    /// to roll back.
+    /// </summary>
+    /// <remarks>
+    ///     <para>This event is in the <see cref="DbLoggerCategory.Database.Transaction" /> category.</para>
+    ///     <para>This event uses the <see cref="MongoTransactionEventData" /> payload when used with a <see cref="DiagnosticSource" />.</para>
+    /// </remarks>
+    public static readonly EventId TransactionRollbackSkipped = MakeTransactionId(Id.TransactionRollbackSkipped);
 
     private static EventId MakeValidationId(Id id)
         => new((int)id, DbLoggerCategory.Model.Validation.Name + "." + id);
