@@ -54,7 +54,7 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 | EF-216 | 245 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
 | EF-X102 | 8 | Relationship discovery between root entity types fails at model build (Unable to determine the relatio... |
 | EF-X527 | 185 | Expression not supported by the driver LINQ translator |
-| EF-X600 | 204 | Query translates natively but returns different data than the expected result  |
+| EF-X600 | 203 | Query translates natively but returns different data than the expected result  |
 | EF-149 | 147 | GroupBy translation is severely limited; most non-trivial group-by shapes fail to translate. |
 | EF-X001 | 137 | Sub-query selection across DbSets is not translated |
 | EF-X316 | 121 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) |
@@ -310,12 +310,13 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X538 | A type that derives from an entity type, and is first reached through a navigation before it is in the model (the base type's navigation to its derived type, with no `DbSet` for the derived type), is owned by convention. That breaks the explicit one-to-one between the two ("the dependent side could not be determined"). `InheritanceRelationshipsQueryMongoFixture` replaces the convention so such a type is not owned; the default is unchanged, because making it the provider default also changes the model of `GraphUpdates` | 0 |
 | EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
 | EF-X549 | A JSON-owned collection that is indexed (`ElementAt`/indexer), projected or composed in a subquery is not translated (`The LINQ expression 'EF.Property<List<JsonOwned...>>(...)' could not be translated`) | 81 |
-| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 204 |
+| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 203 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 38 |
 | EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 67 |
-| EF-X604 | `InvalidOperationException` from query execution or materialization | 85 |
+| EF-X604 | `InvalidOperationException` from query execution or materialization | 83 |
 | EF-X605 | Other unexpected exception from query execution | 119 |
+| EF-X606 | One `SaveChanges` removes a document and adds another with the same value in a unique-indexed property (`GraphUpdates.Save_required_many_to_one_dependents_with_alternate_key`, `useExistingEntities: false`: a `RequiredAk1` is removed and a new one takes its `AlternateId`). The insert is rejected with a duplicate key error (`E11000`) because the old document is still there when it reaches the server. Relational providers order the delete first. Surfaced by #77: the old reseed dropped the database and with it the model's unique indexes, so the test got further and failed later with a `NullReferenceException` (EF-X605, which the `useExistingEntities: true` rows still show) | 1 |
 | EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
 | EF-X701 | **Fixed:** an unset list parameter (a context member used by a query filter, or a null captured list) is serialized as an empty list instead of throwing `NullReferenceException` | 0 |
 | EF-X702 | **Fixed:** `DateTimeOffset.TimeOfDay` is computed from the stored `Ticks`, so sub-millisecond ticks are kept | 0 |
@@ -847,8 +848,10 @@ once however many data rows it has). Only about 40 individual test cases pass as
 Common mechanics, none of which are provider changes: `MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true)` maps every single-property key of the
 upstream models to `_id` (otherwise model validation rejects every model) with a client-side integer generator; `RelaxNullableUniqueIndexes` and
 `RelaxUniqueForeignKeyIndexes` drop the uniqueness that MongoDB cannot honour for `null` (EF-X207); `DoNotOwnTypes` stops relationship discovery
-owning types that the tests model as entities (EF-X102/EF-X538/EF-X539); and the fixtures that run tests which write reseed the database before each
-test, because the tests cannot yet enlist several contexts in one rolled-back transaction (#77). `GraphUpdatesMongoTest` and `ProxyGraphUpdatesMongoTest` are abstract, so they are not run, because their reseed costs about 8 minutes per EF version. `InitFailureGuard` is still available for a fixture whose model/seed/store
+owning types that the tests model as entities (EF-X102/EF-X538/EF-X539); and `GraphUpdatesMongoTest` and `ProxyGraphUpdatesMongoTest` isolate each test the way the relational providers do: EF begins a transaction on one context and never
+commits it, and the `UseTransaction` hook enlists the other contexts a test creates in it (`facade.UseTransaction(transaction)`, #77/#87). Nothing is reseeded, so the
+seed data and the model's unique indexes stay in place and the two suites take about 35 seconds per EF version. The other tracking fixtures still reseed before each test.
+A failed write aborts the whole MongoDB transaction, so a test that carries on after an expected `SaveChanges` exception would fail on its next operation (unlike SQL Server). `InitFailureGuard` is still available for a fixture whose model/seed/store
 creation fails (it re-throws that failure from the first `CreateContext()`); no ported fixture needs it now. `ProxyGraphUpdates` additionally registers
 the EF proxy services and uses lazy-loading and change-tracking proxies. A few upstream tests are `public` but not `virtual` (e.g. `PropertyValuesTestBase.Reload_when_entity_deleted_in_store_can_happen_for_any_state`),
 so they cannot be overridden; where they fail they are hidden by a `new` method with `Skip` carrying the ticket id.

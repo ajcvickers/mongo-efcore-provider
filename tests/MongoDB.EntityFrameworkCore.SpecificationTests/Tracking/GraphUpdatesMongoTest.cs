@@ -14,23 +14,21 @@
  */
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
-// Not run (#77): every test here needs a reset of the store, and without transaction enlistment that means dropping and reseeding
-// the database before each test (about 8 minutes per EF version for GraphUpdates alone). xUnit does not run abstract classes. Remove
-// "abstract" to run the tests; the wrappers below are kept up to date.
-public abstract class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMongoFixture fixture)
-    : GraphUpdatesTestBase<GraphUpdatesMongoTest.GraphUpdatesMongoFixture>(fixture), IAsyncLifetime
+public class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMongoFixture fixture)
+    : GraphUpdatesTestBase<GraphUpdatesMongoTest.GraphUpdatesMongoFixture>(fixture)
 {
-    // The tests write to the shared database and the contexts cannot yet enlist in a rolled-back transaction (#77), so each test reseeds it; otherwise which test sees which rows depends on the order they run in.
-    public async LifetimeTask InitializeAsync()
-        => await Fixture.ReseedAsync();
-
-    public LifetimeTask DisposeAsync()
-        => LifetimeTask.CompletedTask;
+    // EF isolates each test by beginning a transaction on one context and never committing it. A second context the test creates joins
+    // that transaction through this hook (#77, #87); it only participates, so disposing it does not end the transaction. Nothing is
+    // reseeded: the rolled-back transaction leaves the fixture's seed data and the model's indexes as they were.
+    protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
+        => facade.UseTransaction(transaction);
 
 #if EF11
     private readonly object? _ef11Skips = Ef11TestSkips.SkipIfListed("xUnit v3 (EF11) cannot hide this non-virtual upstream test; it fails here for the reasons in EF-X101 (see the New-method override on EF8 to EF10)", "Can_update_many_to_many_and_reference_with_composite_key", "ClientSetDefault_with_sentinel_value_sets_FK_to_sentinel_on_delete");
@@ -220,15 +218,8 @@ public abstract class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMo
 #endif
 
 #if (EF10 || EF11)
-#if EF10
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Discriminator_values_are_not_marked_as_unknown(bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Discriminator_values_are_not_marked_as_unknown(async));
-#else
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
-    public override Task Discriminator_values_are_not_marked_as_unknown(bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Discriminator_values_are_not_marked_as_unknown(async));
-#endif
+        => base.Discriminator_values_are_not_marked_as_unknown(async);
 #elif EF9 || EF8
 #if !EF11
     // Fails: Entities added without a key get Id 0 (no int/long key value generation), so tracking/saving them collides on the same key EF-X101 (upstream test is not virtual, so the failure cannot be asserted; skipped)
@@ -975,13 +966,26 @@ public abstract class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMo
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Other unexpected exception from query execution EF-X605
+    // Fails: useExistingEntities is false: the test removes a RequiredAk1 and adds another with the same AlternateId in one SaveChanges, and the insert is rejected by the unique AlternateId index EF-X606
+    // Fails: useExistingEntities is true: Other unexpected exception from query execution EF-X605
     public override Task Save_required_many_to_one_dependents_with_alternate_key(global::Microsoft.EntityFrameworkCore.GraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.GraphUpdatesMongoTest.GraphUpdatesMongoFixture>.ChangeMechanism changeMechanism, bool useExistingEntities, global::Microsoft.EntityFrameworkCore.ChangeTracking.CascadeTiming? deleteOrphansTiming)
-        => SpecFails.ThrowsAsync<global::System.NullReferenceException>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming));
+        => useExistingEntities
+            ? SpecFails.ThrowsAsync<global::System.NullReferenceException>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming))
+            : SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming), "E11000 duplicate key");
 #elif EF8
-    // Fails: Other unexpected exception from query execution EF-X605
+    // Fails: useExistingEntities is false: the test removes a RequiredAk1 and adds another with the same AlternateId in one SaveChanges, and the insert is rejected by the unique AlternateId index EF-X606
+    // Fails: useExistingEntities is true: Other unexpected exception from query execution EF-X605
     public override void Save_required_many_to_one_dependents_with_alternate_key(global::Microsoft.EntityFrameworkCore.GraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.GraphUpdatesMongoTest.GraphUpdatesMongoFixture>.ChangeMechanism changeMechanism, bool useExistingEntities, global::Microsoft.EntityFrameworkCore.ChangeTracking.CascadeTiming? deleteOrphansTiming)
-        => SpecFails.Throws<global::System.NullReferenceException>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming));
+    {
+        if (useExistingEntities)
+        {
+            SpecFails.Throws<global::System.NullReferenceException>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming));
+        }
+        else
+        {
+            SpecFails.Throws<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming), "E11000 duplicate key");
+        }
+    }
 #endif
 
 #if (EF10 || EF11) || EF9
@@ -1053,9 +1057,8 @@ public abstract class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMo
         => SpecFails.Throws<global::System.NullReferenceException>(() => base.Sever_optional_one_to_one_with_alternate_key(changeMechanism, deleteOrphansTiming));
 #endif
 
-    // Fails: InvalidOperationException from query execution or materialization EF-X604
     public override Task Sever_relationship_that_will_later_be_deleted(bool async)
-        => SpecFails.ThrowsAsync<global::System.InvalidOperationException>(() => base.Sever_relationship_that_will_later_be_deleted(async));
+        => base.Sever_relationship_that_will_later_be_deleted(async);
 
 #if (EF10 || EF11) || EF9
     public override Task Sever_required_non_PK_one_to_one(global::Microsoft.EntityFrameworkCore.GraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.GraphUpdatesMongoTest.GraphUpdatesMongoFixture>.ChangeMechanism changeMechanism, global::Microsoft.EntityFrameworkCore.ChangeTracking.CascadeTiming? deleteOrphansTiming)
@@ -1091,9 +1094,8 @@ public abstract class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMo
         => SpecFails.SyncSomeRows<global::System.NullReferenceException>(() => base.Sever_required_one_to_one_with_alternate_key(changeMechanism, deleteOrphansTiming), string.Empty);
 #endif
 
-    // Fails: Query translates natively but returns different data than the expected result EF-X600
     public override Task Shadow_skip_navigation_in_base_class_is_handled(bool async)
-        => SpecFails.ThrowsAsync<global::Xunit.Sdk.EqualException>(() => base.Shadow_skip_navigation_in_base_class_is_handled(async));
+        => base.Shadow_skip_navigation_in_base_class_is_handled(async);
 
 #if (EF10 || EF11) || EF9
     public override Task Sometimes_not_calling_DetectChanges_when_required_does_not_throw_for_null_ref()
