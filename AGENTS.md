@@ -144,10 +144,14 @@ Each area folder has an `AGENTS.md` (auto-loaded in that subtree) and a read-onl
 (`CryptProvider.cs`, `QueryableEncryption*`).
 
 **Cross-cutting reviewers** apply one lens across the whole diff and run on **every** invocation of
-`/review-ef-core-provider`: `api-stability-reviewer` (public API / breaking changes),
+`/review-provider`: `api-stability-reviewer` (public API / breaking changes),
 `ef-conformance-reviewer` (EF Core integration, multi-version compat, service registration),
 `security-reviewer` (credential redaction, sensitive-data logging, KMS, TLS). With a PR number,
 `pr-summary-reviewer` also runs ("what does this PR do, and is it a good change?").
+
+Run `/review-provider` with no args to review the branch since `release` plus uncommitted and untracked
+files, or `--uncommitted` for just the uncommitted part. A reviewer's `description` frontmatter must not contain an unquoted
+`: `, or Claude Code silently skips the agent; see `docs/agents-architecture.md`.
 
 ## References
 

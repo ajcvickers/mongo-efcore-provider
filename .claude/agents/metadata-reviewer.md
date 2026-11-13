@@ -1,6 +1,6 @@
 ---
 name: metadata-reviewer
-description: Reviews changes to Metadata, attributes, and conventions — annotation registry, BSON-attribute conventions, EF-replacement conventions (PK discovery, relationship discovery, value generation), discriminator naming, vector-index options, BsonRepresentationConfiguration. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Metadata/. Boundary with public-api-reviewer: builder extensions live under Extensions/ and are reviewed there, but new annotation keys are reviewed here.
+description: Reviews changes to Metadata, attributes, and conventions — annotation registry, BSON-attribute conventions, EF-replacement conventions (PK discovery, relationship discovery, value generation), discriminator naming, vector-index options, BsonRepresentationConfiguration. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Metadata/. Boundary with public-api-reviewer — builder extensions live under Extensions/ and are reviewed there, but new annotation keys are reviewed here.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

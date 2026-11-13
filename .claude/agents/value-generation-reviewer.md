@@ -1,6 +1,6 @@
 ---
 name: value-generation-reviewer
-description: Reviews changes to value generation — MongoValueGeneratorSelector and the ObjectId / string-as-ObjectId generators. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/ValueGeneration/, or when MongoValueGenerationConvention in Metadata/Conventions/ changes. Boundary with metadata-reviewer: that decides whether a property gets generated values at all; this decides *which* generator runs.
+description: Reviews changes to value generation — MongoValueGeneratorSelector and the ObjectId / string-as-ObjectId generators. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/ValueGeneration/, or when MongoValueGenerationConvention in Metadata/Conventions/ changes. Boundary with metadata-reviewer — that decides whether a property gets generated values at all; this decides *which* generator runs.
 tools: Read, Grep, Glob, Bash
 model: haiku
 ---
@@ -11,6 +11,6 @@ Read `src/MongoDB.EntityFrameworkCore/ValueGeneration/AGENTS.md` first (selector
 
 ## Escalate to user when
 
-- A generator produces non-`ObjectId`, non-`Guid` keys.
+- A generator produces a value that is not an `ObjectId` (or a `string` holding one) for a key that previously got one. Owned-collection ordinal keys legitimately get EF's `int` generator.
 - Ordinal-key generation changes, or a selector reorder changes which generator wins for an existing property shape.
 - Async or I/O work enters the generator path.
