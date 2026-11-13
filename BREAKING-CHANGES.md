@@ -673,9 +673,19 @@ For a genuinely per-row value, bring the rows to the client first: `context.Orde
   one transaction.
 - A setter on the primary key or the discriminator is rejected before anything is written (`InvalidOperationException`).
 - `OfType<TDerived>()` and a derived-type `DbSet` are supported and scoped by the discriminator.
-- The event data types gained `Strategy`, `Command` (redacted to `?` unless sensitive-data logging is on), `LogSensitiveData` and, for updates,
-  `MatchedCount`. The log message now reads `Strategy=..., Targets=..., Command=...`. A large two-phase operation raises one `Executing` event
-  per batch (each with its own `TargetCount`) and one `Executed` event. The old event data constructors are kept.
+- The event data types gained `Strategy`, `Phase`, `Command` (redacted to `?` unless sensitive-data logging is on), `LogSensitiveData` and, for
+  updates, `MatchedCount`. The `Executing` log message now reads `Strategy=..., Phase=..., Targets=..., Command=...` and the `Executed` message
+  `Phase=..., Targets=..., Deleted=...` (`Matched=..., Modified=...` for an update). The old event data constructors are kept.
+- Every database round trip now raises its own `Executing` event followed by exactly one `Executed` event, or a failure event if it throws
+  (`MongoEventId.BulkDeleteFailed` / `BulkUpdateFailed`, payload `MongoBulkOperationErrorEventData` with the exception, strategy, phase,
+  collection, elapsed time and, for a batch, its id count). `Phase` says which round trip an event describes: `Command` for a
+  single-command operation; for a two-phase operation `ReadTargets` (the read that collects the `_id` of every target; its `Executed` event
+  reports the ids found in `TargetCount`) and then `WriteTargets` once per batch of up to 50,000 ids. A two-phase operation that finds no
+  targets raises only the `ReadTargets` pair. `Elapsed`, `DeleteCount`, `MatchedCount`, `ModifyCount` and `TargetCount` describe that one
+  round trip, not the whole operation: sum the `WriteTargets` `Executed` events for the totals. Previously a two-phase operation raised one
+  `Executing` event per batch and a single `Executed` event with the totals, `Elapsed` spanned both phases, and nothing was raised when an
+  operation failed or found no targets. A failure to commit the transaction of a two-phase operation is not a bulk round trip; it is reported
+  by `MongoEventId.TransactionError`.
 
 The `MongoQueryContext` and `MongoQueryContextFactory` constructors gained an overload that takes the `Update`-category logger; the old
 constructors remain and resolve the logger themselves.
@@ -688,7 +698,9 @@ standalone deployments. Writing the primary key or discriminator corrupted docum
 #### Mitigations
 
 If you depended on ordering or `Distinct` running in a transaction, open an explicit transaction around the call. If you subscribe to the
-events, expect more than one `Executing` event for a large two-phase operation and read the totals from `Executed`.
+events, expect more than one `Executing`/`Executed` pair for a two-phase operation (one for `ReadTargets`, one per `WriteTargets` batch), filter
+on `Phase`, and sum the counts of the `WriteTargets` `Executed` events for the totals. Subscribe to `BulkDeleteFailed`/`BulkUpdateFailed` to
+see an operation that throws.
 
 ### A non-nullable value read through a null or missing optional complex property now throws instead of reading `default`
 

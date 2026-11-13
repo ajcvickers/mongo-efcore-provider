@@ -48,6 +48,13 @@ internal class SpyLoggerProvider : ILoggerProvider
     }
 
     /// <summary>
+    /// The one message of a bulk <c>ExecuteDelete</c>/<c>ExecuteUpdate</c> event for the given round trip (<c>Command</c>,
+    /// <c>ReadTargets</c> or <c>WriteTargets</c>): a two-phase operation raises the event once for its read and once per batch written.
+    /// </summary>
+    public string GetBulkLogMessageByEventId(EventId eventId, string phase)
+        => Assert.Single(GetLogMessagesByEventId(eventId), message => message.Contains($"Phase={phase},"));
+
+    /// <summary>
     /// Asserts the executed MQL contains <paramref name="expected"/>, reporting the actual pipeline on failure.
     /// </summary>
     public void AssertExecutedMqlContains(string expected)

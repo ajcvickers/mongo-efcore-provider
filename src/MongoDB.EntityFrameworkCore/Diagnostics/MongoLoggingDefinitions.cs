@@ -33,6 +33,9 @@ internal class MongoLoggingDefinitions : LoggingDefinitions
 
     public EventDefinitionBase? LogExecutingBulkUpdate;
     public EventDefinitionBase? LogExecutedBulkUpdate;
+
+    public EventDefinitionBase? LogBulkDeleteFailed;
+    public EventDefinitionBase? LogBulkUpdateFailed;
 #endif
 
     public EventDefinitionBase? LogBeginningTransaction;

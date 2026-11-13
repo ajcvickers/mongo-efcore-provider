@@ -80,7 +80,8 @@ public class BulkOperationsInheritanceTests(TemporaryDatabaseFixture database)
         Assert.Equal(2, deleted);
         Assert.Equal(0, Count(collection, "cat"));
         Assert.Equal(1, Count(collection, "dog"));
-        Assert.Contains("Strategy=TwoPhase", spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete));
+        Assert.Contains(
+            "Strategy=TwoPhase", spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkDelete, "WriteTargets"));
     }
 
     [Fact]

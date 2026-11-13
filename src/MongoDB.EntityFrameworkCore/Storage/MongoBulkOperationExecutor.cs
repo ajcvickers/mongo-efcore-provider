@@ -64,21 +64,87 @@ internal static class MongoBulkOperationExecutor
             _ => throw new ArgumentOutOfRangeException(nameof(plan), $"Unsupported bulk plan: {plan.Strategy}/{plan.Kind}.")
         };
 
+    // Phases reported on the bulk events (MongoBulkDeleteEventData.Phase): one per database round trip.
+    private const string CommandPhase = "Command";
+    private const string ReadTargetsPhase = "ReadTargets";
+    private const string WriteTargetsPhase = "WriteTargets";
+
+    // One database round trip. Constructing it starts its clock. Executing() raises the Executing event, and exactly one of ExecutedRead,
+    // ExecutedDelete, ExecutedUpdate or Failed must then close it, so a subscriber sees every Executing followed by one Executed or one
+    // failure event and can time and attribute the failure to the round trip that was open.
+    private sealed class RoundTrip(
+        QueryContext queryContext, MongoBulkPlan plan, CollectionNamespace collectionNamespace, string phase, long? targetCount)
+    {
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private readonly string _strategy = plan.Strategy.ToString();
+
+        public IDiagnosticsLogger<DbLoggerCategory.Update> Logger { get; } = GetUpdateLogger(queryContext);
+
+        public void Executing(Func<string>? renderCommand)
+        {
+            if (plan.Kind == MongoBulkOperationKind.Delete)
+            {
+                Logger.ExecutingBulkDelete(_stopwatch.Elapsed, collectionNamespace, _strategy, phase, targetCount, renderCommand);
+            }
+            else
+            {
+                Logger.ExecutingBulkUpdate(_stopwatch.Elapsed, collectionNamespace, _strategy, phase, targetCount, renderCommand);
+            }
+        }
+
+        // The ReadTargets round trip changes nothing: it reports how many ids it found.
+        public void ExecutedRead(long idsFound)
+        {
+            if (plan.Kind == MongoBulkOperationKind.Delete)
+            {
+                Logger.ExecutedBulkDelete(_stopwatch.Elapsed, collectionNamespace, deleteCount: 0, _strategy, phase, idsFound);
+            }
+            else
+            {
+                Logger.ExecutedBulkUpdate(
+                    _stopwatch.Elapsed, collectionNamespace, matchedCount: 0, modifyCount: 0, _strategy, phase, idsFound);
+            }
+        }
+
+        public void ExecutedDelete(long deleted)
+            => Logger.ExecutedBulkDelete(_stopwatch.Elapsed, collectionNamespace, deleted, _strategy, phase, targetCount);
+
+        public void ExecutedUpdate(long matched, long modified)
+            => Logger.ExecutedBulkUpdate(_stopwatch.Elapsed, collectionNamespace, matched, modified, _strategy, phase, targetCount);
+
+        public void Failed(Exception exception)
+        {
+            if (plan.Kind == MongoBulkOperationKind.Delete)
+            {
+                Logger.BulkDeleteFailed(_stopwatch.Elapsed, collectionNamespace, _strategy, phase, targetCount, exception);
+            }
+            else
+            {
+                Logger.BulkUpdateFailed(_stopwatch.Elapsed, collectionNamespace, _strategy, phase, targetCount, exception);
+            }
+        }
+    }
+
     private static int ExecuteDelete(QueryContext queryContext, MongoBulkPlan plan)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
         var filter = plan.BuildFilter!(queryContext);
 
-        var updateLogger = GetUpdateLogger(queryContext);
-        var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkDelete(
-            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null,
-            () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery: null));
+        var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, CommandPhase, targetCount: null);
+        roundTrip.Executing(() => RenderBulkCommand(roundTrip.Logger, filter, update: null, targetIdQuery: null));
 
-        var result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
+        DeleteResult result;
+        try
+        {
+            result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
+        }
+        catch (Exception exception)
+        {
+            roundTrip.Failed(exception);
+            throw;
+        }
 
-        updateLogger.ExecutedBulkDelete(
-            stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount, plan.Strategy.ToString());
+        roundTrip.ExecutedDelete(result.DeletedCount);
         return checked((int)result.DeletedCount);
     }
 
@@ -87,19 +153,24 @@ internal static class MongoBulkOperationExecutor
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
         var filter = plan.BuildFilter!(queryContext);
 
-        var updateLogger = GetUpdateLogger(queryContext);
-        var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkDelete(
-            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null,
-            () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery: null));
+        var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, CommandPhase, targetCount: null);
+        roundTrip.Executing(() => RenderBulkCommand(roundTrip.Logger, filter, update: null, targetIdQuery: null));
 
         var cancellationToken = queryContext.CancellationToken;
-        var result = session == null
-            ? await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false)
-            : await collection.DeleteManyAsync(session, filter, options: null, cancellationToken).ConfigureAwait(false);
+        DeleteResult result;
+        try
+        {
+            result = session == null
+                ? await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false)
+                : await collection.DeleteManyAsync(session, filter, options: null, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            roundTrip.Failed(exception);
+            throw;
+        }
 
-        updateLogger.ExecutedBulkDelete(
-            stopwatch.Elapsed, collection.CollectionNamespace, result.DeletedCount, plan.Strategy.ToString());
+        roundTrip.ExecutedDelete(result.DeletedCount);
         return checked((int)result.DeletedCount);
     }
 
@@ -109,18 +180,23 @@ internal static class MongoBulkOperationExecutor
         var filter = plan.BuildFilter!(queryContext);
         var update = plan.BuildUpdate!(queryContext);
 
-        var updateLogger = GetUpdateLogger(queryContext);
-        var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkUpdate(
-            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null,
-            () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery: null));
+        var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, CommandPhase, targetCount: null);
+        roundTrip.Executing(() => RenderBulkCommand(roundTrip.Logger, filter, update, targetIdQuery: null));
 
-        var result = session == null
-            ? collection.UpdateMany(filter, update)
-            : collection.UpdateMany(session, filter, update);
+        UpdateResult result;
+        try
+        {
+            result = session == null
+                ? collection.UpdateMany(filter, update)
+                : collection.UpdateMany(session, filter, update);
+        }
+        catch (Exception exception)
+        {
+            roundTrip.Failed(exception);
+            throw;
+        }
 
-        updateLogger.ExecutedBulkUpdate(
-            stopwatch.Elapsed, collection.CollectionNamespace, result.MatchedCount, result.ModifiedCount, plan.Strategy.ToString());
+        roundTrip.ExecutedUpdate(result.MatchedCount, result.ModifiedCount);
         return checked((int)result.MatchedCount);
     }
 
@@ -130,19 +206,24 @@ internal static class MongoBulkOperationExecutor
         var filter = plan.BuildFilter!(queryContext);
         var update = plan.BuildUpdate!(queryContext);
 
-        var updateLogger = GetUpdateLogger(queryContext);
-        var stopwatch = Stopwatch.StartNew();
-        updateLogger.ExecutingBulkUpdate(
-            stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), targetCount: null,
-            () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery: null));
+        var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, CommandPhase, targetCount: null);
+        roundTrip.Executing(() => RenderBulkCommand(roundTrip.Logger, filter, update, targetIdQuery: null));
 
         var cancellationToken = queryContext.CancellationToken;
-        var result = session == null
-            ? await collection.UpdateManyAsync(filter, update, options: null, cancellationToken).ConfigureAwait(false)
-            : await collection.UpdateManyAsync(session, filter, update, options: null, cancellationToken).ConfigureAwait(false);
+        UpdateResult result;
+        try
+        {
+            result = session == null
+                ? await collection.UpdateManyAsync(filter, update, options: null, cancellationToken).ConfigureAwait(false)
+                : await collection.UpdateManyAsync(session, filter, update, options: null, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            roundTrip.Failed(exception);
+            throw;
+        }
 
-        updateLogger.ExecutedBulkUpdate(
-            stopwatch.Elapsed, collection.CollectionNamespace, result.MatchedCount, result.ModifiedCount, plan.Strategy.ToString());
+        roundTrip.ExecutedUpdate(result.MatchedCount, result.ModifiedCount);
         return checked((int)result.MatchedCount);
     }
 
@@ -151,24 +232,23 @@ internal static class MongoBulkOperationExecutor
     // round trip. The phase-1 query must NOT be: it binds the transaction's session when it is built (TranslateQuery reads
     // CurrentTransaction), so built ahead of BeginTransaction it would read outside the transaction. The driver's lazy translation of it
     // is mapped to the canonical translation failure where it is enumerated (MaterializeIds).
+    //
+    // Each phase is its own round trip with its own Executing/Executed (or failure) events: ReadTargets, then, only if it found ids,
+    // WriteTargets once per batch. Committing is not a bulk round trip; a failed commit is reported by the transaction's own TransactionError.
     private static int ExecuteTwoPhaseDelete(QueryContext queryContext, MongoBulkPlan plan)
         => RunInBulkTransaction(queryContext, () =>
         {
-            // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
-            var stopwatch = Stopwatch.StartNew();
             var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
-            var ids = MaterializeIds(queryContext, plan, targetIdQuery);
-            return ids.Count == 0 ? 0 : DeleteByIds(queryContext, plan, targetIdQuery, ids, stopwatch);
+            var ids = ReadTargets(queryContext, plan, targetIdQuery);
+            return ids.Count == 0 ? 0 : DeleteByIds(queryContext, plan, targetIdQuery, ids);
         });
 
     private static Task<int> ExecuteTwoPhaseDeleteAsync(QueryContext queryContext, MongoBulkPlan plan)
         => RunInBulkTransactionAsync(queryContext, async () =>
         {
-            // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
-            var stopwatch = Stopwatch.StartNew();
             var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
-            var ids = await MaterializeIdsAsync(queryContext, plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
-            return ids.Count == 0 ? 0 : await DeleteByIdsAsync(queryContext, plan, targetIdQuery, ids, stopwatch).ConfigureAwait(false);
+            var ids = await ReadTargetsAsync(queryContext, plan, targetIdQuery).ConfigureAwait(false);
+            return ids.Count == 0 ? 0 : await DeleteByIdsAsync(queryContext, plan, targetIdQuery, ids).ConfigureAwait(false);
         });
 
     private static int ExecuteTwoPhaseUpdate(QueryContext queryContext, MongoBulkPlan plan)
@@ -177,11 +257,9 @@ internal static class MongoBulkOperationExecutor
 
         return RunInBulkTransaction(queryContext, () =>
         {
-            // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
-            var stopwatch = Stopwatch.StartNew();
             var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
-            var ids = MaterializeIds(queryContext, plan, targetIdQuery);
-            return ids.Count == 0 ? 0 : UpdateByIds(queryContext, plan, targetIdQuery, ids, update, stopwatch);
+            var ids = ReadTargets(queryContext, plan, targetIdQuery);
+            return ids.Count == 0 ? 0 : UpdateByIds(queryContext, plan, targetIdQuery, ids, update);
         });
     }
 
@@ -191,13 +269,11 @@ internal static class MongoBulkOperationExecutor
 
         return RunInBulkTransactionAsync(queryContext, async () =>
         {
-            // The stopwatch spans phase 1 (the read that collects the target ids) as well as phase 2.
-            var stopwatch = Stopwatch.StartNew();
             var targetIdQuery = plan.BuildTargetIdQuery!(queryContext);
-            var ids = await MaterializeIdsAsync(queryContext, plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
+            var ids = await ReadTargetsAsync(queryContext, plan, targetIdQuery).ConfigureAwait(false);
             return ids.Count == 0
                 ? 0
-                : await UpdateByIdsAsync(queryContext, plan, targetIdQuery, ids, update, stopwatch).ConfigureAwait(false);
+                : await UpdateByIdsAsync(queryContext, plan, targetIdQuery, ids, update).ConfigureAwait(false);
         });
     }
 
@@ -250,103 +326,180 @@ internal static class MongoBulkOperationExecutor
         public void Dispose() => MaxIdsPerBulkCommandOverrideValue.Value = _previous;
     }
 
+    // Phase 1: the round trip that reads the _id of every target. It has no command to report up front (the pipeline is only known once
+    // the query has run, and is part of the phase-2 command), so its Executing event carries none. By now the query has been built, so a
+    // failure here is the driver's lazy translation or the read itself.
+    private static List<BsonValue> ReadTargets(QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery)
+    {
+        var (collection, _) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
+        var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, ReadTargetsPhase, targetCount: null);
+        roundTrip.Executing(renderCommand: null);
+
+        List<BsonValue> ids;
+        try
+        {
+            ids = MaterializeIds(queryContext, plan, targetIdQuery);
+        }
+        catch (Exception exception)
+        {
+            roundTrip.Failed(exception);
+            throw;
+        }
+
+        roundTrip.ExecutedRead(ids.Count);
+        return ids;
+    }
+
+    private static async Task<List<BsonValue>> ReadTargetsAsync(
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery)
+    {
+        var (collection, _) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
+        var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, ReadTargetsPhase, targetCount: null);
+        roundTrip.Executing(renderCommand: null);
+
+        List<BsonValue> ids;
+        try
+        {
+            ids = await MaterializeIdsAsync(queryContext, plan, targetIdQuery, queryContext.CancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            roundTrip.Failed(exception);
+            throw;
+        }
+
+        roundTrip.ExecutedRead(ids.Count);
+        return ids;
+    }
+
+    // Phase 2: one round trip (one Executing/Executed pair) per batch of ids.
     private static int DeleteByIds(
-        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, Stopwatch stopwatch)
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
-        var updateLogger = GetUpdateLogger(queryContext);
 
         long deleted = 0;
         foreach (var batch in BatchIds(ids, MaxIdsPerBulkCommand))
         {
             var filter = Builders<BsonDocument>.Filter.In("_id", batch);
-            updateLogger.ExecutingBulkDelete(
-                stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), batch.Count,
-                () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery));
+            var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, WriteTargetsPhase, batch.Count);
+            roundTrip.Executing(() => RenderBulkCommand(roundTrip.Logger, filter, update: null, targetIdQuery));
 
-            var result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
+            DeleteResult result;
+            try
+            {
+                result = session == null ? collection.DeleteMany(filter) : collection.DeleteMany(session, filter);
+            }
+            catch (Exception exception)
+            {
+                roundTrip.Failed(exception);
+                throw;
+            }
+
+            roundTrip.ExecutedDelete(result.DeletedCount);
             deleted += result.DeletedCount;
         }
 
-        updateLogger.ExecutedBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, deleted, plan.Strategy.ToString());
         return checked((int)deleted);
     }
 
     private static async Task<int> DeleteByIdsAsync(
-        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids, Stopwatch stopwatch)
+        QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
-        var updateLogger = GetUpdateLogger(queryContext);
         var cancellationToken = queryContext.CancellationToken;
 
         long deleted = 0;
         foreach (var batch in BatchIds(ids, MaxIdsPerBulkCommand))
         {
             var filter = Builders<BsonDocument>.Filter.In("_id", batch);
-            updateLogger.ExecutingBulkDelete(
-                stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), batch.Count,
-                () => RenderBulkCommand(updateLogger, filter, update: null, targetIdQuery));
+            var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, WriteTargetsPhase, batch.Count);
+            roundTrip.Executing(() => RenderBulkCommand(roundTrip.Logger, filter, update: null, targetIdQuery));
 
-            var result = session == null
-                ? await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false)
-                : await collection.DeleteManyAsync(session, filter, options: null, cancellationToken).ConfigureAwait(false);
+            DeleteResult result;
+            try
+            {
+                result = session == null
+                    ? await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false)
+                    : await collection.DeleteManyAsync(session, filter, options: null, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                roundTrip.Failed(exception);
+                throw;
+            }
+
+            roundTrip.ExecutedDelete(result.DeletedCount);
             deleted += result.DeletedCount;
         }
 
-        updateLogger.ExecutedBulkDelete(stopwatch.Elapsed, collection.CollectionNamespace, deleted, plan.Strategy.ToString());
         return checked((int)deleted);
     }
 
     private static int UpdateByIds(
         QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids,
-        UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
+        UpdateDefinition<BsonDocument> update)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
-        var updateLogger = GetUpdateLogger(queryContext);
 
-        long matched = 0, modified = 0;
+        long matched = 0;
         foreach (var batch in BatchIds(ids, MaxIdsPerBulkCommand))
         {
             var filter = Builders<BsonDocument>.Filter.In("_id", batch);
-            updateLogger.ExecutingBulkUpdate(
-                stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), batch.Count,
-                () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery));
+            var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, WriteTargetsPhase, batch.Count);
+            roundTrip.Executing(() => RenderBulkCommand(roundTrip.Logger, filter, update, targetIdQuery));
 
-            var result = session == null
-                ? collection.UpdateMany(filter, update)
-                : collection.UpdateMany(session, filter, update);
+            UpdateResult result;
+            try
+            {
+                result = session == null
+                    ? collection.UpdateMany(filter, update)
+                    : collection.UpdateMany(session, filter, update);
+            }
+            catch (Exception exception)
+            {
+                roundTrip.Failed(exception);
+                throw;
+            }
+
+            roundTrip.ExecutedUpdate(result.MatchedCount, result.ModifiedCount);
             matched += result.MatchedCount;
-            modified += result.ModifiedCount;
         }
 
-        updateLogger.ExecutedBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, matched, modified, plan.Strategy.ToString());
         return checked((int)matched);
     }
 
     private static async Task<int> UpdateByIdsAsync(
         QueryContext queryContext, MongoBulkPlan plan, IQueryable<BsonDocument> targetIdQuery, List<BsonValue> ids,
-        UpdateDefinition<BsonDocument> update, Stopwatch stopwatch)
+        UpdateDefinition<BsonDocument> update)
     {
         var (collection, session) = GetBulkCollectionAndSession(queryContext, plan.CollectionName);
-        var updateLogger = GetUpdateLogger(queryContext);
         var cancellationToken = queryContext.CancellationToken;
 
-        long matched = 0, modified = 0;
+        long matched = 0;
         foreach (var batch in BatchIds(ids, MaxIdsPerBulkCommand))
         {
             var filter = Builders<BsonDocument>.Filter.In("_id", batch);
-            updateLogger.ExecutingBulkUpdate(
-                stopwatch.Elapsed, collection.CollectionNamespace, plan.Strategy.ToString(), batch.Count,
-                () => RenderBulkCommand(updateLogger, filter, update, targetIdQuery));
+            var roundTrip = new RoundTrip(queryContext, plan, collection.CollectionNamespace, WriteTargetsPhase, batch.Count);
+            roundTrip.Executing(() => RenderBulkCommand(roundTrip.Logger, filter, update, targetIdQuery));
 
-            var result = session == null
-                ? await collection.UpdateManyAsync(filter, update, options: null, cancellationToken).ConfigureAwait(false)
-                : await collection.UpdateManyAsync(session, filter, update, options: null, cancellationToken).ConfigureAwait(false);
+            UpdateResult result;
+            try
+            {
+                result = session == null
+                    ? await collection.UpdateManyAsync(filter, update, options: null, cancellationToken).ConfigureAwait(false)
+                    : await collection.UpdateManyAsync(session, filter, update, options: null, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                roundTrip.Failed(exception);
+                throw;
+            }
+
+            roundTrip.ExecutedUpdate(result.MatchedCount, result.ModifiedCount);
             matched += result.MatchedCount;
-            modified += result.ModifiedCount;
         }
 
-        updateLogger.ExecutedBulkUpdate(stopwatch.Elapsed, collection.CollectionNamespace, matched, modified, plan.Strategy.ToString());
         return checked((int)matched);
     }
 
