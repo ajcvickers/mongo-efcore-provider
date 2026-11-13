@@ -606,13 +606,14 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var readingMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkUpdate, "ReadTargets");
         Assert.Contains("Targets=-", readingMessage);
         var readMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkUpdate, "ReadTargets");
-        Assert.Contains("Targets=2", readMessage);
+        Assert.Contains("Targets=2,", readMessage);
+        Assert.Contains("Matched=0, Modified=0", readMessage);
 
         var executingMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkUpdate, "WriteTargets");
         Assert.Contains("Executing Bulk Update", executingMessage);
         Assert.Contains($"Collection='{collection.CollectionNamespace}'", executingMessage);
         Assert.Contains("Strategy=TwoPhase", executingMessage);
-        Assert.Contains("Targets=2", executingMessage);
+        Assert.Contains("Targets=2,", executingMessage);
         var executedMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkUpdate, "WriteTargets");
         Assert.Contains("Matched=2", executedMessage);
     }

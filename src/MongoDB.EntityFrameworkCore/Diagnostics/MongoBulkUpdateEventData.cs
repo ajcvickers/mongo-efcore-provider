@@ -200,7 +200,6 @@ public class MongoBulkUpdateEventData : EventData
     /// the <c>Executing</c> event of the <c>ReadTargets</c> phase (the pipeline is only known once that read has run; it is part of the
     /// command of the <c>WriteTargets</c> events).
     /// </summary>
-
     public string? Command { get; }
 
     /// <summary>

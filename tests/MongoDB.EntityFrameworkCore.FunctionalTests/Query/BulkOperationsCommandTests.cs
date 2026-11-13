@@ -24,6 +24,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
@@ -130,7 +131,7 @@ public class BulkOperationsCommandTests(TemporaryDatabaseFixture database)
             Assert.Equal(2, deleted);
             var executing = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkDelete, "WriteTargets");
             Assert.Contains("Strategy=TwoPhase", executing);
-            Assert.Contains("Targets=2", executing);
+            Assert.Contains("Targets=2,", executing);
             AssertByIdCommand(executing, sensitive);
         }
     }
@@ -156,7 +157,7 @@ public class BulkOperationsCommandTests(TemporaryDatabaseFixture database)
             Assert.Equal(2, updated);
             var executing = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkUpdate, "WriteTargets");
             Assert.Contains("Strategy=TwoPhase", executing);
-            Assert.Contains("Targets=2", executing);
+            Assert.Contains("Targets=2,", executing);
             AssertByIdCommand(executing, sensitive);
             if (sensitive)
             {
@@ -191,6 +192,7 @@ public class BulkOperationsCommandTests(TemporaryDatabaseFixture database)
                     : db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, 5)));
 
             var failed = spyLogger.GetLogMessageByEventId(MongoEventId.BulkUpdateFailed);
+            Assert.Equal(LogLevel.Error, spyLogger.GetLogRecordByEventId(MongoEventId.BulkUpdateFailed).LogLevel);
             Assert.Contains("Bulk Update failed", failed);
             Assert.Contains("Phase=Command", failed);
             if (sensitive)

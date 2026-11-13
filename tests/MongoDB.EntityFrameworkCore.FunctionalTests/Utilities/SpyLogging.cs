@@ -55,6 +55,16 @@ internal class SpyLoggerProvider : ILoggerProvider
         => Assert.Single(GetLogMessagesByEventId(eventId), message => message.Contains($"Phase={phase},"));
 
     /// <summary>
+    /// The one log record for the event, including a record that carries an exception.
+    /// </summary>
+    public SpyLogRecord GetLogRecordByEventId(EventId eventId)
+    {
+        var key = eventId.Name[..eventId.Name.LastIndexOf('.')];
+        var logger = Assert.Single(Loggers, s => s.Key == key).Value;
+        return Assert.Single(logger.Records, log => log.EventId == eventId);
+    }
+
+    /// <summary>
     /// Asserts the executed MQL contains <paramref name="expected"/>, reporting the actual pipeline on failure.
     /// </summary>
     public void AssertExecutedMqlContains(string expected)

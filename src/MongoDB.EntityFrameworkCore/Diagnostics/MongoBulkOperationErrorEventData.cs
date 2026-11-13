@@ -33,6 +33,16 @@ namespace MongoDB.EntityFrameworkCore.Diagnostics;
 /// and is reported by <see cref="MongoEventId.TransactionError"/> instead.
 /// </para>
 /// <para>
+/// Each round trip is reported as it completes, so the <c>Executed</c> events of the batches that succeeded before a later round trip
+/// failed have already been raised when the failure event arrives, and their writes are rolled back with the transaction. Do not total
+/// the counts of an operation that ended in a failure event. A query shape the driver only rejects when the <c>ReadTargets</c> read is
+/// first enumerated is reported as a <c>ReadTargets</c> failure whose <see cref="Exception"/> is EF's "could not be translated" error.
+/// </para>
+/// <para>
+/// The log message carries the exception's message only when sensitive-data logging is on, and the log record has no exception object
+/// attached; subscribers that need the exception (and its stack trace) read <see cref="Exception"/> from this payload.
+/// </para>
+/// <para>
 /// See <see href="https://aka.ms/efcore-docs-diagnostics">Logging, events, and diagnostics</see> for more information and examples.
 /// </para>
 /// </remarks>

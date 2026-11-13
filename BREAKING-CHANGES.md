@@ -686,6 +686,12 @@ For a genuinely per-row value, bring the rows to the client first: `context.Orde
   `Executing` event per batch and a single `Executed` event with the totals, `Elapsed` spanned both phases, and nothing was raised when an
   operation failed or found no targets. A failure to commit the transaction of a two-phase operation is not a bulk round trip; it is reported
   by `MongoEventId.TransactionError`.
+- Each round trip is reported as it completes, so the `Executed` events of batches that succeeded before a later round trip failed have
+  already been raised when the failure event arrives, and their writes are rolled back with the transaction: do not total the counts of an
+  operation that ended in a failure event. A query shape the driver only rejects when the `ReadTargets` read is first enumerated is reported
+  as a `ReadTargets` failure whose exception is EF's "could not be translated" error. The failure log message carries the exception's
+  message only with sensitive-data logging; the exception itself is always on the event payload (the log record has no exception object
+  attached).
 
 The `MongoQueryContext` and `MongoQueryContextFactory` constructors gained an overload that takes the `Update`-category logger; the old
 constructors remain and resolve the logger themselves.
