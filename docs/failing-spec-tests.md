@@ -20,13 +20,13 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 5,011 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,530 |
-| ... active in the EF8 build | 1,064 | 2,646 |
-| ... active in the EF9 build | 1,141 | 3,169 |
-| ... active in the EF10 build | 882 | 3,313 |
+| `// Fails:` tag lines | 1,206 | 5,012 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,531 |
+| ... active in the EF8 build | 1,064 | 2,643 |
+| ... active in the EF9 build | 1,141 | 3,166 |
+| ... active in the EF10 build | 882 | 3,309 |
 | ... active in the EF11 build | not measured | 3,339 |
-| Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 60 |
+| Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 58 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
 EF9 20,060 passed / 80 skipped, EF10 19,700 passed / 84 skipped, no failures; EF11 (xUnit v3) 19,840 passed / 87 skipped, no failures. These
@@ -54,7 +54,7 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 | EF-216 | 245 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
 | EF-X102 | 8 | Relationship discovery between root entity types fails at model build (Unable to determine the relatio... |
 | EF-X527 | 185 | Expression not supported by the driver LINQ translator |
-| EF-X600 | 204 | Query translates natively but returns different data than the expected result  |
+| EF-X600 | 202 | Query translates natively but returns different data than the expected result  |
 | EF-149 | 147 | GroupBy translation is severely limited; most non-trivial group-by shapes fail to translate. |
 | EF-X001 | 137 | Sub-query selection across DbSets is not translated |
 | EF-X316 | 121 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) |
@@ -234,7 +234,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X201 | Single-property primary key set by explicit `HasKey`/constructor binding is not mapped to element `_id` (model validation fails); ported fixtures work around it with a test convention | 0 |
 | EF-X202 | ~~Explicit transaction cannot be shared by a second context (session disposed with the first context)~~ — resolved by `UseTransaction`, no remaining tags | 0 |
 | EF-X203 | Property hiding (`new Id` on a derived type) conflicts in the BSON class map | 9 |
-| EF-X205 | `int` keys are not store-generated (upstream models expect identity-style keys); ported fixtures work around it with a counter generator | 1 |
+| EF-X205 | `int` keys are not store-generated (upstream models expect identity-style keys); ported fixtures work around it with a counter generator | 2 |
 | EF-X206 | Lazy-load/`Single` query over a type hierarchy returns more than one element | 0 |
 | EF-X207 | Unique index over a nullable one-to-one foreign key collides on `null` in MongoDB; ported fixtures drop the uniqueness | 1 |
 | EF-X208 | `Include` of a many-to-many skip navigation is not supported | 87 |
@@ -260,7 +260,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X113 | Indexer (shared-type entity) property access `get_Item(...)` is not translated by the driver | 2 |
 | EF-X114 | Partial update of a tracked entity reports a `DbUpdateConcurrencyException` | 0 |
 | EF-X115 | Concurrency exception message differs from the relational wording asserted by `UpdatesTestBase` | 4 |
-| EF-X116 | A conflicting write between two contexts surfaces as a raw `MongoCommandException` (server write conflict) instead of `DbUpdateConcurrencyException` | 15 |
+| EF-X116 | ~~A conflicting write between two contexts surfaces as a raw `MongoCommandException` (server write conflict)~~ — resolved: it came from the spec fixture (second context not enlisted, `byte[]` row version), see EF-X607 for what remained, no remaining tags | 0 |
 | EF-X117 | Inserting a duplicate key surfaces as a raw `MongoBulkWriteException` instead of `DbUpdateException` | 1 |
 | EF-X118 | **Skipped, not failing.** The upstream test's model (the `Cruiser` / `CruiserWithSentinel` entity types with a default-value foreign key) is registered only by the relational fixtures, so it does not exist in the Mongo `GraphUpdates` fixture and the test cannot run. `Can_insert_when_FK_has_default_value`, `Can_insert_when_FK_has_sentinel_value`, `Can_insert_when_composite_FK_has_default_value_for_one_part`. Whether the provider handles a foreign key left at its CLR default is therefore untested | 0 |
 | EF-X500 | Primitive-collection projection/SelectMany/Union/Concat/ordering not translated | 10 |
@@ -310,12 +310,14 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X538 | A type that derives from an entity type, and is first reached through a navigation before it is in the model (the base type's navigation to its derived type, with no `DbSet` for the derived type), is owned by convention. That breaks the explicit one-to-one between the two ("the dependent side could not be determined"). `InheritanceRelationshipsQueryMongoFixture` replaces the convention so such a type is not owned; the default is unchanged, because making it the provider default also changes the model of `GraphUpdates` | 0 |
 | EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
 | EF-X549 | A JSON-owned collection that is indexed (`ElementAt`/indexer), projected or composed in a subquery is not translated (`The LINQ expression 'EF.Property<List<JsonOwned...>>(...)' could not be translated`) | 81 |
-| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 204 |
+| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 202 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 38 |
 | EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 67 |
-| EF-X604 | `InvalidOperationException` from query execution or materialization | 85 |
+| EF-X604 | `InvalidOperationException` from query execution or materialization | 82 |
 | EF-X605 | Other unexpected exception from query execution | 119 |
+| EF-X606 | One `SaveChanges` removes a document and adds another with the same value in a unique-indexed property (`GraphUpdates.Save_required_many_to_one_dependents_with_alternate_key`, `useExistingEntities: false`: a `RequiredAk1` is removed and a new one takes its `AlternateId`). The insert is rejected with a duplicate key error (`E11000`) because the old document is still there when it reaches the server. Relational providers order the delete first. Filed as #102. Surfaced by #77: the old reseed dropped the database and with it the model's unique indexes, so the test got further and failed later with a `NullReferenceException` (EF-X605, which the `useExistingEntities: true` rows still show) | 1 |
+| EF-X607 | `DbUpdateConcurrencyException` is thrown for a conflict, but the provider does not log `CoreEventId.OptimisticConcurrencyException`, which `OptimisticConcurrencyTestBase.ConcurrencyTestAsync` asserts afterwards (`Sequence contains no matching element`); 15 tests. The rest of each test never runs. Filed as #104 | 15 |
 | EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
 | EF-X701 | **Fixed:** an unset list parameter (a context member used by a query filter, or a null captured list) is serialized as an empty list instead of throwing `NullReferenceException` | 0 |
 | EF-X702 | **Fixed:** `DateTimeOffset.TimeOfDay` is computed from the stored `Ticks`, so sub-millisecond ticks are kept | 0 |
@@ -847,8 +849,10 @@ once however many data rows it has). Only about 40 individual test cases pass as
 Common mechanics, none of which are provider changes: `MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true)` maps every single-property key of the
 upstream models to `_id` (otherwise model validation rejects every model) with a client-side integer generator; `RelaxNullableUniqueIndexes` and
 `RelaxUniqueForeignKeyIndexes` drop the uniqueness that MongoDB cannot honour for `null` (EF-X207); `DoNotOwnTypes` stops relationship discovery
-owning types that the tests model as entities (EF-X102/EF-X538/EF-X539); and the fixtures that run tests which write reseed the database before each
-test, because the tests cannot yet enlist several contexts in one rolled-back transaction (#77). `GraphUpdatesMongoTest` and `ProxyGraphUpdatesMongoTest` are abstract, so they are not run, because their reseed costs about 8 minutes per EF version. `InitFailureGuard` is still available for a fixture whose model/seed/store
+owning types that the tests model as entities (EF-X102/EF-X538/EF-X539); and `GraphUpdates`, `ProxyGraphUpdates`, `ManyToManyTracking`, `OptimisticConcurrency`, `StoreGenerated`, `StoreGeneratedFixup` and `Updates` isolate each test the way the relational providers do: EF begins a transaction on one context and never
+commits it, and the `UseTransaction` hook enlists the other contexts a test creates in it (`facade.UseTransaction(transaction)`, #77/#87). Nothing is reseeded, so the
+seed data and the model's unique indexes stay in place and `GraphUpdates` and `ProxyGraphUpdates` take about 35 seconds per EF version together.
+A failed write aborts the whole MongoDB transaction, so a test that carries on after an expected `SaveChanges` exception would fail on its next operation (unlike SQL Server). `InitFailureGuard` is still available for a fixture whose model/seed/store
 creation fails (it re-throws that failure from the first `CreateContext()`); no ported fixture needs it now. `ProxyGraphUpdates` additionally registers
 the EF proxy services and uses lazy-loading and change-tracking proxies. A few upstream tests are `public` but not `virtual` (e.g. `PropertyValuesTestBase.Reload_when_entity_deleted_in_store_can_happen_for_any_state`),
 so they cannot be overridden; where they fail they are hidden by a `new` method with `Skip` carrying the ticket id.
@@ -908,8 +912,17 @@ Assertion failures (`Assert.Equal`/`Assert.True`) in `StoreGenerated` (computed/
 ### EF-X115 — Concurrency message wording
 `UpdatesTestBase.Remove_partial_*`/`Update_*` compare the full exception message with the relational text (`The database operation was expected to affect 1 row(s)...`); the provider says `Conflicts were detected when performing updates to ...` (4 tests).
 
-### EF-X116 — Conflicting writes between two contexts are not reported as a concurrency conflict
-`OptimisticConcurrencyTestBase.ConcurrencyTestAsync` changes the row through a second context and then saves the first. Here the first save fails with `MongoDB.Driver.MongoCommandException: Command update failed: Caused by :: Write conflict during plan execution and yielding is disabled`, so the `DbUpdateConcurrencyException` the 15 tests expect is never thrown. The 15 wrappers pin the server's `Write conflict` message, so they fail if the provider ever starts translating it. The cause was not investigated further: both contexts write inside the test store's transaction, so it may be how the spec fixtures share a transaction rather than provider behaviour, and a write conflict is in any case not translated to a concurrency exception.
+### EF-X116 — resolved (was: conflicting writes between two contexts surfaced as a write conflict)
+`OptimisticConcurrencyTestBase.ConcurrencyTestAsync` changes the row through a second context and then saves the first, expecting a `DbUpdateConcurrencyException`. These tests used to fail with
+`MongoCommandException: Write conflict during plan execution`, and the 15 wrappers pinned that message. It was not the provider: the fixture did not enlist the second context in the first
+one's transaction, so the two contexts ran in separate transactions and the server rejected the second. `OptimisticConcurrencyMongoTest` now enlists it (`UseTransaction`, #77/#87). That exposed two
+more fixture problems: the suite used a `byte[]` row version, which the provider never increments (it generates `int`, `uint`, `long` and `ulong` only), so no conflict was ever detected; it now uses
+`long`. What is left is EF-X607.
+
+### EF-X607 — a concurrency conflict is thrown but not logged
+With the two changes above the provider throws `DbUpdateConcurrencyException` as the tests expect, and then they assert that `CoreEventId.OptimisticConcurrencyException` was logged at `Debug`
+level, as relational providers do. The provider does not log it (#104). The 15 wrappers pin `Sequence contains no matching element` from that assertion, so they fail if the event is ever logged, and
+the part of each test after the assertion (resolving the conflict) is not exercised until then.
 
 ### EF-X117 — Duplicate key is not reported as `DbUpdateException`
 `OptimisticConcurrencyMongoTest.Adding_the_same_entity_twice_results_in_DbUpdateException` expects a `DbUpdateException`; the provider lets the driver's `MongoBulkWriteException` (duplicate key) escape. The cause was not investigated further.

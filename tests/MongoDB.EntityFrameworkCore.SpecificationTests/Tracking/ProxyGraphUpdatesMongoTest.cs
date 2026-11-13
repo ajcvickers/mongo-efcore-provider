@@ -15,23 +15,21 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
-// Not run (#77): every test here needs a reset of the store, and without transaction enlistment that means dropping and reseeding
-// the database before each test (about 8 minutes per EF version for GraphUpdates alone). xUnit does not run abstract classes. Remove
-// "abstract" to run the tests; the wrappers below are kept up to date.
-public abstract class ProxyGraphUpdatesMongoTest(ProxyGraphUpdatesMongoTest.ProxyGraphUpdatesMongoFixture fixture)
-    : ProxyGraphUpdatesTestBase<ProxyGraphUpdatesMongoTest.ProxyGraphUpdatesMongoFixture>(fixture), IAsyncLifetime
+public class ProxyGraphUpdatesMongoTest(ProxyGraphUpdatesMongoTest.ProxyGraphUpdatesMongoFixture fixture)
+    : ProxyGraphUpdatesTestBase<ProxyGraphUpdatesMongoTest.ProxyGraphUpdatesMongoFixture>(fixture)
 {
-    // The tests write to the shared database and the contexts cannot yet enlist in a rolled-back transaction (#77), so each test reseeds it; otherwise which test sees which rows depends on the order they run in.
-    public async LifetimeTask InitializeAsync()
-        => await Fixture.ReseedAsync();
-
-    public LifetimeTask DisposeAsync()
-        => LifetimeTask.CompletedTask;
+    // EF isolates each test by beginning a transaction on one context and never committing it. A second context the test creates joins
+    // that transaction through this hook (#77, #87); it only participates, so disposing it does not end the transaction. Nothing is
+    // reseeded: the rolled-back transaction leaves the fixture's seed data and the model's indexes as they were.
+    protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
+        => facade.UseTransaction(transaction);
 
 #if EF11
     private readonly object? _ef11Skips = Ef11TestSkips.SkipIfListed("xUnit v3 (EF11) cannot hide this non-virtual upstream test; it fails here for the reasons in EF-X102 (see the New-method override on EF8 to EF10)", "Can_attach_full_optional_graph_of_duplicates", "Can_attach_full_required_AK_graph_of_duplicates", "Can_attach_full_required_composite_graph_of_duplicates", "Can_attach_full_required_graph_of_duplicates", "Can_attach_full_required_non_PK_AK_graph_of_duplicates", "Can_attach_full_required_non_PK_graph_of_duplicates", "Can_attach_full_required_one_to_many_graph_of_duplicates");

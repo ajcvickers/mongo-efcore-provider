@@ -14,6 +14,8 @@
  */
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.TestModels.UpdatesModel;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 #if !EF8
@@ -24,14 +26,12 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Update;
 
 public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
-    : UpdatesTestBase<UpdatesMongoTest.UpdatesMongoFixture>(fixture), IAsyncLifetime
+    : UpdatesTestBase<UpdatesMongoTest.UpdatesMongoFixture>(fixture)
 {
-    // The tests write to the shared database and the contexts cannot yet enlist in a rolled-back transaction (#77), so each test reseeds it; otherwise which test sees which rows depends on the order they run in.
-    public async LifetimeTask InitializeAsync()
-        => await Fixture.ReseedAsync();
-
-    public LifetimeTask DisposeAsync()
-        => LifetimeTask.CompletedTask;
+    // EF isolates each test by beginning a transaction on one context and never committing it; a second context the test creates joins
+    // it through this hook (#77, #87) and only participates, so disposing it does not end the transaction. Nothing is reseeded.
+    protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
+        => facade.UseTransaction(transaction);
 
 #if EF11
     private readonly object? _ef11Skips = Ef11TestSkips.SkipIfListed("xUnit v3 (EF11) cannot hide this non-virtual upstream test; it fails here for the reasons in EF-X101, EF-X600, EF-X605 (see the New-method override on EF8 to EF10)", "Ignore_before_save_property_is_still_generated", "Ignore_before_save_property_is_still_generated_graph", "SaveChanges_false_processes_all_tracked_entities_without_calling_AcceptAllChanges", "SaveChanges_processes_all_tracked_entities");

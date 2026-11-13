@@ -14,6 +14,8 @@
  */
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.TestModels.ConcurrencyModel;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
@@ -21,16 +23,16 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
 public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture fixture)
-    : OptimisticConcurrencyTestBase<OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture, byte[]>(fixture), IAsyncLifetime
+    : OptimisticConcurrencyTestBase<OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture, long>(fixture)
 {
-    // The tests write to the shared database and the contexts cannot yet enlist in a rolled-back transaction (#77), so each test reseeds it; otherwise which test sees which rows depends on the order they run in.
-    public async LifetimeTask InitializeAsync()
-        => await Fixture.ReseedAsync();
+    // EF isolates each test by beginning a transaction on one context and never committing it; a second context the test creates joins
+    // it through this hook (#77, #87) and only participates, so disposing it does not end the transaction. Nothing is reseeded.
+    protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
+        => facade.UseTransaction(transaction);
 
-    public LifetimeTask DisposeAsync()
-        => LifetimeTask.CompletedTask;
-
-    public class OptimisticConcurrencyMongoFixture : F1FixtureBase<byte[]>
+    // The provider generates row versions only for int, uint, long and ulong (RowVersion.cs). The upstream suite uses byte[], which nothing
+    // would ever change, so no conflict would be detected; hence long here and in the test base's type argument.
+    public class OptimisticConcurrencyMongoFixture : F1FixtureBase<long>
     {
         private ITestStoreFactory? _testStoreFactory;
 
@@ -126,67 +128,66 @@ public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.Optim
     public override Task Calling_Reload_on_owned_entity_works(bool async)
         => SpecFails.ThrowsAsync(() => base.Calling_Reload_on_owned_entity_works(async), "Values differ");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Change_in_independent_association_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_results_in_independent_association_exception(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_results_in_independent_association_exception(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled()
-        => SpecFails.ThrowsAsync(() => base.Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "Sequence contains no matching element");
 
-    // Fails: the nullable client-side concurrency token reads back null where the base expects 1 EF-X600
     public override void Nullable_client_side_concurrency_token_can_be_used()
-        => SpecFails.Throws(() => base.Nullable_client_side_concurrency_token_can_be_used(), "Values differ");
+        => base.Nullable_client_side_concurrency_token_can_be_used();
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_client_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_client_values(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_client_values(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_new_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_new_values(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_new_values(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first()
-        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first()
-        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException(), "Sequence contains no matching element");
 
-    // Fails: a conflicting write between two contexts surfaces as a raw MongoCommandException (write conflict) instead of DbUpdateConcurrencyException EF-X116
+    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "Write conflict");
+        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "Sequence contains no matching element");
 }
