@@ -13,7 +13,9 @@
  * limitations under the License.
  */
 
+using System.Transactions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using MongoDB.Driver;
@@ -115,5 +117,24 @@ public static class MongoRetryingExecutionStrategyTests
 
         Assert.Equal(3, extension.MaxRetryCount);
         Assert.Equal(TimeSpan.FromSeconds(2), extension.MaxRetryDelay);
+    }
+
+    [Fact]
+    public static void The_transaction_manager_reports_no_ambient_transaction_and_rejects_enlisting_one()
+    {
+        var builder = new DbContextOptionsBuilder()
+            .UseMongoDB("mongodb://localhost:27017", "db")
+            .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning));
+        using var context = new DbContext(builder.Options);
+
+        var manager = Assert.IsAssignableFrom<ITransactionEnlistmentManager>(
+            context.GetService<IDbContextTransactionManager>());
+
+        Assert.Null(manager.EnlistedTransaction);
+        Assert.Null(context.Database.GetEnlistedTransaction());
+
+        using var committable = new CommittableTransaction();
+        var exception = Assert.Throws<NotSupportedException>(() => context.Database.EnlistTransaction(committable));
+        Assert.Equal("The current provider doesn't support System.Transaction.", exception.Message);
     }
 }

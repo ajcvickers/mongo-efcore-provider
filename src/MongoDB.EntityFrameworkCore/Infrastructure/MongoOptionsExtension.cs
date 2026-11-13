@@ -355,6 +355,7 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
             AddDebugInfo(debugInfo, nameof(DatabaseName), Extension.DatabaseName);
             AddDebugInfo(debugInfo, nameof(QueryMode), Extension.QueryMode);
             AddDebugInfo(debugInfo, nameof(MaxRetryCount), Extension.MaxRetryCount);
+            AddDebugInfo(debugInfo, nameof(MaxRetryDelay), Extension.MaxRetryDelay);
         }
 
         /// <inheritdoc/>

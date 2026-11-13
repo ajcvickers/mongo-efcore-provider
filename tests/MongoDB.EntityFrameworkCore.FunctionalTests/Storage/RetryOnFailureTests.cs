@@ -18,11 +18,13 @@ using System.Runtime.ExceptionServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Core.Clusters;
 using MongoDB.Driver.Core.Servers;
 using MongoDB.Driver.Core.Connections;
+using MongoDB.EntityFrameworkCore.Diagnostics;
 using MongoDB.EntityFrameworkCore.Infrastructure;
 using MongoDB.EntityFrameworkCore.Storage;
 
@@ -37,7 +39,10 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
         public string name { get; set; } = null!;
     }
 
-    private static SingleEntityDbContext<SimpleEntity> CreateContext(IMongoCollection<SimpleEntity> collection, bool retry = true)
+    private static SingleEntityDbContext<SimpleEntity> CreateContext(
+        IMongoCollection<SimpleEntity> collection,
+        bool retry = true,
+        Action<DbContextOptionsBuilder>? configure = null)
         => SingleEntityDbContext.Create(
             collection,
             optionsBuilderAction: ob =>
@@ -46,6 +51,8 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
                 {
                     new MongoDbContextOptionsBuilder(ob).EnableRetryOnFailure(10, TimeSpan.FromMilliseconds(50));
                 }
+
+                configure?.Invoke(ob);
             });
 
     // A second context holds an uncommitted write to the document, so the first writer to the document in another transaction fails
@@ -138,18 +145,31 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
         collection.InsertMany([new SimpleEntity { name = "one" }, new SimpleEntity { name = "two" }]);
 
         using var holder = HoldDocument(collection);
-        using var db = CreateContext(collection);
+
+        // The holder is released from the log event EF raises when it is about to retry, so the first attempt always conflicts with it
+        // and the retry always succeeds, however slow the server is.
+        var retries = 0;
+        using var db = CreateContext(
+            collection,
+            configure: ob => ob.LogTo(
+                _ =>
+                {
+                    if (retries++ == 0)
+                    {
+                        holder.Database.CommitTransaction();
+                    }
+                },
+                [CoreEventId.ExecutionStrategyRetrying]));
 
         foreach (var entity in db.Entities.ToList())
         {
             entity.name += "-updated";
         }
 
-        // Two changed roots are saved in an implicit transaction. It conflicts with the held write until that is committed.
-        using var release = new Timer(
-            _ => holder.Database.CommitTransaction(), null, TimeSpan.FromMilliseconds(250), Timeout.InfiniteTimeSpan);
+        // Two changed roots are saved in an implicit transaction, which conflicts with the held write.
         db.SaveChanges();
 
+        Assert.Equal(1, retries);
         Assert.Equal(
             ["one-updated", "two-updated"],
             collection.Find(FilterDefinition<SimpleEntity>.Empty).ToList().Select(e => e.name).Order());
@@ -382,6 +402,12 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
         return exception;
     }
 
+    private static void LogCommitRetries(DbContextOptionsBuilder optionsBuilder, List<string> logged)
+        => optionsBuilder.LogTo(
+            logged.Add,
+            [MongoEventId.TransactionCommitRetrying],
+            LogLevel.Warning);
+
     private MongoTransaction StartTransaction(
         SingleEntityDbContext<SimpleEntity> db, IClientSessionHandle session)
         => MongoTransaction.Start(
@@ -396,7 +422,8 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
     public void A_commit_with_an_unknown_result_is_retried_without_applying_the_transaction_twice()
     {
         var collection = database.CreateCollection<SimpleEntity>();
-        using var db = CreateContext(collection, retry: false);
+        var logged = new List<string>();
+        using var db = CreateContext(collection, retry: false, ob => LogCommitRetries(ob, logged));
         using var real = collection.Database.Client.StartSession();
         var (session, proxy) = FailingCommitSession.Wrap(real, failures: 2, UnknownCommitResult);
 
@@ -405,6 +432,7 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
         transaction.Commit();
 
         Assert.Equal(3, proxy.CommitCalls);
+        Assert.Equal(2, logged.Count);
         Assert.Equal(1, collection.CountDocuments(FilterDefinition<SimpleEntity>.Empty));
     }
 
@@ -412,7 +440,8 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
     public async Task CommitAsync_with_an_unknown_result_is_retried_without_applying_the_transaction_twice()
     {
         var collection = database.CreateCollection<SimpleEntity>();
-        await using var db = CreateContext(collection, retry: false);
+        var logged = new List<string>();
+        await using var db = CreateContext(collection, retry: false, ob => LogCommitRetries(ob, logged));
         using var real = await collection.Database.Client.StartSessionAsync();
         var (session, proxy) = FailingCommitSession.Wrap(real, failures: 2, UnknownCommitResult);
 
@@ -421,6 +450,7 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
         await transaction.CommitAsync();
 
         Assert.Equal(3, proxy.CommitCalls);
+        Assert.Equal(2, logged.Count);
         Assert.Equal(1, await collection.CountDocumentsAsync(FilterDefinition<SimpleEntity>.Empty));
     }
 
@@ -440,7 +470,7 @@ public class RetryOnFailureTests(TemporaryDatabaseFixture database)
     }
 
     [Fact]
-    public void A_commit_that_whose_server_time_limit_expired_is_not_retried()
+    public void A_commit_whose_server_time_limit_expired_is_not_retried()
     {
         var collection = database.CreateCollection<SimpleEntity>();
         using var db = CreateContext(collection, retry: false);
