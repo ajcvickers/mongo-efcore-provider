@@ -656,6 +656,46 @@ context.Orders.Where(o => o.Priority > threshold);
 
 For a genuinely per-row value, bring the rows to the client first: `context.Orders.AsEnumerable().Select(o => new { o.Id, R = Random.Shared.Next() })`.
 
+### `Random` and `Guid.NewGuid`/`Guid.CreateVersion7` calls inside an `ExecuteUpdate` setter value now throw
+
+#### Old behavior
+
+A call to `Random.Next(...)`, `NextDouble()`, `NextSingle()` or `NextInt64(...)` (on any `Random` instance), to `Guid.NewGuid()` or
+`Guid.CreateVersion7()`, or to `EF.Functions.Random()` inside the value of an `ExecuteUpdate` `SetProperty` was evaluated **once** per execution,
+and the single result was written to every matched document, whether or not the value also read the row:
+
+```c#
+context.Orders.ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString()));   // one Guid for every document
+context.Orders.ExecuteUpdate(s => s.SetProperty(o => o.Priority, o => o.Priority + Random.Shared.Next(0, 10)));   // one offset for every document
+```
+
+#### New behavior
+
+These calls throw `InvalidOperationException`, before anything is written, with the message:
+
+> The setter for 'Order.Status' calls 'Guid.NewGuid', which returns a different value on each call. A bulk update evaluates the setter value once per execution, not once per document, so every matched document would receive the same value. Evaluate the call before the update and pass the result in as a variable if one value for all documents is intended; a distinct value per document needs SaveChanges or one update per document.
+
+Unchanged:
+
+* `DateTime.Now` and `DateTime.UtcNow`: they are evaluated afresh on every execution of the update.
+* A value computed before the update and passed in as a variable.
+
+#### Why
+
+Relational providers evaluate such a function per row, so the same code there writes a different value to each row. Writing one value to every document without a diagnostic is
+almost never what the caller meant.
+
+#### Mitigations
+
+If one value for every matched document is intended, evaluate it before the update and use the variable:
+
+```c#
+var status = Guid.NewGuid().ToString();
+context.Orders.ExecuteUpdate(s => s.SetProperty(o => o.Status, status));
+```
+
+For a value that differs per document, load the entities and set the property in `SaveChanges`, or issue one `ExecuteUpdate` per document.
+
 ### Bulk `ExecuteUpdate`/`ExecuteDelete`: diagnostics payloads, execution strategy and rejected setters changed
 
 #### Old behavior
