@@ -10,4 +10,14 @@
          configuration and default item excludes ("obj\**") key off it. -->
     <MSBuildProjectExtensionsPath>obj\$(Configuration)\</MSBuildProjectExtensionsPath>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Every warning fails the build, locally and in CI, in all configurations. Exceptions are in WarningsNotAsErrors
+         (they still show as warnings):
+         - CS1591: missing XML comment on a publicly visible type or member (not enforced).
+         - NU1901-NU1904: NuGet audit advisories. A new advisory against a dependency would otherwise break the build with
+           no code change; Dependabot tracks these. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS1591;NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
 </Project>

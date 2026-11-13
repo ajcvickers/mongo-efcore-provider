@@ -14,7 +14,6 @@
   <PropertyGroup>
     <NoWarn>EF1001</NoWarn>
     <Nullable>enable</Nullable>
-    <WarningsAsErrors>nullable</WarningsAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug EF8' ">
