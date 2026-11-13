@@ -656,13 +656,13 @@ context.Orders.Where(o => o.Priority > threshold);
 
 For a genuinely per-row value, bring the rows to the client first: `context.Orders.AsEnumerable().Select(o => new { o.Id, R = Random.Shared.Next() })`.
 
-### `Random` and `Guid.NewGuid`/`Guid.CreateVersion7` calls inside an `ExecuteUpdate` setter value now throw
+### `Random` and `Guid.NewGuid`/`Guid.CreateVersion7` calls inside an `ExecuteUpdate` setter value lambda now throw
 
 #### Old behavior
 
 A call to `Random.Next(...)`, `NextDouble()`, `NextSingle()` or `NextInt64(...)` (on any `Random` instance), to `Guid.NewGuid()` or
-`Guid.CreateVersion7()`, or to `EF.Functions.Random()` inside the value of an `ExecuteUpdate` `SetProperty` was evaluated **once** per execution,
-and the single result was written to every matched document, whether or not the value also read the row:
+`Guid.CreateVersion7()`, or to `EF.Functions.Random()` inside a **value lambda** of an `ExecuteUpdate` `SetProperty` was evaluated **once** per
+execution, and the single result was written to every matched document, whether or not the lambda also read the row:
 
 ```c#
 context.Orders.ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString()));   // one Guid for every document
@@ -671,23 +671,25 @@ context.Orders.ExecuteUpdate(s => s.SetProperty(o => o.Priority, o => o.Priority
 
 #### New behavior
 
-These calls throw `InvalidOperationException`, before anything is written, with the message:
+These calls throw `InvalidOperationException`, before anything is written. The text below is the translation-failure detail: it follows EF's
+"could not be translated" message, and on EF11 it is the inner exception:
 
 > The setter for 'Order.Status' calls 'Guid.NewGuid', which returns a different value on each call. A bulk update evaluates the setter value once per execution, not once per document, so every matched document would receive the same value. Evaluate the call before the update and pass the result in as a variable if one value for all documents is intended; a distinct value per document needs SaveChanges or one update per document.
 
 Unchanged:
 
+* A value that is not a lambda, `SetProperty(o => o.Status, Guid.NewGuid().ToString())`: it reads as one value for every document, and on EF10 and later
+  the C# compiler evaluates it inside your delegate, so the provider only sees the result. It behaves like a variable computed first.
 * `DateTime.Now` and `DateTime.UtcNow`: they are evaluated afresh on every execution of the update.
-* A value computed before the update and passed in as a variable.
 
 #### Why
 
-Relational providers evaluate such a function per row, so the same code there writes a different value to each row. Writing one value to every document without a diagnostic is
-almost never what the caller meant.
+A value lambda reads as a per-document value, and relational providers evaluate such a function per row, so the same code there writes a
+different value to each row. Writing one value to every document without a diagnostic is almost never what the caller meant.
 
 #### Mitigations
 
-If one value for every matched document is intended, evaluate it before the update and use the variable:
+If one value for every matched document is intended, evaluate it before the update and use the variable, or pass it as a plain argument:
 
 ```c#
 var status = Guid.NewGuid().ToString();

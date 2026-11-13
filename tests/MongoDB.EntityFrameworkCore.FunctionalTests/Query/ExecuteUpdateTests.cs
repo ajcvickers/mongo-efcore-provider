@@ -380,36 +380,71 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         Assert.Contains("Only mapped root scalar properties can be updated", AllMessages(ex));
     }
 
-    // #70: a non-deterministic call in a setter value would be evaluated once per execution and written to every matched document.
+    // #70: a non-deterministic call in a setter value LAMBDA reads as a per-document value but would be evaluated once per execution
+    // and written to every matched document.
     [Fact]
     public void ExecuteUpdate_non_deterministic_setter_value_is_refused()
     {
         using var db = CreateSeededContext();
 
-        var guid = Assert.Throws<InvalidOperationException>(
-            () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString())));
-        Assert.Contains("Guid.NewGuid", AllMessages(guid));
-        Assert.Contains("once per execution, not once per document", AllMessages(guid));
+        string Refused(Action update)
+        {
+            var ex = Assert.Throws<InvalidOperationException>(update);
+            Assert.Contains("once per execution, not once per document", AllMessages(ex));
+            return AllMessages(ex);
+        }
 
-        // Also when the value reads the row (self-referencing path), and for Random.
-        var random = Assert.Throws<InvalidOperationException>(
-            () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Quantity + Random.Shared.Next())));
-        Assert.Contains("Random.Next", AllMessages(random));
+        Assert.Contains("Guid.NewGuid", Refused(() =>
+            db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString()))));
+        Assert.Contains("Guid.NewGuid", Refused(() =>
+            db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, o => o.Status + Guid.NewGuid()))));
+#if EF10 || EF11
+        Assert.Contains("CreateVersion7", Refused(() =>
+            db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.CreateVersion7().ToString()))));
+#endif
+
+        // Also when the value reads the row (self-referencing path), and for the other Random members.
+        Assert.Contains("Random.Next", Refused(() =>
+            db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Quantity + Random.Shared.Next()))));
+        Assert.Contains("Random.NextDouble", Refused(() =>
+            db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => (int)(Random.Shared.NextDouble() * 10)))));
+        Assert.Contains("DbFunctionsExtensions.Random", Refused(() =>
+            db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => (int)(EF.Functions.Random() * 10)))));
+
+        // A refused setter anywhere in the list refuses the whole update.
+        Refused(() => db.Entities.ExecuteUpdate(s => s
+            .SetProperty(o => o.Quantity, 1)
+            .SetProperty(o => o.Status, o => Guid.NewGuid().ToString())));
 
         // Nothing was written.
         Assert.Equal(0, db.Entities.Count(o => o.Status != "open" && o.Status != "closed"));
     }
 
     [Fact]
-    public void ExecuteUpdate_setter_value_computed_before_the_update_is_accepted()
+    public async Task ExecuteUpdateAsync_non_deterministic_setter_value_is_refused()
+    {
+        using var db = CreateSeededContext();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString())));
+
+        Assert.Contains("Guid.NewGuid", AllMessages(ex));
+        Assert.Equal(0, db.Entities.Count(o => o.Status != "open" && o.Status != "closed"));
+    }
+
+    // A value written as a plain argument (not a lambda) reads as one value for every document, and on EF10+ is evaluated by the C#
+    // compiler before the provider sees it, so a call there is the same as a variable computed first. Accepted on every EF version.
+    [Fact]
+    public void ExecuteUpdate_setter_value_that_is_not_a_lambda_is_accepted()
     {
         using var db = CreateSeededContext();
 
         var status = Guid.NewGuid().ToString();
-        var updated = db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, status));
-
-        Assert.Equal(3, updated);
+        Assert.Equal(3, db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, status)));
         Assert.Equal(3, db.Entities.Count(o => o.Status == status));
+
+        Assert.Equal(3, db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, Guid.NewGuid().ToString())));
+        Assert.Equal(1, db.Entities.Select(o => o.Status).Distinct().Count());
     }
 
     // EF11 reports the translation failure details as the inner exception rather than in the message.

@@ -59,9 +59,11 @@ Gate and fallback:
   a required leaf set to null, a computed value that reads through an optional complex hop unless null-coalesced (a missing value would
   remove or null the target), a whole complex value read from the row,
   a self-referencing value for a BsonRepresentation leaf (root scalars keep their pre-existing behaviour), and two setters
-  whose stored paths contain one another (`ThrowIfSetterPathsOverlap`: the server rejects such a `$set`), and a value containing a
-  non-deterministic call (`NonDeterministicCalls.FindFirst` in `BuildSetter`, #70: it would be evaluated once per execution and
-  written to every document; a variable computed before the update is fine). Refusal messages
+  whose stored paths contain one another (`ThrowIfSetterPathsOverlap`: the server rejects such a `$set`), and a value LAMBDA containing a
+  non-deterministic call (`NonDeterministicCalls.FindFirst` in `BuildSetter`, #70: it reads as per-document but is evaluated once per
+  execution and written to every document). A non-lambda value (`SetProperty(o => o.X, Guid.NewGuid())`) is deliberately not checked: on
+  EF10+ the C# compiler evaluates it inside the caller's `Action<UpdateSettersBuilder>`, so no call ever reaches the provider, and EF9
+  must agree. Refusal messages
   print expressions through `ExpressionShapePrinter` (constants as `?`), never `Expression.ToString()`.
 - **A recognizer turning a correlated `DbSet` subquery into a navigation** (`db.Orders.Where(o => o.CustomerId == c.X)`
   -> `c.Orders`) must prove `c.X` is that navigation's FK principal key via `NativeCorrelationMatcher` (single-property FK;

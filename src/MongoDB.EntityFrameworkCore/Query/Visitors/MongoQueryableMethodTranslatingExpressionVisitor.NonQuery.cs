@@ -241,10 +241,13 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             isSelfReferencing = propertySelector.Parameters.Any(p => value.ReferencesParameter(p));
         }
 
-        // A non-deterministic call (Guid.NewGuid, Random.Next, ...) in the value would be evaluated once per execution, by the
-        // client-side compile-and-evaluate fallback or by the driver's partial evaluator, and written to every matched document (#70).
-        // A value the caller computed first and captured in a variable is not a call in the tree, so it is unaffected.
-        if (NonDeterministicCalls.FindFirst(value) is { } nonDeterministicCall)
+        // A non-deterministic call (Guid.NewGuid, Random.Next, ...) in a value LAMBDA (`o => Guid.NewGuid().ToString()`) reads as a
+        // per-document value, but is evaluated once per execution, by the client-side compile-and-evaluate fallback or by the
+        // driver's partial evaluator, and written to every matched document (#70). The non-lambda form
+        // (`SetProperty(o => o.Status, Guid.NewGuid().ToString())`) is not checked: it reads as one value, and on EF10+ the C# compiler
+        // evaluates it inside the caller's delegate, so the provider only ever sees the finished constant. Checking it on EF9 alone
+        // would make the same code behave differently per EF version.
+        if (IsQuotedLambda(valueExpression) && NonDeterministicCalls.FindFirst(value) is { } nonDeterministicCall)
         {
             AddTranslationErrorDetails(
                 ComplexTypeRefusals.BulkSetterNonDeterministicValue(
