@@ -115,6 +115,12 @@ internal static class ComplexTypeRefusals
         => $"Self-referencing ExecuteUpdate on property '{propertyName}' is not supported because it is stored with a "
            + "BsonRepresentation, which the computed value would not be written in.";
 
+    internal static string BulkSetterNonDeterministicValue(string setterTarget, string call)
+        => $"The setter for '{setterTarget}' calls '{call}', which returns a different value on each call. A bulk update evaluates "
+           + "the setter value once per execution, not once per document, so every matched document would receive the same value. "
+           + "Evaluate the call before the update and pass the result in as a variable if one value for all documents is intended; "
+           + "a distinct value per document needs SaveChanges or one update per document.";
+
     internal static string BulkSelfReferencingComplexValue(string complexPropertyName)
         => $"ExecuteUpdate cannot set the complex property '{complexPropertyName}' "
            + "from a value that reads the entity being updated. Set its scalar properties individually "

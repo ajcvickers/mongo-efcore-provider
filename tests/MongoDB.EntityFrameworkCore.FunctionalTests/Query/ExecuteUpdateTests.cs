@@ -199,10 +199,10 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
     }
 
     // The setter value is compiled and evaluated by a fallback whose delegate is cached on the setter (the query is compiled once and the
-    // same node serves every execution). This shape (a value lambda that ignores its parameter and calls Guid.NewGuid) is one that
+    // same node serves every execution). This shape (a value lambda that ignores its parameter and calls DateTime.UtcNow) is one that
     // reaches that fallback on EF9 and EF10 alike. What is cached is the DELEGATE, so each execution must still evaluate afresh: a cache
-    // that held the first VALUE would write the same string both times. (Pre-existing and out of scope: the lambda is evaluated once per
-    // execution, not once per document.)
+    // that held the first VALUE would write the same string both times. (Guid.NewGuid/Random would show the same, but are refused in a
+    // setter, see ExecuteUpdate_non_deterministic_setter_value_is_refused; the value is evaluated once per execution, not per document.)
     [Fact]
     public void ExecuteUpdate_compiled_setter_fallback_is_evaluated_afresh_on_each_execution()
     {
@@ -210,7 +210,7 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
 
         string Run()
         {
-            db.Entities.Where(o => o.Quantity >= 20).ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString()));
+            db.Entities.Where(o => o.Quantity >= 20).ExecuteUpdate(s => s.SetProperty(o => o.Status, o => DateTime.UtcNow.ToString("O")));
             return db.Entities.Where(o => o.Quantity == 20).Select(o => o.Status).Single();
         }
 
@@ -378,6 +378,38 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
         var ex = Assert.Throws<InvalidOperationException>(
             () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Unmapped, "x")));
         Assert.Contains("Only mapped root scalar properties can be updated", AllMessages(ex));
+    }
+
+    // #70: a non-deterministic call in a setter value would be evaluated once per execution and written to every matched document.
+    [Fact]
+    public void ExecuteUpdate_non_deterministic_setter_value_is_refused()
+    {
+        using var db = CreateSeededContext();
+
+        var guid = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, o => Guid.NewGuid().ToString())));
+        Assert.Contains("Guid.NewGuid", AllMessages(guid));
+        Assert.Contains("once per execution, not once per document", AllMessages(guid));
+
+        // Also when the value reads the row (self-referencing path), and for Random.
+        var random = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, o => o.Quantity + Random.Shared.Next())));
+        Assert.Contains("Random.Next", AllMessages(random));
+
+        // Nothing was written.
+        Assert.Equal(0, db.Entities.Count(o => o.Status != "open" && o.Status != "closed"));
+    }
+
+    [Fact]
+    public void ExecuteUpdate_setter_value_computed_before_the_update_is_accepted()
+    {
+        using var db = CreateSeededContext();
+
+        var status = Guid.NewGuid().ToString();
+        var updated = db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Status, status));
+
+        Assert.Equal(3, updated);
+        Assert.Equal(3, db.Entities.Count(o => o.Status == status));
     }
 
     // EF11 reports the translation failure details as the inner exception rather than in the message.
