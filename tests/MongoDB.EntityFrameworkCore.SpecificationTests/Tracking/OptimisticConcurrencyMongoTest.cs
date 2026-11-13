@@ -14,9 +14,9 @@
  */
 
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.TestModels.ConcurrencyModel;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.TestModels.ConcurrencyModel;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 
@@ -30,10 +30,10 @@ public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.Optim
     protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
         => facade.UseTransaction(transaction);
 
+    // The provider generates row versions only for int, uint, long and ulong (RowVersion.cs). The upstream suite uses byte[], which nothing
+    // would ever change, so no conflict would be detected; hence long here and in the test base's type argument.
     public class OptimisticConcurrencyMongoFixture : F1FixtureBase<long>
     {
-        // The provider generates row versions only for int, uint, long and ulong (RowVersion.cs). The upstream suite uses byte[], which nothing
-        // would ever change, so no conflict would be detected; hence long here and in the test base's type argument.
         private ITestStoreFactory? _testStoreFactory;
 
         protected override string StoreName { get; } = TestDatabaseNamer.GetUniqueDatabaseName("OptimisticConcurrency");
