@@ -349,7 +349,11 @@ Rendering (null/missing/dialect semantics):
   `""`). A non-nullable projection leaf over a guarded `Length`/`IndexOf` is flagged `MongoProjection.ThrowsOnNull` and
   read as `T?` (throws "Nullable object must have a value."); one whose null an operator may absorb (`$max`/`$min`,
   `Sign`) declines (`ClassifyNonNullableValueRead`). Group keys, accumulators and `Min`/`Max`/`Average` over such values
-  decline rather than read null as `0`, including via an upstream alias (`MongoElementRefExpression.ThrowsOnNull`).
+  decline rather than read null as `0`, including via an upstream alias (`MongoElementRefExpression.ThrowsOnNull`). The exception is a
+  grouped `Min`/`Max`/`Average` of a BARE leaf under an optional complex property (#73): its all-missing group is null, so the group output
+  is flagged `ThrowsOnNull` and read strictly (`ReducesPossiblyUnmatchedJoinSideToDefault`'s `readsStrictly`). A flagged output cannot be
+  a post-group `Where`/`OrderBy` operand (`TryResolveProjectedAlias`; a throwing group KEY stays usable there), a `Having` side, an ordering aggregate or a nested construction
+  member, which decline.
 - **`$toLower`/`$toUpper` are never emitted natively** (ASCII-only): `Where` becomes an anchored case-insensitive regex;
   `Select` projects the raw string and re-applies the mapping client-side. After such a leaf
   (`HasClientCaseMappingProjectionLeaf`) value-reading operators decline. A GroupBy query that would run on driver-LINQ
