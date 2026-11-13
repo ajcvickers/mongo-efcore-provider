@@ -18,7 +18,9 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
+using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.FunctionalTests.Entities.Guides;
+using MongoDB.EntityFrameworkCore.Storage;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests;
 
@@ -444,6 +446,156 @@ public class LoggingTests(SampleGuidesFixture fixture, ITestOutputHelper testOut
                 Assert.Contains("Committed transaction.", spyLogger.GetLogMessageByEventId(MongoEventId.TransactionCommitted));
             }
         }
+    }
+
+    [Fact]
+    public void UseTransaction_logs_TransactionEnlisted_and_no_commit_events()
+    {
+        List<string> logs = [];
+        using var session = fixture.MongoDatabase.Client.StartSession();
+        session.StartTransaction();
+
+        Guid transactionId;
+        using (var db = GuidesDbContext.Create(fixture.MongoDatabase, s =>
+               {
+                   logs.Add(s);
+                   testOutputHelper.WriteLine(s);
+               }))
+        {
+            var transaction = db.Database.UseTransaction(session);
+            transactionId = transaction.TransactionId;
+
+            var enlisted = AssertSingleLogEntry(logs, MongoEventId.TransactionEnlisted);
+            Assert.Contains(
+                $"Enlisted in transaction {transactionId}, which is owned by the code that supplied the session.", enlisted);
+        }
+
+        // The context only participates in the transaction, so detaching it must not log that it was committed or rolled back.
+        Assert.Single(logs, l => l.Contains("MongoEventId.TransactionEnlisted"));
+        var detached = AssertSingleLogEntry(logs, MongoEventId.TransactionDetached);
+        Assert.Contains(
+            $"Detached from transaction {transactionId}, which is owned by the code that supplied the session", detached);
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRollbackSkipped"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionCommitting"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionCommitted"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRollingBack"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRolledBack"));
+        // The session id must not leak into the log; compare its GUID text, the form that would appear in a log line.
+        var sessionId = session.ServerSession.Id["id"].AsGuid.ToString();
+        Assert.DoesNotContain(logs, l => l.Contains(sessionId, StringComparison.OrdinalIgnoreCase));
+
+        Assert.True(session.IsInTransaction);
+        session.AbortTransaction();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Enlisting_and_detaching_from_a_context_owned_transaction_name_the_owner(bool async)
+    {
+        using var owner = GuidesDbContext.Create(fixture.MongoDatabase);
+        var ownerTransaction = async
+            ? await owner.Database.BeginTransactionAsync()
+            : owner.Database.BeginTransaction();
+
+        List<string> logs = [];
+        var participant = GuidesDbContext.Create(fixture.MongoDatabase, s =>
+        {
+            logs.Add(s);
+            testOutputHelper.WriteLine(s);
+        });
+
+        var participantTransaction = participant.Database.UseTransaction(ownerTransaction);
+        var expectedOwner = $"{nameof(GuidesDbContext)} (transaction {ownerTransaction.TransactionId})";
+
+        // The enlisted event names the owner's context and transaction id, and it is the participant's own id that is logged first.
+        var enlisted = AssertSingleLogEntry(logs, MongoEventId.TransactionEnlisted);
+        Assert.Contains($"Enlisted in transaction {participantTransaction.TransactionId}, which is owned by {expectedOwner}.", enlisted);
+        Assert.NotEqual(ownerTransaction.TransactionId, participantTransaction.TransactionId);
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionDetached"));
+
+        if (async)
+        {
+            await participant.DisposeAsync();
+        }
+        else
+        {
+            participant.Dispose();
+        }
+
+        var detached = AssertSingleLogEntry(logs, MongoEventId.TransactionDetached);
+        Assert.Contains($"Detached from transaction {participantTransaction.TransactionId}, which is owned by {expectedOwner}", detached);
+
+        // Disposing the participant's transaction again (the manager calls back into it) must not log a second detach.
+        if (async)
+        {
+            await participantTransaction.DisposeAsync();
+        }
+        else
+        {
+            participantTransaction.Dispose();
+        }
+
+        Assert.Single(logs, l => l.Contains("MongoEventId.TransactionDetached"));
+
+        // The owner's transaction is untouched by the participant's detach.
+        if (async)
+        {
+            await owner.Database.RollbackTransactionAsync();
+        }
+        else
+        {
+            owner.Database.RollbackTransaction();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Disposing_an_owned_transaction_whose_session_transaction_already_ended_logs_that_rollback_was_skipped(bool async)
+    {
+        List<string> logs = [];
+        var db = GuidesDbContext.Create(fixture.MongoDatabase, s =>
+        {
+            logs.Add(s);
+            testOutputHelper.WriteLine(s);
+        });
+
+        var transaction = async
+            ? await db.Database.BeginTransactionAsync()
+            : db.Database.BeginTransaction();
+
+        // Something else holding the session ends the transaction, so there is nothing for Dispose to roll back.
+        ((MongoTransaction)transaction).ActiveSession.AbortTransaction();
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRollbackSkipped"));
+
+        if (async)
+        {
+            await db.DisposeAsync();
+        }
+        else
+        {
+            db.Dispose();
+        }
+
+        var skipped = AssertSingleLogEntry(logs, MongoEventId.TransactionRollbackSkipped);
+        Assert.Contains($"Disposing transaction {transaction.TransactionId} without rolling it back", skipped);
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRollingBack"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRolledBack"));
+    }
+
+    [Fact]
+    public void Disposing_an_owned_transaction_that_was_rolled_back_does_not_log_a_skipped_rollback()
+    {
+        List<string> logs = [];
+        using (var db = GuidesDbContext.Create(fixture.MongoDatabase, s => logs.Add(s)))
+        {
+            db.Database.BeginTransaction();
+            db.Database.RollbackTransaction();
+        }
+
+        Assert.Single(logs, l => l.Contains("MongoEventId.TransactionRolledBack"));
+        Assert.DoesNotContain(logs, l => l.Contains("MongoEventId.TransactionRollbackSkipped"));
     }
 
     [AtlasTheory]

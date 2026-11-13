@@ -52,6 +52,21 @@ public sealed class MongoTransaction(
 
     private TransactionState _transactionState = TransactionState.Active;
 
+    // Describes who owns the transaction when this MongoTransaction merely participates in it (see Enlist).
+    private string? _ownerDescription;
+
+    /// <summary>
+    /// <see langword="true"/> if this context started the transaction and therefore controls how it ends; <see langword="false"/> if
+    /// this context only participates in a transaction owned by someone else (see <see cref="Enlist"/>).
+    /// </summary>
+    internal bool IsOwner { get; private init; } = true;
+
+    /// <summary>
+    /// Describes the owner of this transaction for use in messages.
+    /// </summary>
+    internal string OwnerDescription
+        => IsOwner ? $"{Context.GetType().Name} (transaction {TransactionId})" : _ownerDescription!;
+
     internal static MongoTransaction Start(
         IClientSessionHandle session,
         DbContext context,
@@ -91,6 +106,28 @@ public sealed class MongoTransaction(
         return transaction;
     }
 
+    /// <summary>
+    /// Creates a <see cref="MongoTransaction"/> that participates in a transaction already in progress on <paramref name="session"/>,
+    /// which is owned (committed, aborted and disposed) by someone else. Commit and rollback are rejected, and disposing only detaches
+    /// the transaction from the <paramref name="transactionManager"/>.
+    /// </summary>
+    internal static MongoTransaction Enlist(
+        IClientSessionHandle session,
+        DbContext context,
+        string ownerDescription,
+        IMongoTransactionManager? transactionManager,
+        IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> transactionLogger)
+    {
+        var transaction = new MongoTransaction(session, context, Guid.NewGuid(), transactionManager, transactionLogger)
+        {
+            IsOwner = false,
+            _ownerDescription = ownerDescription
+        };
+
+        transactionLogger.TransactionEnlisted(transaction);
+        return transaction;
+    }
+
     private const string TransactionByDefault =
         "The MongoDB EF Core Provider now uses transactions to ensure all updates in a SaveChanges operation are applied together or not at all.";
 
@@ -99,9 +136,46 @@ public sealed class MongoTransaction(
 
     /// <summary>
     /// The underlying <see cref="IClientSession"/> this transaction is using which is required
-    /// to issue commands against.
+    /// to issue commands against. Throws if the transaction this <see cref="MongoTransaction"/> was started for or enlisted in
+    /// has ended (committed or aborted), including when the session has since started a different transaction, because a command
+    /// issued then would silently run outside the transaction this context believes it is in.
     /// </summary>
-    internal IClientSessionHandle Session => session;
+    /// <exception cref="InvalidOperationException">The session is no longer in the transaction.</exception>
+    internal IClientSessionHandle ActiveSession
+        => SessionIsInOurTransaction
+            ? session
+            : throw new InvalidOperationException(
+                $"MongoTransaction {TransactionId} is no longer active: the transaction on its session has already been committed or aborted. "
+                + "Commands can not be issued on this transaction because they would run outside of any transaction.");
+
+    // The number the session gave the transaction this MongoTransaction was created for, which identifies it uniquely on the
+    // session. Null if the session was not in a transaction when this was created, in which case there is no transaction for
+    // this MongoTransaction to be active in and it never is.
+    private readonly long? _sessionTransactionNumber = CurrentTransactionNumber(session);
+
+    // The owner of a session shared with a non-owning context disposes it when it ends the transaction, and asking a disposed
+    // session whether it is in a transaction throws ObjectDisposedException. A disposed session is not in a transaction.
+    // A session whose owner committed or aborted and then started another transaction is in a transaction, but not ours.
+    private bool SessionIsInOurTransaction
+        => _sessionTransactionNumber is { } ours
+           && CurrentTransactionNumber(session) is { } current
+           && current == ours;
+
+    // The number of the transaction in progress on the session, or null if there is none (or the session is disposed).
+    // CurrentTransaction is only read while the session is in a transaction.
+    private static long? CurrentTransactionNumber(IClientSessionHandle session)
+    {
+        try
+        {
+            return session.IsInTransaction
+                ? session.WrappedCoreSession.CurrentTransaction?.TransactionNumber
+                : null;
+        }
+        catch (ObjectDisposedException)
+        {
+            return null;
+        }
+    }
 
     /// <inheritdoc />
     public Guid TransactionId { get; } = transactionId;
@@ -115,6 +189,7 @@ public sealed class MongoTransaction(
     public void Commit()
     {
         AssertCorrectState("Commit", TransactionState.Active);
+        AssertIsOwner("Commit");
         var startTime = DateTimeOffset.UtcNow;
         var stopwatch = new Stopwatch();
         stopwatch.Start();
@@ -140,6 +215,7 @@ public sealed class MongoTransaction(
     public async Task CommitAsync(CancellationToken cancellationToken = new())
     {
         AssertCorrectState("Commit", TransactionState.Active);
+        AssertIsOwner("Commit");
         var startTime = DateTimeOffset.UtcNow;
         var stopwatch = new Stopwatch();
         stopwatch.Start();
@@ -168,6 +244,7 @@ public sealed class MongoTransaction(
     public void Rollback()
     {
         AssertCorrectState("Rollback", TransactionState.Active);
+        AssertIsOwner("Rollback");
         var startTime = DateTimeOffset.UtcNow;
         var stopwatch = new Stopwatch();
         stopwatch.Start();
@@ -193,6 +270,7 @@ public sealed class MongoTransaction(
     public async Task RollbackAsync(CancellationToken cancellationToken = new())
     {
         AssertCorrectState("Rollback", TransactionState.Active);
+        AssertIsOwner("Rollback");
         var startTime = DateTimeOffset.UtcNow;
         var stopwatch = new Stopwatch();
         stopwatch.Start();
@@ -226,45 +304,145 @@ public sealed class MongoTransaction(
     /// <inheritdoc />
     public void Dispose()
     {
-        switch (_transactionState)
+        if (!IsOwner)
         {
-            case TransactionState.Disposed:
+            if (_transactionState == TransactionState.Disposed)
+            {
                 return;
+            }
 
-            case TransactionState.Active:
-                Rollback();
-                break;
-
-            case TransactionState.Committed:
-            case TransactionState.RolledBack:
-            case TransactionState.Failed:
-                break;
+            // Only detach: the transaction and its session belong to the owner. The state is set first so that the manager's call
+            // back into Dispose returns immediately.
+            _transactionState = TransactionState.Disposed;
+            transactionLogger.TransactionDetached(this, false);
+            transactionManager?.ResetState();
+            return;
         }
 
-        _transactionState = TransactionState.Disposed;
-        session.Dispose();
+        if (_transactionState == TransactionState.Disposed)
+        {
+            return;
+        }
+
+        // Rollback is what normally detaches this transaction from the manager. It is skipped when the session's transaction has
+        // already ended, and it does not get that far when it throws, so Dispose detaches in those cases itself.
+        var detach = false;
+        try
+        {
+            if (_transactionState == TransactionState.Active)
+            {
+                if (SessionTransactionHasEnded)
+                {
+                    detach = true;
+                    transactionLogger.TransactionRollbackSkipped(this, false);
+                }
+                else
+                {
+                    Rollback();
+                }
+            }
+        }
+        catch
+        {
+            detach = true;
+            throw;
+        }
+        finally
+        {
+            // However the rollback went, this transaction is finished with: the session is released (the server would otherwise keep
+            // the transaction open until it times out) and the manager lets go of us. The state is set first so that the manager's
+            // call back into Dispose returns immediately. An exception from the rollback still reaches the caller.
+            _transactionState = TransactionState.Disposed;
+            try
+            {
+                session.Dispose();
+            }
+            finally
+            {
+                if (detach)
+                {
+                    transactionManager?.ResetState();
+                }
+            }
+        }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        switch (_transactionState)
+        if (!IsOwner)
         {
-            case TransactionState.Disposed:
+            if (_transactionState == TransactionState.Disposed)
+            {
                 return;
+            }
 
-            case TransactionState.Active:
-                await RollbackAsync();
-                break;
+            // See Dispose.
+            _transactionState = TransactionState.Disposed;
+            transactionLogger.TransactionDetached(this, true);
+            if (transactionManager is not null)
+            {
+                await transactionManager.ResetStateAsync().ConfigureAwait(false);
+            }
 
-            case TransactionState.Committed:
-            case TransactionState.RolledBack:
-            case TransactionState.Failed:
-                break;
+            return;
         }
 
-        _transactionState = TransactionState.Disposed;
-        session.Dispose();
+        if (_transactionState == TransactionState.Disposed)
+        {
+            return;
+        }
+
+        // See Dispose.
+        var detach = false;
+        try
+        {
+            if (_transactionState == TransactionState.Active)
+            {
+                if (SessionTransactionHasEnded)
+                {
+                    detach = true;
+                    transactionLogger.TransactionRollbackSkipped(this, true);
+                }
+                else
+                {
+                    await RollbackAsync().ConfigureAwait(false);
+                }
+            }
+        }
+        catch
+        {
+            detach = true;
+            throw;
+        }
+        finally
+        {
+            _transactionState = TransactionState.Disposed;
+            try
+            {
+                session.Dispose();
+            }
+            finally
+            {
+                if (detach && transactionManager is not null)
+                {
+                    await transactionManager.ResetStateAsync().ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
+    // The session's transaction may have been committed or aborted by something else holding the session (which may even have
+    // started another transaction on it). There is then nothing of ours to roll back (attempting it would make Dispose throw or
+    // abort someone else's transaction), but the manager must still be told to let go of us.
+    private bool SessionTransactionHasEnded => !SessionIsInOurTransaction;
+
+    private void AssertIsOwner(string action)
+    {
+        if (!IsOwner)
+            throw new InvalidOperationException(
+                $"Can not {action} MongoTransaction {TransactionId} because it was not started by this context. "
+                + $"It is owned by {_ownerDescription}, which must {(action == "Commit" ? "commit" : "roll back")} it; this context only participates in it.");
     }
 
     private void AssertCorrectState(string action, TransactionState validState)

@@ -83,7 +83,7 @@ public class MongoDatabaseWrapper : Database
         // Explicit transaction mode
         if (_transactionManager.CurrentTransaction is MongoTransaction mongoTransaction)
         {
-            return WriteBatches(updates, mongoTransaction.Session);
+            return WriteBatches(updates, mongoTransaction.ActiveSession);
         }
 
         using var session = _mongoClient.StartSession();
@@ -128,7 +128,7 @@ public class MongoDatabaseWrapper : Database
         // Explicit transaction mode
         if (_transactionManager.CurrentTransaction is MongoTransaction mongoTransaction)
         {
-            return await WriteBatchesAsync(updates, mongoTransaction.Session, cancellationToken).ConfigureAwait(false);
+            return await WriteBatchesAsync(updates, mongoTransaction.ActiveSession, cancellationToken).ConfigureAwait(false);
         }
 
         using var session = await _mongoClient.StartSessionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);

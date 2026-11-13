@@ -6,6 +6,24 @@ In order to evolve the provider as we introduce new features, we will be using t
 
 ## Breaking changes in 8.5.0 / 9.2.0 / 10.1.0
 
+### Disposing a context now rolls back a transaction it started and did not end
+
+#### Old behavior
+
+A context disposed while an explicit transaction it had started with `Database.BeginTransaction()` was still open (not committed, rolled back or disposed) left the transaction open on the server, and its client session undisposed, until the server's transaction lifetime limit (60 seconds by default) aborted it.
+
+#### New behavior
+
+Disposing a non-pooled context disposes its transaction manager, which rolls back the transaction the context started and disposes its session, as with relational providers. A context that only joined a transaction with `UseTransaction` is detached and the transaction is left to its owner. A pooled context is reset, not disposed, when it returns to the pool; its handling of an open transaction is unchanged.
+
+#### Why
+
+An abandoned transaction held server resources, and contexts that had joined it kept writing into a transaction nobody would commit.
+
+#### Mitigations
+
+Commit or roll back the transaction explicitly before disposing the context that started it.
+
 ### Range, sort and aggregate queries over a numeric property stored as a string now fail on non-numeric stored values
 
 #### Old behavior
@@ -770,6 +788,29 @@ that are.
 
 None needed. Documents written by SaveChanges always carry the discriminator, so the change only shows for documents written
 another way or whose discriminator was set to null on a tracked entry.
+
+### `IMongoTransactionManager` has two new members
+
+#### Old behavior
+
+`IMongoTransactionManager` declared `BeginTransaction(TransactionOptions)` and
+`BeginTransactionAsync(TransactionOptions, CancellationToken)` on top of `IDbContextTransactionManager`.
+
+#### New behavior
+
+The interface also declares `UseTransaction(IClientSessionHandle)` and `UseTransaction(IDbContextTransaction)`, which back the new
+`Database.UseTransaction(...)` extension methods that let a context take part in a transaction it did not start (see the README).
+A type that implements `IMongoTransactionManager` no longer compiles until it adds both members.
+
+#### Why
+
+Sharing a transaction between contexts needs the transaction manager to enlist a context in an existing transaction, and the manager
+is resolved from the context's service provider.
+
+#### Mitigations
+
+The interface is documented as internal and users are warned not to implement it, so most code is unaffected. If you have your own
+implementation, add the two methods, or derive from `MongoTransactionManager` instead.
 
 ## Breaking changes in 8.4.0 / 9.1.0 / 10.0.0
 

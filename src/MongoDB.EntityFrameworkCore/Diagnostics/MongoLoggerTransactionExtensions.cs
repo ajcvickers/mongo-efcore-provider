@@ -419,4 +419,164 @@ internal static class MongoLoggerTransactionExtensions
                          level,
                          MongoEventId.TransactionError,
                          "An error occurred using a transaction."))));
+
+    /// <summary>
+    /// Logs for the <see cref="MongoEventId.TransactionEnlisted" /> event.
+    /// </summary>
+    /// <param name="diagnostics">The diagnostics logger to use.</param>
+    /// <param name="transaction">The <see cref="MongoTransaction"/> that the context enlisted in.</param>
+    internal static void TransactionEnlisted(
+        this IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> diagnostics,
+        MongoTransaction transaction)
+    {
+        var definition = LogEnlistedTransaction(diagnostics);
+
+        if (diagnostics.ShouldLog(definition))
+        {
+            definition.Log(diagnostics, transaction.TransactionId, transaction.OwnerDescription);
+        }
+
+        if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+        {
+            var eventData = new MongoTransactionEventData(
+                definition,
+                TransactionEnlisted,
+                transaction,
+                false,
+                DateTimeOffset.UtcNow);
+
+            diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
+        }
+    }
+
+    private static string TransactionEnlisted(EventDefinitionBase definition, EventData payload)
+    {
+        var d = (EventDefinition<Guid, string>)definition;
+        var p = (MongoTransactionEventData)payload;
+        return d.GenerateMessage(p.Transaction.TransactionId, p.Transaction.OwnerDescription);
+    }
+
+    private static EventDefinition<Guid, string> LogEnlistedTransaction(IDiagnosticsLogger logger)
+        => (EventDefinition<Guid, string>)
+            (((MongoLoggingDefinitions)logger.Definitions).LogEnlistedTransaction
+             ?? NonCapturingLazyInitializer.EnsureInitialized(
+                 ref ((MongoLoggingDefinitions)logger.Definitions).LogEnlistedTransaction,
+                 logger,
+                 static logger => new EventDefinition<Guid, string>(
+                     logger.Options,
+                     MongoEventId.TransactionEnlisted,
+                     LogLevel.Information,
+                     "MongoEventId.TransactionEnlisted",
+                     level => LoggerMessage.Define<Guid, string>(
+                         level,
+                         MongoEventId.TransactionEnlisted,
+                         "Enlisted in transaction {transactionId}, which is owned by {owner}."))));
+
+    /// <summary>
+    /// Logs for the <see cref="MongoEventId.TransactionDetached" /> event.
+    /// </summary>
+    /// <param name="diagnostics">The diagnostics logger to use.</param>
+    /// <param name="transaction">The enlisted <see cref="MongoTransaction"/> that the context detached from.</param>
+    /// <param name="async">Indicates whether the transaction is being disposed asynchronously.</param>
+    internal static void TransactionDetached(
+        this IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> diagnostics,
+        MongoTransaction transaction,
+        bool async)
+    {
+        var definition = LogDetachedTransaction(diagnostics);
+
+        if (diagnostics.ShouldLog(definition))
+        {
+            definition.Log(diagnostics, transaction.TransactionId, transaction.OwnerDescription);
+        }
+
+        if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+        {
+            var eventData = new MongoTransactionEventData(
+                definition,
+                TransactionDetached,
+                transaction,
+                async,
+                DateTimeOffset.UtcNow);
+
+            diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
+        }
+    }
+
+    private static string TransactionDetached(EventDefinitionBase definition, EventData payload)
+    {
+        var d = (EventDefinition<Guid, string>)definition;
+        var p = (MongoTransactionEventData)payload;
+        return d.GenerateMessage(p.Transaction.TransactionId, p.Transaction.OwnerDescription);
+    }
+
+    private static EventDefinition<Guid, string> LogDetachedTransaction(IDiagnosticsLogger logger)
+        => (EventDefinition<Guid, string>)
+            (((MongoLoggingDefinitions)logger.Definitions).LogDetachedTransaction
+             ?? NonCapturingLazyInitializer.EnsureInitialized(
+                 ref ((MongoLoggingDefinitions)logger.Definitions).LogDetachedTransaction,
+                 logger,
+                 static logger => new EventDefinition<Guid, string>(
+                     logger.Options,
+                     MongoEventId.TransactionDetached,
+                     LogLevel.Information,
+                     "MongoEventId.TransactionDetached",
+                     level => LoggerMessage.Define<Guid, string>(
+                         level,
+                         MongoEventId.TransactionDetached,
+                         "Detached from transaction {transactionId}, which is owned by {owner} and was left to it."))));
+
+    /// <summary>
+    /// Logs for the <see cref="MongoEventId.TransactionRollbackSkipped" /> event.
+    /// </summary>
+    /// <param name="diagnostics">The diagnostics logger to use.</param>
+    /// <param name="transaction">The owned <see cref="MongoTransaction"/> that was disposed without a rollback.</param>
+    /// <param name="async">Indicates whether the transaction is being disposed asynchronously.</param>
+    internal static void TransactionRollbackSkipped(
+        this IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> diagnostics,
+        MongoTransaction transaction,
+        bool async)
+    {
+        var definition = LogTransactionRollbackSkipped(diagnostics);
+
+        if (diagnostics.ShouldLog(definition))
+        {
+            definition.Log(diagnostics, transaction.TransactionId);
+        }
+
+        if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+        {
+            var eventData = new MongoTransactionEventData(
+                definition,
+                TransactionRollbackSkipped,
+                transaction,
+                async,
+                DateTimeOffset.UtcNow);
+
+            diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
+        }
+    }
+
+    private static string TransactionRollbackSkipped(EventDefinitionBase definition, EventData payload)
+    {
+        var d = (EventDefinition<Guid>)definition;
+        var p = (MongoTransactionEventData)payload;
+        return d.GenerateMessage(p.Transaction.TransactionId);
+    }
+
+    private static EventDefinition<Guid> LogTransactionRollbackSkipped(IDiagnosticsLogger logger)
+        => (EventDefinition<Guid>)
+            (((MongoLoggingDefinitions)logger.Definitions).LogTransactionRollbackSkipped
+             ?? NonCapturingLazyInitializer.EnsureInitialized(
+                 ref ((MongoLoggingDefinitions)logger.Definitions).LogTransactionRollbackSkipped,
+                 logger,
+                 static logger => new EventDefinition<Guid>(
+                     logger.Options,
+                     MongoEventId.TransactionRollbackSkipped,
+                     LogLevel.Information,
+                     "MongoEventId.TransactionRollbackSkipped",
+                     level => LoggerMessage.Define<Guid>(
+                         level,
+                         MongoEventId.TransactionRollbackSkipped,
+                         "Disposing transaction {transactionId} without rolling it back because the transaction on its session had already ended."))));
 }

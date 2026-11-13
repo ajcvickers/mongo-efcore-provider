@@ -27,7 +27,7 @@ namespace MongoDB.EntityFrameworkCore.Storage;
 /// <summary>
 /// Explicit transaction manager for MongoDB EF Core provider.
 /// </summary>
-public class MongoTransactionManager : IMongoTransactionManager
+public class MongoTransactionManager : IMongoTransactionManager, IDisposable, IAsyncDisposable
 {
     private readonly IMongoClientWrapper _client;
     private readonly DbContext _context;
@@ -50,20 +50,51 @@ public class MongoTransactionManager : IMongoTransactionManager
     /// <inheritdoc />
     public void ResetState()
     {
-        CurrentTransaction?.Dispose();
-        CurrentTransaction = null;
+        // The transaction finishes disposing itself even when its rollback throws (see MongoTransaction.Dispose), so the manager
+        // lets go of it whatever happens and the exception still reaches the caller.
+        try
+        {
+            CurrentTransaction?.Dispose();
+        }
+        finally
+        {
+            CurrentTransaction = null;
+        }
     }
 
     /// <inheritdoc />
     public async Task ResetStateAsync(CancellationToken cancellationToken = new())
     {
-        if (CurrentTransaction != null)
+        try
         {
-            await CurrentTransaction.DisposeAsync().ConfigureAwait(false);
+            if (CurrentTransaction != null)
+            {
+                await CurrentTransaction.DisposeAsync().ConfigureAwait(false);
+            }
         }
-
-        CurrentTransaction = null;
+        finally
+        {
+            CurrentTransaction = null;
+        }
     }
+
+    /// <summary>
+    /// Ends the use of this transaction manager when its context is disposed. As with relational providers, a transaction the context
+    /// owns and has not committed or rolled back is rolled back (and its session disposed), so the server does not keep it open; a
+    /// transaction the context only joined (see <see cref="UseTransaction(IClientSessionHandle)"/>) is detached and left to its owner.
+    /// </summary>
+    /// <remarks>
+    /// This is virtual so that a derived manager can add to it. EF disposes the manager through <see cref="IDisposable"/>, which
+    /// reaches an override but not a method that merely hides this one; call the base implementation from an override.
+    /// </remarks>
+    public virtual void Dispose()
+        => ResetState();
+
+    /// <summary>
+    /// Asynchronous version of <see cref="Dispose"/>.
+    /// </summary>
+    public virtual async ValueTask DisposeAsync()
+        => await ResetStateAsync().ConfigureAwait(false);
 
     /// <inheritdoc />
     public IDbContextTransaction BeginTransaction()
@@ -139,6 +170,39 @@ public class MongoTransactionManager : IMongoTransactionManager
             await acquiredTransaction.DisposeAsync().ConfigureAwait(false);
             CurrentTransaction = null;
         }
+    }
+
+    /// <inheritdoc />
+    public IDbContextTransaction UseTransaction(IClientSessionHandle session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        EnsureNoTransactions();
+        if (!session.IsInTransaction)
+        {
+            throw new InvalidOperationException(
+                "The supplied session does not have an active transaction. Start a transaction on the session with "
+                + "'StartTransaction' before enlisting a context in it.");
+        }
+
+        return CurrentTransaction = MongoTransaction.Enlist(
+            session, _context, "the code that supplied the session", this, _logger);
+    }
+
+    /// <inheritdoc />
+    public IDbContextTransaction UseTransaction(IDbContextTransaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+
+        EnsureNoTransactions();
+        if (transaction is not MongoTransaction owner)
+        {
+            throw new InvalidOperationException(
+                $"Only a MongoDB transaction can be shared with a MongoDB context, but a transaction of type '{transaction.GetType().Name}' was supplied.");
+        }
+
+        return CurrentTransaction = MongoTransaction.Enlist(
+            owner.ActiveSession, _context, owner.OwnerDescription, this, _logger);
     }
 
     private IDbContextTransaction GetRequiredCurrentTransaction()

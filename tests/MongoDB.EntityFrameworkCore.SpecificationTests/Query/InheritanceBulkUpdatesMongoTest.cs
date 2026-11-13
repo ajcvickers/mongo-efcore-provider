@@ -131,7 +131,7 @@ public class InheritanceBulkUpdatesMongoTest : InheritanceBulkUpdatesTestBase<In
         // The asserter begins a rolled-back transaction on one context and runs the bulk operation on a second;
         // enlist the second in the same session so DeleteMany/UpdateMany roll back with it.
         public override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
-            => ((MongoTransactionManager)facade.GetService<IDbContextTransactionManager>()).CurrentTransaction = transaction;
+            => facade.UseTransaction(transaction);
     }
 }
 

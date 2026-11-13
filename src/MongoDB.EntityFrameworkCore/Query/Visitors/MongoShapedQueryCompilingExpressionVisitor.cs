@@ -1647,7 +1647,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                 mongoQueryContext.QueryLogger,
                 additionalState));
 
-            var queryable = transaction == null ? collection.AsQueryable() : collection.AsQueryable(transaction.Session);
+            var queryable = transaction == null ? collection.AsQueryable() : collection.AsQueryable(transaction.ActiveSession);
             var nativeExecutable = new MongoExecutableQuery(
                 Expression.Empty(),
                 resultCardinality,
@@ -1656,7 +1656,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                 new(additionalState))
             {
                 NativePipeline = pipeline,
-                Session = transaction?.Session,
+                Session = transaction?.ActiveSession,
                 Streaming = streaming,
                 // Built from the live context because Deserialize runs during cursor creation (batch 1) and must
                 // see this execution's state manager.
@@ -1666,7 +1666,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             return (mongoQueryContext, nativeExecutable);
         }
 
-        var driverQueryable = transaction == null ? collection.AsQueryable() : collection.AsQueryable(transaction.Session);
+        var driverQueryable = transaction == null ? collection.AsQueryable() : collection.AsQueryable(transaction.ActiveSession);
         var source = driverQueryable.As((IBsonSerializer<TEntity>)bsonSerializerFactory.GetEntitySerializer(entityType));
 
         var innerSources = new Dictionary<IEntityType, Expression>();
@@ -1893,7 +1893,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             (IBsonSerializer<TInner>)bsonSerializerFactory.GetEntitySerializer(innerEntityType));
         var innerQueryable = transaction == null
             ? innerCollection.AsQueryable()
-            : innerCollection.AsQueryable(transaction.Session);
+            : innerCollection.AsQueryable(transaction.ActiveSession);
         return innerQueryable.Expression;
     }
 }
