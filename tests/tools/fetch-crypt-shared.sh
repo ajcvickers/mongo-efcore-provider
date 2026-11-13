@@ -2,7 +2,7 @@
 # Fetch the MongoDB crypt_shared library and the mongocryptd binary the same way Evergreen does (drivers-evergreen-tools'
 # mongodl.py) and print the shell lines that export CRYPT_SHARED_LIB_PATH and MONGODB_BINARIES, so the encryption tests
 # run instead of skipping (the tests use crypt_shared for one provider and mongocryptd for the other).
-# Usage: eval "$(tests/tools/fetch-crypt-shared.sh [version])"     (version defaults to latest-release, e.g. 8.0.11)
+# Usage: eval "$(tests/tools/fetch-crypt-shared.sh [version])"     (version defaults to latest-release, e.g. 9.0.8)
 # Env:   CRYPT_SHARED_CACHE  cache directory (default ~/.cache/mongo-efcore-provider/crypt_shared)
 #        PYTHON              Python interpreter (default: python3, python, py)
 set -euo pipefail

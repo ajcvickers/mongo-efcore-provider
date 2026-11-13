@@ -39,16 +39,16 @@ Also, download the MongoDB shell (`mongosh`) archive from [MongoDB Shell Downloa
 Extract these archives to a location of your choice. For example:
 
 ```zsh
-tar -xvzf mongodb-macos-arm64-enterprise-8.0.11.tgz
-tar -xvzf mongo_crypt_shared_v1-macos-arm64-enterprise-8.0.11.tgz -C mongo_crypt_shared_v1-macos-arm64-enterprise-8.0.11
+tar -xvzf mongodb-macos-arm64-enterprise-9.0.8.tgz
+tar -xvzf mongo_crypt_shared_v1-macos-arm64-enterprise-9.0.8.tgz -C mongo_crypt_shared_v1-macos-arm64-enterprise-9.0.8
 tar -xvzf mongosh-2.5.3-darwin-arm64.zip
 ```
 
 And optionally add the bin folders to your system path. For example, on MacOS in `~/.zprofile`:
 
 ```zsh
-path+=('/Users/arthur.vickers/mongodb/mongodb-macos-aarch64-enterprise-8.0.11/bin')
-path+=('/Users/arthur.vickers/mongodb/mongosh-2.5.3-darwin-arm64/bin')
+path+=('/Users/you/mongodb/mongodb-macos-aarch64-enterprise--9.0.8/bin')
+path+=('/Users/you/mongodb/mongosh-2.5.3-darwin-arm64/bin')
 ```
 
 #### Setting environment variables
@@ -61,7 +61,7 @@ The CSFLE and Queryable Encryption tests need the crypt shared library and the `
 and prints the two `export` lines:
 
 ```zsh
-eval "$(tests/tools/fetch-crypt-shared.sh)"      # latest release; or pass a version, e.g. 8.0.11
+eval "$(tests/tools/fetch-crypt-shared.sh)"      # latest release; or pass a version, e.g. 9.0.8
 ```
 
 Downloads are cached under `~/.cache/mongo-efcore-provider/crypt_shared` (override with `CRYPT_SHARED_CACHE`), so repeat runs, and
@@ -83,8 +83,8 @@ If you installed the server by hand as described above, the tests require two en
 For example, on MacOS in `~/.zprofile`:
 
 ```zsh
-export CRYPT_SHARED_LIB_PATH=/Users/arthur.vickers/mongodb/mongo_crypt_shared_v1-macos-arm64-enterprise-8.0.11/lib/mongo_crypt_v1.dylib
-export MONGODB_BINARIES=/Users/arthur.vickers/mongodb/mongodb-macos-aarch64-enterprise-8.0.11/bin
+export CRYPT_SHARED_LIB_PATH=/Users/you/mongodb/mongo_crypt_shared_v1-macos-arm64-enterprise-9.0.8/lib/mongo_crypt_v1.dylib
+export MONGODB_BINARIES=/Users/you/mongodb/mongodb-macos-aarch64-enterprise--9.0.8/bin
 ```
 
 > Tip: Running tests in an IDE may require setting the environment variables in the IDE test runner.
@@ -105,13 +105,13 @@ The EF Core provider functional tests require two instances of `mongod` to be ru
 Each instance will have its own data folder, so create `data1` and `data2` in some chosen location on your machine. Now start the two instances, using a different port for each. For example, on MacOS:
 
 ```zsh
-./mongodb-macos-aarch64-enterprise-8.0.11/bin/mongod --port 27017 --replSet "rs0" --dbpath data1
+./mongodb-macos-aarch64-enterprise--9.0.8/bin/mongod --port 27017 --replSet "rs0" --dbpath data1
 ```
 
 And:
 
 ```zsh
-./mongodb-macos-aarch64-enterprise-8.0.11/bin/mongod --port 27018 --replSet "rs0" --dbpath data2
+./mongodb-macos-aarch64-enterprise--9.0.8/bin/mongod --port 27018 --replSet "rs0" --dbpath data2
 ```
 
 Finally, create the replica set before starting the tests. Use the MongoDB shell for this. For example:
