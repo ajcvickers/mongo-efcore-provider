@@ -32,6 +32,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
@@ -871,6 +872,50 @@ public class BulkOperationsEventDataTests(TemporaryDatabaseFixture database)
         AssertSequence(collector, "ExecutingBulkUpdate", "BulkUpdateFailed");
         Assert.Same(thrown, Failure(collector, 1).Exception);
         Assert.Same(transaction, db.Database.CurrentTransaction);
+    }
+
+    // The failure's ILogger message and its EventData message (what LogTo and ToString() use) show the exception's message only with
+    // sensitive-data logging on, because a duplicate-key error quotes the document's key. Otherwise they show only the exception's type name.
+    // The payload carries the exception itself either way. Update fails on a unique index, delete on a predicate the server cannot evaluate.
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Failure_text_shows_the_exception_message_only_with_sensitive_logging(bool update, bool sensitive)
+    {
+        var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
+        var collection = update
+            ? SeedUniqueQuantity(nameof(Failure_text_shows_the_exception_message_only_with_sensitive_logging) + update + sensitive)
+            : SeedDivideByZero(nameof(Failure_text_shows_the_exception_message_only_with_sensitive_logging) + update + sensitive);
+        using var collector = BulkEventCollector.Start(collection.CollectionNamespace);
+        using var db = SingleEntityDbContext.Create(
+            collection, loggerFactory, optionsBuilderAction: sensitive ? o => o.EnableSensitiveDataLogging() : null);
+
+        var thrown = update
+            ? await Assert.ThrowsAnyAsync<Exception>(() => SetQuantity(db.Entities, async: true))
+            : await Assert.ThrowsAnyAsync<Exception>(() => Delete(db.Entities.Where(o => 10 / o.Quantity > 1), async: true));
+
+        var (_, _, failedName) = Names(update);
+        AssertSequence(collector, update ? "ExecutingBulkUpdate" : "ExecutingBulkDelete", failedName);
+        var failed = Failure(collector, 1);
+        Assert.Same(thrown, failed.Exception);
+        Assert.Equal(sensitive, failed.LogSensitiveData);
+
+        var logRecord = spyLogger.GetLogRecordByEventId(update ? MongoEventId.BulkUpdateFailed : MongoEventId.BulkDeleteFailed);
+        Assert.Equal(LogLevel.Error, logRecord.LogLevel);
+        foreach (var text in new[] { logRecord.Message, failed.ToString() })
+        {
+            if (sensitive)
+            {
+                Assert.Contains(thrown.Message, text);
+            }
+            else
+            {
+                Assert.Contains(thrown.GetType().Name, text);
+                Assert.DoesNotContain(thrown.Message, text);
+            }
+        }
     }
 }
 
