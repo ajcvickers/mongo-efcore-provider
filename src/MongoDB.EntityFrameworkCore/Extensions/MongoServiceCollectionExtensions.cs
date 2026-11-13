@@ -160,6 +160,7 @@ public static class MongoServiceCollectionExtensions
             .TryAdd<IDatabaseProvider, DatabaseProvider<MongoOptionsExtension>>()
             .TryAdd<IDatabase, MongoDatabaseWrapper>()
             .TryAdd<IDbContextTransactionManager, MongoTransactionManager>()
+            .TryAdd<IExecutionStrategyFactory, MongoExecutionStrategyFactory>()
             .TryAdd<IModelValidator, MongoModelValidator>()
             .TryAdd<IProviderConventionSetBuilder, MongoConventionSetBuilder>()
             .TryAdd<IValueGeneratorSelector, MongoValueGeneratorSelector>()

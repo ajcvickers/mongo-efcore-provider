@@ -579,4 +579,67 @@ internal static class MongoLoggerTransactionExtensions
                          level,
                          MongoEventId.TransactionRollbackSkipped,
                          "Disposing transaction {transactionId} without rolling it back because the transaction on its session had already ended."))));
+
+    /// <summary>
+    /// Logs for the <see cref="MongoEventId.TransactionCommitRetrying" /> event.
+    /// </summary>
+    /// <param name="diagnostics">The diagnostics logger to use.</param>
+    /// <param name="transaction">The owned <see cref="MongoTransaction"/> whose commit is being retried.</param>
+    /// <param name="exception">The exception, carrying the <c>UnknownTransactionCommitResult</c> label, that caused the retry.</param>
+    /// <param name="async">True if this operation is asynchronous, false if it is synchronous.</param>
+    /// <param name="startTime">The time that the commit was started.</param>
+    /// <param name="duration">The elapsed time from when the commit was started.</param>
+    internal static void TransactionCommitRetrying(
+        this IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> diagnostics,
+        MongoTransaction transaction,
+        Exception exception,
+        bool async,
+        DateTimeOffset startTime,
+        TimeSpan duration)
+    {
+        var definition = LogTransactionCommitRetrying(diagnostics);
+
+        if (diagnostics.ShouldLog(definition))
+        {
+            definition.Log(diagnostics, transaction.TransactionId);
+        }
+
+        if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
+        {
+            var eventData = new MongoTransactionErrorEventData(
+                definition,
+                TransactionCommitRetrying,
+                transaction,
+                async,
+                "Commit",
+                exception,
+                startTime,
+                duration);
+
+            diagnostics.DispatchEventData(definition, eventData, diagnosticSourceEnabled, simpleLogEnabled);
+        }
+    }
+
+    private static string TransactionCommitRetrying(EventDefinitionBase definition, EventData payload)
+    {
+        var d = (EventDefinition<Guid>)definition;
+        var p = (MongoTransactionErrorEventData)payload;
+        return d.GenerateMessage(p.Transaction.TransactionId);
+    }
+
+    private static EventDefinition<Guid> LogTransactionCommitRetrying(IDiagnosticsLogger logger)
+        => (EventDefinition<Guid>)
+            (((MongoLoggingDefinitions)logger.Definitions).LogTransactionCommitRetrying
+             ?? NonCapturingLazyInitializer.EnsureInitialized(
+                 ref ((MongoLoggingDefinitions)logger.Definitions).LogTransactionCommitRetrying,
+                 logger,
+                 static logger => new EventDefinition<Guid>(
+                     logger.Options,
+                     MongoEventId.TransactionCommitRetrying,
+                     LogLevel.Warning,
+                     "MongoEventId.TransactionCommitRetrying",
+                     level => LoggerMessage.Define<Guid>(
+                         level,
+                         MongoEventId.TransactionCommitRetrying,
+                         "Retrying the commit of transaction {transactionId} because its outcome is unknown."))));
 }

@@ -129,6 +129,24 @@ Entity Framework Core and MongoDB have a wide variety of features. This provider
   - A client session is not thread-safe: contexts sharing a transaction must be used one at a time, never concurrently
   - Ambient `System.Transactions` (`TransactionScope`, `Database.EnlistTransaction`) and savepoints remain unsupported
   - Joining logs `MongoEventId.TransactionEnlisted` and detaching (disposing the joined context or its transaction) logs `MongoEventId.TransactionDetached`, both at Information and both naming the owner; a joined context logs no commit or rollback events. When a context's own transaction is disposed after something else already ended the session's transaction, `MongoEventId.TransactionRollbackSkipped` records that there was nothing to roll back
+- Retrying transient transaction failures: `UseMongoDB(..., o => o.EnableRetryOnFailure())` (defaults: 6 retries, at most 30 seconds between them) makes EF Core's execution strategy (`context.Database.CreateExecutionStrategy()`, which `SaveChanges` also uses) re-run a unit of work when MongoDB aborts its transaction and labels the error `TransientTransactionError`, for example a write conflict between two concurrent transactions:
+  ```csharp
+  var strategy = db.Database.CreateExecutionStrategy();
+  strategy.Execute(() =>
+  {
+      db.ChangeTracker.Clear();                  // a failed attempt leaves its entities tracked
+      using var transaction = db.Database.BeginTransaction();
+      db.Orders.First().Status = "Shipped";
+      db.SaveChanges();
+      transaction.Commit();
+  });
+  ```
+  - Off by default, so nothing changes for existing applications. Retrying is always from the start of the delegate: the failed transaction was aborted, and MongoDB has no savepoints
+  - Only the `TransientTransactionError` label is retried, not specific error codes. Duplicate-key and other deterministic write errors, `DbUpdateConcurrencyException` and cancellation are never retried, and neither is work that did not run inside a transaction (`AutoTransactionBehavior.Never`, or a `SaveChanges` with a single root entity under `WhenNeeded`): a failure there can leave earlier writes applied, and running them again could apply them twice. The driver's own retryable reads and writes still retry single operations as before
+  - As with relational providers, a retrying strategy rejects a transaction started outside the delegate (`Database.BeginTransaction()` or `Database.UseTransaction(...)` followed by `SaveChanges`): "use the execution strategy returned by `CreateExecutionStrategy()` to execute all the operations in the transaction as a retriable unit". Without `EnableRetryOnFailure` such transactions work as before. `SaveChanges` without an outer transaction needs nothing extra: it retries its own implicit transaction
+  - Each attempt starts a new session and transaction. A context that joined the failed transaction with `UseTransaction` (see above) throws "is no longer active" if used again, instead of writing outside a transaction, so create such contexts and join them inside the delegate
+  - Independently of `EnableRetryOnFailure`, `Commit`/`CommitAsync` on a transaction the context started retries the commit on the same session when MongoDB reports `UnknownTransactionCommitResult` (the commit may or may not have been applied; committing again applies it at most once), for up to two minutes, unless the server's `maxTimeMS` expired. Each retry logs `MongoEventId.TransactionCommitRetrying` at Warning. A transaction the context only joined cannot be committed through EF, so the owner's code decides
+  - Retries of the whole unit of work are logged by EF Core's `CoreEventId.ExecutionStrategyRetrying`. Behavior on a sharded cluster has not been tested
 - `CamelCaseElementNameConvention` for helping map Pascal-cased C# properties to camel-cased BSON elements
 - Type discriminators including `OfType<T>` and `Where(e => e is T)`
 - Support for EF shadow properties and EF.Proxy for navigation traversal

@@ -56,6 +56,8 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
         KmsProviders = copyFrom.KmsProviders;
         QueryableEncryptionSchemaMode = copyFrom.QueryableEncryptionSchemaMode;
         QueryMode = copyFrom.QueryMode;
+        MaxRetryCount = copyFrom.MaxRetryCount;
+        MaxRetryDelay = copyFrom.MaxRetryDelay;
     }
 
     /// <summary>
@@ -251,6 +253,37 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
     }
 
     /// <summary>
+    /// The maximum number of times a unit of work is retried after a transient transaction failure, or <see langword="null"/> if
+    /// retrying is not enabled (the default).
+    /// </summary>
+    public int? MaxRetryCount { get; private set; }
+
+    /// <summary>
+    /// The maximum delay between retries of a unit of work after a transient transaction failure. Only used when
+    /// <see cref="MaxRetryCount"/> is set.
+    /// </summary>
+    public TimeSpan MaxRetryDelay { get; private set; } = DefaultMaxRetryDelay;
+
+    internal static readonly TimeSpan DefaultMaxRetryDelay = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Enables retrying a unit of work, run through the context's execution strategy, that fails with a transient transaction error.
+    /// </summary>
+    /// <param name="maxRetryCount">The maximum number of retry attempts, or 0 to disable retrying.</param>
+    /// <param name="maxRetryDelay">The maximum delay between retries.</param>
+    /// <returns>The <see cref="MongoOptionsExtension"/> to continue chaining configuration.</returns>
+    public virtual MongoOptionsExtension WithRetryOnFailure(int maxRetryCount, TimeSpan maxRetryDelay)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxRetryCount);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxRetryDelay, TimeSpan.Zero);
+
+        var clone = Clone();
+        clone.MaxRetryCount = maxRetryCount == 0 ? null : maxRetryCount;
+        clone.MaxRetryDelay = maxRetryDelay;
+        return clone;
+    }
+
+    /// <summary>
     /// Clones the current <see cref="MongoOptionsExtension"/>.
     /// </summary>
     /// <returns>A new clone.</returns>
@@ -321,6 +354,7 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
             AddDebugInfo(debugInfo, nameof(ClientSettings), Extension.ClientSettings);
             AddDebugInfo(debugInfo, nameof(DatabaseName), Extension.DatabaseName);
             AddDebugInfo(debugInfo, nameof(QueryMode), Extension.QueryMode);
+            AddDebugInfo(debugInfo, nameof(MaxRetryCount), Extension.MaxRetryCount);
         }
 
         /// <inheritdoc/>
@@ -354,6 +388,12 @@ public class MongoOptionsExtension : IDbContextOptionsExtension
             if (Extension.QueryMode != MongoQueryMode.Native)
             {
                 builder.Append("QueryMode=").Append(Extension.QueryMode).Append(' ');
+            }
+
+            if (Extension.MaxRetryCount is { } maxRetryCount)
+            {
+                builder.Append("MaxRetryCount=").Append(maxRetryCount).Append(' ')
+                    .Append("MaxRetryDelay=").Append(Extension.MaxRetryDelay).Append(' ');
             }
 
             return builder.ToString();

@@ -60,6 +60,7 @@ public static class MongoEventId
         TransactionRollbackSkipped,
         BulkDeleteFailed,
         BulkUpdateFailed,
+        TransactionCommitRetrying,
     }
 
     private static EventId MakeDatabaseCommandId(Id id)
@@ -196,6 +197,16 @@ public static class MongoEventId
     ///     <para>This event uses the <see cref="MongoTransactionEventData" /> payload when used with a <see cref="DiagnosticSource" />.</para>
     /// </remarks>
     public static readonly EventId TransactionRollbackSkipped = MakeTransactionId(Id.TransactionRollbackSkipped);
+
+    /// <summary>
+    /// Committing a MongoDB transaction failed with an unknown result (the server's <c>UnknownTransactionCommitResult</c> label), so the
+    /// commit is being retried on the same session. Retrying a commit is safe: it applies the transaction at most once.
+    /// </summary>
+    /// <remarks>
+    ///     <para>This event is in the <see cref="DbLoggerCategory.Database.Transaction" /> category.</para>
+    ///     <para>This event uses the <see cref="MongoTransactionErrorEventData" /> payload when used with a <see cref="DiagnosticSource" />.</para>
+    /// </remarks>
+    public static readonly EventId TransactionCommitRetrying = MakeTransactionId(Id.TransactionCommitRetrying);
 
     private static EventId MakeValidationId(Id id)
         => new((int)id, DbLoggerCategory.Model.Validation.Name + "." + id);
