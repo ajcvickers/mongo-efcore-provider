@@ -197,7 +197,18 @@ public sealed class MongoTransaction(
         transactionLogger.TransactionCommitting(this, false, startTime);
         try
         {
-            session.CommitTransaction();
+            while (true)
+            {
+                try
+                {
+                    session.CommitTransaction();
+                    break;
+                }
+                catch (Exception ex) when (ShouldRetryCommit(ex, stopwatch))
+                {
+                    transactionLogger.TransactionCommitRetrying(this, ex, false, startTime, stopwatch.Elapsed);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -223,7 +234,18 @@ public sealed class MongoTransaction(
         transactionLogger.TransactionCommitting(this, true, startTime);
         try
         {
-            await session.CommitTransactionAsync(cancellationToken).ConfigureAwait(false);
+            while (true)
+            {
+                try
+                {
+                    await session.CommitTransactionAsync(cancellationToken).ConfigureAwait(false);
+                    break;
+                }
+                catch (Exception ex) when (ShouldRetryCommit(ex, stopwatch))
+                {
+                    transactionLogger.TransactionCommitRetrying(this, ex, true, startTime, stopwatch.Elapsed);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -239,6 +261,23 @@ public sealed class MongoTransaction(
             await transactionManager.ResetStateAsync(cancellationToken).ConfigureAwait(false);
         }
     }
+
+    // How long a commit whose result is unknown keeps being retried. This is the limit the driver's own WithTransaction helper uses
+    // and the MongoDB transactions specification recommends.
+    private static readonly TimeSpan CommitRetryTimeLimit = TimeSpan.FromSeconds(120);
+
+    private const string UnknownTransactionCommitResultLabel = "UnknownTransactionCommitResult";
+
+    // When the server reports that it does not know whether the transaction was committed, committing again on the same session is
+    // safe: it applies the transaction at most once. Following the specification, the commit is not retried when the server gave up
+    // because the commit's maxTimeMS elapsed, or once the time limit has passed. Cancellation is never retried.
+    private static bool ShouldRetryCommit(Exception exception, Stopwatch stopwatch)
+        => exception is MongoException mongoException
+           && mongoException.HasErrorLabel(UnknownTransactionCommitResultLabel)
+           && exception is not MongoExecutionTimeoutException { Code: MaxTimeMSExpiredCode }
+           && stopwatch.Elapsed < CommitRetryTimeLimit;
+
+    private const int MaxTimeMSExpiredCode = 50;
 
     /// <inheritdoc />
     public void Rollback()

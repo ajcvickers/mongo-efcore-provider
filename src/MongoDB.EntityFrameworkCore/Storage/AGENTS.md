@@ -39,7 +39,11 @@ Only Storage may call the driver client/collection/session types directly.
   serialization then fails.
 - **`AutoTransactionBehavior.Never` removes optimistic concurrency's atomicity**, not the tokens.
 - **Cross-collection atomicity comes from the transaction**, not `BulkWrite` (one per collection).
-- **Implicit transactions roll back on Dispose**; don't wrap the commit in a swallowing `catch`. Ambient
+- **Implicit transactions roll back on Dispose**; don't wrap the commit in a swallowing `catch`. The one deliberate exception is the
+  commit retry loop in `MongoTransaction.Commit`/`CommitAsync`, which retries only a `MongoException` labelled
+  `UnknownTransactionCommitResult` (not after `MaxTimeMSExpired`, nor after 120 seconds) and rethrows anything else. The opt-in
+  retrying execution strategy (`EnableRetryOnFailure`) retries only a `TransientTransactionError`, and only work that ran in a
+  transaction. Ambient
   `System.Transactions` are rejected; an owned `MongoTransaction` follows the `Active → Committed | RolledBack | Failed →
   Disposed` state machine, except that one whose session transaction was ended elsewhere goes `Active → Disposed`, and a non-owned
   one only goes `Active → Disposed` (it never commits or rolls back).

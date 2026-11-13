@@ -27,7 +27,7 @@ namespace MongoDB.EntityFrameworkCore.Storage;
 /// <summary>
 /// Explicit transaction manager for MongoDB EF Core provider.
 /// </summary>
-public class MongoTransactionManager : IMongoTransactionManager, IDisposable, IAsyncDisposable
+public class MongoTransactionManager : IMongoTransactionManager, ITransactionEnlistmentManager, IDisposable, IAsyncDisposable
 {
     private readonly IMongoClientWrapper _client;
     private readonly DbContext _context;
@@ -46,6 +46,24 @@ public class MongoTransactionManager : IMongoTransactionManager, IDisposable, IA
         _context = currentContext.Context;
         _logger = logger;
     }
+
+    // EF Core's execution strategies, and Database.GetEnlistedTransaction, ask the transaction manager for the ambient
+    // System.Transactions transaction it is enlisted in, so it has to implement ITransactionEnlistmentManager even though
+    // ambient transactions are not supported and there never is one.
+
+    /// <summary>
+    /// Ambient <see cref="System.Transactions.Transaction"/>s are not supported.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    public void EnlistTransaction(System.Transactions.Transaction? transaction)
+        => throw new NotSupportedException("The current provider doesn't support System.Transaction.");
+
+    /// <summary>
+    /// The ambient <see cref="System.Transactions.Transaction"/> this context is enlisted in, which is always <see langword="null"/>
+    /// because ambient transactions are not supported.
+    /// </summary>
+    public System.Transactions.Transaction? EnlistedTransaction
+        => null;
 
     /// <inheritdoc />
     public void ResetState()

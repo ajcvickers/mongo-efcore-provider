@@ -52,6 +52,7 @@ internal class MongoLoggingDefinitions : LoggingDefinitions
     public EventDefinitionBase? LogEnlistedTransaction;
     public EventDefinitionBase? LogDetachedTransaction;
     public EventDefinitionBase? LogTransactionRollbackSkipped;
+    public EventDefinitionBase? LogTransactionCommitRetrying;
 
     public EventDefinitionBase? LogRecommendedMinMaxRangeMissing;
     public EventDefinitionBase? LogEncryptedNullablePropertyEncountered;

@@ -13,6 +13,7 @@
 * limitations under the License.
 */
 
+using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -50,6 +51,38 @@ public class MongoDbContextOptionsBuilder : IMongoDbContextOptionsBuilderInfrast
         var extension = (OptionsBuilder.Options.FindExtension<MongoOptionsExtension>()
                          ?? new MongoOptionsExtension())
             .WithQueryMode(queryMode);
+        ((IDbContextOptionsBuilderInfrastructure)OptionsBuilder).AddOrUpdateExtension(extension);
+        return this;
+    }
+
+    /// <summary>
+    /// Enables retrying a unit of work, run through <c>Database.CreateExecutionStrategy()</c> (which <c>SaveChanges</c> does itself),
+    /// when MongoDB reports a <c>TransientTransactionError</c>, for example a write conflict between two concurrent transactions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only work that ran inside a transaction is retried, and always from the start. Duplicate-key and other deterministic write
+    /// errors, <see cref="DbUpdateConcurrencyException"/> and cancellation are not retried.
+    /// </para>
+    /// <para>
+    /// As with relational providers, a transaction started outside the execution strategy (for example with
+    /// <c>Database.BeginTransaction()</c> or <c>Database.UseTransaction(...)</c>) is rejected when a retrying strategy is used: run the
+    /// whole unit of work, including starting the transaction, inside <c>strategy.Execute</c>. A retry starts a new session and
+    /// transaction, so a context that had joined the failed transaction must join the new one inside the delegate.
+    /// </para>
+    /// <para>
+    /// Retrying the commit of a transaction whose outcome is unknown (<c>UnknownTransactionCommitResult</c>) does not depend on this
+    /// option.
+    /// </para>
+    /// </remarks>
+    /// <param name="maxRetryCount">The maximum number of retry attempts. The default is 6. 0 disables retrying.</param>
+    /// <param name="maxRetryDelay">The maximum delay between retries. The default is 30 seconds.</param>
+    /// <returns>This builder, so that further configuration can be chained.</returns>
+    public virtual MongoDbContextOptionsBuilder EnableRetryOnFailure(int maxRetryCount = 6, TimeSpan? maxRetryDelay = null)
+    {
+        var extension = (OptionsBuilder.Options.FindExtension<MongoOptionsExtension>()
+                         ?? new MongoOptionsExtension())
+            .WithRetryOnFailure(maxRetryCount, maxRetryDelay ?? MongoOptionsExtension.DefaultMaxRetryDelay);
         ((IDbContextOptionsBuilderInfrastructure)OptionsBuilder).AddOrUpdateExtension(extension);
         return this;
     }
