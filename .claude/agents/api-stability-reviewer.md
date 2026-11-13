@@ -1,6 +1,6 @@
 ---
 name: api-stability-reviewer
-description: Cross-cutting public-API / breaking-changes reviewer. Runs on every branch review to flag changes to the public surface — method signatures, defaults, attribute lists, visibility, exception types, nullability, enum members, interface shape, MongoAnnotationNames keys, and observable behavior of unchanged signatures. Boundary with public-api-reviewer: that owns Extensions/Infrastructure/Design specifically; this owns the lens across the whole diff and catches breaks that span areas.
+description: Cross-cutting public-API / breaking-changes reviewer. Runs on every branch review to flag changes to the public surface — method signatures, defaults, attribute lists, visibility, exception types, nullability, enum members, interface shape, MongoAnnotationNames keys, and observable behavior of unchanged signatures. Boundary with public-api-reviewer — that owns Extensions/Infrastructure/Design specifically; this owns the lens across the whole diff and catches breaks that span areas.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

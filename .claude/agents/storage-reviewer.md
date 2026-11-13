@@ -1,6 +1,6 @@
 ---
 name: storage-reviewer
-description: Reviews changes to the Storage area — client/database wrappers, update pipeline (MongoUpdate, MongoUpdateBatch), transactions, EnsureCreated/index creation, type mapping, MongoDB-specific value converters, row-version handling. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Storage/. Boundary with public-api-reviewer: options/extension construction lives in Infrastructure; this owns the runtime wrapper that consumes them. Boundary with serialization-reviewer: that owns IBsonSerializer; this looks them up via BsonSerializerFactory and writes BSON.
+description: Reviews changes to the Storage area — client/database wrappers, update pipeline (MongoUpdate, MongoUpdateBatch), transactions, EnsureCreated/index creation, type mapping, MongoDB-specific value converters, row-version handling. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Storage/. Boundary with public-api-reviewer — options/extension construction lives in Infrastructure; this owns the runtime wrapper that consumes them. Boundary with serialization-reviewer — that owns IBsonSerializer; this looks them up via BsonSerializerFactory and writes BSON.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

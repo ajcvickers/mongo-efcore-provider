@@ -1,6 +1,6 @@
 ---
 name: diagnostics-reviewer
-description: Reviews changes to Diagnostics — MongoEventId registry, MongoLoggingDefinitions, logger extension methods, EventData payloads, MQL redaction. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Diagnostics/, or when log/event call sites change in Storage or Query. Boundary with security-reviewer: that owns redaction across the whole diff; this owns the redaction *mechanism* and event-ID stability.
+description: Reviews changes to Diagnostics — MongoEventId registry, MongoLoggingDefinitions, logger extension methods, EventData payloads, MQL redaction. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Diagnostics/, or when log/event call sites change in Storage or Query. Boundary with security-reviewer — that owns redaction across the whole diff; this owns the redaction *mechanism* and event-ID stability.
 tools: Read, Grep, Glob, Bash
 model: haiku
 ---

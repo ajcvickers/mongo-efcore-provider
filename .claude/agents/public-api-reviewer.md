@@ -1,6 +1,6 @@
 ---
 name: public-api-reviewer
-description: Reviews changes to Extensions, Infrastructure, and Design — public configuration entry points (UseMongoDB, AddMongoDB), MongoOptionsExtension, model-building fluent extensions, runtime database-facade extensions, queryable-encryption schema infrastructure, design-time services. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Extensions/, Infrastructure/, or Design/. Boundary with metadata-reviewer: new annotation keys belong there; the builder methods that surface them are reviewed here.
+description: Reviews changes to Extensions, Infrastructure, and Design — public configuration entry points (UseMongoDB, AddMongoDB), MongoOptionsExtension, model-building fluent extensions, runtime database-facade extensions, queryable-encryption schema infrastructure, design-time services. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Extensions/, Infrastructure/, or Design/. Boundary with metadata-reviewer — new annotation keys belong there; the builder methods that surface them are reviewed here.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

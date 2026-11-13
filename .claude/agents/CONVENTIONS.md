@@ -1,6 +1,6 @@
 # Reviewer conventions (shared)
 
-Referenced by every `*-reviewer` agent and by `review-ef-core-provider`'s dispatch prompts; point here instead of restating.
+Referenced by every `*-reviewer` agent and by `review-provider`'s dispatch prompts; point here instead of restating.
 
 ## Report shape
 
@@ -31,4 +31,4 @@ Defer to `[external-action]` only when a repro genuinely can't run locally: no A
 
 Reviewers may narrow or extend this in their own file.
 
-**Clean up.** Delete every file you created to reproduce a finding; leave the working tree as found. Never commit a verification test. Reviewers have no `Edit`/`Write` tool beyond that; fixes are applied by the parent/fixer.
+**Clean up.** Delete every file you created to reproduce a finding; leave the working tree as found. The tree may contain the user's uncommitted work and other reviewers run in it concurrently: never modify, stash, reset, check out or delete a pre-existing file, and name repro files `Review_<your-reviewer-name>_*` so they are easy to find and remove. If a build fails on a lock or on a file you did not write, retry once, then report `[external-action]`. Never commit a verification test. Reviewers have no `Edit`/`Write` tool beyond that; fixes are applied by the parent/fixer.

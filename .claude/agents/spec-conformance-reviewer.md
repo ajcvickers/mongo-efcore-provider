@@ -1,6 +1,6 @@
 ---
 name: spec-conformance-reviewer
-description: Reviews changes to test infrastructure and the SpecificationTests project — shared fixtures (TestServer, TemporaryDatabaseFixture, TestMqlLoggerFactory), Specification-tests inheritance pattern, EF8/EF9/EF10 `#if` discipline in tests, MQL-assertion conventions, test isolation and parallelization. Use proactively when modifying tests/MongoDB.EntityFrameworkCore.SpecificationTests/, tests/MongoDB.EntityFrameworkCore.FunctionalTests/Utilities/, or tests/MongoDB.EntityFrameworkCore.FunctionalTests/Usings.cs. Boundary with the per-area reviewers: per-area test folders (Query/, Storage/, etc.) are reviewed by the matching area reviewer.
+description: Reviews changes to test infrastructure and the SpecificationTests project — shared fixtures (TestServer, TemporaryDatabaseFixture, TestMqlLoggerFactory), Specification-tests inheritance pattern, EF8-EF11 `#if` discipline in tests, MQL-assertion conventions, test isolation and parallelization. Use proactively when modifying tests/MongoDB.EntityFrameworkCore.SpecificationTests/, tests/MongoDB.EntityFrameworkCore.FunctionalTests/Utilities/, or tests/MongoDB.EntityFrameworkCore.FunctionalTests/Usings.cs. Boundary with the per-area reviewers — per-area test folders (Query/, Storage/, etc.) are reviewed by the matching area reviewer.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---
@@ -11,12 +11,12 @@ Read `tests/MongoDB.EntityFrameworkCore.SpecificationTests/AGENTS.md` first (con
 
 ## Also check
 
-- New tests compile under all three EF configurations (`#if EF8`, `#if EF8 || EF9`, `#if !EF8 && !EF9`).
+- New tests compile under all four EF configurations (`#if EF8`, `#if EF8 || EF9`, `#if !EF8 && !EF9`, `#if EF10 || EF11`, `#if EF11`); SpecificationTests is xUnit v2 for EF8-EF10 and xUnit v3 for EF11.
 - Encryption tests gate on `CRYPT_SHARED_LIB_PATH`, never a baked-in path.
 - A new `[XUnitCollection]` or moving tests between collections preserves the original isolation intent.
 
 ## Escalate to user when
 
-- Test parallelization is enabled for the Specification tests, or CI runs the test projects concurrently against a MongoDB 5.0/6.0 server (snapshot errors, code 246); or a spec test is skipped without a "permanently unsupported" reason.
+- Test parallelization is enabled for the Specification tests (`SpecificationTests/Usings.cs` disables it with `DisableTestParallelization` on xUnit v2 and `Parallelization(Mode = None)` on xUnit v3; removing either is a regression), or CI runs the test projects concurrently against a MongoDB 5.0/6.0 server (snapshot errors, code 246); or a spec test is skipped without a "permanently unsupported" reason.
 - `TestServer.GetOrInitializeTestServerAsync()` connection priority, unique-name generation or the per-assembly/EF-version prefixes in either `TestDatabaseNamer`, or the `DatabaseCleaner.CleanDatabase` skip-fact changes.
 - The upstream EF version in `Versions.props` is bumped.

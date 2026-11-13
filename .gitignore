@@ -69,7 +69,7 @@ packages
 /tools
 /evergreen/krb5.conf.empty
 
-# /review-ef-core-provider skill iteration reports
+# /review-provider skill iteration reports
 review*.md
 
 # BenchmarkDotNet output (written to the process CWD — repo root when run via `dotnet run --project`)

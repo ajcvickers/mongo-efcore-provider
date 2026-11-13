@@ -1,6 +1,6 @@
 ---
 name: security-reviewer
-description: Cross-cutting security reviewer. Runs on every branch review to flag credential exposure, TLS misconfiguration, sensitive-data logging without the redaction gate, KMS plumbing leaks, RNG weakness, and missing log redaction. Boundary with encryption-reviewer: that owns CSFLE / Queryable Encryption feature correctness; this owns secret-handling hygiene wherever it appears.
+description: Cross-cutting security reviewer. Runs on every branch review to flag credential exposure, TLS misconfiguration, sensitive-data logging without the redaction gate, KMS plumbing leaks, RNG weakness, and missing log redaction. Boundary with encryption-reviewer — that owns CSFLE / Queryable Encryption feature correctness; this owns secret-handling hygiene wherever it appears.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

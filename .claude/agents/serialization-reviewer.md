@@ -1,6 +1,6 @@
 ---
 name: serialization-reviewer
-description: Reviews changes to Serializers and ChangeTracking — BsonSerializerFactory, EntitySerializer, ValueConverterSerializer, MongoEFDiscriminator, and the family of ValueComparer<T> for collections and string-keyed dictionaries. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Serializers/ or src/MongoDB.EntityFrameworkCore/ChangeTracking/. Boundary with storage-reviewer: that owns ValueConverter types and value-conversion selectors; this owns how serializers wrap converters and how change-tracking compares values.
+description: Reviews changes to Serializers and ChangeTracking — BsonSerializerFactory, EntitySerializer, ValueConverterSerializer, MongoEFDiscriminator, and the family of ValueComparer<T> for collections and string-keyed dictionaries. Use proactively when modifying anything under src/MongoDB.EntityFrameworkCore/Serializers/ or src/MongoDB.EntityFrameworkCore/ChangeTracking/. Boundary with storage-reviewer — that owns ValueConverter types and value-conversion selectors; this owns how serializers wrap converters and how change-tracking compares values.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

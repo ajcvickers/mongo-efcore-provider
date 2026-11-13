@@ -556,7 +556,7 @@ EF8/EF9 versus EF10 differ in the `LeftJoin` shim, GroupJoin composite-key guard
 - **MQL shape does not prove native.** Use `MongoQueryMode.NativeOnly`, or set `MONGODB_EF_QUERY_MODE=NativeOnly` to flip every spec and functional context.
 - `tests/tools/native-parity-diff.sh` runs the suites under `DriverLinq` and `NativeOnly` and diffs outcomes: *regress* means it passes on the driver but fails natively, *improve* is the reverse.
 - Baselines regenerate with `EF_TEST_REWRITE_BASELINES=1` and a tight `--filter`. See `tests/.../SpecificationTests/AGENTS.md`.
-- Agents: `.claude/agents/query-reviewer.md` plus the cross-cutting reviewers run via `/review-ef-core-provider`.
+- Agents: `.claude/agents/query-reviewer.md` plus the cross-cutting reviewers run via `/review-provider`.
 
 ---
 
