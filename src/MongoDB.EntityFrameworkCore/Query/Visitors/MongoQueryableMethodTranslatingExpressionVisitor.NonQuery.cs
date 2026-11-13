@@ -241,6 +241,22 @@ internal sealed partial class MongoQueryableMethodTranslatingExpressionVisitor
             isSelfReferencing = propertySelector.Parameters.Any(p => value.ReferencesParameter(p));
         }
 
+        // A non-deterministic call (Guid.NewGuid, Random.Next, ...) in a value LAMBDA (`o => Guid.NewGuid().ToString()`) reads as a
+        // per-document value, but is evaluated once per execution, by the client-side compile-and-evaluate fallback or by the
+        // driver's partial evaluator, and written to every matched document (#70). The non-lambda form
+        // (`SetProperty(o => o.Status, Guid.NewGuid().ToString())`) is not checked: it reads as one value, and on EF10+ the C# compiler
+        // evaluates it inside the caller's delegate, so the provider only ever sees the finished constant. Checking it on EF9 alone
+        // would make the same code behave differently per EF version.
+        if (IsQuotedLambda(valueExpression) && NonDeterministicCalls.FindFirst(value) is { } nonDeterministicCall)
+        {
+            AddTranslationErrorDetails(
+                ComplexTypeRefusals.BulkSetterNonDeterministicValue(
+                    $"{property.DeclaringType.DisplayName()}.{property.Name}",
+                    $"{nonDeterministicCall.Method.DeclaringType!.Name}.{nonDeterministicCall.Method.Name}"));
+            throw MongoBulkPlanBuilder.NonQueryTranslationFailed(
+                ExpressionShapePrinter.PrintQuery(mongoQueryExpression.CapturedExpression), TranslationErrorDetails);
+        }
+
         // A self-referencing value over an OfType<TDerived>() source: EF types the setter's lambda parameter as TDerived, but the value is
         // rendered against the root entity type, so the parameter would stay free in the rendered expression and the driver fails with
         // an opaque "Expression not supported: e." Refused with the real limitation instead. A constant setter is unaffected.

@@ -60,6 +60,14 @@ internal static class NonDeterministicCalls
         return finder.Found;
     }
 
+    /// <summary>The first call in <paramref name="node"/> for which <see cref="IsNonDeterministic"/> holds, or <see langword="null"/>.</summary>
+    public static MethodCallExpression? FindFirst(Expression node)
+    {
+        var finder = new Finder();
+        finder.Visit(node);
+        return finder.First;
+    }
+
     /// <summary>
     /// Throws for the first non-deterministic call anywhere in <paramref name="tree"/>. Run once per query, before the
     /// native/fallback decision, so every mode refuses alike: the translator runs speculatively under several binders
