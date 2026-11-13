@@ -20,8 +20,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Complex-property LEAVES composed with set operations, <c>Distinct</c>, entity-level operators, paging, global query
 /// filters and <c>Include</c>, over the <see cref="Composition"/> model: two complex properties of one CLR type stored

@@ -26,8 +26,6 @@ using MongoDB.EntityFrameworkCore.Infrastructure;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 
-#nullable enable
-
 /// <summary>
 /// Leaf spellings over an owned-then-complex chain (owned <c>Home</c> holding a <c>[ComplexType]</c> struct
 /// <c>Spot</c>). Each runs NativeOnly + Native + DriverLinq against a hand-written answer, or, where the projection

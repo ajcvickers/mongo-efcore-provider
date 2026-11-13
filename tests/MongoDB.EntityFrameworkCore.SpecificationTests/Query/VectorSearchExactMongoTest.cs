@@ -324,7 +324,7 @@ Books.{ "$vectorSearch" : { "path" : "Floats", "limit" : 4, "index" : "FloatsInd
     {
         await using var context = Fixture.CreateContext();
         var inputVector = new[] { 0.33f, -0.52f };
-        var queryable = context.Set<Book>().VectorSearch(e => e.Preface.Floats, inputVector, limit: 4, new(NumberOfCandidates: 10, Exact: true));
+        var queryable = context.Set<Book>().VectorSearch(e => e.Preface!.Floats, inputVector, limit: 4, new(NumberOfCandidates: 10, Exact: true));
 
         Assert.Contains(
             "The option 'Exact' is set to 'true' on a call to 'VectorQuery', indicating an exact nearest neighbour (ENN) search, and the number of candidates has also been set.",

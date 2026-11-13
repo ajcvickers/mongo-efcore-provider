@@ -7,7 +7,10 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <NoWarn>EF1001,CS8602,CS8618</NoWarn>
+    <!-- CS8618 stays off for the tests: ~730 properties on EF entity/model POCOs are populated by EF or the test itself, and
+         `= null!` or `required` on each would only be noise. CS8602 and the other nullable warnings are on. -->
+    <NoWarn>EF1001,CS8618</NoWarn>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

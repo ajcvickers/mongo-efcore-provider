@@ -21,8 +21,6 @@ using MongoDB.Driver;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Change tracking, update and delete of entities with complex properties: what EF reports as modified, what the
 /// provider sends in the <c>update</c> command's <c>$set</c>, and what ends up stored.

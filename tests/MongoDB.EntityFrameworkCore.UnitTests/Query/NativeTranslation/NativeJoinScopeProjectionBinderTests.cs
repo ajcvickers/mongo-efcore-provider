@@ -757,7 +757,7 @@ public class NativeJoinScopeProjectionBinderTests
         var mongoQ = TranslateJoinQuery((owners, orders) =>
             owners.GroupJoin(orders, o => o.Id, r => r.OwnerId, (o, rs) => new { o, rs })
                 .SelectMany(x => x.rs.DefaultIfEmpty(), (x, r) => new { x.o, r })
-                .Select(x => x.r.Total));
+                .Select(x => x.r!.Total));
 
         Assert.NotNull(mongoQ.Select.JoinScope);
         Assert.Equal(
@@ -774,7 +774,7 @@ public class NativeJoinScopeProjectionBinderTests
         var mongoQ = TranslateJoinQuery((owners, orders) =>
             orders.GroupJoin(owners, r => r.OwnerId, o => o.Id, (r, os) => new { r, os })
                 .SelectMany(x => x.os.DefaultIfEmpty(), (x, o) => new { x.r, o })
-                .Select(x => x.o.Name));
+                .Select(x => x.o!.Name));
 
         Assert.NotNull(mongoQ.Select.JoinScope);
         Assert.Equal(

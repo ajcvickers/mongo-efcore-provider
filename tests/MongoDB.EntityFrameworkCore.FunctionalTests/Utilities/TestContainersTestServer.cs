@@ -23,7 +23,7 @@ public class TestContainersTestServer : TestServer
     private MongoDbAtlasContainer? _container;
 
     public override string ConnectionString
-        => _container.GetConnectionString();
+        => _container!.GetConnectionString();
 
     public override MongoClient Client
         => _client!;

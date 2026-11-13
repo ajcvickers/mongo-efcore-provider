@@ -23,8 +23,6 @@ using MongoDB.EntityFrameworkCore.Extensions;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 
-#nullable enable
-
 /// <summary>
 /// A constant/captured <c>SetProperty</c> value must be stored as DATA. In the pipeline form of an update (used as soon as
 /// one setter reads the row, <c>SetProperty(c =&gt; c.Rank, c =&gt; c.Rank + 1)</c>) <c>$set</c> evaluates its values as

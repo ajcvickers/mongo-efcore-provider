@@ -250,7 +250,7 @@ CustomerGroup.{ "$lookup" : { "from" : "Customer", "localField" : "RequiredCusto
         // The fixture's Address sorter dereferences null, and this query yields a null row for a group without an optional customer.
         await AssertQuery(
             async,
-            ss => from cg in ss.Set<CustomerGroup>() select cg.OptionalCustomer.ShippingAddress,
+            ss => from cg in ss.Set<CustomerGroup>() select cg.OptionalCustomer!.ShippingAddress,
             e => e?.ZipCode!,
             assertOrder: false);
 

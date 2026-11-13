@@ -23,8 +23,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// A compiled query whose argument is an ENTITY (<c>EF.CompileQuery((db, C o) =&gt; ... c.Address == o.Address)</c>): on
 /// EF8/EF9 EF passes <c>o</c> as a plain <see cref="System.Linq.Expressions.ParameterExpression"/> named

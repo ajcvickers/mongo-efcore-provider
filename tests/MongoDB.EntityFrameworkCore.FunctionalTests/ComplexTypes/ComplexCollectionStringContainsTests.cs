@@ -25,8 +25,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// <c>hay.Contains(s.City)</c> with a captured STRING <c>hay</c> is a substring test, not membership in a list. The bulk
 /// allow-list took it for a "non-nullable list's Contains" (a <see cref="string"/> is an <c>IEnumerable&lt;char&gt;</c> of a

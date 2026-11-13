@@ -24,8 +24,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// A whole complex value compared with <c>null</c>, with a captured or constant instance, and with another stored complex
 /// value: member-wise equality (a conjunction of leaf equalities, recursing into nested complex values) with C# null

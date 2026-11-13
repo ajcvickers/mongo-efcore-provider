@@ -17,8 +17,6 @@ using MongoDB.Bson;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 public struct GeoPoint
 {
     public double Lat { get; set; }

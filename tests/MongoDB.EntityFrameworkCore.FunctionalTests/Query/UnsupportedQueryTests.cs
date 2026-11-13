@@ -111,7 +111,7 @@ public sealed class UnsupportedQueriesTests(ReadOnlySampleGuidesFixture database
     [Fact]
     public void SelectMany_cannot_translate_array()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => _db.Planets.SelectMany(p => p.mainAtmosphere).ToList());
+        var ex = Assert.Throws<InvalidOperationException>(() => _db.Planets.SelectMany(p => p.mainAtmosphere!).ToList());
 
         Assert.Contains("p => p.mainAtmosphere", ex.Message);
     }

@@ -619,9 +619,9 @@ public abstract class VectorSearchMongoTestBase
         var inputVector = new[] { 0.33f, -0.52f };
 
         var queryable = specifyIndex
-            ? context.Set<Book>().VectorSearch(e => e.Preface.Floats, inputVector, limit: 4,
+            ? context.Set<Book>().VectorSearch(e => e.Preface!.Floats, inputVector, limit: 4,
                 new() { IndexName = "FloatsVectorIndex" })
-            : context.Set<Book>().VectorSearch(e => e.Preface.Floats, inputVector, limit: 4);
+            : context.Set<Book>().VectorSearch(e => e.Preface!.Floats, inputVector, limit: 4);
 
         var booksFromStore = async ? await queryable.ToListAsync(TestCancellation.Token) : queryable.ToList();
 
@@ -644,7 +644,7 @@ public abstract class VectorSearchMongoTestBase
         var inputVector = new[] { 0.33f, -0.52f };
 
         var queryable = context.Set<Book>()
-            .VectorSearch(e => e.Preface.Floats, e => e.Preface.IsPublished, inputVector, limit: 4,
+            .VectorSearch(e => e.Preface!.Floats, e => e.Preface!.IsPublished, inputVector, limit: 4,
                 CreateQueryOptions("FloatsVectorIndex"));
 
         var booksFromStore = async ? await queryable.ToListAsync(TestCancellation.Token) : queryable.ToList();
@@ -667,8 +667,8 @@ public abstract class VectorSearchMongoTestBase
 
         var queryable = context.Set<Book>()
             .VectorSearch(
-                e => e.Preface.Floats,
-                e => e.Preface.Comments.Contains("Froody") && (e.Preface.Pages > 500 || e.Preface.IsPublished),
+                e => e.Preface!.Floats,
+                e => e.Preface!.Comments.Contains("Froody") && (e.Preface.Pages > 500 || e.Preface.IsPublished),
                 inputVector, limit: 4,
                 CreateQueryOptions("FloatsVectorIndex"));
 

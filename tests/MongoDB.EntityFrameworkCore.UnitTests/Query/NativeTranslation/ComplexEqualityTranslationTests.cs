@@ -26,8 +26,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.UnitTests.Query.NativeTranslation;
 
-#nullable enable
-
 /// <summary>
 /// The native rendering of whole complex-value equality (<c>MongoExpressionTranslator.ComplexEquality.cs</c>): null checks
 /// and constant member-wise equality stay in the index-usable query dialect; stored-to-stored equality is <c>$expr</c> over

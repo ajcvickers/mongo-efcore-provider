@@ -22,8 +22,6 @@ using MongoDB.EntityFrameworkCore.Infrastructure;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 #if !EF8 && !EF9
 /// <summary>
 /// An optional complex property whose members are all nullable has a discriminator (EF10 <c>HasDiscriminator()</c>), the way

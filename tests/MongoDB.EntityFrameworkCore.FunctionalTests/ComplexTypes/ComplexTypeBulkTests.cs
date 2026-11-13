@@ -28,8 +28,6 @@ using MongoDB.EntityFrameworkCore.Metadata;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// <c>ExecuteUpdate</c>/<c>ExecuteDelete</c> over single complex properties (bulk operations run on the driver-LINQ bridge:
 /// owner decision). Every row is asserted on the RAW stored documents (each untouched document must equal its seed exactly)

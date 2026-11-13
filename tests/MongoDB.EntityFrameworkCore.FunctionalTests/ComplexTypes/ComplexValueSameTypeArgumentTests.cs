@@ -23,8 +23,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Several whole complex values of the SAME CLR type, stored alike, in one projection: every
 /// construction shape (positional constructor, record, member-init DTO, anonymous type, tuple), over required, optional

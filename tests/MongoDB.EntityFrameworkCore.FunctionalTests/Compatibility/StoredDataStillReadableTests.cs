@@ -58,7 +58,7 @@ public class StoredDataStillReadableTests(TemporaryDatabaseFixture database)
         Assert.Equal(_nonNullables.Uint, read.Uint);
         Assert.Equal(_nonNullables.Ulong, read.Ulong);
         Assert.Equal(_nonNullables.Ushort, read.Ushort);
-        Assert.Equal(_nonNullables.OwnedSingle.Name, read.OwnedSingle.Name);
+        Assert.Equal(_nonNullables.OwnedSingle.Name, read.OwnedSingle!.Name);
         Assert.Equal(_nonNullables.OwnedMany, read.OwnedMany);
     }
 

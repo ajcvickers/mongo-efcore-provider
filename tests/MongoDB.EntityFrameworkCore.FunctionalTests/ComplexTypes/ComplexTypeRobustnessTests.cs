@@ -25,8 +25,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Robustness of complex types deep nesting, unusual element names, malformed stored BSON, one CLR type at
 /// several paths, BSON attributes, and the leaf type matrix. Every query runs in all three modes against a hand-written

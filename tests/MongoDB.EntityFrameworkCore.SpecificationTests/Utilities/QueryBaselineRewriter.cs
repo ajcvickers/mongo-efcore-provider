@@ -5,8 +5,6 @@
 // the original skipped over the old call by character count from whatever Roslyn node contained the line start, so a line number that did not
 // start an AssertMql call (stale build, off by one, another process) silently damaged the file.
 
-#nullable enable
-
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;

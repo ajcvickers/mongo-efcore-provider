@@ -134,14 +134,14 @@ public sealed class ExplicitEncryptionTests : EncryptionTestsBase, IDisposable
     }
 
     private BsonBinaryData EncryptString(string value, Guid key, bool deterministic)
-        => _clientEncryption.Encrypt(new BsonString(value),
+        => _clientEncryption!.Encrypt(new BsonString(value),
             new EncryptOptions(
                 algorithm: deterministic
                     ? EncryptionAlgorithm.AEAD_AES_256_CBC_HMAC_SHA_512_Deterministic
                     : EncryptionAlgorithm.AEAD_AES_256_CBC_HMAC_SHA_512_Random, keyId: key), CancellationToken.None);
 
     private string DecryptString(byte[] encryptedValue)
-        => _clientEncryption.Decrypt(new BsonBinaryData(encryptedValue, BsonBinarySubType.Encrypted), CancellationToken.None).AsString;
+        => _clientEncryption!.Decrypt(new BsonBinaryData(encryptedValue, BsonBinarySubType.Encrypted), CancellationToken.None).AsString;
 
     public List<EncryptedCard> CreateEncryptedCards(
         List<UnencryptedCard> unencryptedCards,

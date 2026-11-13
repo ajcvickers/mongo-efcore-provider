@@ -22,8 +22,6 @@ using MongoDB.Driver;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Optional complex properties and complex collections (EF10 only; EF8/EF9 reject optional complex properties and
 /// have no <c>ComplexCollection</c>): what is stored on insert, what EF reports as changed, what the provider sends

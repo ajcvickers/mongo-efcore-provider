@@ -21,8 +21,6 @@ using MongoDB.Driver;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Optimistic concurrency with complex properties. A concurrency token or row version on a member of a complex type is
 /// rejected by the model validator: before that check, EF accepted it on EF8, EF9 and EF10 and the provider ignored it

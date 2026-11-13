@@ -44,7 +44,7 @@ public class MongoDatabaseCreatorTests
 
         var planets = db.Set<Planet>().ToList();
         Assert.Single(planets);
-        Assert.Equal("YELLOW TAXI", planets[0].parkingCar.reg);
+        Assert.Equal("YELLOW TAXI", planets[0].parkingCar!.reg);
         Assert.Equal(2, planets[0].parkingCars.Count);
         Assert.Contains("RED BUS", planets[0].parkingCars.Select(e => e.reg));
         Assert.Contains("PURPLE DINOSAUR", planets[0].parkingCars.Select(e => e.reg));

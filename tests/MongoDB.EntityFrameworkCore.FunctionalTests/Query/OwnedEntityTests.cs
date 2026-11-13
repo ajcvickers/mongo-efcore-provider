@@ -121,7 +121,7 @@ public class OwnedEntityTests(TemporaryDatabaseFixture database)
         var location = db.Entities.First(p => p.name == "Carmen").location;
         var actual = db.Entities.FirstOrDefault(p => p.location.latitude == location.latitude && p.name != "Carmen");
 
-        Assert.Equal("Milton", actual.name);
+        Assert.Equal("Milton", actual!.name);
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class OwnedEntityTests(TemporaryDatabaseFixture database)
         var location = db.Entities.First().locations[1];
         var actual = db.Entities.FirstOrDefault(p => p.locations.Contains(location));
 
-        Assert.Equal("Damien", actual.name);
+        Assert.Equal("Damien", actual!.name);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class OwnedEntityTests(TemporaryDatabaseFixture database)
         var location = db.Entities.First().locations[1];
         var actual = db.Entities.FirstOrDefault(p => !p.locations.Contains(location));
 
-        Assert.Equal("Carmen", actual.name);
+        Assert.Equal("Carmen", actual!.name);
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class OwnedEntityTests(TemporaryDatabaseFixture database)
         var location = db.Entities.First().locations[1];
         var actual = db.Entities.FirstOrDefault(p => p.locations.Any(l => l == location));
 
-        Assert.Equal("Damien", actual.name);
+        Assert.Equal("Damien", actual!.name);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class OwnedEntityTests(TemporaryDatabaseFixture database)
         var location = db.Entities.First().locations[1];
         var actual = db.Entities.FirstOrDefault(p => !p.locations.Any(l => l == location));
 
-        Assert.Equal("Carmen", actual.name);
+        Assert.Equal("Carmen", actual!.name);
     }
 
     [Fact]

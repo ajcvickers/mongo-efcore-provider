@@ -1042,7 +1042,7 @@ public class ProjectionTests(ReadOnlySampleGuidesFixture database)
             .Select(p => new
             {
                 p.name,
-                AtmosphereCount = p.mainAtmosphere.Count()
+                AtmosphereCount = p.mainAtmosphere!.Count()
             })
             .ToList();
 
@@ -1172,7 +1172,7 @@ public class ProjectionTests(ReadOnlySampleGuidesFixture database)
     {
         Assert.ThrowsAny<Exception>(() =>
             _db.Planets
-                .SelectMany(p => p.mainAtmosphere, (p, a) => new { p.name, Atmosphere = a })
+                .SelectMany(p => p.mainAtmosphere!, (p, a) => new { p.name, Atmosphere = a })
                 .ToList());
     }
 
@@ -1184,7 +1184,7 @@ public class ProjectionTests(ReadOnlySampleGuidesFixture database)
             _db.Planets.Select(p => new
             {
                 p.name,
-                Gases = p.mainAtmosphere.Where(a => a.Length > 1).ToList()
+                Gases = p.mainAtmosphere!.Where(a => a.Length > 1).ToList()
             }).ToList());
     }
 

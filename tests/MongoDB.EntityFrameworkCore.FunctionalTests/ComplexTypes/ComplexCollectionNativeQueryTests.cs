@@ -29,8 +29,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Native queries over complex COLLECTIONS (EF10 only: <c>ComplexCollection</c> does not exist on EF8/EF9): element
 /// quantifiers (<c>Any</c>/<c>All</c>), counts, membership (<c>Contains</c> of a whole element, member-wise), ordering by a

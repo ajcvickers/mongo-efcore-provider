@@ -24,8 +24,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Complex properties composed with TPH hierarchies (complex property on the base and on a derived type), shared-type
 /// entity types, and owned types (owned → complex chains, complex values inside owned collection elements). Every shape is

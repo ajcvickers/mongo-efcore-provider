@@ -124,14 +124,14 @@ public class FirstSingleTests(ReadOnlySampleGuidesFixture database)
     [Fact]
     public void MinBy_after_DefaultIfEmpty_on_empty_entity_source_returns_null()
     {
-        var result = _db.Planets.Where(p => p.orderFromSun > 1000).DefaultIfEmpty().MinBy(p => p.name);
+        var result = _db.Planets.Where(p => p.orderFromSun > 1000).DefaultIfEmpty().MinBy(p => p!.name);
         Assert.Null(result);
     }
 
     [Fact]
     public void MinBy_after_DefaultIfEmpty_on_non_empty_entity_source_returns_the_entity()
     {
-        var result = _db.Planets.DefaultIfEmpty().MinBy(p => p.name);
+        var result = _db.Planets.DefaultIfEmpty().MinBy(p => p!.name);
         Assert.NotNull(result);
         Assert.Equal(_db.Planets.OrderBy(p => p.name).First().name, result.name);
     }
@@ -139,7 +139,7 @@ public class FirstSingleTests(ReadOnlySampleGuidesFixture database)
     [Fact]
     public void First_after_DefaultIfEmpty_and_ordering_on_empty_source_returns_default()
     {
-        var result = _db.Planets.Where(p => p.orderFromSun > 1000).DefaultIfEmpty().OrderBy(p => p.name).ThenBy(p => p.orderFromSun).First();
+        var result = _db.Planets.Where(p => p.orderFromSun > 1000).DefaultIfEmpty().OrderBy(p => p!.name).ThenBy(p => p!.orderFromSun).First();
         Assert.Null(result);
     }
 #endif

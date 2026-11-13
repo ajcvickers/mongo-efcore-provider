@@ -1610,7 +1610,7 @@ public class ClrTypeMappingTests(AtlasTemporaryDatabaseFixture database)
         // Verify that the driver can still read these back after they have been updated by EF Core
         var fromDriver = collection.AsQueryable().FirstOrDefault();
 
-        Assert.Equal([-4, 3, -2, 1], fromDriver.SBytes);
+        Assert.Equal([-4, 3, -2, 1], fromDriver!.SBytes);
         Assert.Equal(new Memory<sbyte>([-4, 3, -2, 1]), fromDriver.MemorySBytes);
         Assert.Equal(new ReadOnlyMemory<sbyte>([-4, 3, -2, 1]), fromDriver.ReadOnlyMemorySBytes);
         Assert.Equal(new([-4, 3, -2, 1]), fromDriver.BinaryVector.Data);

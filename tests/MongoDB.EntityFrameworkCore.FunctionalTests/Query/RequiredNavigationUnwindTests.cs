@@ -199,7 +199,7 @@ public class RequiredNavigationUnwindTests(TemporaryDatabaseFixture database)
 
         Assert.Equal(["L1", "L2", "L3", "L4", "L5", "L6"], pairs.Select(p => p.LineName).ToArray());
         Assert.Null(pairs.Single(p => p.LineName == "L4").Order);
-        Assert.Equal("O1", pairs.Single(p => p.LineName == "L1").Order.OrderName);
+        Assert.Equal("O1", pairs.Single(p => p.LineName == "L1").Order!.OrderName);
     }
 
 #if !EF8 && !EF9

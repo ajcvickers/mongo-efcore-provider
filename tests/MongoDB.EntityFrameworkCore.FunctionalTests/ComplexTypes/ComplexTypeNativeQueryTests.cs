@@ -26,8 +26,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// Native predicates, ordering, scalar projection, grouping and aggregates over complex-property leaves
 /// (<c>c.Address.City</c>, <c>c.Address.Location.Lat</c>). Every shape runs under <see cref="MongoQueryMode.NativeOnly"/>

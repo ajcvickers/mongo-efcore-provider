@@ -23,8 +23,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 #if !EF8 && !EF9
 /// <summary>
 /// A NON-NULLABLE leaf under an OPTIONAL complex parent is MISSING whenever the parent is null or absent. The aggregation

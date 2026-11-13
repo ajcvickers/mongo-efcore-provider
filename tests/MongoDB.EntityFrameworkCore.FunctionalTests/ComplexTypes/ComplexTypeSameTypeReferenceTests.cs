@@ -23,8 +23,6 @@ using static MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes.Compositio
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// A whole complex value read off an entity of the SAME CLR type as the query root, but not the root row: through a
 /// self-referencing reference navigation (<c>p.Referrer!.Badge</c>) or from the INNER side of a self-join. The read side

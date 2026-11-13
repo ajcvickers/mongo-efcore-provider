@@ -24,8 +24,6 @@ using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
 namespace MongoDB.EntityFrameworkCore.FunctionalTests.ComplexTypes;
 
-#nullable enable
-
 /// <summary>
 /// The model, seed and per-mode assertion shared by the composition tests (<see cref="ComplexTypeCompositionTests"/>,
 /// <see cref="ComplexTypeJoinCompositionTests"/>): clients with two complex properties of the SAME CLR type stored
