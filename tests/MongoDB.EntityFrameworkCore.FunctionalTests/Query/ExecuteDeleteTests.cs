@@ -314,11 +314,20 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
 
         Assert.Equal(2, deleted);
 
-        var executingMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete);
+        // Each phase is its own round trip with its own pair of events: the read of the target ids, then the write by _id.
+        var readingMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkDelete, "ReadTargets");
+        Assert.Contains("Targets=-", readingMessage);
+        var readMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkDelete, "ReadTargets");
+        Assert.Contains("Targets=2,", readMessage);
+        Assert.Contains("Deleted=0", readMessage);
+
+        var executingMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkDelete, "WriteTargets");
         Assert.Contains("Executing Bulk Delete", executingMessage);
         Assert.Contains($"Collection='{collection.CollectionNamespace}'", executingMessage);
         Assert.Contains("Strategy=TwoPhase", executingMessage);
-        Assert.Contains("Targets=2", executingMessage);
+        Assert.Contains("Targets=2,", executingMessage);
+        var executedMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkDelete, "WriteTargets");
+        Assert.Contains("Deleted=2", executedMessage);
     }
 
     [Theory]
@@ -638,7 +647,8 @@ public class ExecuteDeleteTests(TemporaryDatabaseFixture database)
         var deleted = db.Entities.OrderBy(o => o.Quantity).Skip(1).ExecuteDelete();
 
         Assert.Equal(2, deleted);
-        Assert.Contains("Strategy=TwoPhase", spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete));
+        Assert.Contains(
+            "Strategy=TwoPhase", spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkDelete, "WriteTargets"));
         Assert.Equal("open", db.Entities.Single().Status);
     }
 

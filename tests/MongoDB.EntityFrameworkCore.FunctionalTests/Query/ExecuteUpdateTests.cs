@@ -602,11 +602,20 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
 
         Assert.Equal(2, updated);
 
-        var executingMessage = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkUpdate);
+        // Each phase is its own round trip with its own pair of events: the read of the target ids, then the write by _id.
+        var readingMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkUpdate, "ReadTargets");
+        Assert.Contains("Targets=-", readingMessage);
+        var readMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkUpdate, "ReadTargets");
+        Assert.Contains("Targets=2,", readMessage);
+        Assert.Contains("Matched=0, Modified=0", readMessage);
+
+        var executingMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkUpdate, "WriteTargets");
         Assert.Contains("Executing Bulk Update", executingMessage);
         Assert.Contains($"Collection='{collection.CollectionNamespace}'", executingMessage);
         Assert.Contains("Strategy=TwoPhase", executingMessage);
-        Assert.Contains("Targets=2", executingMessage);
+        Assert.Contains("Targets=2,", executingMessage);
+        var executedMessage = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkUpdate, "WriteTargets");
+        Assert.Contains("Matched=2", executedMessage);
     }
 
     [Theory]

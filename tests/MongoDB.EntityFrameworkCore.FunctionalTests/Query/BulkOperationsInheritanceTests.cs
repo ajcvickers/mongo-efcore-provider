@@ -80,18 +80,30 @@ public class BulkOperationsInheritanceTests(TemporaryDatabaseFixture database)
         Assert.Equal(2, deleted);
         Assert.Equal(0, Count(collection, "cat"));
         Assert.Equal(1, Count(collection, "dog"));
-        Assert.Contains("Strategy=TwoPhase", spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete));
+        Assert.Contains(
+            "Strategy=TwoPhase", spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkDelete, "WriteTargets"));
+
+        // Only the two Cats are targets: the discriminator-scoped read found 2 ids and the write acted on exactly those.
+        Assert.Contains("Targets=2,", spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkDelete, "ReadTargets"));
+        var written = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkDelete, "WriteTargets");
+        Assert.Contains("Targets=2,", written);
+        Assert.Contains("Deleted=2", written);
     }
 
     [Fact]
     public void ExecuteUpdate_with_OfType_updates_only_that_type()
     {
+        var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
         var collection = Seed(nameof(ExecuteUpdate_with_OfType_updates_only_that_type));
-        using var db = SingleEntityDbContext.Create(collection, Configure);
+        using var db = SingleEntityDbContext.Create(collection, loggerFactory, Configure);
 
         var updated = db.Entities.OfType<Cat>().ExecuteUpdate(s => s.SetProperty(a => a.Name, "renamed"));
 
         Assert.Equal(2, updated);
+        Assert.Contains("Targets=2,", spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkUpdate, "ReadTargets"));
+        var written = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutedBulkUpdate, "WriteTargets");
+        Assert.Contains("Targets=2,", written);
+        Assert.Contains("Matched=2,", written);
         Assert.Equal("Rex", db.Entities.OfType<Dog>().Single().Name);
         Assert.All(db.Entities.OfType<Cat>().ToList(), c => Assert.Equal("renamed", c.Name));
     }

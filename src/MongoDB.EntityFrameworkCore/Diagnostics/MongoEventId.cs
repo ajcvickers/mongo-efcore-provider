@@ -58,6 +58,8 @@ public static class MongoEventId
         TransactionEnlisted,
         TransactionDetached,
         TransactionRollbackSkipped,
+        BulkDeleteFailed,
+        BulkUpdateFailed,
     }
 
     private static EventId MakeDatabaseCommandId(Id id)
@@ -319,5 +321,29 @@ public static class MongoEventId
     /// </para>
     /// </remarks>
     public static readonly EventId ExecutedBulkUpdate = MakeUpdateId(Id.ExecutedBulkUpdate);
+
+    /// <summary>
+    /// A database round trip of a bulk delete (server-side <c>ExecuteDelete</c>) failed. It is raised instead of
+    /// <see cref="ExecutedBulkDelete"/> for the round trip announced by the preceding <see cref="ExecutingBulkDelete"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>This event is in the <see cref="DbLoggerCategory.Update" /> category.</para>
+    /// <para>
+    /// This event uses the <see cref="MongoBulkOperationErrorEventData" /> payload when used with a <see cref="DiagnosticSource" />.
+    /// </para>
+    /// </remarks>
+    public static readonly EventId BulkDeleteFailed = MakeUpdateId(Id.BulkDeleteFailed);
+
+    /// <summary>
+    /// A database round trip of a bulk update (server-side <c>ExecuteUpdate</c>) failed. It is raised instead of
+    /// <see cref="ExecutedBulkUpdate"/> for the round trip announced by the preceding <see cref="ExecutingBulkUpdate"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>This event is in the <see cref="DbLoggerCategory.Update" /> category.</para>
+    /// <para>
+    /// This event uses the <see cref="MongoBulkOperationErrorEventData" /> payload when used with a <see cref="DiagnosticSource" />.
+    /// </para>
+    /// </remarks>
+    public static readonly EventId BulkUpdateFailed = MakeUpdateId(Id.BulkUpdateFailed);
 #endif
 }

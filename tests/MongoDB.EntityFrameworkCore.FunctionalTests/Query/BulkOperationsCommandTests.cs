@@ -24,6 +24,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.EntityFrameworkCore.Diagnostics;
@@ -128,9 +129,9 @@ public class BulkOperationsCommandTests(TemporaryDatabaseFixture database)
                 : db.Entities.OrderBy(o => o.Quantity).Take(2).ExecuteDelete();
 
             Assert.Equal(2, deleted);
-            var executing = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkDelete);
+            var executing = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkDelete, "WriteTargets");
             Assert.Contains("Strategy=TwoPhase", executing);
-            Assert.Contains("Targets=2", executing);
+            Assert.Contains("Targets=2,", executing);
             AssertByIdCommand(executing, sensitive);
         }
     }
@@ -154,9 +155,9 @@ public class BulkOperationsCommandTests(TemporaryDatabaseFixture database)
                     .ExecuteUpdate(s => s.SetProperty(o => o.Status, "shipped"));
 
             Assert.Equal(2, updated);
-            var executing = spyLogger.GetLogMessageByEventId(MongoEventId.ExecutingBulkUpdate);
+            var executing = spyLogger.GetBulkLogMessageByEventId(MongoEventId.ExecutingBulkUpdate, "WriteTargets");
             Assert.Contains("Strategy=TwoPhase", executing);
-            Assert.Contains("Targets=2", executing);
+            Assert.Contains("Targets=2,", executing);
             AssertByIdCommand(executing, sensitive);
             if (sensitive)
             {
@@ -166,6 +167,42 @@ public class BulkOperationsCommandTests(TemporaryDatabaseFixture database)
             else
             {
                 Assert.DoesNotContain("shipped", executing);
+            }
+        }
+    }
+
+    // The server's error quotes the offending key ("dup key: { Quantity: 5 }"): like the command, it is logged only with sensitive logging on.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Failed_bulk_update_logs_the_server_error_message_only_with_sensitive_logging(bool async)
+    {
+        foreach (var sensitive in new[] { false, true })
+        {
+            var (loggerFactory, spyLogger) = SpyLoggerProvider.Create();
+            var collection = SeedCollection(
+                $"{nameof(Failed_bulk_update_logs_the_server_error_message_only_with_sensitive_logging)}_{sensitive}", async);
+            collection.Indexes.CreateOne(
+                new CreateIndexModel<Order>(Builders<Order>.IndexKeys.Ascending(o => o.Quantity), new CreateIndexOptions { Unique = true }));
+            using var db = CreateContext(collection, loggerFactory, sensitive);
+
+            await Assert.ThrowsAnyAsync<Exception>(
+                async () => _ = async
+                    ? await db.Entities.ExecuteUpdateAsync(s => s.SetProperty(o => o.Quantity, 5))
+                    : db.Entities.ExecuteUpdate(s => s.SetProperty(o => o.Quantity, 5)));
+
+            var failed = spyLogger.GetLogMessageByEventId(MongoEventId.BulkUpdateFailed);
+            Assert.Equal(LogLevel.Error, spyLogger.GetLogRecordByEventId(MongoEventId.BulkUpdateFailed).LogLevel);
+            Assert.Contains("Bulk Update failed", failed);
+            Assert.Contains("Phase=Command", failed);
+            if (sensitive)
+            {
+                Assert.Contains("dup key", failed);
+            }
+            else
+            {
+                Assert.DoesNotContain("dup key", failed);
+                Assert.DoesNotContain("Quantity", failed);
             }
         }
     }
