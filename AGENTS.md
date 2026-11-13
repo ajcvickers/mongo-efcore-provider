@@ -19,6 +19,9 @@ The MongoDB database provider for [Entity Framework Core](https://github.com/dot
 ## Editing
 
 - **Preserve file BOMs.** Annotate new `src/` types for nullability.
+- **Warnings fail the build** in every project and configuration (`TreatWarningsAsErrors` in the root `Directory.Build.props`).
+  `CS1591` (missing XML comment) and the NuGet audit warnings `NU1901`-`NU1904` are exempt. Fix a new warning rather than
+  suppressing it; add a `NoWarn` only with a comment saying why.
 - Version-conditional code uses `#if EF8 || EF9` (legacy), `#if !EF8` (EF9+) and `#if EF10 || EF11` (EF10+); see
   `Storage/MongoTypeMappingSource.cs`, `Query/QueryingEnumerable.cs`.
 
