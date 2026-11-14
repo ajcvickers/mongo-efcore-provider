@@ -39,39 +39,24 @@ public class NonSharedModelBulkUpdatesMongoTest : NonSharedModelBulkUpdatesTestB
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
 
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Delete_aggregate_root_when_eager_loaded_owned_collection(bool async)
-        => SpecFails.ThrowsAsync(() => base.Delete_aggregate_root_when_eager_loaded_owned_collection(async));
+        => base.Delete_aggregate_root_when_eager_loaded_owned_collection(async);
 
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Delete_with_owned_collection_and_non_natively_translatable_query(bool async)
-        => SpecFails.ThrowsAsync(() => base.Delete_with_owned_collection_and_non_natively_translatable_query(async));
+        => base.Delete_with_owned_collection_and_non_natively_translatable_query(async);
 
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Delete_aggregate_root_when_table_sharing_with_owned(bool async)
-        => SpecFails.ThrowsAsync(() => base.Delete_aggregate_root_when_table_sharing_with_owned(async));
+        => base.Delete_aggregate_root_when_table_sharing_with_owned(async);
 
     // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Replace_ColumnExpression_in_column_setter(bool async)
         => SpecFails.ThrowsAsync(() => base.Replace_ColumnExpression_in_column_setter(async));
 
-#if EF9
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
-    public override Task Update_non_owned_property_on_entity_with_owned(bool async)
-        => SpecFails.ThrowsAsync(() => base.Update_non_owned_property_on_entity_with_owned(async));
-#else
     public override Task Update_non_owned_property_on_entity_with_owned(bool async)
         => base.Update_non_owned_property_on_entity_with_owned(async);
-#endif
 
-#if EF9
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
-    public override Task Update_non_owned_property_on_entity_with_owned2(bool async)
-        => SpecFails.ThrowsAsync(() => base.Update_non_owned_property_on_entity_with_owned2(async));
-#else
     public override Task Update_non_owned_property_on_entity_with_owned2(bool async)
         => base.Update_non_owned_property_on_entity_with_owned2(async);
-#endif
 
     // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Update_non_owned_property_on_entity_with_owned_in_join(bool async)
@@ -81,9 +66,8 @@ public class NonSharedModelBulkUpdatesMongoTest : NonSharedModelBulkUpdatesTestB
     public override Task Update_owned_and_non_owned_properties_with_table_sharing(bool async)
         => SpecFails.ThrowsAsync(() => base.Update_owned_and_non_owned_properties_with_table_sharing(async));
 
-    // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Delete_entity_with_auto_include(bool async)
-        => SpecFails.ThrowsAsync(() => base.Delete_entity_with_auto_include(async));
+        => base.Delete_entity_with_auto_include(async);
 
     // Fails: Bulk ExecuteUpdate/ExecuteDelete source restricted to a single collection scoped by Where EF-X016
     public override Task Delete_predicate_based_on_optional_navigation(bool async)
