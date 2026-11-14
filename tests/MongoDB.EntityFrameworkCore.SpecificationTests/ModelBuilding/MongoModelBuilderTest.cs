@@ -165,9 +165,14 @@ public abstract class MongoModelBuilderTestBase : ModelBuilderTest
         // Fails: Types reachable only by navigation become owned, so the relationship model differs EF-X403
         public override void Index_removed_when_covered_by_an_inherited_foreign_key()
             => SpecFails.Throws<System.NullReferenceException>(() => base.Index_removed_when_covered_by_an_inherited_foreign_key());
+#if EF8
         // Fails: Types reachable only by navigation become owned, so the relationship model differs EF-X403
         public override void Relationships_are_discovered_on_the_base_entity_type()
             => SpecFails.Throws<System.NullReferenceException>(() => base.Relationships_are_discovered_on_the_base_entity_type());
+#else
+        public override void Relationships_are_discovered_on_the_base_entity_type()
+            => base.Relationships_are_discovered_on_the_base_entity_type();
+#endif
         // Fails: Types reachable only by navigation become owned, so the relationship model differs EF-X403
         public override void Relationships_on_derived_types_are_discovered_first_if_base_is_one_sided()
             => SpecFails.Throws<System.NullReferenceException>(() => base.Relationships_on_derived_types_are_discovered_first_if_base_is_one_sided());
@@ -470,12 +475,22 @@ public abstract class MongoModelBuilderTestBase : ModelBuilderTest
         // Fails: Primary key must map to _id (composite/shadow/field keys rejected) EF-X405
         public override void Can_use_shared_type_as_join_entity()
             => SpecFails.Throws<System.InvalidOperationException>(() => base.Can_use_shared_type_as_join_entity());
+#if EF8
         // Fails: Many-to-many navigation relationship cannot be determined EF-X409
         public override void ForeignKeyAttribute_configures_the_properties()
             => SpecFails.Throws<System.InvalidOperationException>(() => base.ForeignKeyAttribute_configures_the_properties());
+#else
+        public override void ForeignKeyAttribute_configures_the_properties()
+            => base.ForeignKeyAttribute_configures_the_properties();
+#endif
+#if EF8
         // Fails: Many-to-many navigation relationship cannot be determined EF-X409
         public override void Join_type_is_automatically_configured_by_convention()
             => SpecFails.Throws<System.InvalidOperationException>(() => base.Join_type_is_automatically_configured_by_convention());
+#else
+        public override void Join_type_is_automatically_configured_by_convention()
+            => base.Join_type_is_automatically_configured_by_convention();
+#endif
         // Fails: Primary key must map to _id (composite/shadow/field keys rejected) EF-X405
         public override void UsingEntity_with_shared_type_passed_when_marked_as_shared_type()
             => SpecFails.Throws<System.InvalidOperationException>(() => base.UsingEntity_with_shared_type_passed_when_marked_as_shared_type());

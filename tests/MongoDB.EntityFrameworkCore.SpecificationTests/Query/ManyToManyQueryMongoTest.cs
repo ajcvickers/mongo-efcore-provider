@@ -535,12 +535,6 @@ UnidirectionalEntityRoots.{ "$match" : { "$and" : [{ "_t" : { "$in" : ["Unidirec
             await base.InitializeAsync();
         }
 
-        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
-        {
-            base.ConfigureConventions(configurationBuilder);
-            configurationBuilder.DoNotOwnTypes((type, _) => type.Name.Contains("Join"));
-        }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);

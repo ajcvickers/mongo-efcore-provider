@@ -392,6 +392,58 @@ modelBuilder.Entity<Order>().OwnsOne(o => o.ShippingAddress);
 
 (or `OwnsMany` for collection navigations). If you want the new separate-collection behavior, no change is required. Models whose embedded types never had their own `DbSet` are unaffected, and the stored documents for those types are unchanged.
 
+### A type that derives from an entity type is no longer embedded when reached by a navigation
+
+#### Old behavior
+
+When a navigation led to a type that derives from an entity type already in the model (for example `Blog.Featured` of type `FeaturedBlog : Blog`, with a `DbSet<Blog>` and no `DbSet<FeaturedBlog>`), the derived type was configured as an *owned* (embedded) type and stored as a sub-document of the principal document. It was a separate entity type from the one in the hierarchy: it had no base type, and a `FeaturedBlog` instance could not be added through `DbSet<Blog>` (`Add` threw "the two types are not in the same hierarchy"). With an inverse navigation or an explicit one-to-one between the two, model building could also fail ("the dependent side could not be determined").
+
+#### New behavior
+
+A type that derives from an entity type in the model is part of that entity type's hierarchy and is no longer auto-owned. It is stored in the base type's collection, with its discriminator, and the navigation becomes a reference between two documents (a foreign key), as it already did when the derived type had its own `DbSet` or was registered with `Entity<T>()`. A `FeaturedBlog` can now be added through `DbSet<Blog>`.
+
+A type that is explicitly configured as owned (`OwnsOne` or the `[Owned]` attribute) is still embedded.
+
+#### Why
+
+An entity type is either owned or part of a hierarchy; it cannot be both. A derived type of a root is by definition stored in the root's collection, and EF Core only links a discovered type into a hierarchy when it is not owned, so embedding it silently cut it off from its base type.
+
+#### Mitigations
+
+If you relied on the derived type being embedded, configure it as owned explicitly so it continues to be stored as a sub-document:
+
+```c#
+modelBuilder.Entity<Blog>().OwnsOne(b => b.Featured);
+```
+
+Documents already stored with the embedded form are not read back as the new reference form; migrate them, or keep the explicit `OwnsOne` above. Models in which the derived type has its own `DbSet`, is registered with `Entity<T>()`, or is never reached through a navigation are unaffected.
+
+### A type that other entity types reference is no longer embedded by convention
+
+#### Old behavior
+
+A type reached through a navigation, with no `DbSet`, was always embedded in the principal document, even when something outside that document also referred to it. Depending on the model this either failed to build ("Unable to determine the relationship represented by navigation ...") or produced a model in which the type could not be used as an entity: for example the join entity of a many-to-many relationship that another type also held a collection of was embedded in that type, and `Set<TJoin>()` threw.
+
+#### New behavior
+
+A type that is embedded by convention becomes an independent entity type, stored in its own collection and referenced by foreign key, when any of these applies:
+
+- another entity type that is not its owner navigates to it, and it navigates back (an inverse pair);
+- it holds a collection of an independent entity type, so the documents of that type hold a foreign key to it;
+- it is the join entity type of a skip navigation (`UsingEntity<T>()`), which both sides of the relationship depend on.
+
+A type that is only reached by one-way navigations from one or more owners is still embedded in each of them, as a separate owned entity type per owner. A reference back to the owner is part of the embedding and does not change that. A type configured with `OwnsOne` or `[Owned]` is never changed.
+
+#### Why
+
+An owned type lives inside its owner's document, so nothing outside that document can refer to it. If something does, the type must be addressable on its own, which means it is not embedded.
+
+#### Mitigations
+
+Models that built before and embedded such a type will store it in its own collection from now on, so existing documents in the old embedded form need migrating. To keep a type embedded, remove the navigation that references it from outside the document.
+
+If you call `Set<T>()` for a type that is embedded, register it with `modelBuilder.Entity<T>()` so that it is an independent entity type.
+
 ### The connection string is no longer written to logs
 
 #### Old behavior

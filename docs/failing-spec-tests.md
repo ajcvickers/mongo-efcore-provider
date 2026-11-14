@@ -48,7 +48,7 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 
 | Ticket | Methods | Subject |
 | --- | --- | --- |
-| EF-X526 | 711 | Query shape (navigation/projection/set operation) not translated |
+| EF-X526 | 712 | Query shape (navigation/projection/set operation) not translated |
 | EF-X101 | 8 | Entities added without an explicit key get Id 0 (no int/long key generation), so tracking/saving them ... |
 | EF-X530 | 238 | Wrong results compared with the reference (client) evaluation |
 | EF-216 | 245 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
@@ -194,15 +194,15 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X024 | `Where`/entity materialization over a flattened multi-join chain onto ambiguous same-navigation or navigation-less siblings is not translated | 2 |
 | EF-X016 | Bulk `ExecuteUpdate`/`ExecuteDelete` source restricted to a single collection scoped by `Where` | 55 |
 | EF-X400 | **Fixed:** `DbUpdateConcurrencyException` is now raised through `ISaveChangesInterceptor.ThrowingConcurrencyException[Async]` (#104); a suppressed conflict is counted as applied, like the relational providers | 0 |
-| EF-X401 | Ambiguous foreign key discovery between a join/owned type and its owner (`Both relationships ... could use {'PostId'}`) | 4 |
+| EF-X401 | Ambiguous foreign key discovery between a join/owned type and its owner (`Both relationships ... could use {'PostId'}`) | 3 |
 | EF-X402 | Projecting an owned collection navigation directly (`Select(e => e.OwnedCollection)`) is not translated | 1 |
-| EF-X403 | Entity types reachable only through a navigation are made owned, so ModelBuilder relationship tests see a different model (NRE in the base assertions) | 82 |
+| EF-X403 | Entity types reachable only through a navigation are made owned, so ModelBuilder relationship tests see a different model (NRE in the base assertions) | 81 |
 | EF-X404 | Collection-typed properties (`List<T>`, `T[]`, `ObservableCollection<T>`) in ModelBuilder tests fail model validation as unmapped | 34 |
 | EF-X405 | Primary key must be mapped to `_id`: composite, shadow and field-backed keys are rejected in model validation | 18 |
 | EF-X406 | `HasData` on owned types fails seed validation (required key property has no value) | 1 |
 | EF-X407 | Owned type used from multiple navigations with different element names is rejected | 6 |
 | EF-X408 | EF convention/validation exceptions the base tests expect are not thrown | 4 |
-| EF-X409 | Many-to-many navigations (`[ForeignKey]` attribute shapes) cannot be determined | 2 |
+| EF-X409 | Many-to-many navigations (`[ForeignKey]` attribute shapes) cannot be determined (fixed for EF9 and later by #65; still pinned on EF8) | 0 |
 | EF-X410 | Multiple row-version (concurrency token) properties on one entity are rejected | 1 |
 | EF-X411 | Model metadata differs from the relational baseline (owned-type keys/names, `ValueGenerated`) | 12 |
 | EF-X412 | `CompiledModelTestBase`: properties of types with no Mongo mapping (`IPAddress`, ...) are discovered as owned entity types and fail to build | 3 |
@@ -214,14 +214,14 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X305 | Query comparing a struct-typed (value-converted) key does not translate | 14 |
 | EF-X306 | ~~Inserting entities with value-converted keys raises a duplicate `_id` error~~ — resolved by #109 (removing and adding an entity with the same key is now one `ReplaceOne`), no remaining tags; 14 of the 35 then reach EF-X305 | 0 |
 | EF-X307 | Model validation requires every key property to be mapped to `_id` | 6 |
-| EF-X308 | Relationship/navigation discovery differs (navigations become owned by convention) | 26 |
+| EF-X308 | Relationship/navigation discovery differs (navigations become owned by convention) | 21 |
 | EF-X309 | `[Required]`/`[MaxLength]`/`[StringLength]` are not enforced by the store | 4 |
 | EF-X310 | `Single`/`First` over an empty result in the test body (not triaged) | 2 |
 | EF-X311 | Music store query fails with `InvalidOperationException` (not triaged) | 1 |
 | EF-X312 | `[Column(TypeName)]` is reported as an error by default | 5 |
 | EF-X314 | Driver LINQ translation rejects expression over converted property, indexer or subquery | 6 |
 | EF-X315 | Value-converter behavior differs from the provider-agnostic expectation (not triaged) | 5 |
-| EF-X316 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) | 121 |
+| EF-X316 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) | 123 |
 | EF-X317 | `JsonTypesTestBase` round-trips values through the type mapping's `JsonValueReaderWriter`, which Mongo type mappings do not have (it is `null`), so the base test throws `NullReferenceException`. Confirmed by decompiling the base and running `Can_read_write_DateOnly_JSON_values`; the other wrappers share that code path | 60 |
 | EF-X318 | Bad JSON value does not throw on materialization | 0 |
 | EF-X319 | Concurrency token on an owned entity is rejected (Serialization). The fixture drops the owned token (`FixExternalModel`) and seeds the F1 data itself, and `SerializationMongoTest` passes as the base | 0 |
@@ -246,7 +246,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X215 | **Fixed (#66).** `UseSeeding`/`UseAsyncSeeding` delegates were not run by `EnsureCreated`; the ported fixtures seeded explicitly and no longer do | 0 |
 | EF-X216 | Materialization interception creates the base proxy type for derived-type documents (`DriverProxy` instead of `TestDriver`) | 1 |
 | EF-X217 | Keyless query type maps to its own (empty) collection; relational tests map it to a view/SQL query over another table | 1 |
-| EF-X101 | Entities added without an explicit key get `Id` 0 (no `int`/`long` key generation), so tracking/saving them collides on the same key | 8 |
+| EF-X101 | Entities added without an explicit key get `Id` 0 (no `int`/`long` key generation), so tracking/saving them collides on the same key | 10 |
 | EF-X102 | Relationship discovery between root entity types fails at model build (`Unable to determine the relationship represented by navigation`) | 8 |
 | EF-X103 | No value generator for `int`/`long`/enum/value-converted keys (`NotSupportedException` on `Add`) | 31 |
 | EF-X104 | Dependent key is null because the principal key (`string`/`Uri`/`Guid` wrapper) was not generated | 4 |
@@ -284,10 +284,10 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X519 | Hierarchy materialization fails: discriminator value does not match the requested type | 1 |
 | EF-X520 | ElementAt/indexer call is rebuilt with the wrong number of arguments | 4 |
 | EF-X521 | Left join on entity with owned navigations throws ArgumentNullException (key) | 1 |
-| EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 45 |
+| EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 46 |
 | EF-X523 | Model validation rejects the relationship (owned/nested owned or ambiguous FK) | 2 |
 | EF-X525 | EF8/EF9: filtered query with multiple filtered entities returns duplicate rows | 1 |
-| EF-X526 | Query shape (navigation/projection/set operation) not translated | 711 |
+| EF-X526 | Query shape (navigation/projection/set operation) not translated | 712 |
 | EF-X527 | Expression not supported by the driver LINQ translator | 185 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
 | EF-X529 | NullReferenceException during query execution/materialization | 10 |
@@ -298,16 +298,16 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X534 | Join key selector that is a sub-query: serializer cannot be created for MongoQuery | 7 |
 | EF-X535 | Skip/Take/Distinct between two cross-collection joins (Include/ThenInclude) not supported | 13 |
 | EF-X537 | Single/First over query results finds the wrong number of rows (duplicate or missing rows) | 0 |
-| EF-X539 | Many-to-many join entity types (`JoinOneToTwo` and the like) have no `DbSet` and are reached through navigations, so the provider owns them by convention and `Set<JoinOneToTwo>()` throws. `ManyToManyQueryMongoFixture` and `ManyToManyNoTrackingQueryMongoFixture` replace the convention (`MongoSpecModelHelpers.DoNotOwnTypes`) so the join types are independent entity types, and relax the unique indexes (EF-X207). The bases are now ported on EF8 to EF11 | 1 |
+| EF-X539 | Fixed for the many-to-many fixtures (#65). A join entity type that has no `DbSet` and is reached through a navigation (`JoinOneToTwoExtra.JoinEntities`, or a skip navigation's `UsingEntity<T>()`) was owned by convention, so `Set<JoinOneToTwo>()` threw. The join entity type of a skip navigation, and a type that holds a collection of an independent entity type, are no longer owned, so `ManyToManyQueryMongoFixture`, `ManyToManyNoTrackingQueryMongoFixture` and `ManyToManyTrackingMongoFixture` need no workaround. One ad hoc test still pins the failure: it calls `Set<T>()` on a type that is embedded by design | 1 |
 | EF-X540 | Result mismatch whose assertion failure surfaces as TypeLoadException (xunit.assert version skew), hiding the wrong-result cause | 3 |
 | EF-X541 | Average/aggregate over a navigation without selector throws 'Operation is not valid due to the current state of the object' | 3 |
 | EF-X542 | Enum flags bitwise/closure typed as a different type: ConvertIntegralTypeToEnumSerializer lacks IHasRepresentationSerializer | 2 |
 | EF-X543 | Property converted to nullable/other type in a projection: no coercion operator defined (int to string) | 1 |
-| EF-X544 | Model validation: an owned entity type used in multiple navigations is rejected | 4 |
-| EF-X545 | Model validation: cannot determine the relationship represented by a navigation | 4 |
+| EF-X544 | Model validation: an owned entity type used in multiple navigations is rejected (fixed for EF9 and later by #65; still pinned on EF8) | 0 |
+| EF-X545 | Model validation: cannot determine the relationship represented by a navigation (fixed for EF9 and later by #65; still pinned on EF8) | 2 |
 | EF-X546 | Filter on a nested DTO via an interface: serializer value type mismatch | 1 |
-| EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 2 |
-| EF-X538 | A type that derives from an entity type, and is first reached through a navigation before it is in the model (the base type's navigation to its derived type, with no `DbSet` for the derived type), is owned by convention. That breaks the explicit one-to-one between the two ("the dependent side could not be determined"). `InheritanceRelationshipsQueryMongoFixture` replaces the convention so such a type is not owned; the default is unchanged, because making it the provider default also changes the model of `GraphUpdates` | 0 |
+| EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 3 |
+| EF-X538 | Fixed (#65). A type deriving from a root entity type that was first reached through a navigation (the base type's navigation to its derived type, with no `DbSet` for the derived type) was owned by convention, which cut it off from its base type's hierarchy and broke the explicit one-to-one between the two ("the dependent side could not be determined"). Such a type is no longer auto-owned, so `InheritanceRelationshipsQueryMongoFixture` no longer needs `DoNotOwnTypes` | 0 |
 | EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
 | EF-X549 | A JSON-owned collection that is indexed (`ElementAt`/indexer), projected or composed in a subquery is not translated (`The LINQ expression 'EF.Property<List<JsonOwned...>>(...)' could not be translated`) | 81 |
 | EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 202 |
@@ -375,10 +375,12 @@ grouping below is by symptom as each batch reported it; "same root cause" is a h
   `Updates`, `OptimisticConcurrency`) now use it too, so `EF-X101` only counts what still fails with client-side keys.
   `EF-X306` (duplicate `_id` for value-converted keys) was not this: it was a remove and add of the same key, fixed by #109.
 - **Single-property keys must map to `_id`**: `EF-X201`, `EF-X307`, `EF-X405`, `EF-X547`. Upstream models name their keys freely.
-- **Navigations to non-root types become owned by convention**, so relationships between root entity types are not
-  discovered, `Set<T>()` is rejected, and many-to-many join entities are owned: `EF-X102`, `EF-X112`, `EF-X213`, `EF-X308`,
-  `EF-X401`, `EF-X403`, `EF-X409`, `EF-X523`, `EF-X538`, `EF-X539`, `EF-X544`, `EF-X545`. Whether this is the intended
-  embedding model or a gap needs a decision before it is ticketed as a bug.
+- **Navigations to non-root types become owned by convention.** Decided in #65: a type is owned by convention only if it can be embedded, that is
+  it is not top-level, is not in a root entity type's hierarchy, and nothing outside its owner's document references it. The provider now
+  applies that: a type deriving from a root is not owned (`EF-X538`); a type that an entity type outside its document navigates to, and that
+  navigates back, is a root; a type that holds a collection of an independent entity type is a root (`EF-X102`); and the join entity type of a
+  skip navigation is a root (`EF-X539`). Explicit `OwnsOne`, `[Owned]` and `Owned<T>()` always win. `Set<T>()` on a type that is embedded is a
+  runtime error by design, so a test must register the type with `Entity<T>()` instead (`EF-X213`, `EF-X112`, `EF-X308`, `EF-X544`, `EF-X545` remain).
 - **Derived types and the discriminator**: `EF-X200`, `EF-X206`, `EF-X216`, `EF-X519`, `EF-X537`. Basic hierarchy queries and
   `Find` through a derived set fail; three batches hit it independently, so it is likely to matter for ordinary inheritance use.
 - **Concurrency**: tokens on owned types are rejected (`EF-X111`, `EF-X214`, `EF-X319`); the concurrency exception reports a
@@ -847,8 +849,8 @@ once however many data rows it has). Only about 40 individual test cases pass as
 
 Common mechanics, none of which are provider changes: `MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true)` maps every single-property key of the
 upstream models to `_id` (otherwise model validation rejects every model) with a client-side integer generator; `RelaxNullableUniqueIndexes` and
-`RelaxUniqueForeignKeyIndexes` drop the uniqueness that MongoDB cannot honour for `null` (EF-X207); `DoNotOwnTypes` stops relationship discovery
-owning types that the tests model as entities (EF-X102/EF-X538/EF-X539); and `GraphUpdates`, `ProxyGraphUpdates`, `ManyToManyTracking`, `OptimisticConcurrency`, `StoreGenerated`, `StoreGeneratedFixup` and `Updates` isolate each test the way the relational providers do: EF begins a transaction on one context and never
+`RelaxUniqueForeignKeyIndexes` drop the uniqueness that MongoDB cannot honour for `null` (EF-X207); `StoreGeneratedFixup` and `PropertyValues` register the types
+their tests treat as entities (`FirstLevel`, `SecondLevel`, `ThirdLevel`, `Whiteboard`), which the provider otherwise embeds (#65); and `GraphUpdates`, `ProxyGraphUpdates`, `ManyToManyTracking`, `OptimisticConcurrency`, `StoreGenerated`, `StoreGeneratedFixup` and `Updates` isolate each test the way the relational providers do: EF begins a transaction on one context and never
 commits it, and the `UseTransaction` hook enlists the other contexts a test creates in it (`facade.UseTransaction(transaction)`, #77/#87). Nothing is reseeded, so the
 seed data and the model's unique indexes stay in place and `GraphUpdates` and `ProxyGraphUpdates` take about 35 seconds per EF version together.
 A failed write aborts the whole MongoDB transaction, so a test that carries on after an expected `SaveChanges` exception would fail on its next operation (unlike SQL Server). `InitFailureGuard` is still available for a fixture whose model/seed/store
