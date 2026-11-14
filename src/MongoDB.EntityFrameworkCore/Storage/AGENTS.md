@@ -34,6 +34,11 @@ Only Storage may call the driver client/collection/session types directly.
   promoted to Modified; don't filter the entry list before promotion.
 - **Concurrency-filter values are *original* values** (`GetOriginalValue`); current values corrupt conflict
   detection.
+- **A conflict goes through EF's update logger before it throws** (`AssertWritesApplied[Async]`): it logs
+  `CoreEventId.OptimisticConcurrencyException` and runs `ISaveChangesInterceptor.ThrowingConcurrencyException[Async]`, and an
+  interceptor that suppresses it makes `SaveChanges` carry on, counting the unapplied operations as applied (as the relational
+  providers do). Keep the sync and async paths in step, and keep entity values, keys and tokens out of the exception text: it is
+  logged with no sensitive-data gate.
 - **RowVersion ordering is contract**: `CreateWhereFilter` (pre-increment) → `SetStoreGeneratedValues` (increments
   in memory) → `WriteEntity` (post-increment into `$set`). The in-memory value is already advanced if
   serialization then fails.

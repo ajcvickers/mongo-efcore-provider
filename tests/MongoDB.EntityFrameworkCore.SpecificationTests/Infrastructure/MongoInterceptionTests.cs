@@ -24,24 +24,11 @@ namespace MongoDB.EntityFrameworkCore.SpecificationTests.Infrastructure;
 public class SaveChangesInterceptionMongoTest(SaveChangesInterceptionMongoTest.InterceptionMongoFixture fixture)
     : SaveChangesInterceptionTestBase(fixture), IClassFixture<SaveChangesInterceptionMongoTest.InterceptionMongoFixture>
 {
-    // Fails: DbUpdateConcurrencyException is thrown without invoking ISaveChangesInterceptor.ThrowingConcurrencyException EF-X400
-    public override async Task Intercept_SaveChanges_failed(bool async, bool inject, bool noAcceptChanges, bool concurrencyError)
-    {
-        if (concurrencyError)
-        {
-            await SpecFails.ThrowsAsync<Xunit.Sdk.XunitException>(
-                () => base.Intercept_SaveChanges_failed(async, inject, noAcceptChanges, concurrencyError));
-        }
-        else
-        {
-            await base.Intercept_SaveChanges_failed(async, inject, noAcceptChanges, concurrencyError);
-        }
-    }
+    public override Task Intercept_SaveChanges_failed(bool async, bool inject, bool noAcceptChanges, bool concurrencyError)
+        => base.Intercept_SaveChanges_failed(async, inject, noAcceptChanges, concurrencyError);
 
-    // Fails: DbUpdateConcurrencyException is thrown without invoking ISaveChangesInterceptor.ThrowingConcurrencyException EF-X400
     public override Task Intercept_to_suppress_concurrency_exception(bool async, bool inject, bool noAcceptChanges)
-        => SpecFails.ThrowsAsync<Xunit.Sdk.XunitException>(
-            () => base.Intercept_to_suppress_concurrency_exception(async, inject, noAcceptChanges));
+        => base.Intercept_to_suppress_concurrency_exception(async, inject, noAcceptChanges);
 
     public class InterceptionMongoFixture : InterceptionFixtureBase
     {

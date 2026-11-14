@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 5,012 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,531 |
-| ... active in the EF8 build | 1,064 | 2,643 |
-| ... active in the EF9 build | 1,141 | 3,166 |
-| ... active in the EF10 build | 882 | 3,309 |
-| ... active in the EF11 build | not measured | 3,339 |
+| `// Fails:` tag lines | 1,206 | 4,995 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,514 |
+| ... active in the EF8 build | 1,064 | 2,626 |
+| ... active in the EF9 build | 1,141 | 3,149 |
+| ... active in the EF10 build | 882 | 3,292 |
+| ... active in the EF11 build | not measured | 3,322 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 58 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -193,7 +193,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X022 | Join/GroupJoin whose inner source is a filtered or ordered sub-query is rejected | 14 |
 | EF-X024 | `Where`/entity materialization over a flattened multi-join chain onto ambiguous same-navigation or navigation-less siblings is not translated | 2 |
 | EF-X016 | Bulk `ExecuteUpdate`/`ExecuteDelete` source restricted to a single collection scoped by `Where` | 61 |
-| EF-X400 | `DbUpdateConcurrencyException` is thrown without invoking `ISaveChangesInterceptor.ThrowingConcurrencyException` | 2 |
+| EF-X400 | **Fixed:** `DbUpdateConcurrencyException` is now raised through `ISaveChangesInterceptor.ThrowingConcurrencyException[Async]` (#104); a suppressed conflict is counted as applied, like the relational providers | 0 |
 | EF-X401 | Ambiguous foreign key discovery between a join/owned type and its owner (`Both relationships ... could use {'PostId'}`) | 4 |
 | EF-X402 | Projecting an owned collection navigation directly (`Select(e => e.OwnedCollection)`) is not translated | 1 |
 | EF-X403 | Entity types reachable only through a navigation are made owned, so ModelBuilder relationship tests see a different model (NRE in the base assertions) | 82 |
@@ -260,7 +260,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X113 | Indexer (shared-type entity) property access `get_Item(...)` is not translated by the driver | 2 |
 | EF-X114 | Partial update of a tracked entity reports a `DbUpdateConcurrencyException` | 0 |
 | EF-X115 | Concurrency exception message differs from the relational wording asserted by `UpdatesTestBase` | 4 |
-| EF-X116 | ~~A conflicting write between two contexts surfaces as a raw `MongoCommandException` (server write conflict)~~ — resolved: it came from the spec fixture (second context not enlisted, `byte[]` row version), see EF-X607 for what remained, no remaining tags | 0 |
+| EF-X116 | ~~A conflicting write between two contexts surfaces as a raw `MongoCommandException` (server write conflict)~~ — resolved: it came from the spec fixture (second context not enlisted, `byte[]` row version), what remained was EF-X607 (since fixed), no remaining tags | 0 |
 | EF-X117 | Inserting a duplicate key surfaces as a raw `MongoBulkWriteException` instead of `DbUpdateException` | 1 |
 | EF-X118 | **Skipped, not failing.** The upstream test's model (the `Cruiser` / `CruiserWithSentinel` entity types with a default-value foreign key) is registered only by the relational fixtures, so it does not exist in the Mongo `GraphUpdates` fixture and the test cannot run. `Can_insert_when_FK_has_default_value`, `Can_insert_when_FK_has_sentinel_value`, `Can_insert_when_composite_FK_has_default_value_for_one_part`. Whether the provider handles a foreign key left at its CLR default is therefore untested | 0 |
 | EF-X500 | Primitive-collection projection/SelectMany/Union/Concat/ordering not translated | 10 |
@@ -317,7 +317,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X604 | `InvalidOperationException` from query execution or materialization | 82 |
 | EF-X605 | Other unexpected exception from query execution | 119 |
 | EF-X606 | One `SaveChanges` removes a document and adds another with the same value in a unique-indexed property (`GraphUpdates.Save_required_many_to_one_dependents_with_alternate_key`, `useExistingEntities: false`: a `RequiredAk1` is removed and a new one takes its `AlternateId`). The insert is rejected with a duplicate key error (`E11000`) because the old document is still there when it reaches the server. Relational providers order the delete first. Filed as #102. Surfaced by #77: the old reseed dropped the database and with it the model's unique indexes, so the test got further and failed later with a `NullReferenceException` (EF-X605, which the `useExistingEntities: true` rows still show) | 1 |
-| EF-X607 | `DbUpdateConcurrencyException` is thrown for a conflict, but the provider does not log `CoreEventId.OptimisticConcurrencyException`, which `OptimisticConcurrencyTestBase.ConcurrencyTestAsync` asserts afterwards (`Sequence contains no matching element`); 15 tests. The rest of each test never runs. Filed as #104 | 15 |
+| EF-X607 | **Fixed:** a concurrency conflict now logs `CoreEventId.OptimisticConcurrencyException` (#104) before `DbUpdateConcurrencyException` is thrown | 0 |
 | EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
 | EF-X701 | **Fixed:** an unset list parameter (a context member used by a query filter, or a null captured list) is serialized as an empty list instead of throwing `NullReferenceException` | 0 |
 | EF-X702 | **Fixed:** `DateTimeOffset.TimeOfDay` is computed from the stored `Ticks`, so sub-millisecond ticks are kept | 0 |
@@ -382,8 +382,8 @@ grouping below is by symptom as each batch reported it; "same root cause" is a h
   embedding model or a gap needs a decision before it is ticketed as a bug.
 - **Derived types and the discriminator**: `EF-X200`, `EF-X206`, `EF-X216`, `EF-X519`, `EF-X537`. Basic hierarchy queries and
   `Find` through a derived set fail; three batches hit it independently, so it is likely to matter for ordinary inheritance use.
-- **Concurrency**: tokens on owned types are rejected (`EF-X111`, `EF-X214`, `EF-X319`); the concurrency exception is thrown
-  without reaching interceptors (`EF-X400`) or reports a conflict for a partial update (`EF-X114`); message wording differs
+- **Concurrency**: tokens on owned types are rejected (`EF-X111`, `EF-X214`, `EF-X319`); the concurrency exception reports a
+  conflict for a partial update (`EF-X114`); message wording differs
   (`EF-X115`).
 - **Many-to-many**: `Include` and `Load` of skip navigations (`EF-X110`, `EF-X208`, `EF-X209`).
 - **Unique indexes over nullable columns** collide on `null` (`EF-X106`, `EF-X207`); the fixtures relax them with
@@ -680,9 +680,9 @@ fallback doesn't produce once 2+ lookups are registered, regardless of join kind
 every declined multi-lookup shape when the result is entity-shaped (reached via `Translate`, not
 `TranslateProjected`), not only the left-outer ones.
 
-### EF-X400 — `DbUpdateConcurrencyException` is thrown without invoking `ThrowingConcurrencyException`
-Comment pattern: `// Fails: DbUpdateConcurrencyException is thrown without invoking ISaveChangesInterceptor.ThrowingConcurrencyException EF-X400`.
-`SaveChangesInterceptionMongoTest.Intercept_SaveChanges_failed` (concurrencyError: true) and `Intercept_to_suppress_concurrency_exception` (16 cases per EF version). `MongoDatabaseWrapper.AssertWritesApplied` throws `DbUpdateConcurrencyException` directly rather than going through `IDiagnosticsLogger<DbLoggerCategory.Update>.OptimisticConcurrencyException`, so `ISaveChangesInterceptor.ThrowingConcurrencyException` is never called and an interceptor cannot observe or suppress the failure. The non-concurrency `Intercept_SaveChanges_failed` cases pass.
+### EF-X400 — fixed (was: `DbUpdateConcurrencyException` thrown without invoking `ThrowingConcurrencyException`)
+`MongoDatabaseWrapper` used to throw `DbUpdateConcurrencyException` directly, so `ISaveChangesInterceptor.ThrowingConcurrencyException[Async]` never ran and an interceptor could not observe or suppress the conflict. It now logs `CoreEventId.OptimisticConcurrencyException` and
+runs the interceptors (#104), as the relational providers do. A suppressed conflict does not throw, and its operations are counted as applied in the `SaveChanges` result, so `SaveChangesInterceptionMongoTest.Intercept_SaveChanges_failed` and `Intercept_to_suppress_concurrency_exception` call `base`.
 
 ### EF-X401 — Ambiguous foreign key discovery between a join/owned type and its owner
 `ModelBuilding101MongoTest.ManyToManyWith*NavsToJoinClassTest` (3 tests) and the ModelBuilder `OwnedTypes` `Can_configure_another_relationship_to_owner` shapes. Model finalization throws `Both relationships between 'PostTag' and 'Post.PostTags' and between 'PostTag' and 'Post' could use {'PostId'} as the foreign key`. Likely a consequence of the same navigation-implies-owned behavior as EF-X403.
@@ -917,12 +917,11 @@ Assertion failures (`Assert.Equal`/`Assert.True`) in `StoreGenerated` (computed/
 `MongoCommandException: Write conflict during plan execution`, and the 15 wrappers pinned that message. It was not the provider: the fixture did not enlist the second context in the first
 one's transaction, so the two contexts ran in separate transactions and the server rejected the second. `OptimisticConcurrencyMongoTest` now enlists it (`UseTransaction`, #77/#87). That exposed two
 more fixture problems: the suite used a `byte[]` row version, which the provider never increments (it generates `int`, `uint`, `long` and `ulong` only), so no conflict was ever detected; it now uses
-`long`. What is left is EF-X607.
+`long`. What was left after that was EF-X607 (since fixed).
 
-### EF-X607 — a concurrency conflict is thrown but not logged
-With the two changes above the provider throws `DbUpdateConcurrencyException` as the tests expect, and then they assert that `CoreEventId.OptimisticConcurrencyException` was logged at `Debug`
-level, as relational providers do. The provider does not log it (#104). The 15 wrappers pin `Sequence contains no matching element` from that assertion, so they fail if the event is ever logged, and
-the part of each test after the assertion (resolving the conflict) is not exercised until then.
+### EF-X607 — fixed (was: a concurrency conflict was thrown but not logged)
+`OptimisticConcurrencyTestBase.ConcurrencyTestAsync` asserts that `CoreEventId.OptimisticConcurrencyException` was logged at `Debug` level, as relational providers do. `MongoDatabaseWrapper` now
+logs it (and so runs `ISaveChangesInterceptor.ThrowingConcurrencyException[Async]`) just before it throws (#104). The 15 wrappers were removed and the tests run to completion.
 
 ### EF-X117 — Duplicate key is not reported as `DbUpdateException`
 `OptimisticConcurrencyMongoTest.Adding_the_same_entity_twice_results_in_DbUpdateException` expects a `DbUpdateException`; the provider lets the driver's `MongoBulkWriteException` (duplicate key) escape. The cause was not investigated further.
