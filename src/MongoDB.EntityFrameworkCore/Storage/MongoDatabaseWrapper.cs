@@ -16,6 +16,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -169,7 +170,30 @@ public class MongoDatabaseWrapper : Database
             var collection = _mongoClient.GetCollection<BsonDocument>(batch.CollectionName);
             _updateLogger.ExecutingBulkWrite(stopwatch.Elapsed, collection.CollectionNamespace, batch.Inserts, batch.Deletes,
                 batch.Modified);
-            var result = collection.BulkWrite(session, batch.Updates.Select(u => u.Model));
+            BulkWriteResult<BsonDocument> result;
+            try
+            {
+                result = collection.BulkWrite(session, batch.Updates.Select(u => u.Model));
+            }
+            catch (MongoBulkWriteException<BsonDocument> exception)
+            {
+                if (!TryCreateConcurrencyExceptionForFailedWrite(
+                        batch, exception, collection.CollectionNamespace, out var concurrencyException, out var entries))
+                {
+                    throw;
+                }
+
+                var interception = _updateLogger.OptimisticConcurrencyException(
+                    _currentDbContext.Context, entries, WithoutInnerException(concurrencyException, entries), null);
+                if (interception.IsSuppressed)
+                {
+                    // The write failed, so there is nothing to carry on with: report the failure itself.
+                    throw;
+                }
+
+                throw concurrencyException;
+            }
+
             documentsAffected += AssertWritesApplied(batch, result, collection.CollectionNamespace);
             _updateLogger.ExecutedBulkWrite(stopwatch.Elapsed, collection.CollectionNamespace, result.InsertedCount,
                 result.DeletedCount, result.ModifiedCount);
@@ -190,9 +214,33 @@ public class MongoDatabaseWrapper : Database
             var collection = _mongoClient.GetCollection<BsonDocument>(batch.CollectionName);
             _updateLogger.ExecutingBulkWrite(stopwatch.Elapsed, collection.CollectionNamespace, batch.Inserts, batch.Deletes,
                 batch.Modified);
-            var result = await collection
-                .BulkWriteAsync(session, batch.Updates.Select(u => u.Model), cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
+            BulkWriteResult<BsonDocument> result;
+            try
+            {
+                result = await collection
+                    .BulkWriteAsync(session, batch.Updates.Select(u => u.Model), cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (MongoBulkWriteException<BsonDocument> exception)
+            {
+                if (!TryCreateConcurrencyExceptionForFailedWrite(
+                        batch, exception, collection.CollectionNamespace, out var concurrencyException, out var entries))
+                {
+                    throw;
+                }
+
+                var interception = await _updateLogger.OptimisticConcurrencyExceptionAsync(
+                    _currentDbContext.Context, entries, WithoutInnerException(concurrencyException, entries), null,
+                    cancellationToken).ConfigureAwait(false);
+                if (interception.IsSuppressed)
+                {
+                    // The write failed, so there is nothing to carry on with: report the failure itself.
+                    throw;
+                }
+
+                throw concurrencyException;
+            }
+
             documentsAffected += await AssertWritesAppliedAsync(batch, result, collection.CollectionNamespace, cancellationToken)
                 .ConfigureAwait(false);
             _updateLogger.ExecutedBulkWrite(stopwatch.Elapsed, collection.CollectionNamespace, result.InsertedCount,
@@ -279,24 +327,76 @@ public class MongoDatabaseWrapper : Database
         var insertedVariance = batch.Inserts - result.InsertedCount;
         var deletedVariance = batch.Deletes - result.DeletedCount;
 
-        // We can't determine the exact entry that caused the conflict but we can narrow it down to which type(s) of entries
-        // within this bulk write batch.
-        var conflictingEntries = batch.Updates.Where(u => u.Model.ModelType == WriteModelType.DeleteOne && deletedVariance != 0
-                                                          || u.Model.ModelType == WriteModelType.InsertOne
-                                                          && insertedVariance != 0
-                                                          || u.Model.ModelType == WriteModelType.UpdateOne
-                                                          && modifiedVariance != 0).Select(u => u.Entry).ToList();
+        var conflictingEntries = GetConflictingEntries(batch.Updates, modifiedVariance, insertedVariance, deletedVariance);
 
         entries = conflictingEntries;
         unapplied = Math.Max(0, modifiedVariance) + Math.Max(0, insertedVariance) + Math.Max(0, deletedVariance);
 
-        // This text is logged (CoreEventId.OptimisticConcurrencyException) and returned to callers with no sensitive-data gate:
-        // never put entity values, keys or concurrency tokens in it.
         return new DbUpdateConcurrencyException(
-            $"Conflicts were detected when performing updates to '{collectionNamespace.FullName}'. " +
-            $"Did not perform {modifiedVariance} modifications, {insertedVariance} insertions, and {deletedVariance} deletions.",
-            conflictingEntries);
+            ConcurrencyMessage(collectionNamespace, modifiedVariance, insertedVariance, deletedVariance), conflictingEntries);
     }
+
+    // We can't determine the exact entry that caused the conflict but we can narrow it down to which type(s) of entries
+    // within this bulk write batch.
+    private static List<IUpdateEntry> GetConflictingEntries(
+        IEnumerable<MongoUpdate> updates, long modifiedVariance, long insertedVariance, long deletedVariance)
+        => updates.Where(u => u.Model.ModelType == WriteModelType.DeleteOne && deletedVariance != 0
+                              || u.Model.ModelType == WriteModelType.InsertOne
+                              && insertedVariance != 0
+                              || u.Model.ModelType == WriteModelType.UpdateOne
+                              && modifiedVariance != 0).Select(u => u.Entry).ToList();
+
+    // This text is logged (CoreEventId.OptimisticConcurrencyException) and returned to callers with no sensitive-data gate:
+    // never put entity values, keys or concurrency tokens in it.
+    private static string ConcurrencyMessage(
+        CollectionNamespace collectionNamespace, long modifiedVariance, long insertedVariance, long deletedVariance)
+        => $"Conflicts were detected when performing updates to '{collectionNamespace.FullName}'. " +
+           $"Did not perform {modifiedVariance} modifications, {insertedVariance} insertions, and {deletedVariance} deletions.";
+
+    /// <summary>
+    /// Writes in a batch are ordered, deletes first, so when one fails (typically a duplicate key) the deletes and updates
+    /// before it have already run. If one of those matched nothing, a concurrency check failed, and that is the cause: for
+    /// example a delete that did not remove a document still holding the unique value a later insert then collides with.
+    /// That is reported as <see cref="DbUpdateConcurrencyException"/>, as it would have been had the write not failed, with
+    /// the driver exception as the inner exception.
+    /// </summary>
+    /// <returns><see langword="false"/> if the failure was not caused by a concurrency check.</returns>
+    private static bool TryCreateConcurrencyExceptionForFailedWrite(
+        MongoUpdateBatch batch,
+        MongoBulkWriteException<BsonDocument> exception,
+        CollectionNamespace collectionNamespace,
+        [NotNullWhen(true)] out DbUpdateConcurrencyException? concurrencyException,
+        out IReadOnlyList<IUpdateEntry> entries)
+    {
+        concurrencyException = null;
+        entries = [];
+
+        var result = exception.Result;
+        if (exception.WriteErrors.Count == 0 || result is not { IsAcknowledged: true })
+        {
+            return false;
+        }
+
+        // Only the writes before the first failed one are known to have run.
+        var executed = batch.Updates.Take(exception.WriteErrors.Min(e => e.Index)).ToList();
+        var modifiedVariance = executed.Count(u => u.Model.ModelType == WriteModelType.UpdateOne) - result.MatchedCount;
+        var deletedVariance = executed.Count(u => u.Model.ModelType == WriteModelType.DeleteOne) - result.DeletedCount;
+        if (modifiedVariance == 0 && deletedVariance == 0)
+        {
+            return false;
+        }
+
+        entries = GetConflictingEntries(executed, modifiedVariance, 0, deletedVariance);
+        concurrencyException = new DbUpdateConcurrencyException(
+            ConcurrencyMessage(collectionNamespace, modifiedVariance, 0, deletedVariance), exception, entries);
+        return true;
+    }
+
+    // The logger and the interceptors get the exception without the driver exception: that one's message holds the values of the
+    // duplicate key, and the logged text must not hold entity values (see ConcurrencyMessage). Only the thrown one keeps it.
+    private static DbUpdateConcurrencyException WithoutInnerException(
+        DbUpdateConcurrencyException exception, IReadOnlyList<IUpdateEntry> entries)
+        => new(exception.Message, entries);
 
     private bool ShouldUseImplicitTransaction(int operationCount)
     {

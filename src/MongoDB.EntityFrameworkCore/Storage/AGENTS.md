@@ -44,6 +44,20 @@ Only Storage may call the driver client/collection/session types directly.
   serialization then fails.
 - **`AutoTransactionBehavior.Never` removes optimistic concurrency's atomicity**, not the tokens.
 - **Cross-collection atomicity comes from the transaction**, not `BulkWrite` (one per collection).
+- **Write order within a collection is deletes, then updates, then inserts** (`MongoUpdateBatch.CreateBatches`, #102), because EF
+  Core supplies the entries Added, Modified, Deleted and an insert would otherwise reach the server before the delete or update
+  that frees the unique-indexed value it takes. The grouping covers the whole update list (one batch per collection, in order of
+  first appearance), not just consecutive updates. Among the updates, `MongoUniqueValueOrderer` puts one that moves a unique
+  index value away before the one that takes it (best effort: values compare as EF Core compares keys, so a case-insensitive
+  collation or a multikey array is not seen, and keys with a `null` are skipped). Two updates that swap values are a cycle and
+  fail with a duplicate key error, as the relational providers fail with a circular dependency. A delete and an add with the same
+  primary key is not an ordering problem (EF drops the delete, #109).
+- **A failed bulk write is reported as `DbUpdateConcurrencyException` when a delete or update before the failed write matched
+  nothing** (`TryCreateConcurrencyExceptionForFailedWrite`): with deletes first, a delete that failed its concurrency check
+  leaves the document holding the unique value a later insert then collides with, and the failed check is the cause. It goes
+  through the same logging and `ThrowingConcurrencyException` interception as a count mismatch; the thrown exception keeps the
+  driver exception as its inner exception, but the logged one does not (the driver's message holds the duplicate key's values).
+  If an interceptor suppresses it, the original driver exception is thrown, since the write did fail.
 - **Implicit transactions roll back on Dispose**; don't wrap the commit in a swallowing `catch`. The one deliberate exception is the
   commit retry loop in `MongoTransaction.Commit`/`CommitAsync`, which retries only a `MongoException` labelled
   `UnknownTransactionCommitResult` (not after `MaxTimeMSExpired`, nor after 120 seconds) and rethrows anything else. The opt-in
