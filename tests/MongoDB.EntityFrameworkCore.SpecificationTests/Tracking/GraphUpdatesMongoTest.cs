@@ -966,25 +966,14 @@ public class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMongoFixtur
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: useExistingEntities is false: the test removes a RequiredAk1 and adds another with the same AlternateId in one SaveChanges, and the insert is rejected by the unique AlternateId index EF-X606
-    // Fails: useExistingEntities is true: Other unexpected exception from query execution EF-X605
+    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Save_required_many_to_one_dependents_with_alternate_key(global::Microsoft.EntityFrameworkCore.GraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.GraphUpdatesMongoTest.GraphUpdatesMongoFixture>.ChangeMechanism changeMechanism, bool useExistingEntities, global::Microsoft.EntityFrameworkCore.ChangeTracking.CascadeTiming? deleteOrphansTiming)
-        => useExistingEntities
-            ? SpecFails.ThrowsAsync<global::System.NullReferenceException>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming))
-            : SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming), "E11000 duplicate key");
+        => SpecFails.ThrowsAsync<global::System.NullReferenceException>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming));
 #elif EF8
-    // Fails: useExistingEntities is false: the test removes a RequiredAk1 and adds another with the same AlternateId in one SaveChanges, and the insert is rejected by the unique AlternateId index EF-X606
-    // Fails: useExistingEntities is true: Other unexpected exception from query execution EF-X605
+    // Fails: Other unexpected exception from query execution EF-X605
     public override void Save_required_many_to_one_dependents_with_alternate_key(global::Microsoft.EntityFrameworkCore.GraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.GraphUpdatesMongoTest.GraphUpdatesMongoFixture>.ChangeMechanism changeMechanism, bool useExistingEntities, global::Microsoft.EntityFrameworkCore.ChangeTracking.CascadeTiming? deleteOrphansTiming)
     {
-        if (useExistingEntities)
-        {
-            SpecFails.Throws<global::System.NullReferenceException>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming));
-        }
-        else
-        {
-            SpecFails.Throws<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming), "E11000 duplicate key");
-        }
+        SpecFails.Throws<global::System.NullReferenceException>(() => base.Save_required_many_to_one_dependents_with_alternate_key(changeMechanism, useExistingEntities, deleteOrphansTiming));
     }
 #endif
 

@@ -65,7 +65,12 @@ public class SaveChangesTransactionTests(TemporaryDatabaseFixture database)
             var db = SingleEntityDbContext.Create(collection);
             if (transactionBehavior == AutoTransactionBehavior.Never)
             {
-                Assert.Equal(3, db.Entities.Count());
+                // No transaction to roll back, so what was written before the duplicate failed stays: the writes go
+                // deletes, updates, then inserts, so the delete and the first insert were applied.
+                Assert.Equal(2, db.Entities.Count());
+                Assert.Equal("Original", db.Entities.First(e => e._id == idToDuplicate).text);
+                Assert.DoesNotContain(db.Entities.ToList(), e => e._id == idToDelete);
+                Assert.Contains(db.Entities.ToList(), e => e.text == "Insert");
             }
             else
             {
@@ -112,7 +117,12 @@ public class SaveChangesTransactionTests(TemporaryDatabaseFixture database)
 
             if (transactionBehavior == AutoTransactionBehavior.Never)
             {
-                Assert.Equal(3, db.Entities.Count());
+                // No transaction to roll back, so what was written before the duplicate failed stays: the writes go
+                // deletes, updates, then inserts, so the delete and the first insert were applied.
+                Assert.Equal(2, db.Entities.Count());
+                Assert.Equal("Original", db.Entities.First(e => e._id == idToDuplicate).text);
+                Assert.DoesNotContain(db.Entities.ToList(), e => e._id == idToDelete);
+                Assert.Contains(db.Entities.ToList(), e => e.text == "Insert");
             }
             else
             {
