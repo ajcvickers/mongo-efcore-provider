@@ -23,16 +23,14 @@ using MongoDB.EntityFrameworkCore.FunctionalTests.Utilities;
 namespace MongoDB.EntityFrameworkCore.SpecificationTests.Tracking;
 
 public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture fixture)
-    : OptimisticConcurrencyTestBase<OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture, long>(fixture)
+    : OptimisticConcurrencyTestBase<OptimisticConcurrencyMongoTest.OptimisticConcurrencyMongoFixture, byte[]>(fixture)
 {
     // EF isolates each test by beginning a transaction on one context and never committing it; a second context the test creates joins
     // it through this hook (#77, #87) and only participates, so disposing it does not end the transaction. Nothing is reseeded.
     protected override void UseTransaction(DatabaseFacade facade, IDbContextTransaction transaction)
         => facade.UseTransaction(transaction);
 
-    // The provider generates row versions only for int, uint, long and ulong (RowVersion.cs). The upstream suite uses byte[], which nothing
-    // would ever change, so no conflict would be detected; hence long here and in the test base's type argument.
-    public class OptimisticConcurrencyMongoFixture : F1FixtureBase<long>
+    public class OptimisticConcurrencyMongoFixture : F1FixtureBase<byte[]>
     {
         private ITestStoreFactory? _testStoreFactory;
 

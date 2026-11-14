@@ -777,7 +777,7 @@ public class ExecuteUpdateTests(TemporaryDatabaseFixture database)
 
         var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName)
             .Find(FilterDefinition<BsonDocument>.Empty).Single();
-        Assert.Equal(newVersion, raw["Version"].AsBsonBinaryData.Bytes);
+        Assert.Equal(newVersion, raw["_version"].AsBsonBinaryData.Bytes); // a row version is stored as _version
     }
 
     // A self-referencing navigation inside a setter value gives the value body two Employee-typed parameters (the setter's own `e`

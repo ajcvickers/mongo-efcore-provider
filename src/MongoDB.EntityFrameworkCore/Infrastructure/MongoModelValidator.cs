@@ -72,6 +72,7 @@ public class MongoModelValidator : ModelValidator
         base.Validate(model, logger);
 
         ValidateNoTablePerType(model);
+        ValidateRowVersionTypes(model);
         ValidateMaximumOneRowVersionPerEntity(model);
         ValidateNoConcurrencyTokensOnOwnedEntities(model);
         ValidateNoUnsupportedAttributesOrAnnotations(model);
@@ -167,6 +168,38 @@ public class MongoModelValidator : ModelValidator
             {
                 throw new InvalidOperationException(
                     $"Vector similarity is set to '{similarity}' which is not a valid value from the 'VectorSimilarity' enum.'");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validate that every row version (<c>IsRowVersion()</c> or <c>[Timestamp]</c>) is of a type the provider generates values for.
+    /// </summary>
+    /// <remarks>
+    /// EF represents a row version as a concurrency token with <c>ValueGenerated.OnAddOrUpdate</c>, and a property configured that way
+    /// by hand is indistinguishable from one, so it is rejected too.
+    /// The provider increments a row version on every write, which works for a non-nullable <c>int</c>, <c>uint</c>, <c>long</c> or
+    /// <c>ulong</c>, and for a <c>byte[]</c> (an 8-byte big-endian counter, the shape used with SQL Server <c>rowversion</c>). Any other
+    /// row version would never change, so its check in the update filter would always match and conflicting saves would succeed
+    /// silently. Rather than give a false sense of optimistic-concurrency protection, the configuration is rejected.
+    /// </remarks>
+    /// <param name="model">The <see cref="IModel"/> to validate for correctness.</param>
+    /// <exception cref="NotSupportedException">When a row version has a type the provider cannot generate values for.</exception>
+    private static void ValidateRowVersionTypes(IModel model)
+    {
+        foreach (var entityType in model.GetEntityTypes())
+        {
+            var property = entityType.GetProperties().FirstOrDefault(RowVersion.IsUnsupportedRowVersion);
+            if (property != null)
+            {
+                throw new NotSupportedException(
+                    PropertyOnEntity(property) +
+                    " is configured as a row version (IsRowVersion, [Timestamp], or a concurrency token with ValueGeneratedOnAddOrUpdate)" +
+                    $" but has type '{property.ClrType.ShortDisplayName()}'." +
+                    $" The MongoDB provider can only generate row versions for {RowVersion.SupportedTypeDescription}," +
+                    " so any other type would never change and conflicting updates would not be detected." +
+                    " Use one of those types, or use a plain IsConcurrencyToken (or [ConcurrencyCheck]) without IsRowVersion or" +
+                    " ValueGeneratedOnAddOrUpdate and change the value yourself.");
             }
         }
     }
