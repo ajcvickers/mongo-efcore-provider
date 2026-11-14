@@ -44,7 +44,7 @@ Only Storage may call the driver client/collection/session types directly.
   serialization then fails.
 - **A row version is only generated for a non-nullable `int`/`uint`/`long`/`ulong` or a `byte[]`** (`RowVersion.IsRowVersion`).
   A `byte[]` is the same counter as a `ulong`, held as 8 big-endian bytes (empty/null counts as 0, any other length throws on
-  write, before the in-memory value changes); it is stored as binary in `_version`, like the numeric types. Any other
+  write, before the in-memory value changes); it is stored as binary in `_version` (unless an element name is configured, as `CamelCaseElementNameConvention` does), like the numeric types. Any other
   `IsRowVersion`/`[Timestamp]` property (or concurrency token with `ValueGenerated.OnAddOrUpdate`) would never change, so
   `MongoModelValidator.ValidateRowVersionTypes` rejects it (otherwise a concurrency check that never fails). A new generated
   type must be added to both.

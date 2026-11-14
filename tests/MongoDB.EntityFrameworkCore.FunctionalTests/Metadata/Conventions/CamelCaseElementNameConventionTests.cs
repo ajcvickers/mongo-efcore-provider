@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -254,5 +255,34 @@ public class CamelCaseElementNameConventionTests(TemporaryDatabaseFixture databa
 
         Assert.True(savedDocuments[1].Contains("_id"));
         Assert.Equal(marmaladeValue, savedDocuments[1].GetValue(discriminatorName));
+    }
+
+    class CamelCaseVersionedEntity
+    {
+        public ObjectId _id { get; set; }
+        public string Name { get; set; } = null!;
+        [Timestamp] public byte[] Version { get; set; } = null!;
+    }
+
+    [Fact]
+    public void Row_version_is_stored_under_its_camel_case_element_name_not_underscore_version()
+    {
+        var collection = database.CreateCollection<CamelCaseVersionedEntity>();
+
+        using (var db = new CamelCaseDbContext<CamelCaseVersionedEntity>(collection))
+        {
+            var entity = new CamelCaseVersionedEntity {Name = "one"};
+            db.Add(entity);
+            db.SaveChanges();
+
+            entity.Name = "two";
+            db.SaveChanges();
+        }
+
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName)
+            .Find(FilterDefinition<BsonDocument>.Empty).Single();
+        Assert.False(raw.Contains("_version"));
+        Assert.False(raw.Contains("Version"));
+        Assert.Equal(new byte[] {0, 0, 0, 0, 0, 0, 0, 2}, raw["version"].AsBsonBinaryData.Bytes);
     }
 }

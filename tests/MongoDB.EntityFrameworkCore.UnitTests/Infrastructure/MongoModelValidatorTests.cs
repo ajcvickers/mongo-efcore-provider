@@ -636,6 +636,66 @@ public static class MongoModelValidatorTests
         Assert.Contains($"'{nameof(NullableVersionEntity.Version)}'", ex.Message);
     }
 
+    class NullableLongVersionEntity { public int _id { get; set; } public long? Version { get; set; } }
+    class NullableUIntVersionEntity { public int _id { get; set; } public uint? Version { get; set; } }
+    class OwnerWithGuidVersionOwned { public int _id { get; set; } public GuidVersionOwned Owned { get; set; } }
+    class GuidVersionOwned { public Guid Version { get; set; } public string Text { get; set; } }
+
+    [Fact]
+    public static void Validate_throws_when_nullable_long_is_configured_as_row_version()
+    {
+        using var db = SingleEntityDbContext.Create<NullableLongVersionEntity>(mb =>
+            mb.Entity<NullableLongVersionEntity>().Property(e => e.Version).IsRowVersion());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(NullableLongVersionEntity.Version)}'", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_throws_when_nullable_uint_is_configured_as_row_version()
+    {
+        using var db = SingleEntityDbContext.Create<NullableUIntVersionEntity>(mb =>
+            mb.Entity<NullableUIntVersionEntity>().Property(e => e.Version).IsRowVersion());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(NullableUIntVersionEntity.Version)}'", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_reports_the_row_version_type_before_the_owned_entity_for_an_unsupported_row_version_on_an_owned_entity()
+    {
+        using var db = SingleEntityDbContext.Create<OwnerWithGuidVersionOwned>(mb =>
+            mb.Entity<OwnerWithGuidVersionOwned>()
+                .OwnsOne(e => e.Owned, b => b.Property(p => p.Version).IsRowVersion()));
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(GuidVersionOwned.Version)}'", ex.Message);
+        Assert.Contains("row version", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_throws_when_a_user_maintained_date_time_token_is_generated_on_add_or_update()
+    {
+        // Rejected because EF cannot tell it from a row version; the message tells the user to drop ValueGeneratedOnAddOrUpdate.
+        using var db = SingleEntityDbContext.Create<DateTimeTokenEntity>(mb =>
+            mb.Entity<DateTimeTokenEntity>().Property(e => e.Stamp).IsConcurrencyToken().ValueGeneratedOnAddOrUpdate());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(DateTimeTokenEntity.Stamp)}'", ex.Message);
+        Assert.Contains("ValueGeneratedOnAddOrUpdate", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_succeeds_when_a_user_maintained_date_time_token_is_a_plain_concurrency_token()
+    {
+        using var db = SingleEntityDbContext.Create<DateTimeTokenEntity>(mb =>
+            mb.Entity<DateTimeTokenEntity>().Property(e => e.Stamp).IsConcurrencyToken());
+
+        Assert.NotNull(db.Model);
+    }
+
+    class DateTimeTokenEntity { public int _id { get; set; } public DateTime Stamp { get; set; } }
+
     [Fact]
     public static void Validate_throws_when_guid_is_configured_as_row_version()
     {

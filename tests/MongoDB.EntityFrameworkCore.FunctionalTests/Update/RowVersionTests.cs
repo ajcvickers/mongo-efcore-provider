@@ -618,4 +618,76 @@ public class RowVersionTests(TemporaryDatabaseFixture database)
         Assert.Throws<DbUpdateConcurrencyException>(() => db1.SaveChanges());
         Assert.Equal(1, collection.CountDocuments(FilterDefinition<TimestampedByteArrayEntity>.Empty));
     }
+
+    public class NullableByteArrayEntity : BasicEntity
+    {
+        [Timestamp] public byte[]? Version { get; set; }
+    }
+
+    // The same legacy document as above, but the property is nullable: it loads with a null version, and its first update stamps it.
+    [Fact]
+    public void Document_without_a_stored_byte_array_row_version_loads_as_null_and_is_stamped_when_the_property_is_nullable()
+    {
+        var collection = database.CreateCollection<NullableByteArrayEntity>();
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
+        raw.InsertOne(new BsonDocument {{"_id", ObjectId.GenerateNewId()}, {"Text", "legacy"}, {"Version", BsonNull.Value}});
+
+        using var db = SingleEntityDbContext.Create(collection);
+        var entity = db.Entities.Single();
+        Assert.Null(entity.Version);
+        entity.Text = "changed";
+        db.SaveChanges();
+
+        Assert.Equal(Counter(1), entity.Version);
+        var stored = ReadRaw(collection);
+        Assert.Equal(Counter(1), stored["_version"].AsBsonBinaryData.Bytes);
+        Assert.Equal("changed", stored["Text"].AsString);
+    }
+
+    [Fact]
+    public void Byte_array_row_version_at_its_maximum_throws_OverflowException()
+    {
+        var collection = database.CreateCollection<TimestampedByteArrayEntity>();
+        var raw = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName);
+        raw.InsertOne(new BsonDocument
+        {
+            {"_id", ObjectId.GenerateNewId()}, {"Text", "full"}, {"_version", new BsonBinaryData(Counter(ulong.MaxValue))}
+        });
+
+        using var db = SingleEntityDbContext.Create(collection);
+        var entity = db.Entities.Single();
+        entity.Text = "changed";
+
+        Assert.Throws<OverflowException>(() => db.SaveChanges());
+        Assert.Equal("full", ReadRaw(collection)["Text"].AsString);
+    }
+
+    public class ShadowVersionEntity : BasicEntity;
+
+    private static void ConfigureShadowByteArray(ModelBuilder mb)
+        => mb.Entity<ShadowVersionEntity>().Property<byte[]>("Version").IsRowVersion();
+
+    [Fact]
+    public void Shadow_byte_array_row_version_is_generated_and_detects_conflicts()
+    {
+        var collection = database.CreateCollection<ShadowVersionEntity>();
+
+        using var db1 = SingleEntityDbContext.Create(collection, ConfigureShadowByteArray);
+        var entity1 = new ShadowVersionEntity {Text = "one"};
+        db1.Entities.Add(entity1);
+        db1.SaveChanges();
+        Assert.Equal(Counter(1), db1.Entry(entity1).Property<byte[]>("Version").CurrentValue);
+        Assert.Equal(Counter(1), ReadRaw(collection)["_version"].AsBsonBinaryData.Bytes);
+
+        using (var db2 = SingleEntityDbContext.Create(collection, ConfigureShadowByteArray))
+        {
+            var entity2 = db2.Entities.Single();
+            entity2.Text = "two";
+            db2.SaveChanges();
+        }
+
+        entity1.Text = "stale";
+        Assert.Throws<DbUpdateConcurrencyException>(() => db1.SaveChanges());
+        Assert.Equal(Counter(2), ReadRaw(collection)["_version"].AsBsonBinaryData.Bytes);
+    }
 }
