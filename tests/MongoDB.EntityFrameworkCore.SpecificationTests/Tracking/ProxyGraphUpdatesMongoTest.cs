@@ -829,23 +829,11 @@ public class ProxyGraphUpdatesMongoTest(ProxyGraphUpdatesMongoTest.ProxyGraphUpd
 #endif
 
 #if (EF10 || EF11) || EF9
-#if EF9
-    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Save_required_one_to_one_changed_by_reference(global::Microsoft.EntityFrameworkCore.ProxyGraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.ProxyGraphUpdatesMongoTest.ProxyGraphUpdatesMongoFixture>.ChangeMechanism changeMechanism)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Save_required_one_to_one_changed_by_reference(changeMechanism));
-#elif EF10
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Save_required_one_to_one_changed_by_reference(global::Microsoft.EntityFrameworkCore.ProxyGraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.ProxyGraphUpdatesMongoTest.ProxyGraphUpdatesMongoFixture>.ChangeMechanism changeMechanism)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Save_required_one_to_one_changed_by_reference(changeMechanism));
-#else
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Save_required_one_to_one_changed_by_reference(global::Microsoft.EntityFrameworkCore.ProxyGraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.ProxyGraphUpdatesMongoTest.ProxyGraphUpdatesMongoFixture>.ChangeMechanism changeMechanism)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Save_required_one_to_one_changed_by_reference(changeMechanism));
-#endif
+        => base.Save_required_one_to_one_changed_by_reference(changeMechanism);
 #elif EF8
-    // Fails: Other unexpected exception from query execution EF-X605
     public override void Save_required_one_to_one_changed_by_reference(global::Microsoft.EntityFrameworkCore.ProxyGraphUpdatesTestBase<global::MongoDB.EntityFrameworkCore.SpecificationTests.Tracking.ProxyGraphUpdatesMongoTest.ProxyGraphUpdatesMongoFixture>.ChangeMechanism changeMechanism)
-        => SpecFails.Throws<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Save_required_one_to_one_changed_by_reference(changeMechanism));
+        => base.Save_required_one_to_one_changed_by_reference(changeMechanism);
 #endif
 
 #if (EF10 || EF11) || EF9

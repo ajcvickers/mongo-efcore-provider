@@ -307,8 +307,11 @@ public class MongoDatabaseWrapper : Database
 
     // 'unapplied' is non-zero only when an interceptor suppressed a conflict: like the relational providers, the suppressed
     // operations are then counted as if they had been applied.
+    // Updates and replaces are counted by the documents they matched, not the documents they changed (ModifiedCount leaves out
+    // one that already held the values written): that is what the concurrency check treats as applied, and what the relational
+    // providers count (the matched row of an UPDATE that sets the values it already has).
     private static int CountAffected(BulkWriteResult<BsonDocument> result, long unapplied)
-        => (int)(result.ModifiedCount + result.DeletedCount + result.InsertedCount + unapplied);
+        => (int)(result.MatchedCount + result.DeletedCount + result.InsertedCount + unapplied);
 
     private static DbUpdateConcurrencyException? CreateConcurrencyException(MongoUpdateBatch batch,
         BulkWriteResult<BsonDocument> result, CollectionNamespace collectionNamespace, out IReadOnlyList<IUpdateEntry> entries,
@@ -343,7 +346,7 @@ public class MongoDatabaseWrapper : Database
         => updates.Where(u => u.Model.ModelType == WriteModelType.DeleteOne && deletedVariance != 0
                               || u.Model.ModelType == WriteModelType.InsertOne
                               && insertedVariance != 0
-                              || u.Model.ModelType == WriteModelType.UpdateOne
+                              || u.IsUpdate
                               && modifiedVariance != 0).Select(u => u.Entry).ToList();
 
     // This text is logged (CoreEventId.OptimisticConcurrencyException) and returned to callers with no sensitive-data gate:
@@ -379,7 +382,7 @@ public class MongoDatabaseWrapper : Database
 
         // Only the writes before the first failed one are known to have run.
         var executed = batch.Updates.Take(exception.WriteErrors.Min(e => e.Index)).ToList();
-        var modifiedVariance = executed.Count(u => u.Model.ModelType == WriteModelType.UpdateOne) - result.MatchedCount;
+        var modifiedVariance = executed.Count(u => u.IsUpdate) - result.MatchedCount;
         var deletedVariance = executed.Count(u => u.Model.ModelType == WriteModelType.DeleteOne) - result.DeletedCount;
         if (modifiedVariance == 0 && deletedVariance == 0)
         {

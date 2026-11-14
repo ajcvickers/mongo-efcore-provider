@@ -57,7 +57,19 @@ Only Storage may call the driver client/collection/session types directly.
   index value away before the one that takes it (best effort: values compare as EF Core compares keys, so a case-insensitive
   collation or a multikey array is not seen, and keys with a `null` are skipped). Two updates that swap values are a cycle and
   fail with a duplicate key error, as the relational providers fail with a circular dependency. A delete and an add with the same
-  primary key is not an ordering problem (EF drops the delete, #109).
+  primary key is not an ordering problem: see the next item.
+- **An entity removed and another added with the same primary key is one `ReplaceOne`** (`MongoUpdate.ConvertReplaced`, #109). EF
+  Core pairs the entries (the Added entry's `SharedIdentityEntry` is the Deleted one) and leaves the Deleted one out of the entries
+  to save, as the relational providers then send one `UPDATE`; the provider only sees the Added entry, so inserting collides on
+  `_id`. The replace's filter is the key plus the *removed* entry's original concurrency token values (a changed or deleted
+  document is a conflict, never an upsert), the replacement is the new entity's whole document (nothing of the old one survives),
+  and the row version continues from the replaced one (`ContinueRowVersions`) so a stale context can't match a restarted version
+  (only when the removed entity has a row version of the same name and type: with another shape the new entity's version simply
+  starts again). Only an Added entry paired with a Deleted one is a replace; a Deleted entry paired with a Modified one (`Remove`
+  then `Update` of the same key) is still just a `$set` of the modified properties, as before.
+  It is counted as modified (`MongoUpdate.IsUpdate`: `Modified`, the match-count check, the log counts) and reported as the Added
+  entry; `MongoUpdate.Replaced` holds the removed one, which `MongoUniqueValueOrderer` uses to free its unique values before
+  another update takes them.
 - **A failed bulk write is reported as `DbUpdateConcurrencyException` when a delete or update before the failed write matched
   nothing** (`TryCreateConcurrencyExceptionForFailedWrite`): with deletes first, a delete that failed its concurrency check
   leaves the document holding the unique value a later insert then collides with, and the failed check is the cause. It goes

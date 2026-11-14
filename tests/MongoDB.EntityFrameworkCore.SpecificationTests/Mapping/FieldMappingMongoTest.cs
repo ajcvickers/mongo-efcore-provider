@@ -74,9 +74,8 @@ public class FieldMappingMongoTest(FieldMappingMongoTest.FieldMappingMongoFixtur
     public override void Include_collection_hiding_props(bool tracking)
         => SpecFails.Throws<global::MongoDB.Bson.BsonSerializationException>(() => base.Include_collection_hiding_props(tracking), "cannot use element name '_id' because it is already being used");
 
-    // Fails: int keys are not store-generated, so a second Id=0 insert hits a duplicate key EF-X205
     public override void Can_define_a_backing_field_for_a_navigation_and_query_and_update_it()
-        => SpecFails.Throws<global::System.Exception>(() => base.Can_define_a_backing_field_for_a_navigation_and_query_and_update_it(), "DuplicateKey");
+        => base.Can_define_a_backing_field_for_a_navigation_and_query_and_update_it();
 
     // Fails: Property hiding (new Id on derived type) conflicts in BSON class map EF-X203
     public override void Include_reference_hiding_props(bool tracking)

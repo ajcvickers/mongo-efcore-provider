@@ -53,6 +53,12 @@ internal static class MongoUniqueValueOrderer
         for (var i = 0; i < updates.Count; i++)
         {
             var entry = updates[i].Entry;
+            if (updates[i].Replaced is { } removed)
+            {
+                AddReplacement(entry, removed, i, comparer, ref frees, ref takes);
+                continue;
+            }
+
             if (entry.EntityState != EntityState.Modified)
             {
                 continue;
@@ -104,6 +110,76 @@ internal static class MongoUniqueValueOrderer
         }
 
         return edges == null ? updates : Sort(updates, edges);
+    }
+
+    /// <summary>
+    /// A document replaced (#109) gives up the unique values the removed entity had and takes those of the entity added, so
+    /// like a modified one it must come after the update that frees a value it takes, and before the one that takes a value it
+    /// frees. A value it keeps is neither.
+    /// </summary>
+    private static void AddReplacement(
+        IUpdateEntry added,
+        IUpdateEntry removed,
+        int position,
+        IndexKeyComparer comparer,
+        ref Dictionary<IndexKey, List<int>>? frees,
+        ref Dictionary<IndexKey, List<int>>? takes)
+    {
+        var originals = new List<IndexKey>();
+        foreach (var index in removed.EntityType.GetIndexes())
+        {
+            if (index.IsUnique && TryGetValues(removed, index, original: true) is { } values)
+            {
+                originals.Add(new IndexKey(index, values));
+            }
+        }
+
+        foreach (var index in added.EntityType.GetIndexes())
+        {
+            if (!index.IsUnique || TryGetValues(added, index, original: false) is not { } values)
+            {
+                continue;
+            }
+
+            var key = new IndexKey(index, values);
+            if (originals.RemoveAll(o => comparer.Equals(o, key)) == 0)
+            {
+                Add(ref takes, key, position, comparer);
+            }
+        }
+
+        foreach (var key in originals)
+        {
+            Add(ref frees, key, position, comparer);
+        }
+    }
+
+    /// <summary>
+    /// The values of <paramref name="index"/> of <paramref name="entry"/>, or <see langword="null"/> if there is no value to
+    /// conflict on (a <see langword="null"/> in the key, a member of a complex type, or no original values).
+    /// </summary>
+    private static object?[]? TryGetValues(IUpdateEntry entry, IIndex index, bool original)
+    {
+        var values = new object?[index.Properties.Count];
+        try
+        {
+            for (var i = 0; i < values.Length; i++)
+            {
+                if (AsProperty(index.Properties[i]) is not { } property)
+                {
+                    return null;
+                }
+
+                values[i] = original ? entry.GetOriginalValue(property) : entry.GetCurrentValue(property);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // The original values are not available, see TryGetKeys. This is only an ordering aid, so go without.
+            return null;
+        }
+
+        return Array.IndexOf(values, null) >= 0 ? null : values;
     }
 
     private static void Add(ref Dictionary<IndexKey, List<int>>? map, IndexKey key, int position, IndexKeyComparer comparer)

@@ -1138,93 +1138,18 @@ public class GraphUpdatesMongoTest(GraphUpdatesMongoTest.GraphUpdatesMongoFixtur
     public override Task Update_root_by_collection_replacement_of_deleted_first_level(bool async)
         => base.Update_root_by_collection_replacement_of_deleted_first_level(async);
 
-#if EF8
-    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Update_root_by_collection_replacement_of_deleted_second_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_deleted_second_level(async));
-#elif EF9
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_deleted_second_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_deleted_second_level(async));
-#elif EF10
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_deleted_second_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_deleted_second_level(async));
-#else
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_deleted_second_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_deleted_second_level(async));
-#endif
+        => base.Update_root_by_collection_replacement_of_deleted_second_level(async);
 
-#if EF8
-    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Update_root_by_collection_replacement_of_deleted_third_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_deleted_third_level(async));
-#elif EF9
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_deleted_third_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_deleted_third_level(async));
-#elif EF10
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_deleted_third_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_deleted_third_level(async));
-#else
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_deleted_third_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_deleted_third_level(async));
-#endif
+        => base.Update_root_by_collection_replacement_of_deleted_third_level(async);
 
-#if EF8
-    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Update_root_by_collection_replacement_of_inserted_first_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_first_level(async));
-#elif EF9
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_first_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_first_level(async));
-#elif EF10
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_first_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_first_level(async));
-#else
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_first_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_first_level(async));
-#endif
+        => base.Update_root_by_collection_replacement_of_inserted_first_level(async);
 
-#if EF8
-    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Update_root_by_collection_replacement_of_inserted_first_level_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_first_level_level(async));
-#elif EF9
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_first_level_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_first_level_level(async));
-#elif EF10
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_first_level_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_first_level_level(async));
-#else
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_first_level_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_first_level_level(async));
-#endif
+        => base.Update_root_by_collection_replacement_of_inserted_first_level_level(async);
 
-#if EF8
-    // Fails: Other unexpected exception from query execution EF-X605
     public override Task Update_root_by_collection_replacement_of_inserted_second_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_second_level(async));
-#elif EF9
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_second_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_second_level(async));
-#elif EF10
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_second_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_second_level(async));
-#else
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Update_root_by_collection_replacement_of_inserted_second_level(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Update_root_by_collection_replacement_of_inserted_second_level(async));
-#endif
+        => base.Update_root_by_collection_replacement_of_inserted_second_level(async);
 }
