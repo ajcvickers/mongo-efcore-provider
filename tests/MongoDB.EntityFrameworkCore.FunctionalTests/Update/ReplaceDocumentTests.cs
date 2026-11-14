@@ -13,11 +13,13 @@
  * limitations under the License.
  */
 
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MongoDB.EntityFrameworkCore.Diagnostics;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Storage;
 
@@ -29,7 +31,7 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Update;
 /// This provider sends one <c>ReplaceOne</c>, filtered on the key and the removed entity's original concurrency token
 /// values, so the document is never missing and the new entity's whole document is written (#109).
 /// </summary>
-public class ReplaceDocumentTests(TemporaryDatabaseFixture database, ITestOutputHelper testOutputHelper)
+public class ReplaceDocumentTests(TemporaryDatabaseFixture database)
     : IClassFixture<TemporaryDatabaseFixture>
 {
     public class Thing
@@ -793,27 +795,130 @@ public class ReplaceDocumentTests(TemporaryDatabaseFixture database, ITestOutput
         Assert.False(check.Things.Any(t => t.Id == id));
     }
 
+    // DiagnosticListener.AllListeners is process-wide, so the events are filtered to this fixture's (unique) database.
+    private sealed class BulkWriteCollector : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>
+    {
+        private readonly object _lock = new();
+        private readonly List<(string Name, MongoBulkWriteEventData Data)> _events = [];
+        private readonly List<IDisposable> _subscriptions = [];
+
+        public IReadOnlyList<(string Name, MongoBulkWriteEventData Data)> EventsIn(string databaseName)
+        {
+            lock (_lock)
+            {
+                return _events.Where(e => e.Data.CollectionNamespace.DatabaseNamespace.DatabaseName == databaseName).ToList();
+            }
+        }
+
+        public void OnNext(DiagnosticListener listener)
+        {
+            if (listener.Name == DbLoggerCategory.Name)
+            {
+                lock (_lock)
+                {
+                    _subscriptions.Add(listener.Subscribe(this));
+                }
+            }
+        }
+
+        public void OnNext(KeyValuePair<string, object?> value)
+        {
+            if (value.Value is MongoBulkWriteEventData data)
+            {
+                lock (_lock)
+                {
+                    _events.Add((value.Key, data));
+                }
+            }
+        }
+
+        public void OnCompleted()
+        {
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void Stop()
+        {
+            lock (_lock)
+            {
+                foreach (var subscription in _subscriptions)
+                {
+                    subscription.Dispose();
+                }
+            }
+        }
+    }
+
     [Fact]
-    public void A_replace_is_logged_as_one_modified_write()
+    public void A_replace_is_reported_as_one_modified_write()
     {
         var id = Guid.NewGuid();
-        var messages = new List<string>();
+        var databaseName = database.MongoDatabase.DatabaseNamespace.DatabaseName;
+        var collector = new BulkWriteCollector();
+        using var subscription = DiagnosticListener.AllListeners.Subscribe(collector);
+        try
+        {
+            using (var seed = CreateContext())
+            {
+                seed.Things.Add(new Thing { Id = id, Code = NewCode() });
+                seed.SaveChanges();
+            }
+
+            using (var db = CreateContext())
+            {
+                db.Remove(db.Things.Single(t => t.Id == id));
+                db.Add(new Thing { Id = id, Code = NewCode() });
+                db.SaveChanges();
+            }
+        }
+        finally
+        {
+            collector.Stop();
+        }
+
+        var events = collector.EventsIn(databaseName);
+
+        // The seeding insert and the replace: one write each, the replace counted as a modification, not an insert and a delete.
+        var executing = events.Where(e => e.Name == MongoEventId.ExecutingBulkWrite.Name).Select(e => e.Data).ToList();
+        Assert.Equal(2, executing.Count);
+        Assert.Equal((1L, 0L, 0L), (executing[0].InsertCount, executing[0].DeleteCount, executing[0].ModifyCount));
+        Assert.Equal((0L, 0L, 1L), (executing[1].InsertCount, executing[1].DeleteCount, executing[1].ModifyCount));
+        Assert.Equal("Things", executing[1].CollectionNamespace.CollectionName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Removing_and_then_updating_an_entity_with_the_same_key_sets_its_properties_and_keeps_the_rest(bool async)
+    {
+        var id = Guid.NewGuid();
 
         using (var seed = CreateContext())
         {
-            seed.Things.Add(new Thing { Id = id, Code = NewCode() });
-            seed.SaveChanges();
+            seed.Things.Add(new Thing { Id = id, Code = NewCode(), Note = "old" });
+            await Save(seed, async);
         }
 
-        using (var db = CreateContext(messages.Add))
+        // Something only the stored document has: Update (unlike Add) is a $set, so it stays.
+        await database.MongoDatabase.GetCollection<BsonDocument>("Things").UpdateOneAsync(
+            new BsonDocument("_id", new BsonBinaryData(id, GuidRepresentation.Standard)),
+            new BsonDocument("$set", new BsonDocument("Unmapped", 42)));
+
+        var newCode = NewCode();
+        using (var db = CreateContext())
         {
             db.Remove(db.Things.Single(t => t.Id == id));
-            db.Add(new Thing { Id = id, Code = NewCode() });
-            db.SaveChanges();
+
+            // Only an entity that is Added is a replace: this one is Modified, as before #109.
+            db.Update(new Thing { Id = id, Code = newCode });
+            await Save(db, async);
         }
 
-        testOutputHelper.WriteLine(string.Join(Environment.NewLine, messages));
-        Assert.Contains(messages, m => m.Contains("Executing Bulk Write")
-                                       && m.Contains("Insertions=0, Deletions=0, Modifications=1"));
+        var document = RawDocument("Things", id);
+        Assert.Equal(newCode, document["Code"].AsString);
+        Assert.Equal(42, document["Unmapped"].AsInt32);
     }
 }
