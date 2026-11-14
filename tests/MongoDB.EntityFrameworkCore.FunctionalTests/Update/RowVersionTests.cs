@@ -690,4 +690,90 @@ public class RowVersionTests(TemporaryDatabaseFixture database)
         Assert.Throws<DbUpdateConcurrencyException>(() => db1.SaveChanges());
         Assert.Equal(Counter(2), ReadRaw(collection)["_version"].AsBsonBinaryData.Bytes);
     }
+
+    public class VersionedAnimal
+    {
+        public ObjectId _id { get; set; }
+        public string Text { get; set; } = null!;
+    }
+
+    public class VersionedDog : VersionedAnimal
+    {
+        [Timestamp] public byte[] Version { get; set; } = null!;
+    }
+
+    // A byte[] row version declared on a derived type of a hierarchy stored in one collection: only the derived documents carry
+    // "_version", and the base documents are unaffected.
+    [Fact]
+    public void Byte_array_row_version_on_a_derived_type_is_generated_and_detects_conflicts()
+    {
+        var collection = database.CreateCollection<VersionedAnimal>();
+
+        using var db1 = SingleEntityDbContext.Create(collection, mb => mb.Entity<VersionedDog>());
+        var animal = new VersionedAnimal {Text = "plain"};
+        var dog1 = new VersionedDog {Text = "dog"};
+        db1.AddRange(animal, dog1);
+        db1.SaveChanges();
+
+        Assert.Equal(Counter(1), dog1.Version);
+
+        var documents = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName)
+            .Find(FilterDefinition<BsonDocument>.Empty).ToList();
+        Assert.Equal(2, documents.Count);
+        Assert.Single(documents, d => d["Text"] == "plain" && !d.Contains("_version"));
+        Assert.Single(documents, d => d["Text"] == "dog" && d["_version"].AsBsonBinaryData.Bytes.SequenceEqual(Counter(1)));
+
+        // The base type's own updates do not involve a version.
+        animal.Text = "plain, changed";
+        db1.SaveChanges();
+        Assert.Equal(Counter(1), dog1.Version);
+
+        using (var db2 = SingleEntityDbContext.Create(collection, mb => mb.Entity<VersionedDog>()))
+        {
+            var dog2 = db2.Set<VersionedDog>().Single();
+            Assert.Equal(Counter(1), dog2.Version);
+            dog2.Text = "dog, changed elsewhere";
+            db2.SaveChanges();
+            Assert.Equal(Counter(2), dog2.Version);
+        }
+
+        dog1.Text = "stale";
+        Assert.Throws<DbUpdateConcurrencyException>(() => db1.SaveChanges());
+
+        var stored = collection.Database.GetCollection<BsonDocument>(collection.CollectionNamespace.CollectionName)
+            .Find(new BsonDocument("Text", "dog, changed elsewhere")).Single();
+        Assert.Equal(Counter(2), stored["_version"].AsBsonBinaryData.Bytes);
+    }
+
+    private static void ConfigureByteArrayConvertedToString(ModelBuilder mb)
+        => mb.Entity<UnattributedByteArrayEntity>().Property(e => e.Version).IsRowVersion().HasConversion<string>();
+
+    // The application sees the byte[] counter; the database holds whatever the converter produces (here base64), and the update filter
+    // compares the converted original value.
+    [Fact]
+    public void Byte_array_row_version_with_a_value_converter_is_generated_and_detects_conflicts()
+    {
+        var collection = database.CreateCollection<UnattributedByteArrayEntity>();
+
+        using var db1 = SingleEntityDbContext.Create(collection, ConfigureByteArrayConvertedToString);
+        var entity1 = new UnattributedByteArrayEntity {Text = "one"};
+        db1.Entities.Add(entity1);
+        db1.SaveChanges();
+
+        Assert.Equal(Counter(1), entity1.Version);
+        Assert.Equal(Convert.ToBase64String(Counter(1)), ReadRaw(collection)["_version"].AsString);
+
+        using (var db2 = SingleEntityDbContext.Create(collection, ConfigureByteArrayConvertedToString))
+        {
+            var entity2 = db2.Entities.Single();
+            Assert.Equal(Counter(1), entity2.Version);
+            entity2.Text = "two";
+            db2.SaveChanges();
+            Assert.Equal(Counter(2), entity2.Version);
+        }
+
+        entity1.Text = "stale";
+        Assert.Throws<DbUpdateConcurrencyException>(() => db1.SaveChanges());
+        Assert.Equal(Convert.ToBase64String(Counter(2)), ReadRaw(collection)["_version"].AsString);
+    }
 }
