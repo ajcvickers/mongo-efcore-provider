@@ -58,15 +58,6 @@ public class SerializationMongoTest(SerializationMongoTest.SerializationMongoFix
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        // From EF9 the F1 data is added through UseSeeding / UseAsyncSeeding, which the provider's EnsureCreated does not run, so seed it here.
-#if !EF8
-        protected override async Task SeedAsync(Microsoft.EntityFrameworkCore.TestModels.ConcurrencyModel.F1Context context)
-        {
-            Microsoft.EntityFrameworkCore.TestModels.ConcurrencyModel.F1Context.AddSeedData(context);
-            await context.SaveChangesAsync();
-        }
-#endif
-
         // The F1 model is built outside the normal pipeline (UseModel), so OnModelCreating is not part of it.
         protected override void BuildModelExternal(ModelBuilder modelBuilder)
         {

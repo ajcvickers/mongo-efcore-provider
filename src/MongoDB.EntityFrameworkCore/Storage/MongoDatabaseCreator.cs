@@ -21,6 +21,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -48,6 +49,30 @@ public class MongoDatabaseCreator(
     : IMongoDatabaseCreator
 {
     private bool _useDatabaseNameFilter = true;
+    private readonly IDbContextOptions? _contextOptions;
+    private readonly ICurrentDbContext? _currentContext;
+
+    /// <summary>
+    /// Creates a database creator that also runs the seeding delegates configured with
+    /// <c>UseSeeding</c> and <c>UseAsyncSeeding</c> (EF9 and later) after the database has been created.
+    /// </summary>
+    /// <remarks>
+    /// This constructor is not typically used directly from application code. The constructor without the options and context is kept
+    /// so that existing derived classes still compile; a creator built with it does not run those delegates.
+    /// </remarks>
+    public MongoDatabaseCreator(
+        IMongoClientWrapper clientWrapper,
+        IDesignTimeModel designTimeModel,
+        IUpdateAdapterFactory updateAdapterFactory,
+        IDatabase database,
+        IDiagnosticsLogger<DbLoggerCategory.Database> logger,
+        IDbContextOptions contextOptions,
+        ICurrentDbContext currentContext)
+        : this(clientWrapper, designTimeModel, updateAdapterFactory, database, logger)
+    {
+        _contextOptions = contextOptions;
+        _currentContext = currentContext;
+    }
 
     /// <inheritdoc/>
     public bool EnsureDeleted()
@@ -134,6 +159,8 @@ public class MongoDatabaseCreator(
             WaitForSearchIndexes(options.IndexCreationTimeout);
         }
 
+        RunSeeder(performedCreate: !existed);
+
         return !existed;
     }
 
@@ -195,6 +222,8 @@ public class MongoDatabaseCreator(
             await WaitForSearchIndexesAsync(options.IndexCreationTimeout, cancellationToken).ConfigureAwait(false);
         }
 
+        await RunSeederAsync(performedCreate: !existed, cancellationToken).ConfigureAwait(false);
+
         return !existed;
     }
 
@@ -205,6 +234,51 @@ public class MongoDatabaseCreator(
     // Used by tests. The EF9 tests were updated to async infra, and hence this method is used when building against EF9.
     internal async Task SeedFromModelAsync(CancellationToken cancellationToken = default)
         => await database.SaveChangesAsync(AddModelData().GetEntriesToSave(), cancellationToken).ConfigureAwait(false);
+
+    // The delegates set with UseSeeding / UseAsyncSeeding (EF9+) run last, on every call and whether or not anything was created, as
+    // they do for relational providers; the argument is `true` when the database did not exist (the value EnsureCreated returns), not when only some collections were missing. Unlike relational providers they are not
+    // wrapped in a transaction: the delegate's own SaveChanges takes the implicit transaction its AutoTransactionBehavior calls for,
+    // and the retrying execution strategy, which rejects a transaction begun outside it, still applies. The sync entry point needs
+    // UseSeeding and the async one UseAsyncSeeding; with only the other set, EF Core's MissingSeeder error is thrown, as for relational.
+    private void RunSeeder(bool performedCreate)
+    {
+#if !EF8
+        if (_contextOptions?.FindExtension<CoreOptionsExtension>() is not { } coreOptions)
+        {
+            return;
+        }
+
+        if (coreOptions.Seeder is { } seeder)
+        {
+            seeder(_currentContext!.Context, performedCreate);
+        }
+        else if (coreOptions.AsyncSeeder != null)
+        {
+            throw new InvalidOperationException(CoreStrings.MissingSeeder);
+        }
+#endif
+    }
+
+    private async Task RunSeederAsync(bool performedCreate, CancellationToken cancellationToken)
+    {
+#if !EF8
+        if (_contextOptions?.FindExtension<CoreOptionsExtension>() is not { } coreOptions)
+        {
+            return;
+        }
+
+        if (coreOptions.AsyncSeeder is { } seedAsync)
+        {
+            await seedAsync(_currentContext!.Context, performedCreate, cancellationToken).ConfigureAwait(false);
+        }
+        else if (coreOptions.Seeder != null)
+        {
+            throw new InvalidOperationException(CoreStrings.MissingSeeder);
+        }
+#else
+        await Task.CompletedTask.ConfigureAwait(false);
+#endif
+    }
 
     private IUpdateAdapter AddModelData()
     {

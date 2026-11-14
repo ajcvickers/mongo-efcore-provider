@@ -92,8 +92,16 @@ Only Storage may call the driver client/collection/session types directly.
   (`try/finally`) even when the rollback throws, and `ResetState*` always clears `CurrentTransaction`. The manager's `Dispose`/`DisposeAsync`
   are `virtual` (EF disposes through the interfaces, so a hiding method would never run).
   A `MongoTransaction` built on a session with no transaction has no transaction number and is never active.
-- **`EnsureCreated` is idempotent by design** (re-applies seeds, re-creates indexes, tolerates duplicate-key errors
-  while seeding). Seeding goes through the normal update pipeline.
+- **`EnsureCreated` is idempotent by design**: `HasData` rows are written only when the database did not exist, and missing
+  collections and indexes are created every time. Seeding goes through the normal update pipeline.
+- **`EnsureCreated[Async]` ends by running the `UseSeeding` / `UseAsyncSeeding` delegate (EF9+, `RunSeeder[Async]`)**, on every
+  call, passing `!existed` (the value it returns: whether the *database* existed, so a missing collection in an existing
+  database does not make it `true`, unlike a relational provider's "operations performed"); with only the other kind configured it throws EF Core's `MissingSeeder` error, as
+  relational providers do. It is **deliberately not wrapped in `BeginTransaction`** as relational providers do: a retrying execution
+  strategy rejects a transaction begun outside it (so the delegate's `SaveChanges` would throw), and the wrapper would need a
+  replica set even for a single-root seed. The delegate's `SaveChanges` takes its own implicit transaction. The creator needs
+  `IDbContextOptions` and `ICurrentDbContext` for this, so it has a second public constructor taking them; the original one
+  stays (a creator built with it runs no delegates) so the public constructor is not a break.
 - **Query → Storage seam is `MongoClientWrapper.Execute(MongoExecutableQuery)`**; the wrapper doesn't translate.
   Bulk `ExecuteUpdate`/`ExecuteDelete` crosses as behavior: `MongoBulkOperationExecutor` runs a `MongoBulkPlan` whose
   translation delegates are invoked per execution (translation is parameter-value-dependent);
