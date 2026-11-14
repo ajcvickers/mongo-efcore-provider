@@ -65,15 +65,6 @@ public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.Optim
             MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
             modelBuilder.RelaxUniqueForeignKeyIndexes();
         }
-
-        // From EF9 the F1 data is added through UseSeeding / UseAsyncSeeding, which the provider's EnsureCreated does not run, so seed it here.
-#if !EF8
-        protected override async Task SeedAsync(F1Context context)
-        {
-            F1Context.AddSeedData(context);
-            await context.SaveChangesAsync();
-        }
-#endif
     }
 
     // Fails: inserting a duplicate key surfaces as a raw MongoBulkWriteException instead of DbUpdateException EF-X117

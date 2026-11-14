@@ -173,18 +173,6 @@ public class DataBindingMongoTest(DataBindingMongoTest.DataBindingMongoFixture f
             await base.InitializeAsync();
         }
 
-#if !EF8
-        // The provider does not run UseSeeding/UseAsyncSeeding delegates from EnsureCreated (EF-X215), so seed explicitly.
-        protected override async Task SeedAsync(F1Context context)
-        {
-            if (await ShouldSeedAsync(context))
-            {
-                F1Context.AddSeedData(context);
-                await context.SaveChangesAsync();
-            }
-        }
-#endif
-
         public override TestHelpers TestHelpers
             => MongoTestHelpers.Instance;
 

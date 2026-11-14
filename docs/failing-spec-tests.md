@@ -69,8 +69,8 @@ individually); expect them to split once someone looks at the individual failure
 > theory counts once however many data rows it has, so the numbers are methods, not xunit test cases (a ported
 > `Generic`/`NonGeneric` pair of classes shares one set of methods and so counts once per class). Tickets cited only in
 > prose, such as `post-EF-117`, are not counted. Earlier figures in this file used an unknown mixture of rules and have all
-> been replaced. A count of 0 means no test is tagged: either the bug is fixed (the row is kept for history), or the
-> ticket describes a workaround that the ported fixtures apply in their model (`EF-X201`, `X207`, `X211`, `X214`, `X215`,
+> been replaced. A count of 0 means no test is tagged: either the bug is fixed (the row is kept for history, as for `X215`), or the
+> ticket describes a workaround that the ported fixtures apply in their model (`EF-X201`, `X207`, `X211`, `X214`,
 > `X304`) or a base that could not be ported.
 
 > If you fix one of these bugs, search for the ticket id in the spec-tests
@@ -243,7 +243,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X212 | **Mostly withdrawn.** Reading a document with nested owned types reported "Document element is missing for required non-nullable property" in 59 of 61 lazy-load tests. That was reseed pollution, not a provider bug: before release made `MongoTestStore.Clean` drop the database, `Fixture.Reseed()` stacked a second copy of the seed data on the previous test's rows. After release's isolation change the 59 no longer fail; 2 tests still carry the tag | 3 |
 | EF-X213 | A type reached only through a navigation is auto-owned, so `Set<T>()` for it is rejected | 14 |
 | EF-X214 | Concurrency token on an owned type is rejected by model validation (F1 test model); ported fixture drops them | 0 |
-| EF-X215 | `UseSeeding`/`UseAsyncSeeding` delegates are not run by `EnsureCreated`; ported fixture seeds explicitly | 0 |
+| EF-X215 | **Fixed (#66).** `UseSeeding`/`UseAsyncSeeding` delegates were not run by `EnsureCreated`; the ported fixtures seeded explicitly and no longer do | 0 |
 | EF-X216 | Materialization interception creates the base proxy type for derived-type documents (`DriverProxy` instead of `TestDriver`) | 1 |
 | EF-X217 | Keyless query type maps to its own (empty) collection; relational tests map it to a view/SQL query over another table | 1 |
 | EF-X101 | Entities added without an explicit key get `Id` 0 (no `int`/`long` key generation), so tracking/saving them collides on the same key | 8 |
@@ -826,8 +826,8 @@ Affected: `WithConstructorsMongoTest` (`Attaching_entity_sets_lazy_loader*`, `De
 ### EF-X214 — Concurrency token on an owned type is rejected
 Not tagged on tests: the F1 model (`DataBindingTestBase`) puts concurrency tokens on owned `Location`; the validator throws `NotSupportedException` by design. The ported fixture drops the owned tokens via `ModelBuilder.FixExternalModel(dropOwnedConcurrencyTokens: true)`.
 
-### EF-X215 — `UseSeeding`/`UseAsyncSeeding` delegates are not run by `EnsureCreated`
-Not tagged on tests: the F1 fixture seeds through `UseSeeding`/`UseAsyncSeeding`; `MongoTestStore` only seeds via the fixture's `SeedAsync`, and the provider's `EnsureCreated` did not run the delegates (the tests saw 0/2 rows). `DataBindingMongoTest`'s fixture seeds explicitly.
+### EF-X215 — `UseSeeding`/`UseAsyncSeeding` delegates are not run by `EnsureCreated` (fixed, #66)
+Not tagged on tests: the F1 fixture seeds through `UseSeeding`/`UseAsyncSeeding`, and the provider's `EnsureCreated` did not run the delegates (the tests saw 0/2 rows), so `OptimisticConcurrencyMongoTest`, `SerializationMongoTest` and `DataBindingMongoTest` seeded explicitly. `EnsureCreated[Async]` now runs them and the explicit seeding is gone.
 
 ### EF-X216 — Materialization interception creates the base proxy type for derived-type documents
 Comment pattern: `// Fails: Materialization interception creates the base proxy type (DriverProxy) for derived-type documents, so the cast to TestDriver fails EF-X216`.

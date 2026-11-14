@@ -6,6 +6,27 @@ In order to evolve the provider as we introduce new features, we will be using t
 
 ## Breaking changes in 8.5.0 / 9.2.0 / 10.1.0
 
+### `EnsureCreated` and `EnsureCreatedAsync` now run the `UseSeeding` and `UseAsyncSeeding` delegates (EF9 and later)
+
+#### Old behavior
+
+A delegate configured with `UseSeeding` or `UseAsyncSeeding` was silently ignored by `Database.EnsureCreated()` and `Database.EnsureCreatedAsync()`: the provider only wrote the model's `HasData` rows, and only when the database did not exist.
+
+#### New behavior
+
+- After the collections, indexes and `HasData` rows exist, `EnsureCreated` runs the `UseSeeding` delegate and `EnsureCreatedAsync` runs the `UseAsyncSeeding` delegate, as EF Core's relational providers do. The delegate runs on every call, including when nothing was created, so a delegate that is not idempotent now seeds the same data again on every start-up. Its `bool` argument is `true` when the database did not exist before the call, which is the value `EnsureCreated` returns (it is `false` when the database existed but some collections had to be created).
+- If only the other kind of delegate is configured (`UseAsyncSeeding` alone with `EnsureCreated`, or `UseSeeding` alone with `EnsureCreatedAsync`), the call throws `InvalidOperationException` (EF Core's `MissingSeeder` error, which asks for the matching delegate to be set; its text speaks of a "synchronous" operation even for `EnsureCreatedAsync`), as it does for relational providers. It used to succeed, ignoring the delegate.
+- Unlike relational providers, the delegate is not wrapped in a transaction. Its own `SaveChanges` is transactional as usual (so it needs a replica set or sharded cluster only if it writes several root entities) and works with `EnableRetryOnFailure`.
+- A class derived from `MongoDatabaseCreator` that still calls the original five-argument constructor compiles and behaves as before, and so runs no seeding delegates. Use the new constructor, which also takes `IDbContextOptions` and `ICurrentDbContext`, to get them.
+
+#### Why
+
+`UseSeeding` and `UseAsyncSeeding` are EF Core's supported way to seed data and are documented to run from `EnsureCreated`; ignoring them meant data seeded that way was never written.
+
+#### Mitigations
+
+Make a seeding delegate safe to run repeatedly, for example by checking whether the data exists first or by using the `bool` argument to run only when the database was just created. Configure both `UseSeeding` and `UseAsyncSeeding` with the same logic, as EF Core recommends. If you called `EnsureCreated` and then seeded by hand to work around the old behavior, remove one of the two, or the data is written twice.
+
 ### A `byte[]` row version is now generated and stored as `_version`; a row version of any other unsupported type is rejected
 
 #### Old behavior
