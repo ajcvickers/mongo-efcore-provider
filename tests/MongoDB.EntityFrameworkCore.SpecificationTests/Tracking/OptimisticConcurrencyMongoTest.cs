@@ -128,66 +128,51 @@ public class OptimisticConcurrencyMongoTest(OptimisticConcurrencyMongoTest.Optim
     public override Task Calling_Reload_on_owned_entity_works(bool async)
         => SpecFails.ThrowsAsync(() => base.Calling_Reload_on_owned_entity_works(async), "Values differ");
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception(), "Sequence contains no matching element");
+        => base.Change_in_independent_association_after_change_in_different_concurrency_token_results_in_independent_association_exception();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Change_in_independent_association_results_in_independent_association_exception()
-        => SpecFails.ThrowsAsync(() => base.Change_in_independent_association_results_in_independent_association_exception(), "Sequence contains no matching element");
+        => base.Change_in_independent_association_results_in_independent_association_exception();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled()
-        => SpecFails.ThrowsAsync(() => base.Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled(), "Sequence contains no matching element");
+        => base.Concurrency_issue_where_the_FK_is_the_concurrency_token_can_be_handled();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException(), "Sequence contains no matching element");
+        => base.Deleting_the_same_entity_twice_results_in_DbUpdateConcurrencyException();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException(), "Sequence contains no matching element");
+        => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "Sequence contains no matching element");
+        => base.Deleting_then_updating_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values();
 
     public override void Nullable_client_side_concurrency_token_can_be_used()
         => base.Nullable_client_side_concurrency_token_can_be_used();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_client_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_client_values(), "Sequence contains no matching element");
+        => base.Simple_concurrency_exception_can_be_resolved_with_client_values();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_new_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_new_values(), "Sequence contains no matching element");
+        => base.Simple_concurrency_exception_can_be_resolved_with_new_values();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values(), "Sequence contains no matching element");
+        => base.Simple_concurrency_exception_can_be_resolved_with_store_values();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload(), "Sequence contains no matching element");
+        => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_Reload();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes()
-        => SpecFails.ThrowsAsync(() => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes(), "Sequence contains no matching element");
+        => base.Simple_concurrency_exception_can_be_resolved_with_store_values_using_equivalent_of_accept_changes();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first()
-        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first(), "Sequence contains no matching element");
+        => base.Two_concurrency_issues_in_one_to_many_related_entities_can_be_handled_by_dealing_with_dependent_first();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first()
-        => SpecFails.ThrowsAsync(() => base.Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first(), "Sequence contains no matching element");
+        => base.Two_concurrency_issues_in_one_to_one_related_entities_can_be_handled_by_dealing_with_dependent_first();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException()
-        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException(), "Sequence contains no matching element");
+        => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException();
 
-    // Fails: the DbUpdateConcurrencyException is thrown as the test expects, but the provider does not log CoreEventId.OptimisticConcurrencyException, which the test then asserts EF-X607
     public override Task Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values()
-        => SpecFails.ThrowsAsync(() => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values(), "Sequence contains no matching element");
+        => base.Updating_then_deleting_the_same_entity_results_in_DbUpdateConcurrencyException_which_can_be_resolved_with_store_values();
 }

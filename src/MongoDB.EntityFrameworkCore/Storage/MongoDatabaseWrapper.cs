@@ -193,7 +193,8 @@ public class MongoDatabaseWrapper : Database
             var result = await collection
                 .BulkWriteAsync(session, batch.Updates.Select(u => u.Model), cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            documentsAffected += AssertWritesApplied(batch, result, collection.CollectionNamespace);
+            documentsAffected += await AssertWritesAppliedAsync(batch, result, collection.CollectionNamespace, cancellationToken)
+                .ConfigureAwait(false);
             _updateLogger.ExecutedBulkWrite(stopwatch.Elapsed, collection.CollectionNamespace, result.InsertedCount,
                 result.DeletedCount, result.ModifiedCount);
         }
@@ -208,35 +209,93 @@ public class MongoDatabaseWrapper : Database
     /// <param name="batch">The <see cref="MongoUpdateBatch"/> containing details of the updates that were sent to the server.</param>
     /// <param name="result">The <see cref="BulkWriteResult{TDocument}"/> containing the results of the bulk write operation.</param>
     /// <param name="collectionNamespace">The <see class="CollectionNamespace"/> used to build the exception message on failure.</param>
-    /// <returns>Number of documents affected by the bulk write operation.</returns>
+    /// <returns>
+    /// Number of documents affected by the bulk write operation. When a conflict was suppressed by an interceptor
+    /// (<see cref="ISaveChangesInterceptor.ThrowingConcurrencyException"/>) the operations that did not apply are counted as
+    /// well, as the relational providers count a suppressed conflict as applied.
+    /// </returns>
     /// <exception cref="DbUpdateConcurrencyException">
-    /// Thrown if the counts in <paramref name="batch"/> does not match the counts in <paramref name="result"/>.
+    /// Thrown if the counts in <paramref name="batch"/> does not match the counts in <paramref name="result"/>, unless an interceptor
+    /// suppresses the exception.
     /// </exception>
-    private static int AssertWritesApplied(MongoUpdateBatch batch, BulkWriteResult<BsonDocument> result,
+    private int AssertWritesApplied(MongoUpdateBatch batch, BulkWriteResult<BsonDocument> result,
         CollectionNamespace collectionNamespace)
     {
-        // Modified count does not include docs that that did not need modification - i.e. no modifications - so we use matched count instead.
-        if (result.MatchedCount != batch.Modified || result.DeletedCount != batch.Deletes || result.InsertedCount != batch.Inserts)
+        var exception = CreateConcurrencyException(batch, result, collectionNamespace, out var entries, out var unapplied);
+        if (exception != null)
         {
-            var modifiedVariance = batch.Modified - result.MatchedCount;
-            var insertedVariance = batch.Inserts - result.InsertedCount;
-            var deletedVariance = batch.Deletes - result.DeletedCount;
-
-            // We can't determine the exact entry that caused the conflict but we can narrow it down to which type(s) of entries
-            // within this bulk write batch.
-            var conflictingEntries = batch.Updates.Where(u => u.Model.ModelType == WriteModelType.DeleteOne && deletedVariance != 0
-                                                              || u.Model.ModelType == WriteModelType.InsertOne
-                                                              && insertedVariance != 0
-                                                              || u.Model.ModelType == WriteModelType.UpdateOne
-                                                              && modifiedVariance != 0).Select(u => u.Entry).ToList();
-
-            throw new DbUpdateConcurrencyException(
-                $"Conflicts were detected when performing updates to '{collectionNamespace.FullName}'. " +
-                $"Did not perform {modifiedVariance} modifications, {insertedVariance} insertions, and {deletedVariance} deletions.",
-                conflictingEntries);
+            // Like the relational providers: log CoreEventId.OptimisticConcurrencyException (which also runs
+            // ISaveChangesInterceptor.ThrowingConcurrencyException) and throw unless an interceptor suppressed it.
+            var interception = _updateLogger.OptimisticConcurrencyException(
+                _currentDbContext.Context, entries, exception, null);
+            if (!interception.IsSuppressed)
+            {
+                throw exception;
+            }
         }
 
-        return (int)(result.ModifiedCount + result.DeletedCount + result.InsertedCount);
+        return CountAffected(result, unapplied);
+    }
+
+    /// <summary>
+    /// The async counterpart of <see cref="AssertWritesApplied"/>, so asynchronous save-changes interceptors run.
+    /// </summary>
+    private async Task<int> AssertWritesAppliedAsync(MongoUpdateBatch batch, BulkWriteResult<BsonDocument> result,
+        CollectionNamespace collectionNamespace, CancellationToken cancellationToken)
+    {
+        var exception = CreateConcurrencyException(batch, result, collectionNamespace, out var entries, out var unapplied);
+        if (exception != null)
+        {
+            var interception = await _updateLogger.OptimisticConcurrencyExceptionAsync(
+                _currentDbContext.Context, entries, exception, null, cancellationToken).ConfigureAwait(false);
+            if (!interception.IsSuppressed)
+            {
+                throw exception;
+            }
+        }
+
+        return CountAffected(result, unapplied);
+    }
+
+    // 'unapplied' is non-zero only when an interceptor suppressed a conflict: like the relational providers, the suppressed
+    // operations are then counted as if they had been applied.
+    private static int CountAffected(BulkWriteResult<BsonDocument> result, long unapplied)
+        => (int)(result.ModifiedCount + result.DeletedCount + result.InsertedCount + unapplied);
+
+    private static DbUpdateConcurrencyException? CreateConcurrencyException(MongoUpdateBatch batch,
+        BulkWriteResult<BsonDocument> result, CollectionNamespace collectionNamespace, out IReadOnlyList<IUpdateEntry> entries,
+        out long unapplied)
+    {
+        entries = [];
+        unapplied = 0;
+
+        // Modified count does not include docs that that did not need modification - i.e. no modifications - so we use matched count instead.
+        if (result.MatchedCount == batch.Modified && result.DeletedCount == batch.Deletes && result.InsertedCount == batch.Inserts)
+        {
+            return null;
+        }
+
+        var modifiedVariance = batch.Modified - result.MatchedCount;
+        var insertedVariance = batch.Inserts - result.InsertedCount;
+        var deletedVariance = batch.Deletes - result.DeletedCount;
+
+        // We can't determine the exact entry that caused the conflict but we can narrow it down to which type(s) of entries
+        // within this bulk write batch.
+        var conflictingEntries = batch.Updates.Where(u => u.Model.ModelType == WriteModelType.DeleteOne && deletedVariance != 0
+                                                          || u.Model.ModelType == WriteModelType.InsertOne
+                                                          && insertedVariance != 0
+                                                          || u.Model.ModelType == WriteModelType.UpdateOne
+                                                          && modifiedVariance != 0).Select(u => u.Entry).ToList();
+
+        entries = conflictingEntries;
+        unapplied = Math.Max(0, modifiedVariance) + Math.Max(0, insertedVariance) + Math.Max(0, deletedVariance);
+
+        // This text is logged (CoreEventId.OptimisticConcurrencyException) and returned to callers with no sensitive-data gate:
+        // never put entity values, keys or concurrency tokens in it.
+        return new DbUpdateConcurrencyException(
+            $"Conflicts were detected when performing updates to '{collectionNamespace.FullName}'. " +
+            $"Did not perform {modifiedVariance} modifications, {insertedVariance} insertions, and {deletedVariance} deletions.",
+            conflictingEntries);
     }
 
     private bool ShouldUseImplicitTransaction(int operationCount)
