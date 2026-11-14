@@ -211,8 +211,8 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X302 | `ValueConverterSerializer` / enum-conversion serializers lack `IHasRepresentationSerializer` | 1 |
 | EF-X303 | Query over converted property fails binding `ValueConverterSerializer` | 3 |
 | EF-X304 | No built-in integer key value generation (spec fixtures use a test-only generator) | 0 |
-| EF-X305 | Query comparing a struct-typed (value-converted) key does not translate | 0 |
-| EF-X306 | Inserting entities with value-converted keys raises a duplicate `_id` error | 35 |
+| EF-X305 | Query comparing a struct-typed (value-converted) key does not translate | 14 |
+| EF-X306 | ~~Inserting entities with value-converted keys raises a duplicate `_id` error~~ — resolved by #109 (removing and adding an entity with the same key is now one `ReplaceOne`), no remaining tags; 14 of the 35 then reach EF-X305 | 0 |
 | EF-X307 | Model validation requires every key property to be mapped to `_id` | 6 |
 | EF-X308 | Relationship/navigation discovery differs (navigations become owned by convention) | 26 |
 | EF-X309 | `[Required]`/`[MaxLength]`/`[StringLength]` are not enforced by the store | 4 |
@@ -234,7 +234,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X201 | Single-property primary key set by explicit `HasKey`/constructor binding is not mapped to element `_id` (model validation fails); ported fixtures work around it with a test convention | 0 |
 | EF-X202 | ~~Explicit transaction cannot be shared by a second context (session disposed with the first context)~~ — resolved by `UseTransaction`, no remaining tags | 0 |
 | EF-X203 | Property hiding (`new Id` on a derived type) conflicts in the BSON class map | 9 |
-| EF-X205 | `int` keys are not store-generated (upstream models expect identity-style keys); ported fixtures work around it with a counter generator | 2 |
+| EF-X205 | `int` keys are not store-generated (upstream models expect identity-style keys); ported fixtures work around it with a counter generator | 1 |
 | EF-X206 | Lazy-load/`Single` query over a type hierarchy returns more than one element | 0 |
 | EF-X207 | Unique index over a nullable one-to-one foreign key collides on `null` in MongoDB; ported fixtures drop the uniqueness | 1 |
 | EF-X208 | `Include` of a many-to-many skip navigation is not supported | 87 |
@@ -250,7 +250,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X102 | Relationship discovery between root entity types fails at model build (`Unable to determine the relationship represented by navigation`) | 8 |
 | EF-X103 | No value generator for `int`/`long`/enum/value-converted keys (`NotSupportedException` on `Add`) | 31 |
 | EF-X104 | Dependent key is null because the principal key (`string`/`Uri`/`Guid` wrapper) was not generated | 4 |
-| EF-X105 | Bulk write fails with a duplicate `_id` when saving entities that rely on default `int` keys | 25 |
+| EF-X105 | Bulk write fails with a duplicate `_id` when saving entities that rely on default `int` keys | 23 |
 | EF-X106 | Unique index build fails on null/missing values (`createIndexes` duplicate `null`). `NullKeysMongoFixture` relaxes the indexes (`RelaxNullableUniqueIndexes`, `RelaxUniqueForeignKeyIndexes`), so the `NullKeys` tests run | 0 |
 | EF-X107 | Entity types used by the test are missing from the model (`entity type '...' was not found`) | 8 |
 | EF-X108 | Store-generated/computed value and update semantics differ (no database defaults, computed columns or generated keys) | 6 |
@@ -280,7 +280,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X515 | Wrong results for owned-collection operators (ElementAt/Union/...) | 5 |
 | EF-X516 | Server aggregate error for owned-collection element access | 2 |
 | EF-X517 | Projecting an owned entity without its owner in a tracking query | 6 |
-| EF-X518 | Provider throws a different exception type than the base test expects | 3 |
+| EF-X518 | Provider throws a different exception type than the base test expects | 2 |
 | EF-X519 | Hierarchy materialization fails: discriminator value does not match the requested type | 1 |
 | EF-X520 | ElementAt/indexer call is rebuilt with the wrong number of arguments | 4 |
 | EF-X521 | Left join on entity with owned navigations throws ArgumentNullException (key) | 1 |
@@ -315,7 +315,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 38 |
 | EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 67 |
 | EF-X604 | `InvalidOperationException` from query execution or materialization | 82 |
-| EF-X605 | Other unexpected exception from query execution | 119 |
+| EF-X605 | Other unexpected exception from query execution | 112 |
 | EF-X607 | **Fixed:** a concurrency conflict now logs `CoreEventId.OptimisticConcurrencyException` (#104) before `DbUpdateConcurrencyException` is thrown | 0 |
 | EF-X700 | **Withdrawn.** Was reported as a regression (`InheritanceQuery` base-type queries returning an extra row). It was test pollution in the port: `Setting_foreign_key_to_a_different_type_throws` expects a foreign key violation, MongoDB has none, so its `SaveChanges` persisted a Kiwi that later count-based tests saw, depending on the run order. The class now drops and re-seeds its database after the two tests that write (`ResetDatabaseAsync`); the three tests pass | 0 |
 | EF-X701 | **Fixed:** an unset list parameter (a context member used by a query filter, or a null captured list) is serialized as an empty list instead of throwing `NullReferenceException` | 0 |
@@ -326,7 +326,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
 | EF-X711 | EF11 only: xUnit v3 rejects a class that hides an inherited test with a `new` method ("has overloads"), so the hiding methods used on EF8 to EF10 for non-virtual upstream tests are not compiled on EF11 and the inherited tests that fail as base are skipped at run time (`Ef11TestSkips`); the reason names the ticket | 0 |
 | EF-X720 | Time zone dependent: a `DateTime` of kind Unspecified is treated as local time (EF-X006), so these `ComplexNavigations*` (and some Translations) tests return values shifted by an hour wherever the machine zone has daylight saving time on the data dates (Europe/London), and pass in UTC, as on the CI runners. `SpecFails.Either` requires a pass in a UTC environment and accepts the known failure elsewhere. Reproduced on Linux (WSL) with and without `TZ=UTC`: the OS makes no difference | 167 |
-| EF-X721 | Non-deterministic: the entity graphs of the `ManyToManyTracking`, `StoreGenerated` and `Updates` tests all have default key 0 (EF-X101), so which entity hits the duplicate key first, and so the exception (or whether one is thrown), depends on the traversal order and varies from run to run (hash randomization). Their exact-exception assertions on EF11 use `SpecFails.AnyOutcome`. Seen on EF11 only; not seen on EF8 to EF10 | 125 |
+| EF-X721 | Non-deterministic: the entity graphs of the `ManyToManyTracking`, `StoreGenerated` and `Updates` tests all have default key 0 (EF-X101), so which entity hits the duplicate key first, and so the exception (or whether one is thrown), depends on the traversal order and varies from run to run (hash randomization). Their exact-exception assertions on EF11 use `SpecFails.AnyOutcome`. Seen on EF11 only; not seen on EF8 to EF10 | 123 |
 | EF-X800 | Convert/Parse of a string to byte/decimal/double/short/int/long (`Parse(ToString(b.Int))`) is not supported by the driver LINQ translator (EF11 `*_Parse` tests) | 6 |
 | EF-X801 | `Random.Shared.Next`, `new Random().Next` and `EF.Functions.Random` cannot be evaluated or translated | 7 |
 | EF-X802 | `Convert.ToBoolean` on a bool is not supported | 1 |
@@ -373,7 +373,7 @@ grouping below is by symptom as each batch reported it; "same root cause" is a h
   fixtures that are not about this gap work around it with `MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true)`
   (a client-side generator). The tracking/graph suites (`GraphUpdates`, `StoreGenerated`, `StoreGeneratedFixup`, `ManyToManyTracking`,
   `Updates`, `OptimisticConcurrency`) now use it too, so `EF-X101` only counts what still fails with client-side keys.
-  `EF-X306` (duplicate `_id` for value-converted keys) may be the same default-key collision; not verified.
+  `EF-X306` (duplicate `_id` for value-converted keys) was not this: it was a remove and add of the same key, fixed by #109.
 - **Single-property keys must map to `_id`**: `EF-X201`, `EF-X307`, `EF-X405`, `EF-X547`. Upstream models name their keys freely.
 - **Navigations to non-root types become owned by convention**, so relationships between root entity types are not
   discovered, `Set<T>()` is rejected, and many-to-many join entities are owned: `EF-X102`, `EF-X112`, `EF-X213`, `EF-X308`,
@@ -740,8 +740,8 @@ data rows (or depends on the machine time zone) the override uses `SpecFails.*So
 - **EF-X304**: the provider only generates `ObjectId`/`Guid`/string keys, while the spec models use integer keys. `MongoSpecModelHelpers.MapSingleKeysToId` (test infrastructure)
   maps every root single-property key to `_id` and registers a test-only sequential generator for `int`/`long`/`short` keys so these models can be seeded. No test is tagged.
 
-- **EF-X305/X306**: `KeysWithConverters`: querying a struct-typed key fails with `The binary operator Equal is not defined`; the insert tests (35) raise
-  `MongoBulkWriteException` (duplicate `_id`) for value-converted keys, which needs investigation as it hits common converted-key shapes.
+- **EF-X305/X306**: `KeysWithConverters`: querying a struct-typed key fails with `The binary operator Equal is not defined`; the insert tests (35) used to raise
+  `MongoBulkWriteException` (duplicate `_id`) for value-converted keys; the tests no longer fail there since #109 (a remove and add of the same key is one `ReplaceOne`): 21 pass, and the 14 with a struct key and required dependents (EF9-EF11; all pass on EF8) now reach the EF-X305 failure.
 
 - **EF-X307**: `DataAnnotation` models whose key property is not named `Id` fail model validation (`primary key property 'X' must be mapped to element '_id'`).
 

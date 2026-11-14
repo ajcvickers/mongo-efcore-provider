@@ -71,6 +71,9 @@ public class MongoUpdateBatchTests : IDisposable
         => new(EntryFor(entity), new UpdateOneModel<BsonDocument>(
             new BsonDocument(), new BsonDocumentUpdateDefinition<BsonDocument>(new BsonDocument("$set", new BsonDocument()))));
 
+    private MongoUpdate Replace(object entity)
+        => new(EntryFor(entity), new ReplaceOneModel<BsonDocument>(new BsonDocument(), new BsonDocument()));
+
     [Fact]
     public void No_updates_gives_no_batches()
         => Assert.Empty(MongoUpdateBatch.CreateBatches([]));
@@ -162,5 +165,26 @@ public class MongoUpdateBatchTests : IDisposable
         Assert.Equal(1, batch.Modified);
         Assert.Equal(3, batch.Deletes);
         Assert.Equal(6, batch.Updates.Count);
+    }
+
+    [Fact]
+    public void A_replaced_document_is_written_with_the_updates_and_counted_as_modified()
+    {
+        var i1 = Insert(new Apple());
+        var r1 = Replace(new Apple());
+        var d1 = Delete(new Apple());
+        var u1 = Update(new Apple());
+
+        var batch = Assert.Single(MongoUpdateBatch.CreateBatches([i1, r1, d1, u1]));
+
+        // Like an update it changes a document that exists, so it is after the deletes and before the inserts (#109).
+        Assert.Equal([d1, r1, u1, i1], batch.Updates);
+        Assert.Equal(2, batch.Modified);
+        Assert.Equal(1, batch.Inserts);
+        Assert.Equal(1, batch.Deletes);
+        Assert.True(r1.IsUpdate);
+        Assert.True(u1.IsUpdate);
+        Assert.False(i1.IsUpdate);
+        Assert.False(d1.IsUpdate);
     }
 }

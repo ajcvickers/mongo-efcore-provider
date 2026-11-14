@@ -130,7 +130,7 @@ public class UpdateEntityTests(TemporaryDatabaseFixture database)
     }
 
     [Fact]
-    public void Unchanged_entity_marked_as_modified_is_processed_but_does_not_affect_documents()
+    public void Unchanged_entity_marked_as_modified_is_processed_but_does_not_change_documents()
     {
         var collection = database.CreateCollection<SimpleEntity>();
         var entity = new SimpleEntity {_id = ObjectId.GenerateNewId(), name = "Modify-"};
@@ -145,7 +145,10 @@ public class UpdateEntityTests(TemporaryDatabaseFixture database)
             using var db = SingleEntityDbContext.Create(collection);
             var foundEntity = db.Entities.Single();
             db.Entry(foundEntity).State = EntityState.Modified;
-            Assert.Equal(0, db.SaveChanges());
+
+            // Every property is written ($set), and the document matched, so it counts as one write, as the relational
+            // providers count the matched row. The server reports it as unmodified because it already held the values.
+            Assert.Equal(1, db.SaveChanges());
         }
     }
 

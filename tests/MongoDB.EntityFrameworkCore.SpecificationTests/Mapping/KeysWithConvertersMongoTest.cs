@@ -33,353 +33,297 @@ public class KeysWithConvertersMongoTest(KeysWithConvertersMongoTest.KeysWithCon
 
     // <generated>
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_bare_class_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_bare_class_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_bare_class_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_bare_class_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_bare_class_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_bare_class_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_bare_class_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_bare_class_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_bare_class_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_bare_class_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_bare_class_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_bare_class_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_class_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_class_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_class_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_class_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_class_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_class_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_class_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_class_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_class_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_class_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_class_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_class_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_class_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents_with_shadow_FK(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_binary_key_and_required_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents_with_shadow_FK(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_comparable_struct_key_and_required_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_enumerable_class_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_enumerable_class_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_enumerable_class_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_enumerable_class_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_enumerable_class_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_enumerable_class_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents_with_shadow_FK(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_binary_key_and_required_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents_with_shadow_FK(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_generic_comparable_struct_key_and_required_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_binary_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_struct_binary_key_and_required_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_required_dependents(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_struct_binary_key_and_required_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_binary_key_and_required_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_struct_binary_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_required_dependents_with_shadow_FK(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_struct_binary_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_binary_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_binary_key_and_required_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_struct_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_struct_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_struct_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_struct_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_struct_key_and_required_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_struct_key_and_required_dependents(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_struct_key_and_required_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_key_and_required_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_struct_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_struct_key_and_required_dependents_with_shadow_FK(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_struct_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_struct_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_struct_key_and_required_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override Task Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents_with_shadow_FK();
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_optional_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents();
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
+    // Fails: Query comparing a struct-typed (value-converted) key does not translate EF-X305
     public override Task Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Async<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents_with_shadow_FK(), "The binary operator Equal is not defined");
 #elif EF8
-    // Fails: Inserting entities with value-converted keys raises a duplicate _id error EF-X306
     public override void Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents_with_shadow_FK()
-        => SpecFails.Sync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents_with_shadow_FK(), "A bulk write operation resulted in one or more errors");
+        => base.Can_insert_and_read_back_with_structural_struct_binary_key_and_required_dependents_with_shadow_FK();
 #endif
 
 #if (EF10 || EF11) || EF9

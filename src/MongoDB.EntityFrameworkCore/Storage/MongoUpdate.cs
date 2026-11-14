@@ -30,7 +30,7 @@ using MongoDB.EntityFrameworkCore.Serializers;
 
 namespace MongoDB.EntityFrameworkCore.Storage;
 
-internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
+internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model, IUpdateEntry? replaced = null)
 {
     /// <summary>
     /// The <see cref="WriteModel{BsonDocument}"/> that contains both the document
@@ -47,6 +47,25 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
     public IUpdateEntry Entry
     {
         get => entry;
+    }
+
+    /// <summary>
+    /// For a replacement of a document (an entity removed and another added with the same primary key in one save), the
+    /// <see cref="EntityState.Deleted"/> entry of the entity removed; <see cref="Entry"/> is the one added. Otherwise
+    /// <see langword="null"/>.
+    /// </summary>
+    public IUpdateEntry? Replaced
+    {
+        get => replaced;
+    }
+
+    /// <summary>
+    /// <see langword="true"/> if this changes an existing document (an <c>UpdateOne</c> or a <c>ReplaceOne</c>), which is
+    /// matched on its filter, as opposed to inserting or deleting one.
+    /// </summary>
+    public bool IsUpdate
+    {
+        get => model.ModelType is WriteModelType.UpdateOne or WriteModelType.ReplaceOne;
     }
 
     /// <summary>
@@ -71,6 +90,15 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
 
     private static MongoUpdate ConvertAdded(IUpdateEntry entry)
     {
+        // An entity removed and another added with the same primary key: EF Core pairs the two entries (the added entry's
+        // SharedIdentityEntry is the deleted one) and leaves the deleted one out of the entries to save, as the relational
+        // providers then send one UPDATE. Inserting would collide with the document still there, and sending a delete as well
+        // would leave a moment with no document, so the document is replaced in one write (#109).
+        if (entry.SharedIdentityEntry is { EntityState: EntityState.Deleted } removed)
+        {
+            return ConvertReplaced(entry, removed);
+        }
+
         var document = new BsonDocument();
         using var writer = new BsonDocumentWriter(document);
 
@@ -98,7 +126,47 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
         return new MongoUpdate(entry, new UpdateOneModel<BsonDocument>(whereFilter, updateDefinition));
     }
 
-    private static FilterDefinition<BsonDocument> CreateWhereFilter(IUpdateEntry entry)
+    /// <summary>
+    /// Replaces the document of <paramref name="removed"/> with the whole document of <paramref name="entry"/>, which has the
+    /// same primary key. Like the relational providers' one UPDATE for the pair, it matches the document by its key and the
+    /// concurrency token values <paramref name="removed"/> was loaded with (so a document changed or deleted since is a
+    /// conflict, not an upsert), and everything the new entity maps is written, as for an insert.
+    /// </summary>
+    private static MongoUpdate ConvertReplaced(IUpdateEntry entry, IUpdateEntry removed)
+    {
+        var document = new BsonDocument();
+        using var writer = new BsonDocumentWriter(document);
+
+        var whereFilter = CreateWhereFilter(entry, removed); // Before row version incrementation
+        ContinueRowVersions(entry, removed);
+        SetStoreGeneratedValues(entry);
+        WriteEntity(writer, entry);
+
+        return new MongoUpdate(entry, new ReplaceOneModel<BsonDocument>(whereFilter, document), removed);
+    }
+
+    // The new entity has not been stored, so its row version would start again and could equal the one other contexts loaded
+    // with the document it replaces, letting their stale updates through. Carry on from the version that was replaced.
+    private static void ContinueRowVersions(IUpdateEntry entry, IUpdateEntry removed)
+    {
+        foreach (var property in entry.EntityType.GetProperties())
+        {
+            if (property.IsRowVersion()
+                && removed.EntityType.FindProperty(property.Name) is { } removedProperty
+                && removedProperty.ClrType == property.ClrType
+                && removedProperty.IsRowVersion())
+            {
+                entry.SetStoreGeneratedValue(property, removed.GetOriginalValue(removedProperty));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates the filter that finds the document of <paramref name="entry"/>: its key and the original values of its
+    /// concurrency tokens. For a replacement the key comes from the entity added, but the tokens from
+    /// <paramref name="tokenEntry"/>, the entity removed, which is the one the stored document was loaded as.
+    /// </summary>
+    private static FilterDefinition<BsonDocument> CreateWhereFilter(IUpdateEntry entry, IUpdateEntry? tokenEntry = null)
     {
         _ = entry.EntityType.FindPrimaryKey() ??
             throw new InvalidOperationException($"Cannot find the primary key for the entity: {entry.EntityType.Name}");
@@ -108,7 +176,7 @@ internal class MongoUpdate(IUpdateEntry entry, WriteModel<BsonDocument> model)
 
         writer.WriteStartDocument();
         WriteKeyProperties(writer, entry);
-        WriteConcurrencyTokens(writer, entry);
+        WriteConcurrencyTokens(writer, tokenEntry ?? entry);
         writer.WriteEndDocument();
 
         return writer.Document.Elements

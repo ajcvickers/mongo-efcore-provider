@@ -25,7 +25,8 @@ internal class MongoUpdateBatch(string collectionName, List<MongoUpdate> updates
     public string CollectionName { get => collectionName; }
     public List<MongoUpdate> Updates { get => updates; }
 
-    public long Modified => updates.Count(u => u.Model.ModelType == WriteModelType.UpdateOne);
+    // A document replaced (#109) is counted with the modified ones: it is matched on its filter, as an update is.
+    public long Modified => updates.Count(u => u.IsUpdate);
     public long Inserts => updates.Count(u => u.Model.ModelType == WriteModelType.InsertOne);
     public long Deletes => updates.Count(u => u.Model.ModelType == WriteModelType.DeleteOne);
 

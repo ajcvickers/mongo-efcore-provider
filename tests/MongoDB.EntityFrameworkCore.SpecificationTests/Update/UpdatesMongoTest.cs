@@ -105,37 +105,11 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
         => base.Can_change_type_of__dependent_by_replacing_with_new_dependent(async);
 #endif
 
-#if (EF10 || EF11)
-#if EF11
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
     public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
-        => SpecFails.AnyOutcomeAsync(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
-#else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
-    public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
-#endif
-#elif EF9 || EF8
-#if EF8
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async));
-#else
-    // Fails: Other unexpected exception from query execution EF-X605
-    public override Task Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException<global::MongoDB.Bson.BsonDocument>>(() => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async));
-#endif
-#endif
+        => base.Can_change_type_of_pk_to_pk_dependent_by_replacing_with_new_dependent(async);
 
-#if EF11
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105 (non-deterministic: depends on the graph traversal order) EF-X721
     public override Task Can_delete_and_add_for_same_key(bool async)
-        => SpecFails.AnyOutcomeAsync(() => base.Can_delete_and_add_for_same_key(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
-#else
-    // Fails: Bulk write failure (duplicate _id) when saving entities with default int keys EF-X105
-    public override Task Can_delete_and_add_for_same_key(bool async)
-        => SpecFails.ThrowsAsync<global::MongoDB.Driver.MongoBulkWriteException>(() => base.Can_delete_and_add_for_same_key(async), "A bulk write operation resulted in one or more errors. WriteErrors: [ { Category : \"Duplic");
-#endif
+        => base.Can_delete_and_add_for_same_key(async);
 
 #if (EF10 || EF11)
 #if !EF11
@@ -286,15 +260,5 @@ public class UpdatesMongoTest(UpdatesMongoTest.UpdatesMongoFixture fixture)
     // Fails: Concurrency exception message differs from the relational wording EF-X115
     public override void Save_partial_update_on_missing_record_throws()
         => SpecFails.Throws<global::Xunit.Sdk.XunitException>(() => base.Save_partial_update_on_missing_record_throws(), "Strings differ");
-#endif
-
-#if (EF10 || EF11) || EF9
-    // Fails: replacing a principal (delete and add the same key in one SaveChanges) throws MongoBulkWriteException (duplicate key) EF-X518
-    public override Task Save_replaced_principal()
-        => SpecFails.ThrowsAsync(() => base.Save_replaced_principal(), "DuplicateKey");
-#elif EF8
-    // Fails: replacing a principal (delete and add the same key in one SaveChanges) throws MongoBulkWriteException (duplicate key) EF-X518
-    public override void Save_replaced_principal()
-        => SpecFails.Throws(() => base.Save_replaced_principal(), "DuplicateKey");
 #endif
 }

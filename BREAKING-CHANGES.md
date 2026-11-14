@@ -895,6 +895,61 @@ is resolved from the context's service provider.
 The interface is documented as internal and users are warned not to implement it, so most code is unaffected. If you have your own
 implementation, add the two methods, or derive from `MongoTransactionManager` instead.
 
+### Removing an entity and adding another with the same key in one `SaveChanges` now replaces the stored document
+
+#### Old behavior
+
+When one `SaveChanges` removed an entity and added another with the same primary key, EF Core tracks the two entries as a pair and
+passes only the added one to the provider. The provider inserted it, so the insert collided with the document still in the
+collection and failed with `MongoBulkWriteException` (`E11000`, duplicate key on `_id`). The one case that worked was removing an
+entity that was not stored: for example `Attach` a stub, `Remove` it and `Add` an entity with the same key for a document that did not
+exist inserted that document.
+
+#### New behavior
+
+The pair is saved as one `ReplaceOne`, as the relational providers save it as one `UPDATE`. The filter is the key and the
+original concurrency token values of the removed entity, and the replacement is the whole document of the added entity: properties
+and owned entities that only the old document had are gone. A row version continues from the one it replaces. The write counts as a
+modification: it is logged as one modified document, and a document that was changed or deleted since it was loaded fails the
+concurrency check with `DbUpdateConcurrencyException` (reporting the added entity), never an insert. The code that used to throw
+`MongoBulkWriteException` now succeeds, and the stub case above now throws `DbUpdateConcurrencyException`.
+
+#### Why
+
+Saving a replacement of an entity under the same key is valid in EF Core and worked with the relational providers, but could not be
+expressed at all with this provider.
+
+#### Mitigations
+
+Code that removed a stub and added an entity to write a document whether or not it exists should check for the document first
+(`AnyAsync`), or catch `DbUpdateConcurrencyException` and add the entity. Code that caught the duplicate key error from a remove and
+add of the same key can drop the handler.
+
+### `SaveChanges` now counts updates by the documents they matched, not the documents they changed
+
+#### Old behavior
+
+The number `SaveChanges` returned counted an update only if the server reported the document as modified. An entity whose update
+wrote the values the document already held, such as one set to `EntityState.Modified` without a change, matched its document but
+was reported as modified by MongoDB as `0`, so `SaveChanges` returned 0 for it.
+
+#### New behavior
+
+An update counts when it matches its document, whether or not the stored values change, so such a `SaveChanges` returns 1. This is
+what the relational providers return (the matched row of an `UPDATE`) and what the concurrency check already treated as applied.
+Inserts and deletes are counted as before.
+
+#### Why
+
+EF Core documents the result as the number of state entries written to the database, and the same save reported different numbers
+depending on whether the stored values happened to be the same. The replace of a document with an identical one (see above) would
+also have returned 0.
+
+#### Mitigations
+
+Code that relied on a return value of 0 to tell that nothing changed should compare the entity's values, or check for modified
+properties, before saving.
+
 ## Breaking changes in 8.4.0 / 9.1.0 / 10.0.0
 
 ### The element name for discriminators may have changed
