@@ -78,6 +78,13 @@ public class ReplaceDocumentTests(TemporaryDatabaseFixture database, ITestOutput
         public string Name { get; set; } = null!;
     }
 
+    public class Stamped
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = null!;
+        public byte[] Version { get; set; } = null!;
+    }
+
     public abstract class Animal
     {
         public Guid Id { get; set; }
@@ -101,11 +108,13 @@ public class ReplaceDocumentTests(TemporaryDatabaseFixture database, ITestOutput
         public DbSet<Versioned> Versioneds { get; set; } = null!;
         public DbSet<Animal> Animals { get; set; } = null!;
         public DbSet<Pair> Pairs { get; set; } = null!;
+        public DbSet<Stamped> Stampeds { get; set; } = null!;
         public DbSet<Converted> Converteds { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Pair>().HasKey(p => new { p.Part, p.Name });
+            modelBuilder.Entity<Stamped>().Property(s => s.Version).IsRowVersion();
             modelBuilder.Entity<Converted>().Property(c => c.Id).HasConversion<string>();
             modelBuilder.Entity<Versioned>().Property(v => v.Version).IsRowVersion();
             modelBuilder.Entity<Animal>();
@@ -609,6 +618,36 @@ public class ReplaceDocumentTests(TemporaryDatabaseFixture database, ITestOutput
         Assert.Equal(2, replacement.Version);
         using var check = CreateContext();
         Assert.Equal(2, check.Versioneds.Single(v => v.Id == id).Version);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_replaced_documents_byte_array_row_version_continues_from_the_one_replaced(bool async)
+    {
+        var id = Guid.NewGuid();
+
+        using (var seed = CreateContext())
+        {
+            seed.Stampeds.Add(new Stamped { Id = id, Name = "v1" });
+            await Save(seed, async);
+        }
+
+        using var db = CreateContext();
+        var old = db.Stampeds.Single(v => v.Id == id);
+        Assert.Equal(1UL, System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(old.Version));
+
+        db.Remove(old);
+        var replacement = new Stamped { Id = id, Name = "v2" };
+        db.Add(replacement);
+        await Save(db, async);
+
+        // The counter carries on from the replaced document's, so a context still holding version 1 cannot match.
+        Assert.Equal(2UL, System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(replacement.Version));
+        using var check = CreateContext();
+        var stored = check.Stampeds.Single(v => v.Id == id);
+        Assert.Equal("v2", stored.Name);
+        Assert.Equal(2UL, System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(stored.Version));
     }
 
     [Theory]
