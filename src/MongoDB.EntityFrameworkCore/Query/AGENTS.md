@@ -65,6 +65,15 @@ Gate and fallback:
   EF10+ the C# compiler evaluates it inside the caller's `Action<UpdateSettersBuilder>`, so no call ever reaches the provider, and EF9
   must agree. Refusal messages
   print expressions through `ExpressionShapePrinter` (constants as `?`), never `Expression.ToString()`.
+  The source chain is always read through `MongoNonQueryExpression.UnwrapBulkOperator` (classifier, filter, two-phase id query,
+  null-element scan), which also strips the OUTERMOST auto-include wrapper navigation expansion leaves for an entity type with an
+  included navigation (always on EF9, and for `ExecuteDelete` on EF10+; #69). It loads related data only, so it never changes the
+  affected set. Two shapes, matched narrowly: `Select(e => Include(e, ...))` for an owned navigation (auto-included by convention),
+  and `LeftJoin(source, DbSet<Related>, ...)` + `Select(ti => Include(ti.Outer, nav, ti.Inner))` (n nested of each) for REFERENCE
+  navigations to another collection, which is stripped to `source`. A required navigation's inner `Join` is NOT stripped (it drops
+  documents whose reference dangles, changing the affected set), nor is a collection include, nor a `Where` above the join (a
+  predicate on the navigation, which stays unsupported); any other `Select` is still refused. A new reader of the chain must go
+  through `UnwrapBulkOperator`, not through `CapturedExpression` directly.
 - **A recognizer turning a correlated `DbSet` subquery into a navigation** (`db.Orders.Where(o => o.CustomerId == c.X)`
   -> `c.Orders`) must prove `c.X` is that navigation's FK principal key via `NativeCorrelationMatcher` (single-property FK;
   alternate key via `ForeignKey.PrincipalKey`; composite declines). Binding emits `$lookup {localField: principalKey}`,

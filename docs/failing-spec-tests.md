@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 4,995 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,514 |
+| `// Fails:` tag lines | 1,206 | 4,987 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,508 |
 | ... active in the EF8 build | 1,064 | 2,626 |
-| ... active in the EF9 build | 1,141 | 3,149 |
-| ... active in the EF10 build | 882 | 3,292 |
-| ... active in the EF11 build | not measured | 3,322 |
+| ... active in the EF9 build | 1,141 | 3,143 |
+| ... active in the EF10 build | 882 | 3,288 |
+| ... active in the EF11 build | not measured | 3,318 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 58 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -192,7 +192,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X021 | Filtered Include / query filter on cross-collection target not translated | 0 |
 | EF-X022 | Join/GroupJoin whose inner source is a filtered or ordered sub-query is rejected | 14 |
 | EF-X024 | `Where`/entity materialization over a flattened multi-join chain onto ambiguous same-navigation or navigation-less siblings is not translated | 2 |
-| EF-X016 | Bulk `ExecuteUpdate`/`ExecuteDelete` source restricted to a single collection scoped by `Where` | 61 |
+| EF-X016 | Bulk `ExecuteUpdate`/`ExecuteDelete` source restricted to a single collection scoped by `Where` | 55 |
 | EF-X400 | **Fixed:** `DbUpdateConcurrencyException` is now raised through `ISaveChangesInterceptor.ThrowingConcurrencyException[Async]` (#104); a suppressed conflict is counted as applied, like the relational providers | 0 |
 | EF-X401 | Ambiguous foreign key discovery between a join/owned type and its owner (`Both relationships ... could use {'PostId'}`) | 4 |
 | EF-X402 | Projecting an owned collection navigation directly (`Select(e => e.OwnedCollection)`) is not translated | 1 |
@@ -479,7 +479,7 @@ Affected: 1 test (`NorthwindMiscellaneousQueryMongoTest.Where_nanosecond_and_mic
 ### EF-X016 — Bulk `ExecuteUpdate`/`ExecuteDelete` source restricted to a single collection scoped by `Where`
 Comment pattern: `// Fails: ExecuteUpdate/ExecuteDelete source restricted to a Where predicate; <shape> unsupported EF-X016`.
 Test-body pattern: `AssertTranslationFailed(() => base.X(...))`.
-Affected: 61 tests: 42 in `NorthwindBulkUpdatesMongoTest.cs`, 11 in `NonSharedModelBulkUpdatesMongoTest.cs`, 4 in `InheritanceBulkUpdatesMongoTest.cs` and 4 in `FiltersInheritanceBulkUpdatesMongoTest.cs`. By design, the provider supports bulk `ExecuteUpdate`/`ExecuteDelete` only against a single collection scoped by `Where`, with constant / parameter / self-referencing scalar setters (see README "What is supported" and EF-107). The EF conformance suite exercises shapes outside that subset — joins / correlated subqueries, set operations (`Except`/`Intersect`), `GroupBy`, `SelectMany`, cross-document navigation predicates, non-entity projection sources, and multiple-collection updates — and the provider rejects them during translation with an `InvalidOperationException` whose message reports the LINQ expression could not be translated. This is a documented limitation rather than a bug to fix; the ticket tracks the boundary so any future expansion of the supported subset (or a behavior change) is detected. Most shapes are rejected by compile-time bulk-source validation; a few (e.g. a `GroupBy` subquery inside the `Where` predicate) only fail when the filter is built at execution time, where a translation guard (`TranslateBulkOrThrow` in `MongoShapedQueryCompilingExpressionVisitor`) converts the raw driver/expression exception into the same canonical non-query translation failure. A handful of sibling shapes surface differently and are tagged separately: cross-DbSet `GroupBy` rejections under [EF-216](https://jira.mongodb.org/browse/EF-216), and the `$unionWith`-in-transaction `Concat`/`Union` cases under `EF-X002`.
+Affected: 55 tests: 42 in `NorthwindBulkUpdatesMongoTest.cs`, 5 in `NonSharedModelBulkUpdatesMongoTest.cs`, 4 in `InheritanceBulkUpdatesMongoTest.cs` and 4 in `FiltersInheritanceBulkUpdatesMongoTest.cs`. By design, the provider supports bulk `ExecuteUpdate`/`ExecuteDelete` only against a single collection scoped by `Where`, with constant / parameter / self-referencing scalar setters (see README "What is supported" and EF-107). The EF conformance suite exercises shapes outside that subset — joins / correlated subqueries, set operations (`Except`/`Intersect`), `GroupBy`, `SelectMany`, cross-document navigation predicates, non-entity projection sources, and multiple-collection updates — and the provider rejects them during translation with an `InvalidOperationException` whose message reports the LINQ expression could not be translated. An entity type with an included navigation (an owned navigation is auto-included) is no longer part of that boundary: the outermost auto-include `Select(Include)` wrapper is stripped (#69), so the formerly tagged `Delete_entity_with_auto_include`, `Delete_aggregate_root_when_eager_loaded_owned_collection`, `Delete_aggregate_root_when_table_sharing_with_owned`, `Delete_with_owned_collection_and_non_natively_translatable_query` and (EF9) `Update_non_owned_property_on_entity_with_owned`/`2` now pass. This is a documented limitation rather than a bug to fix; the ticket tracks the boundary so any future expansion of the supported subset (or a behavior change) is detected. Most shapes are rejected by compile-time bulk-source validation; a few (e.g. a `GroupBy` subquery inside the `Where` predicate) only fail when the filter is built at execution time, where a translation guard (`TranslateBulkOrThrow` in `MongoShapedQueryCompilingExpressionVisitor`) converts the raw driver/expression exception into the same canonical non-query translation failure. A handful of sibling shapes surface differently and are tagged separately: cross-DbSet `GroupBy` rejections under [EF-216](https://jira.mongodb.org/browse/EF-216), and the `$unionWith`-in-transaction `Concat`/`Union` cases under `EF-X002`.
 
 **Remaining unsupported shapes — grouped by root cause.** The unifying cause: bulk execution needs a source the provider can express as a single-collection filter (single command) or read to collect the target `_id`s (two-phase, selected by `Skip`/`Take` or `OfType<TDerived>()`). Every group below fails because the source shape itself cannot be translated — so neither phase 1 nor a single-command filter can be built. (Delete has the analogous cases; the `Update_*` methods are enumerated here since they are the larger set.)
 

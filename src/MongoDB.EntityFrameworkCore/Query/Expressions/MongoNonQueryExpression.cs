@@ -105,13 +105,136 @@ internal sealed class MongoNonQueryExpression : Expression
     /// <see cref="MongoQueryExpression.CapturedExpression"/>; walkers that scope the operation need only the source.
     /// Only the four bulk operators are unwrapped: other methods on that type (AsNoTracking, IgnoreQueryFilters, TagWith, ...) stay in
     /// the chain so the classifier can see and reject them rather than having them silently discarded.
+    /// <para>
+    /// An outermost auto-include wrapper is unwrapped too (<see cref="StripIncludeWrapper"/>), so every consumer of the source chain
+    /// (classification, filter, two-phase id query, null-element scan) sees the same chain.
+    /// </para>
     /// </summary>
     public static Expression? UnwrapBulkOperator(Expression? capturedExpression)
-        => capturedExpression is MethodCallExpression { Method: { DeclaringType: var declaringType, Name: var name } } call
-           && declaringType == typeof(EntityFrameworkQueryableExtensions)
-           && Array.IndexOf(BulkOperatorNames, name) >= 0
-            ? call.Arguments[0]
-            : capturedExpression;
+        => StripIncludeWrapper(
+            capturedExpression is MethodCallExpression { Method: { DeclaringType: var declaringType, Name: var name } } call
+            && declaringType == typeof(EntityFrameworkQueryableExtensions)
+            && Array.IndexOf(BulkOperatorNames, name) >= 0
+                ? call.Arguments[0]
+                : capturedExpression);
+
+    /// <summary>
+    /// Removes the auto-include wrapper that navigation expansion leaves as the OUTERMOST operator when the entity type has an included
+    /// navigation: always for ExecuteDelete, and for ExecuteUpdate on EF9 (#69). It only loads related data into the result, so it does
+    /// not change which documents match, and a bulk operation returns none of it. Two shapes, matched narrowly (anything else stays in the
+    /// chain for the classifier to reject):
+    /// <list type="bullet">
+    /// <item>
+    /// <c>Select(e => Include(e, ...))</c>, an embedded (owned) navigation: a <c>Select</c> whose lambda body is nothing but
+    /// <see cref="IncludeExpression"/>s over the lambda's own parameter.
+    /// </item>
+    /// <item>
+    /// <c>LeftJoin(source, DbSet&lt;Related&gt;, ...).Select(ti => Include(ti.Outer, nav, ti.Inner))</c>, a REFERENCE navigation to another
+    /// collection: a left-outer join (so a document whose reference is missing is still in the set, and one match at most, since it is
+    /// a reference) that only feeds the include. Stripping both leaves <c>source</c>. An inner <c>Join</c>, which a required navigation may
+    /// produce, is NOT accepted: it can drop documents whose reference dangles, which would change the affected set.
+    /// </item>
+    /// </list>
+    /// Several included reference navigations arrive as ONE <c>Select</c> of nested includes over nested <c>LeftJoin</c>s, handled the same
+    /// way. Repeated while the chain still starts with one wrapper.
+    /// </summary>
+    private static Expression? StripIncludeWrapper(Expression? expression)
+    {
+        while (TryStripIncludeWrapper(expression, out var source))
+        {
+            expression = source;
+        }
+
+        return expression;
+    }
+
+    private static bool TryStripIncludeWrapper(Expression? expression, out Expression? source)
+    {
+        source = null;
+        if (expression is not MethodCallExpression { Method: { IsGenericMethod: true } method, Arguments: [var select, var selector] }
+            || method.GetGenericMethodDefinition() != QueryableMethods.Select
+            || selector.UnwrapLambdaFromQuote() is not { Parameters: [var parameter], Body: IncludeExpression outermost })
+        {
+            return false;
+        }
+
+        // The nested includes, outermost first, down to the entity they all include onto.
+        var includes = new List<IncludeExpression>();
+        Expression entity = outermost;
+        while (entity is IncludeExpression nested)
+        {
+            includes.Add(nested);
+            entity = nested.EntityExpression;
+        }
+
+        if (entity == parameter)
+        {
+            source = select;
+            return true;
+        }
+
+        // n included reference navigations: the entity is p.Outer (n times) and include j reads p.Outer (j times).Inner, over n nested
+        // LeftJoins that only feed those includes.
+        var count = includes.Count;
+        if (!parameter.Type.IsTransparentIdentifierType() || !IsOuterPath(entity, parameter, count))
+        {
+            return false;
+        }
+
+        for (var j = 0; j < count; j++)
+        {
+            if (includes[j].Navigation.IsCollection
+                || includes[j].NavigationExpression is not MemberExpression { Member.Name: "Inner", Expression: { } owner }
+                || !IsOuterPath(owner, parameter, j))
+            {
+                return false;
+            }
+        }
+
+        var current = select;
+        for (var j = 0; j < count; j++)
+        {
+            if (current is not MethodCallExpression
+                {
+                    Method: { Name: "LeftJoin", IsGenericMethod: true } join,
+                    Arguments: [var joinSource, QueryRootExpression, _, _, var resultSelector]
+                }
+                || !(join.DeclaringType == typeof(Queryable) || join.DeclaringType?.Assembly == typeof(DbContext).Assembly)
+                || !IsTransparentIdentifierOfParameters(resultSelector.UnwrapLambdaFromQuote()))
+            {
+                return false;
+            }
+
+            current = joinSource;
+        }
+
+        source = current;
+        return true;
+    }
+
+    // parameter.Outer.Outer... (count times); count 0 is the parameter itself.
+    private static bool IsOuterPath(Expression expression, ParameterExpression parameter, int count)
+    {
+        while (count > 0)
+        {
+            if (expression is not MemberExpression { Member.Name: "Outer" } member || !member.IsTransparentIdentifierOuterOrInnerAccess())
+            {
+                return false;
+            }
+
+            expression = member.Expression!;
+            count--;
+        }
+
+        return expression == parameter;
+    }
+
+    // (o, i) => new TransparentIdentifier<TOuter, TInner>(o, i): the plain pairing EF writes for a join feeding an include.
+    private static bool IsTransparentIdentifierOfParameters(LambdaExpression selector)
+        => selector is { Parameters: [var outer, var inner], Body: NewExpression { Arguments: [var first, var second] } body }
+           && body.Type.IsTransparentIdentifierType()
+           && first == outer
+           && second == inner;
 
     // The canonical single-key / parameterless overloads. Matched by method definition, not by name (Query/AGENTS.md: reference-equality on
     // MethodInfo), so overloads with different semantics are not admitted: OrderBy(keySelector, IComparer<T>) and
