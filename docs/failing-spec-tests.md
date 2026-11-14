@@ -915,8 +915,8 @@ Assertion failures (`Assert.Equal`/`Assert.True`) in `StoreGenerated` (computed/
 `OptimisticConcurrencyTestBase.ConcurrencyTestAsync` changes the row through a second context and then saves the first, expecting a `DbUpdateConcurrencyException`. These tests used to fail with
 `MongoCommandException: Write conflict during plan execution`, and the 15 wrappers pinned that message. It was not the provider: the fixture did not enlist the second context in the first
 one's transaction, so the two contexts ran in separate transactions and the server rejected the second. `OptimisticConcurrencyMongoTest` now enlists it (`UseTransaction`, #77/#87). That exposed two
-more fixture problems: the suite used a `byte[]` row version, which the provider never increments (it generates `int`, `uint`, `long` and `ulong` only), so no conflict was ever detected; it now uses
-`long`. What was left after that was EF-X607 (since fixed).
+more fixture problems: the suite used a `byte[]` row version, which the provider did not increment at the time (it generated `int`, `uint`, `long` and `ulong` only), so no conflict was ever detected, and the
+suite used `long` instead. The provider now generates `byte[]` row versions (#105), and the suite uses EF's `byte[]` again. What was left after that was EF-X607 (since fixed).
 
 ### EF-X607 — fixed (was: a concurrency conflict was thrown but not logged)
 `OptimisticConcurrencyTestBase.ConcurrencyTestAsync` asserts that `CoreEventId.OptimisticConcurrencyException` was logged at `Debug` level, as relational providers do. `MongoDatabaseWrapper` now

@@ -564,6 +564,258 @@ public static class MongoModelValidatorTests
         Assert.NotNull(db.Model);
     }
 
+    class ByteArrayVersionEntity
+    {
+        public int _id { get; set; }
+        public byte[] Version { get; set; }
+    }
+
+    class TimestampedByteArrayEntity
+    {
+        public int _id { get; set; }
+        [Timestamp] public byte[] Version { get; set; }
+    }
+
+    class TwoByteArrayVersionsEntity
+    {
+        public int _id { get; set; }
+        public byte[] VersionA { get; set; }
+        public byte[] VersionB { get; set; }
+    }
+
+    class NullableVersionEntity
+    {
+        public int _id { get; set; }
+        public int? Version { get; set; }
+    }
+
+    class GuidVersionEntity
+    {
+        public int _id { get; set; }
+        public Guid Version { get; set; }
+    }
+
+    [Fact]
+    public static void Validate_succeeds_when_byte_array_is_configured_as_row_version()
+    {
+        using var db = SingleEntityDbContext.Create<ByteArrayVersionEntity>(mb =>
+            mb.Entity<ByteArrayVersionEntity>().Property(e => e.Version).IsRowVersion());
+
+        Assert.NotNull(db.Model);
+    }
+
+    [Fact]
+    public static void Validate_succeeds_when_byte_array_has_timestamp_attribute()
+    {
+        using var db = SingleEntityDbContext.Create<TimestampedByteArrayEntity>();
+
+        Assert.NotNull(db.Model);
+    }
+
+    [Fact]
+    public static void Validate_throws_when_two_byte_array_row_versions_are_configured()
+    {
+        using var db = SingleEntityDbContext.Create<TwoByteArrayVersionsEntity>(mb =>
+        {
+            mb.Entity<TwoByteArrayVersionsEntity>().Property(e => e.VersionA).IsRowVersion();
+            mb.Entity<TwoByteArrayVersionsEntity>().Property(e => e.VersionB).IsRowVersion();
+        });
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains(nameof(TwoByteArrayVersionsEntity.VersionA), ex.Message);
+        Assert.Contains(nameof(TwoByteArrayVersionsEntity.VersionB), ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_throws_when_nullable_int_is_configured_as_row_version()
+    {
+        using var db = SingleEntityDbContext.Create<NullableVersionEntity>(mb =>
+            mb.Entity<NullableVersionEntity>().Property(e => e.Version).IsRowVersion());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(NullableVersionEntity.Version)}'", ex.Message);
+    }
+
+    class NullableLongVersionEntity { public int _id { get; set; } public long? Version { get; set; } }
+    class NullableUIntVersionEntity { public int _id { get; set; } public uint? Version { get; set; } }
+    class OwnerWithGuidVersionOwned { public int _id { get; set; } public GuidVersionOwned Owned { get; set; } }
+    class GuidVersionOwned { public Guid Version { get; set; } public string Text { get; set; } }
+
+    [Fact]
+    public static void Validate_throws_when_nullable_long_is_configured_as_row_version()
+    {
+        using var db = SingleEntityDbContext.Create<NullableLongVersionEntity>(mb =>
+            mb.Entity<NullableLongVersionEntity>().Property(e => e.Version).IsRowVersion());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(NullableLongVersionEntity.Version)}'", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_throws_when_nullable_uint_is_configured_as_row_version()
+    {
+        using var db = SingleEntityDbContext.Create<NullableUIntVersionEntity>(mb =>
+            mb.Entity<NullableUIntVersionEntity>().Property(e => e.Version).IsRowVersion());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(NullableUIntVersionEntity.Version)}'", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_reports_the_row_version_type_before_the_owned_entity_for_an_unsupported_row_version_on_an_owned_entity()
+    {
+        using var db = SingleEntityDbContext.Create<OwnerWithGuidVersionOwned>(mb =>
+            mb.Entity<OwnerWithGuidVersionOwned>()
+                .OwnsOne(e => e.Owned, b => b.Property(p => p.Version).IsRowVersion()));
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(GuidVersionOwned.Version)}'", ex.Message);
+        Assert.Contains("row version", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_throws_when_a_user_maintained_date_time_token_is_generated_on_add_or_update()
+    {
+        // Rejected because EF cannot tell it from a row version; the message tells the user to drop ValueGeneratedOnAddOrUpdate.
+        using var db = SingleEntityDbContext.Create<DateTimeTokenEntity>(mb =>
+            mb.Entity<DateTimeTokenEntity>().Property(e => e.Stamp).IsConcurrencyToken().ValueGeneratedOnAddOrUpdate());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(DateTimeTokenEntity.Stamp)}'", ex.Message);
+        Assert.Contains("ValueGeneratedOnAddOrUpdate", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_succeeds_when_a_user_maintained_date_time_token_is_a_plain_concurrency_token()
+    {
+        using var db = SingleEntityDbContext.Create<DateTimeTokenEntity>(mb =>
+            mb.Entity<DateTimeTokenEntity>().Property(e => e.Stamp).IsConcurrencyToken());
+
+        Assert.NotNull(db.Model);
+    }
+
+    class DateTimeTokenEntity { public int _id { get; set; } public DateTime Stamp { get; set; } }
+
+    [Fact]
+    public static void Validate_throws_when_guid_is_configured_as_row_version()
+    {
+        using var db = SingleEntityDbContext.Create<GuidVersionEntity>(mb =>
+            mb.Entity<GuidVersionEntity>().Property(e => e.Version).IsRowVersion());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(GuidVersionEntity.Version)}'", ex.Message);
+    }
+
+    class OwnerWithByteArrayVersionOwned
+    {
+        public int _id { get; set; }
+        public ByteArrayVersionOwned Owned { get; set; }
+    }
+
+    class ByteArrayVersionOwned
+    {
+        public byte[] Version { get; set; }
+        public string Text { get; set; }
+    }
+
+    class VersionedBase
+    {
+        public int _id { get; set; }
+    }
+
+    class VersionedDerived : VersionedBase
+    {
+        public byte[] Version { get; set; }
+    }
+
+    enum VersionEnum { One }
+
+    class EnumVersionEntity
+    {
+        public int _id { get; set; }
+        public VersionEnum Version { get; set; }
+    }
+
+    class UIntVersionEntity { public int _id { get; set; } public uint Version { get; set; } }
+    class LongVersionEntity { public int _id { get; set; } public long Version { get; set; } }
+    class ULongVersionEntity { public int _id { get; set; } public ulong Version { get; set; } }
+    class StringVersionEntity { public int _id { get; set; } public string Version { get; set; } }
+
+    [Fact]
+    public static void Validate_throws_when_byte_array_row_version_is_on_an_owned_entity()
+    {
+        using var db = SingleEntityDbContext.Create<OwnerWithByteArrayVersionOwned>(mb =>
+            mb.Entity<OwnerWithByteArrayVersionOwned>()
+                .OwnsOne(e => e.Owned, b => b.Property(p => p.Version).IsRowVersion()));
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(ByteArrayVersionOwned.Version)}'", ex.Message);
+        Assert.Contains("owned entity", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_succeeds_when_byte_array_row_version_is_on_a_derived_type()
+    {
+        using var db = SingleEntityDbContext.Create<VersionedBase>(mb =>
+        {
+            mb.Entity<VersionedBase>();
+            mb.Entity<VersionedDerived>().Property(e => e.Version).IsRowVersion();
+        });
+
+        Assert.NotNull(db.Model);
+    }
+
+    [Fact]
+    public static void Validate_throws_when_enum_is_configured_as_row_version()
+    {
+        using var db = SingleEntityDbContext.Create<EnumVersionEntity>(mb =>
+            mb.Entity<EnumVersionEntity>().Property(e => e.Version).IsRowVersion());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(EnumVersionEntity.Version)}'", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_throws_when_a_concurrency_token_is_generated_on_add_or_update_with_an_unsupported_type()
+    {
+        using var db = SingleEntityDbContext.Create<StringVersionEntity>(mb =>
+            mb.Entity<StringVersionEntity>().Property(e => e.Version).IsConcurrencyToken().ValueGeneratedOnAddOrUpdate());
+
+        var ex = Assert.Throws<NotSupportedException>(() => db.Model);
+        Assert.Contains($"'{nameof(StringVersionEntity.Version)}'", ex.Message);
+        Assert.Contains("ValueGeneratedOnAddOrUpdate", ex.Message);
+        Assert.Contains("byte[]", ex.Message);
+    }
+
+    [Fact]
+    public static void Validate_succeeds_when_a_non_concurrency_property_is_generated_on_add_or_update()
+    {
+        using var db = SingleEntityDbContext.Create<StringVersionEntity>(mb =>
+            mb.Entity<StringVersionEntity>().Property(e => e.Version).ValueGeneratedOnAddOrUpdate());
+
+        Assert.NotNull(db.Model);
+    }
+
+    [Fact]
+    public static void Validate_succeeds_when_unsigned_and_long_row_versions_are_supported_types()
+    {
+        using (var db = SingleEntityDbContext.Create<UIntVersionEntity>(mb => mb.Entity<UIntVersionEntity>().Property(e => e.Version).IsRowVersion()))
+            Assert.NotNull(db.Model);
+        using (var db = SingleEntityDbContext.Create<LongVersionEntity>(mb => mb.Entity<LongVersionEntity>().Property(e => e.Version).IsRowVersion()))
+            Assert.NotNull(db.Model);
+        using (var db = SingleEntityDbContext.Create<ULongVersionEntity>(mb => mb.Entity<ULongVersionEntity>().Property(e => e.Version).IsRowVersion()))
+            Assert.NotNull(db.Model);
+    }
+
+    [Fact]
+    public static void Validate_succeeds_when_byte_array_is_a_plain_concurrency_token()
+    {
+        using var db = SingleEntityDbContext.Create<ByteArrayVersionEntity>(mb =>
+            mb.Entity<ByteArrayVersionEntity>().Property(e => e.Version).IsConcurrencyToken());
+
+        Assert.NotNull(db.Model);
+    }
+
     class VersionableEntity
     {
         public int _id { get; set; }

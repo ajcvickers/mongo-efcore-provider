@@ -87,7 +87,7 @@ Entity Framework Core and MongoDB have a wide variety of features. This provider
 - Storage type configuration through EF ValueConverters or BSON representation attributes and fluent APIs
 - Query and update logging of MQL (sensitive logging must be enabled)
 - `EnsureCreated` & `EnsureDeleted` to ensure collections and the database created at app start-up
-- Optimistic concurrency support through `IsConcurrencyToken`/`ConcurrencyCheckAttribute` & `IsRowVersion`/`TimestampAttribute`
+- Optimistic concurrency support through `IsConcurrencyToken`/`ConcurrencyCheckAttribute` & `IsRowVersion`/`TimestampAttribute`. A row version must be a non-nullable `int`, `uint`, `long` or `ulong`, or a `byte[]` (as used with SQL Server `rowversion`); the provider increments it on every write (a `byte[]` is an 8-byte big-endian counter) and stores it in the `_version` element (unless an element name is configured for the property). Any other row version type is rejected when the model is built. To use a `ulong` in code and bytes in the database, use `IsRowVersion().HasConversion<byte[]>()`
 - AutoTransactional `SaveChanges` & `SaveChangesAsync` - all changes committed or rolled-back together
 - Sharing a transaction between contexts: `context.Database.UseTransaction(...)` makes a context write and query inside a transaction it did not start, so several contexts (even on different `MongoClient` instances connected to the same cluster, including a sharded cluster) can take part in one transaction. Pass another context's transaction, or an `IClientSessionHandle` that already has a transaction started:
 

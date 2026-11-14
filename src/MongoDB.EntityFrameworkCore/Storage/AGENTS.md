@@ -42,6 +42,12 @@ Only Storage may call the driver client/collection/session types directly.
 - **RowVersion ordering is contract**: `CreateWhereFilter` (pre-increment) → `SetStoreGeneratedValues` (increments
   in memory) → `WriteEntity` (post-increment into `$set`). The in-memory value is already advanced if
   serialization then fails.
+- **A row version is only generated for a non-nullable `int`/`uint`/`long`/`ulong` or a `byte[]`** (`RowVersion.IsRowVersion`).
+  A `byte[]` is the same counter as a `ulong`, held as 8 big-endian bytes (empty/null counts as 0, any other length throws on
+  write, before the in-memory value changes); it is stored as binary in `_version` (unless an element name is configured, as `CamelCaseElementNameConvention` does), like the numeric types. Any other
+  `IsRowVersion`/`[Timestamp]` property (or concurrency token with `ValueGenerated.OnAddOrUpdate`) would never change, so
+  `MongoModelValidator.ValidateRowVersionTypes` rejects it (otherwise a concurrency check that never fails). A new generated
+  type must be added to both.
 - **`AutoTransactionBehavior.Never` removes optimistic concurrency's atomicity**, not the tokens.
 - **Cross-collection atomicity comes from the transaction**, not `BulkWrite` (one per collection).
 - **Write order within a collection is deletes, then updates, then inserts** (`MongoUpdateBatch.CreateBatches`, #102), because EF
