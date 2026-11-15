@@ -211,7 +211,7 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
 
     // Fails: Model validation requires key property to be mapped to _id EF-X307
     public override void Key_from_base_type_is_recognized()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Key_from_base_type_is_recognized(), "The entity type 'OKeyBase' primary key property 'OrderLineNo' must be ");
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Key_from_base_type_is_recognized(), "The entity type 'DODerived' primary key property ");
 
     // Fails: Model validation requires key property to be mapped to _id EF-X307
     public override void Key_from_base_type_is_recognized_if_base_discovered_first()

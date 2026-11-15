@@ -94,8 +94,8 @@ public class AdHocNavigationsQueryMongoTest : AdHocNavigationsQueryTestBase
 
     public override async Task Let_multiple_references_with_reference_to_outer()
     {
-        // Fails: Model validation: cannot determine the relationship/owner represented by a navigation EF-X545
-        await SpecFails.ThrowsAsync(() => base.Let_multiple_references_with_reference_to_outer(), "InvalidOperationException");
+        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
+        await SpecFails.ThrowsAsync(() => base.Let_multiple_references_with_reference_to_outer(), "could not be translated");
     }
 
     public override async Task Include_collection_with_OfType_base()
@@ -129,8 +129,8 @@ public class AdHocNavigationsQueryMongoTest : AdHocNavigationsQueryTestBase
 
     public override async Task Cycles_in_auto_include()
     {
-        // Fails: Model validation: cannot determine the relationship/owner represented by a navigation EF-X545
-        await SpecFails.ThrowsAsync(() => base.Cycles_in_auto_include(), "InvalidOperationException");
+        // Fails: Generated int key not assigned (no value generation), so tracking conflicts EF-X522
+        await SpecFails.ThrowsAsync(() => base.Cycles_in_auto_include(), "cannot be tracked because another instance");
     }
 
 #if EF8

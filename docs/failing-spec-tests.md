@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 4,987 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,508 |
-| ... active in the EF8 build | 1,064 | 2,626 |
-| ... active in the EF9 build | 1,141 | 3,143 |
-| ... active in the EF10 build | 882 | 3,288 |
-| ... active in the EF11 build | not measured | 3,318 |
+| `// Fails:` tag lines | 1,206 | 4,895 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,465 |
+| ... active in the EF8 build | 1,064 | 2,576 |
+| ... active in the EF9 build | 1,141 | 3,100 |
+| ... active in the EF10 build | 882 | 3,245 |
+| ... active in the EF11 build | not measured | 3,275 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 58 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -48,7 +48,7 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 
 | Ticket | Methods | Subject |
 | --- | --- | --- |
-| EF-X526 | 712 | Query shape (navigation/projection/set operation) not translated |
+| EF-X526 | 713 | Query shape (navigation/projection/set operation) not translated |
 | EF-X101 | 8 | Entities added without an explicit key get Id 0 (no int/long key generation), so tracking/saving them ... |
 | EF-X530 | 238 | Wrong results compared with the reference (client) evaluation |
 | EF-216 | 245 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
@@ -284,10 +284,10 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X519 | Hierarchy materialization fails: discriminator value does not match the requested type | 1 |
 | EF-X520 | ElementAt/indexer call is rebuilt with the wrong number of arguments | 4 |
 | EF-X521 | Left join on entity with owned navigations throws ArgumentNullException (key) | 1 |
-| EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 46 |
+| EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 47 |
 | EF-X523 | Model validation rejects the relationship (owned/nested owned or ambiguous FK) | 2 |
 | EF-X525 | EF8/EF9: filtered query with multiple filtered entities returns duplicate rows | 1 |
-| EF-X526 | Query shape (navigation/projection/set operation) not translated | 712 |
+| EF-X526 | Query shape (navigation/projection/set operation) not translated | 713 |
 | EF-X527 | Expression not supported by the driver LINQ translator | 185 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
 | EF-X529 | NullReferenceException during query execution/materialization | 10 |
@@ -304,7 +304,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X542 | Enum flags bitwise/closure typed as a different type: ConvertIntegralTypeToEnumSerializer lacks IHasRepresentationSerializer | 2 |
 | EF-X543 | Property converted to nullable/other type in a projection: no coercion operator defined (int to string) | 1 |
 | EF-X544 | Model validation: an owned entity type used in multiple navigations is rejected (fixed for EF9 and later by #65; still pinned on EF8) | 0 |
-| EF-X545 | Model validation: cannot determine the relationship represented by a navigation (fixed for EF9 and later by #65; still pinned on EF8) | 2 |
+| EF-X545 | Model validation: cannot determine the relationship represented by a navigation (fixed for EF9 and later by #65; still pinned on EF8) | 0 |
 | EF-X546 | Filter on a nested DTO via an interface: serializer value type mismatch | 1 |
 | EF-X547 | Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) | 3 |
 | EF-X538 | Fixed (#65). A type deriving from a root entity type that was first reached through a navigation (the base type's navigation to its derived type, with no `DbSet` for the derived type) was owned by convention, which cut it off from its base type's hierarchy and broke the explicit one-to-one between the two ("the dependent side could not be determined"). Such a type is no longer auto-owned, so `InheritanceRelationshipsQueryMongoFixture` no longer needs `DoNotOwnTypes` | 0 |
