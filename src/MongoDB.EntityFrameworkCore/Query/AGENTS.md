@@ -234,7 +234,7 @@ Scope, joins, grouping:
       `StreamedCollectionSubstituter.TryStreamReferencedElementSelect` when the streaming shaper is chosen (`StreamedCollectionSubstituter.TryRewrite` and `MongoProjectionStreamingPlanner.TryPlan` accept the
       query), the element type is not owned and is `StreamingEligibility.IsEligible` (so no hierarchy), the alias is not also read whole, and
       `MongoElementSelectorRewriter` accepts the lambda (member reads of the element's scalar properties, operators, conditionals, anonymous types,
-      `string`/`Math`/`Nullable<T>` methods; `int.ToString()`, `DateTime` methods, `EF.Property` and collection `Contains` are not accepted), tracked or not: the cursor evaluates
+      `string`/`Math`/`Nullable<T>` methods, a captured value read from the query context (see below); `int.ToString()`, `DateTime` methods, `EF.Property` and collection `Contains` are not accepted), tracked or not: the cursor evaluates
       it per element (`BuildReferencedCollectionSelectReader`) and yields the `List<TResult>`, so no element entity is constructed, resolved against the
       change tracker or tracked, and an unsaved change to an already tracked row is never read. The terminal then runs over that list. Only the streaming
       materializer does this (the DOM one is going away). Because no entity is built, the selector reads the stored value of each property, so a property
@@ -251,7 +251,7 @@ Scope, joins, grouping:
         result does not depend on which one the query takes. The DOM shaper is taken for a hierarchy element type, for a projection with a member the streaming
         planner cannot stream, past 32 slots, and on the fallback routes; the fusion above is streaming only, so there the whole element is built (untracked) and the
         selector runs over it.
-      - `Other` (the element itself, a user method, a nested member, a navigation or owned member): applied to the materialized, and under `TrackAll`
+      - `Other` (the element itself, a user method, a nested member, an owned member; a navigation to another collection is refused, see below): applied to the materialized, and under `TrackAll`
         tracked, entity, so it sees the tracked instance and its unsaved change. That is EF Core's identity resolution (a tracking query never overwrites a
         tracked instance with what it read), and it is not refused: EF refuses a query because of its tracking behavior only when it cannot build a coherent
         result under it (an owned entity without its owner under `TrackAll`, an include cycle without a query state manager), and an element used as an entity
@@ -273,8 +273,33 @@ Scope, joins, grouping:
       reason names only a cause the binder established (`SelectorNotSelfContained` is the neutral fallback). The two sides see different trees (the read side has
       the source's shaper where the emit side has the selector's parameter), so leaves are matched on a normalized key
       (`ElementLeafDeclineKey`); a join-scope leaf is not matched and keeps the bare message. Reasons are shared constants: tests assert them.
-      Note that an element type with ANY owned navigation is declined (`OwnedNavigations`): nav-expansion includes them through a
-      `Select(m => Include(m, ..))` selector, which is not self-contained.
+      What is refused today, and why: an eagerly loaded cross-collection navigation of the element, the outer entity in the selector, `EF.Property`
+      in it (`SelectorUsesEFProperty`), a subquery in it (neutral `SelectorNotSelfContained`), a navigation of the element read in it (below), a
+      correlation that is not a key equality, a sort key that is not a default-stored scalar, an element filter reading the outer entity or not
+      translating, and an `OrDefault` member under an operator (below). A captured value is NOT refused (next bullet).
+    - **A captured value in an element selector is read per execution** (`m => m.Name + suffix`, #119). `IsSelfContainedLambda` admits a query
+      parameter, and the binding visitor puts every element selector into the shaper through `ReadQueryParametersPerExecution`
+      (`NativeQueryParameter.ReplaceQueryParameters`: each parameter becomes `QueryContext.Parameters[name]`), at each of its three binding sites
+      (the owned stored-value Select, the owned `Other` arm, `TryBindReferencedElementLeaf`), so the DOM, mixed and streaming shapers all read
+      this execution's value and the cached plan never holds one. `MongoElementSelectorRewriter` accepts exactly that read
+      (`NativeQueryParameter.IsQueryParameterRead` against the cursor's own query-context parameter), so a captured value does not stop the fusion.
+    - **The element's owned navigations are read through the element (#119).** Their data is in the element's own document and the element shaper
+      includes them (`CreateElementShaperWithOwnedIncludes`), so `NativeReferencedElementMatcher.TryMatch` normalizes nav-expansion's spelling of
+      them in the selector (`NormalizeOwnedNavigationReads`): `EF.Property<Detail>(m, "Detail")` (and a nested owned navigation off it) becomes the
+      member read `m.Detail`, and the owned-navigation `Include(Include(m, Detail), Pieces)` nav-expansion adds as the selector of a whole element
+      becomes the element itself, i.e. no selector. Both sides call `TryMatch`, so they see the same selector. Classification is unchanged (#120,
+      R2): a selector reading an owned member (`m.Detail.Label`, `m.Pieces.Count`) is `Other`, so under `TrackAll` it runs over the tracked
+      element with its tracked owned graph (an unsaved change is seen) and, untracked, over the stored element. The element and its owned
+      entities are tracked together or not at all, never an owned entity without its owner. An `EF.Property` the user wrote (or a shadow
+      property) is not rewritten and is still refused.
+    - **A navigation of the element to another collection read in the selector is refused, naming it** (`m.Animal.Name`, also as
+      `First().Animal.Name`, #119). Nav-expansion turns it into a `Join` (EF10+: `LeftJoin` for an optional one) onto `DbSet<Animal>` with a
+      `TransparentIdentifier` result directly below the selector (only the required `Join` is tested); `TryMatch` recognizes that join (only there, only one, only when the outer
+      key names the reference navigation's element-side key) and sets `ReferencedElementShape.JoinedNavigation`, so the binder declines with
+      `ElementLeafDeclineReasons.SelectorReadsNavigation(<Type>, <Nav>)` instead of the bare `DbSet<Method>()` message. Recognition only: the
+      lookup of a projected collection cannot carry the join (it would need a `$lookup` inside the element array's sub-pipeline, as
+      `ElementNestedLookups` does for `MinBy` keys), so it is never translated. EF8/EF9's optional-navigation form (`GroupJoin` +
+      `SelectMany(DefaultIfEmpty)`) is not recognized and keeps the bare message.
     - **An element leaf as an operand** (`R = a.Nav.OrderBy(..).First().Rank + 1`, `a.Name == "Rex" ? a.Nav.OrderBy(..).First().Name : "n/a"`, bare or
       wrapped) is a member the shaper evaluates over its operands (`NativeProjectionBinder.TryStageClientOperandMember`, the last resort after the
       client-conditional arm). Both sides walk the member with one classifier, `ClassifyClientOperandNode`: an operator or conditional holding an element
@@ -636,7 +661,7 @@ Shapers and projections:
   bare `r => r.Kids`) and beside the whole root (`new { r, Ws = ... }`: the array leaf's sibling-readability check admits a `$$ROOT` leaf; a late
   fallback that strips the projection then reads the whole documents with the mixed reader (`ReadsWholeRootLeafFromStrippedDocuments`), which reads
   that leaf as the document itself; one predicate, `MongoElementRefExpression.IsWholeRootDocument`). The lambda must be self-contained
-  (`IsSelfContainedLambda`). A lambda reading the outer entity crashes shaper build in every mode (pre-existing). What the shaper does
+  (`IsSelfContainedLambda`); a captured value is admitted and read per execution, as in an element leaf's selector. A lambda reading the outer entity crashes shaper build in every mode (pre-existing). What the shaper does
   with the elements depends on the selector, classified by the same `NativeReferencedElementMatcher.ClassifySelector` as an element
   leaf's (#32; owned and navigation members of the element are `Other`, and so is a read of an OWNED element's primary-key or
   ownership-FK property, which is synthesized, not stored: `IsOwnedTypeKey` gives it element name ""):
@@ -659,7 +684,8 @@ Shapers and projections:
   - **The streaming shaper evaluates a `ScalarMembersOnly` Select in place, tracked or not**
     (`StreamedCollectionSubstituter.TryStreamOwnedElementStoredSelect`, `MongoElementSelectorRewriter`): no element (nor its nested owned
     types) is constructed, and the lambda runs inside the driver's batch deserialization. So it must be side-effect free: member reads,
-    operators, conditionals, anonymous types, and `string`/`Math`/`Nullable<T>` methods only; a lambda the rewriter declines
+    operators, conditionals, anonymous types, `string`/`Math`/`Nullable<T>` methods, and a captured value, read per execution from the
+    cursor's query context (`ReadQueryParametersPerExecution`, as every element selector), only; a lambda the rewriter declines
     (`k.W.ToString()`, a user method), or an array also read whole in the same projection (an element of the cursor is read once), leaves the
     query to the DOM shaper, which still reads the stored values. Once the streaming shaper is chosen the pipeline is narrowed to the scalars
     the lambda reads (`MongoSelectDefinition.TryNarrowArrayProjection`, factory rebuilt); the pruning above never drops a scalar otherwise.

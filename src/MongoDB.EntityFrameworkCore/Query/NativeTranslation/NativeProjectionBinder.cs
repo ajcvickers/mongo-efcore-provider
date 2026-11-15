@@ -1882,26 +1882,20 @@ internal static class NativeProjectionBinder
     }
 
     /// <summary>
-    /// The reason an element leaf's selector that <see cref="IsSelfContainedLambda"/> rejected is declined, naming only a cause found in it: the
-    /// owned-navigation include nav-expansion adds as a selector of its own (<c>m =&gt; Include(m, m.Detail)</c>), a read of an owned navigation of
-    /// the element (nav-expansion spells <c>m.Detail</c> as <c>EF.Property(m, "Detail")</c>), any other <c>EF.Property</c>, or else a neutral
-    /// reason (a navigation or subquery reaches it as a query root; Task 9 names that one). A captured value is never the cause: it is admitted.
+    /// The reason an element leaf's selector that <see cref="IsSelfContainedLambda"/> rejected is declined, naming only a cause found in it: an
+    /// <c>EF.Property</c> (the matcher has already rewritten nav-expansion's reads of the element's owned navigations to member reads, so this is
+    /// one the user wrote, or a shadow property), or else a neutral reason (a subquery reaches it as a query root). A captured value is never the
+    /// cause: it is admitted. A navigation to another collection is named before this (<see cref="ReferencedElementShape.JoinedNavigation"/>).
     /// </summary>
-    private static string ClassifyNotSelfContainedSelector(LambdaExpression selector, IEntityType elementType)
+    private static string ClassifyNotSelfContainedSelector(LambdaExpression selector)
     {
-        if (selector.Body is IncludeExpression && selector.Body.UnwrapIncludes() == selector.Parameters[0])
-            return ElementLeafDeclineReasons.OwnedNavigations;
-
-        var finder = new SelectorDeclineFinder(selector.Parameters[0], elementType);
+        var finder = new SelectorDeclineFinder();
         finder.Visit(selector.Body);
-        return finder.ReadsOwnedNavigation ? ElementLeafDeclineReasons.SelectorReadsOwnedNavigation
-            : finder.UsesEFProperty ? ElementLeafDeclineReasons.SelectorUsesEFProperty
-            : ElementLeafDeclineReasons.SelectorNotSelfContained;
+        return finder.UsesEFProperty ? ElementLeafDeclineReasons.SelectorUsesEFProperty : ElementLeafDeclineReasons.SelectorNotSelfContained;
     }
 
-    private sealed class SelectorDeclineFinder(ParameterExpression element, IEntityType elementType) : ExpressionVisitor
+    private sealed class SelectorDeclineFinder : ExpressionVisitor
     {
-        public bool ReadsOwnedNavigation { get; private set; }
         public bool UsesEFProperty { get; private set; }
 
         // A query parameter is a leaf the base visitor cannot always walk (EF10's QueryParameterExpression); it is admitted, so it is no cause.
@@ -1912,16 +1906,7 @@ internal static class NativeProjectionBinder
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             if (node.Method.IsEFPropertyMethod())
-            {
                 UsesEFProperty = true;
-                if (node.Arguments is [var receiver, ConstantExpression { Value: string name }]
-                    && receiver.RemoveConvert().UnwrapIncludes() == element
-                    && elementType.FindNavigation(name) is { } navigation
-                    && navigation.IsEmbedded())
-                {
-                    ReadsOwnedNavigation = true;
-                }
-            }
 
             return base.VisitMethodCall(node);
         }
@@ -2703,6 +2688,11 @@ internal static class NativeProjectionBinder
         }
 
         var target = shape.Root.EntityType;
+
+        // A navigation of the element read in the selector is a join the element's lookup cannot carry (#119): refused, naming it.
+        if (shape.JoinedNavigation is { } joinedNavigation)
+            return Decline(ElementLeafDeclineReasons.SelectorReadsNavigation(target.ShortName(), joinedNavigation.Name));
+
         if (target.GetNavigations().Any(n => n.IsEagerLoaded && !n.IsEmbedded()))
             return Decline(ElementLeafDeclineReasons.EagerLoadedNavigation);
 
@@ -2714,7 +2704,7 @@ internal static class NativeProjectionBinder
                 return Decline(ElementLeafDeclineReasons.OuterEntityInSelector);
 
             if (!IsSelfContainedLambda(selector))
-                return Decline(ClassifyNotSelfContainedSelector(selector, target));
+                return Decline(ClassifyNotSelfContainedSelector(selector));
         }
 
         if (!NativeCorrelationMatcher.TryMatchCorrelation(

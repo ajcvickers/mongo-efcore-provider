@@ -17,8 +17,12 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;  // IsEFPropertyMethod()
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
+using MongoDB.EntityFrameworkCore.Extensions;        // IsEmbedded()
 
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
@@ -64,6 +68,13 @@ internal sealed class ReferencedElementShape
     /// that is not the tracked instance, so the leaf reads the stored row (see <see cref="ElementSelectorKind.ScalarMembersOnly"/>).
     /// </summary>
     public ElementSelectorKind SelectorKind { get; init; }
+
+    /// <summary>
+    /// The navigation of the element to another collection that <see cref="Selector"/> reads (<c>m.Animal.Name</c>), which nav-expansion joins in
+    /// below the selector (<c>Join(.., DbSet&lt;Animal&gt;(), ..).Select(ti =&gt; ti.Inner.Name)</c>), or <see langword="null"/>. Recognized only so that
+    /// the binder can refuse it naming the navigation: such a leaf is never translated.
+    /// </summary>
+    public INavigation? JoinedNavigation { get; init; }
 
     /// <summary>The <c>Skip</c> count applied after the ordering (a constant or a query parameter), or <see langword="null"/>.</summary>
     public Expression? Skip { get; init; }
@@ -119,17 +130,18 @@ internal static class ElementLeafDeclineReasons
     public const string EagerLoadedNavigation
         = "The element type has an eagerly loaded navigation to another collection, which is not loaded for the elements of a projected collection.";
 
-    public const string OwnedNavigations
-        = "The element type has owned navigations, which are not supported for the elements of a projected collection.";
-
     public const string OuterEntityInSelector
         = "The element selector reads the outer entity; a selector over the elements of a projected collection can only read the element.";
 
-    public const string SelectorReadsOwnedNavigation
-        = "The element selector reads an owned navigation of the element; a selector over the elements of a projected collection can only read the element and its stored scalar properties.";
-
     public const string SelectorUsesEFProperty
         = "The element selector uses EF.Property, which cannot run over the materialized elements of a projected collection.";
+
+    /// <summary>
+    /// The selector reads a navigation of the element to another collection (<c>m.Animal.Name</c>), which nav-expansion turns into a join that
+    /// the lookup of a projected collection cannot carry.
+    /// </summary>
+    public static string SelectorReadsNavigation(string elementTypeName, string navigationName)
+        => $"The element selector reads the navigation '{elementTypeName}.{navigationName}'; a navigation of an element of a projected collection is not supported.";
 
     /// <summary>The neutral reason: the selector contains something that cannot run over the materialized elements, which the binder did not identify further.</summary>
     public const string SelectorNotSelfContained
@@ -266,6 +278,12 @@ internal static class NativeReferencedElementMatcher
         var previousWasWhere = false;
         var current = source;
 
+        // A navigation of the element read in the selector: nav-expansion joins its target in directly below the selector. Recognized only to be
+        // refused by name (see ReferencedElementShape.JoinedNavigation); a join anywhere else in the chain is not an element leaf.
+        MethodCallExpression? join = null;
+        if (selector is not null && TryPeelNavigationJoin(ref current, out var navigationJoin))
+            join = navigationJoin;
+
         while (current is not EntityQueryRootExpression)
         {
             // Only the operators below take a lambda second argument; Concat/Union/Except/... take a query, which must not be unwrapped as one.
@@ -326,20 +344,174 @@ internal static class NativeReferencedElementMatcher
         sorts.Reverse();
         wheres.Reverse();
 
+        var root = (EntityQueryRootExpression)current;
+        INavigation? joinedNavigation = null;
+        if (join is not null)
+        {
+            if (FindJoinedNavigation(join, root.EntityType) is not { } found)
+                return false;
+
+            joinedNavigation = found;
+        }
+        else if (selector is not null)
+        {
+            // The owned navigations of the element are in its own document, and the element shaper includes them
+            // (CreateElementShaperWithOwnedIncludes): nav-expansion's owned Include and EF.Property spelling of them are read as the element's members.
+            selector = NormalizeOwnedNavigationReads(selector, root.EntityType);
+        }
+
         shape = new ReferencedElementShape
         {
             Terminal = terminal,
             ElementIndex = elementIndex,
-            Root = (EntityQueryRootExpression)current,
+            Root = root,
             Correlation = wheres[0],
             Filters = wheres.Skip(1).ToList(),
             Sorts = sorts,
             Selector = selector,
-            SelectorKind = ClassifySelector(selector, ((EntityQueryRootExpression)current).EntityType),
+            SelectorKind = joinedNavigation is not null ? ElementSelectorKind.Other : ClassifySelector(selector, root.EntityType),
+            JoinedNavigation = joinedNavigation,
             Skip = skip,
             Take = take
         };
         return true;
+    }
+
+    /// <summary>
+    /// Rewrites the reads of the element's owned (embedded) navigations in <paramref name="selector"/> to the plain member reads the user wrote:
+    /// nav-expansion spells <c>m.Detail.Label</c> as <c>EF.Property&lt;Detail&gt;(m, "Detail").Label</c> (and a nested owned navigation
+    /// the same way off it), and wraps an element it returns in an <see cref="IncludeExpression"/> per owned navigation
+    /// (<c>m =&gt; Include(Include(m, Detail), Pieces)</c>). Their data is in the element's own document and the element shaper includes them, so
+    /// the include is dropped, and a selector left as the bare element is no selector. Returns <see langword="null"/> for that case. Any other
+    /// <c>EF.Property</c> is left as it is (the binder declines it).
+    /// </summary>
+    private static LambdaExpression? NormalizeOwnedNavigationReads(LambdaExpression selector, IEntityType elementType)
+    {
+        var body = new OwnedNavigationReadRewriter(selector.Parameters[0], elementType).Visit(selector.Body);
+        if (body == selector.Parameters[0])
+            return null;
+
+        return body == selector.Body ? selector : Expression.Lambda(body, selector.Parameters);
+    }
+
+    private sealed class OwnedNavigationReadRewriter(ParameterExpression element, IEntityType elementType) : ExpressionVisitor
+    {
+        // The entity type of each owned-navigation read this rewriter produced, so a nested one is resolved against its owner.
+        private readonly Dictionary<Expression, IEntityType> _ownedReads = new(ReferenceEqualityComparer.Instance);
+
+        protected override Expression VisitExtension(Expression node)
+        {
+            // An Include of only embedded navigations around the element: the element shaper includes them already.
+            if (node is IncludeExpression include && IsElementUnderEmbeddedIncludes(include))
+                return element;
+
+            return base.VisitExtension(node);
+        }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.IsEFPropertyMethod()
+                && node.Arguments is [var receiverArgument, ConstantExpression { Value: string name }])
+            {
+                var receiver = Visit(receiverArgument).RemoveConvert();
+                var receiverType = receiver == element ? elementType : _ownedReads.GetValueOrDefault(receiver);
+                if (receiverType?.FindNavigation(name) is { } navigation
+                    && navigation.IsEmbedded()
+                    && (navigation.PropertyInfo ?? (MemberInfo?)navigation.FieldInfo) is { } member
+                    && member.DeclaringType!.IsAssignableFrom(receiver.Type))
+                {
+                    Expression read = Expression.MakeMemberAccess(receiver, member);
+                    _ownedReads[read] = navigation.TargetEntityType;
+                    return read.Type == node.Type ? read : Expression.Convert(read, node.Type);
+                }
+            }
+
+            return base.VisitMethodCall(node);
+        }
+
+        private bool IsElementUnderEmbeddedIncludes(IncludeExpression include)
+        {
+            Expression current = include;
+            while (current is IncludeExpression nested)
+            {
+                if (nested.Navigation is not INavigation navigation || !navigation.IsEmbedded())
+                    return false;
+
+                current = nested.EntityExpression;
+            }
+
+            return current == element;
+        }
+    }
+
+    /// <summary>
+    /// Peels nav-expansion's join of a navigation the selector reads (an inner <c>Join</c>, or EF10's <c>LeftJoin</c>, onto a query root with a
+    /// <c>TransparentIdentifier&lt;TOuter, TInner&gt;</c> result) from the top of the chain.
+    /// </summary>
+    private static bool TryPeelNavigationJoin(ref Expression source, [NotNullWhen(true)] out MethodCallExpression? join)
+    {
+        join = null;
+        if (source is MethodCallExpression
+            {
+                Method: { Name: nameof(Queryable.Join) or "LeftJoin", DeclaringType: var declaring },
+                Arguments: [var outer, EntityQueryRootExpression, var outerKey, _, var resultSelector]
+            } call
+            && declaring == typeof(Queryable)
+            && outerKey.UnwrapLambdaFromQuote() is { Parameters.Count: 1 }
+            && resultSelector.UnwrapLambdaFromQuote() is { Body: NewExpression resultBody }
+            && resultBody.Type.IsTransparentIdentifierType())
+        {
+            join = call;
+            source = outer;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The single reference navigation of <paramref name="elementType"/> to the joined root whose element-side key is the join's outer key.</summary>
+    private static INavigation? FindJoinedNavigation(MethodCallExpression join, IEntityType elementType)
+    {
+        var inner = ((EntityQueryRootExpression)join.Arguments[1]).EntityType;
+        var outerKeyNames = new HashSet<string>(
+            new EFPropertyNameCollector().Collect(join.Arguments[2].UnwrapLambdaFromQuote().Body));
+
+        var candidates = elementType.GetNavigations()
+            .Where(n => !n.IsCollection
+                        && !n.IsEmbedded()
+                        && n.TargetEntityType == inner
+                        && (n.IsOnDependent ? n.ForeignKey.Properties : n.ForeignKey.PrincipalKey.Properties)
+                        .Select(p => p.Name).ToHashSet().SetEquals(outerKeyNames))
+            .ToList();
+
+        return candidates is [var navigation] ? navigation : null;
+    }
+
+    private sealed class EFPropertyNameCollector : ExpressionVisitor
+    {
+        private readonly List<string> _names = [];
+
+        public IReadOnlyList<string> Collect(Expression body)
+        {
+            Visit(body);
+            return _names;
+        }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.IsEFPropertyMethod() && node.Arguments is [_, ConstantExpression { Value: string name }])
+                _names.Add(name);
+
+            return base.VisitMethodCall(node);
+        }
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (node.Expression is ParameterExpression)
+                _names.Add(node.Member.Name);
+
+            return base.VisitMember(node);
+        }
     }
 
     /// <summary>

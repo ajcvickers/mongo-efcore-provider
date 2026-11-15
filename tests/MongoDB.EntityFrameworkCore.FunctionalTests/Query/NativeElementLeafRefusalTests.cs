@@ -137,41 +137,46 @@ public class NativeElementLeafRefusalTests(TemporaryDatabaseFixture database)
             () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => db.Animals.Count(x => x.Name == "Rex")).ToList()).ToList());
     }
 
-    [Theory]
-    [MemberData(nameof(Modes))]
-    public void An_owned_reference_read_in_the_element_selector_is_named(MongoQueryMode mode)
-    {
-        using var db = CreateContext(mode, nameof(An_owned_reference_read_in_the_element_selector_is_named), withOwned: true);
-
-        AssertDeclined(
-            ElementLeafDeclineReasons.SelectorReadsOwnedNavigation,
-            () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => m.Detail.Label).ToList()).ToList());
-    }
-
-    [Theory]
-    [MemberData(nameof(Modes))]
-    public void An_owned_collection_read_in_the_element_selector_is_named(MongoQueryMode mode)
-    {
-        using var db = CreateContext(mode, nameof(An_owned_collection_read_in_the_element_selector_is_named), withOwned: true);
-
-        AssertDeclined(
-            ElementLeafDeclineReasons.SelectorReadsOwnedNavigation,
-            () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => m.Pieces.Count).ToList()).ToList());
-    }
-
     /// <summary>
-    /// Nav-expansion includes the element's owned navigations through a selector of their own (<c>m =&gt; Include(m, m.Detail)</c>), so an
-    /// element leaf whose type owns anything is declined even when it selects nothing.
+    /// A navigation of the element to another collection read in the selector (#119): nav-expansion turns it into a join, which the lookup of a
+    /// projected collection cannot carry. It is refused, naming the navigation.
     /// </summary>
     [Theory]
     [MemberData(nameof(Modes))]
-    public void An_element_type_with_owned_navigations_is_named(MongoQueryMode mode)
+    public void A_navigation_of_the_element_read_in_the_element_selector_is_named(MongoQueryMode mode)
     {
-        using var db = CreateContext(mode, nameof(An_element_type_with_owned_navigations_is_named), withOwned: true);
+        using var db = CreateContext(mode, nameof(A_navigation_of_the_element_read_in_the_element_selector_is_named));
 
         AssertDeclined(
-            ElementLeafDeclineReasons.OwnedNavigations,
-            () => db.Animals.Select(a => new { a.Name, Methods = a.Methods.OrderBy(m => m.Rank).ToList() }).ToList());
+            ElementLeafDeclineReasons.SelectorReadsNavigation("Method", "Animal"),
+            () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => m.Animal.Name).ToList()).ToList());
+    }
+
+    [Theory]
+    [MemberData(nameof(Modes))]
+    public void A_navigation_of_the_element_read_after_a_single_element_terminal_is_named(MongoQueryMode mode)
+    {
+        using var db = CreateContext(mode, nameof(A_navigation_of_the_element_read_after_a_single_element_terminal_is_named));
+
+        AssertDeclined(
+            ElementLeafDeclineReasons.SelectorReadsNavigation("Method", "Animal"),
+            () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).First().Animal.Name).ToList());
+    }
+
+    /// <summary>
+    /// An owned member of the element is read in the selector (#119, NativeElementLeafStoredValueKindsTests), but not through <c>EF.Property</c>,
+    /// which is still what is named when the selector holds both.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Modes))]
+    public void EF_Property_beside_an_owned_member_in_the_element_selector_is_named(MongoQueryMode mode)
+    {
+        using var db = CreateContext(mode, nameof(EF_Property_beside_an_owned_member_in_the_element_selector_is_named), withOwned: true);
+
+        AssertDeclined(
+            ElementLeafDeclineReasons.SelectorUsesEFProperty,
+            () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => m.Detail.Label + EF.Property<string>(m, "Name")).ToList())
+                .ToList());
     }
 
     [Theory]
