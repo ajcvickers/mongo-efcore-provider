@@ -602,16 +602,33 @@ Shapers and projections:
   plain-`Select` callers only); never widen `allowPositionalConstructorArguments`, which `GroupBy`/`SelectMany` result
   selectors share. `new List<T> { ... }` is not a container.
 - **An element `Select` over a root-declared owned collection** (`e.Kids.Select(k => k.W).ToList()`) is staged as the
-  collection's whole array (`TryMatchOwnedArraySelectLeaf`, the one predicate both sides call); the shaper re-applies the
-  `Select` over materialized owned entities. The lambda must be self-contained (`IsSelfContainedLambda`). A lambda reading
-  the outer entity crashes shaper build in every mode (pre-existing).
-  - **The streaming shaper evaluates such a Select in place** (`StreamedCollectionSubstituter.TryStreamElementSelect`,
-    `MongoElementSelectorRewriter`): when the lambda reads only scalar members of its element, no element (nor its nested owned
-    types) is constructed, and the lambda runs inside the driver's batch deserialization. So it must be side-effect free: member
-    reads, operators, conditionals, anonymous types, and `string`/`Math`/`Nullable<T>` methods only; anything else declines to the
-    whole-array read. Once that shaper is chosen the pipeline is narrowed to the scalars the lambda reads
-    (`MongoSelectDefinition.TryNarrowArrayProjection`, factory rebuilt), so a stored element missing a required scalar the lambda
-    does NOT read no longer throws; the pruning above never drops a scalar otherwise.
+  collection's whole array (`TryMatchOwnedArraySelectLeaf`, the one predicate both sides call). The lambda must be self-contained
+  (`IsSelfContainedLambda`). A lambda reading the outer entity crashes shaper build in every mode (pre-existing). What the shaper does
+  with the elements depends on the selector, classified by the same `NativeReferencedElementMatcher.ClassifySelector` as an element
+  leaf's (#32; owned and navigation members of the element are `Other`):
+  - **`ScalarMembersOnly` reads the stored values and builds no owned entity (#121)**, in every query mode and for every tracking
+    behavior. The binding visitor (`TryBindOwnedElementStoredSelect`) binds an `OwnedElementStoredSelectExpression`, which holds the
+    array (the leaf's projection binding on the native projection route; the navigation's `ObjectArrayProjectionExpression` on every other
+    route whose shaper the provider builds: the mixed fallback shaper, a client-wrapped whole entity) and the selector, and NO owned
+    entity shaper. That is load-bearing: EF's materializer injector (`InjectStructuralTypeMaterializers`) throws "owned entity without a
+    corresponding owner" for a tracking query that projects an owned shaper without its owner, before any provider code runs. The DOM and
+    mixed shapers lower the node to `ToList(Select(Cast<BsonDocument>(<array> ?? new BsonArray()), e => <body>))`, each `k.P` read from
+    the stored element through `P`'s serializer (`BuildOwnedElementStoredSelect`). So nothing is resolved against or added to the change
+    tracker: `new { r.Name, Ws = ... }` is no longer refused under `TrackAll`, and beside its owner (`new { r, Ws = ... }`) the owner and its
+    owned graph are tracked as usual while `Ws` is the stored values, not the tracked owner's unsaved change. A property getter or
+    constructor of the element type is not run, and a stored element missing a member the selector does not read is not an error (one it
+    reads and requires still throws). `ProjectionAnalyzer` keeps the node off the driver's push-down (`ExecuteProjectedQuery`), as it did
+    the collection shaper it replaces, so no route returns a driver-built value for it.
+  - **`Other`** (the element itself, a method taking it, a nested owned member) is re-applied over the materialized owned entities, under
+    `TrackAll` the owner's tracked instances with their unsaved changes (EF Core's identity resolution); without the owner a tracking query
+    is still refused by EF.
+  - **The streaming shaper evaluates a `ScalarMembersOnly` Select in place, tracked or not**
+    (`StreamedCollectionSubstituter.TryStreamOwnedElementStoredSelect`, `MongoElementSelectorRewriter`): no element (nor its nested owned
+    types) is constructed, and the lambda runs inside the driver's batch deserialization. So it must be side-effect free: member reads,
+    operators, conditionals, anonymous types, and `string`/`Math`/`Nullable<T>` methods only; a lambda the rewriter declines
+    (`k.W.ToString()`, a user method), or an array also read whole in the same projection (an element of the cursor is read once), leaves the
+    query to the DOM shaper, which still reads the stored values. Once the streaming shaper is chosen the pipeline is narrowed to the scalars
+    the lambda reads (`MongoSelectDefinition.TryNarrowArrayProjection`, factory rebuilt); the pruning above never drops a scalar otherwise.
 - **`Mql.Field(p, "element", serializer)` resolves like a mapped field** (`TryResolveMqlField`, shared by Where, OrderBy,
   Select, aggregate selectors) by STORED element name. The serializer argument is ignored (can't be inspected at compile
   time), so a converter/non-default representation or a CLR-type mismatch declines.

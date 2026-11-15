@@ -157,6 +157,11 @@ internal static class ProjectionAnalyzer
             case BlockExpression blockExpression:
                 return blockExpression.Expressions.Any(ContainsEntityReference);
 
+            // An owned element Select that reads stored values: the provider's mixed shaper evaluates it over whole documents, as it did the
+            // collection shaper this node replaces, so the query is not handed to the driver's push-down.
+            case OwnedElementStoredSelectExpression:
+                return true;
+
             case ProjectionBindingExpression:
             case ConstantExpression:
             case ParameterExpression:

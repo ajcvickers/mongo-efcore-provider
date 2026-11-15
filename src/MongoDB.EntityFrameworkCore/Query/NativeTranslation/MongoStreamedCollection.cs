@@ -265,7 +265,7 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
     public List<ParameterExpression> RemovedVariables { get; } = [];
 
     /// <summary>
-    /// For each owned array an element <c>Select</c> reads in place (see <see cref="TryStreamElementSelect"/>), the alias it is projected under and the
+    /// For each owned array an element <c>Select</c> reads in place (see <see cref="TryStreamOwnedElementStoredSelect"/>), the alias it is projected under and the
     /// stored element names the Select needs from each element. Nothing else of the array is read, so once the shaper is in use the pipeline may
     /// project just these (<see cref="MongoSelectDefinition.TryNarrowArrayProjection"/>).
     /// </summary>
@@ -341,63 +341,34 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
             return TryStreamEntityLeaf(include) ?? TryStreamIncludeAfterRow(include) ?? Decline(node);
         }
 
+        if (node is OwnedElementStoredSelectExpression storedSelect)
+        {
+            return TryStreamOwnedElementStoredSelect(storedSelect) ?? Decline(node);
+        }
+
         return base.VisitExtension(node);
     }
 
-    // `ToList(Select(Convert(<owned collection block>), l => body))`: the binding visitor's re-application of an element Select over a
-    // root-level owned collection (NativeProjectionBinder.TryMatchOwnedArraySelectLeaf). When the lambda reads only scalar members of its
-    // element (MongoElementSelectorRewriter), the cursor evaluates it per element straight off the reader and yields the List<TResult>, so no
-    // owned entity (nor its nested owned types) is constructed. Anything else leaves the collection to be read whole and the Select to run on it.
-    // Under an untracked query only: a tracked owned element is part of its owner, so it is read whole. The same Select over the keyed array of a
-    // referenced element leaf (TryStreamReferencedElementSelect) is fused whatever the tracking, since it must not resolve against the change tracker.
+    // The Select over the keyed array of a referenced element leaf (TryStreamReferencedElementSelect) is fused whatever the tracking, since it must
+    // not resolve against the change tracker.
     protected override Expression VisitMethodCall(MethodCallExpression node)
-        => !_trackedQuery && TryStreamElementSelect(node) is { } fused
-            ? fused
-            : TryStreamReferencedElementSelect(node) is { } referencedFused ? referencedFused : base.VisitMethodCall(node);
+        => TryStreamReferencedElementSelect(node) ?? base.VisitMethodCall(node);
 
-    private Expression? TryStreamElementSelect(MethodCallExpression toList)
+    // An element Select over a root-level owned collection whose selector only reads mapped scalar members of its element
+    // (OwnedElementStoredSelectExpression, bound for NativeProjectionBinder.TryMatchOwnedArraySelectLeaf). When MongoElementSelectorRewriter
+    // accepts the lambda, the cursor evaluates it per element straight off the reader and yields the List<TResult>, so no owned entity (nor its
+    // nested owned types) is constructed, tracked or not: the node builds none on any shaper. A lambda the rewriter declines, or an array that is
+    // also read another way, leaves the DOM shaper in charge, which evaluates the selector over the stored element documents.
+    private Expression? TryStreamOwnedElementStoredSelect(OwnedElementStoredSelectExpression storedSelect)
     {
-        if (toList is not
-            {
-                Method: { Name: nameof(Enumerable.ToList), DeclaringType: var toListType },
-                Arguments:
-                [
-                    MethodCallExpression
-                    {
-                        Method: { Name: nameof(Enumerable.Select), DeclaringType: var selectType },
-                        Arguments:
-                        [
-                            UnaryExpression
-                            {
-                                NodeType: ExpressionType.Convert,
-                                Operand: BlockExpression
-                                {
-                                    Variables: [{ } arrayVariable],
-                                    Expressions:
-                                    [
-                                        BinaryExpression { NodeType: ExpressionType.Assign, Right: UnaryExpression { NodeType: ExpressionType.TypeAs, Operand: ProjectionBindingExpression binding } },
-                                        CollectionShaperExpression shaper
-                                    ]
-                                } block
-                            },
-                            LambdaExpression { Parameters.Count: 1 } selector
-                        ]
-                    }
-                ]
-            }
-            || toListType != typeof(Enumerable)
-            || selectType != typeof(Enumerable)
-            || arrayVariable.Type != typeof(BsonArray)
-            || !TryResolveOwnedCollection(binding, shaper, out var navigation, out var alias))
+        if (storedSelect.ArrayProjection is not ProjectionBindingExpression binding
+            || !TryResolveOwnedCollection(binding, storedSelect.Navigation, out var navigation, out var alias)
+            || _unfusedAliases.Contains(alias))
         {
             return null;
         }
 
-        if (_unfusedAliases.Contains(alias))
-        {
-            return null;
-        }
-
+        var selector = storedSelect.Selector;
         IBsonSerializer serializer;
         IReadOnlyList<string> elementNames;
         try
@@ -411,11 +382,10 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
             return null;
         }
 
-        RemovedVariables.AddRange(CollectVariables(block));
         Replaced++;
         _fusedAliasReads.Add(alias);
         NarrowedArrays.Add((alias, elementNames));
-        return new MongoStreamedCollectionExpression(alias, typeof(List<>).MakeGenericType(selector.ReturnType), serializer);
+        return new MongoStreamedCollectionExpression(alias, storedSelect.Type, serializer);
     }
 
     private static readonly MethodInfo CreateEntitySerializerMethod =
@@ -678,17 +648,16 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
         return node;
     }
 
-    // An untracked, streamable owned collection of the root, projected under its own alias: its navigation and the alias it is read under.
+    // A streamable owned collection of the root, projected under its own alias: its navigation and the alias it is read under.
     private bool TryResolveOwnedCollection(
         ProjectionBindingExpression binding,
-        CollectionShaperExpression shaper,
+        INavigation? candidate,
         [NotNullWhen(true)] out INavigation? navigation,
         [NotNullWhen(true)] out string? alias)
     {
         navigation = null;
         alias = null;
-        if (_trackedQuery
-            || shaper.Navigation is not INavigation { IsCollection: true } found
+        if (candidate is not { IsCollection: true } found
             || !found.TargetEntityType.IsOwned()
             || !StreamingEligibility.IsEligibleOwnedElement(found.TargetEntityType))
         {
@@ -833,7 +802,7 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
     // visitor re-applies over the entities (`TryBindReferencedElementLeaf`). When the lambda reads only scalar members of its element
     // (MongoElementSelectorRewriter), the cursor evaluates it per element straight off the reader and yields the List<TResult>, so no element entity is
     // constructed: none is resolved against the change tracker, so a tracked row's unsaved change is never read (#32), and none is tracked, so it is fused
-    // for a tracked query too (an owned element is only fused untracked, TryStreamElementSelect). Anything else leaves the list of entities to be read whole and the Select to run on it.
+    // for a tracked query too, as the owned element Select is (TryStreamOwnedElementStoredSelect). Anything else leaves the list of entities to be read whole and the Select to run on it.
     private Expression? TryStreamReferencedElementSelect(MethodCallExpression select)
     {
         if (select is not
@@ -909,7 +878,8 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
 
     private Expression? TryStream(BlockExpression block, ProjectionBindingExpression binding, CollectionShaperExpression shaper)
     {
-        if (!TryResolveOwnedCollection(binding, shaper, out var navigation, out var alias))
+        // A tracked owned element is part of its owner, so a tracking query reads the collection whole through the DOM.
+        if (_trackedQuery || !TryResolveOwnedCollection(binding, shaper.Navigation as INavigation, out var navigation, out var alias))
         {
             return TryStreamEntityCollection(block, binding, null, shaper);
         }

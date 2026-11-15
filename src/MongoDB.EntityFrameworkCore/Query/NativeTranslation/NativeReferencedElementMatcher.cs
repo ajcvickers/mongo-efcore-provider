@@ -283,9 +283,12 @@ internal static class NativeReferencedElementMatcher
     }
 
     /// <summary>
-    /// Classifies an element selector: the read side materializes the elements of a <see cref="ElementSelectorKind.ScalarMembersOnly"/> selector outside
-    /// the change tracker, so the leaf returns the stored values it reads, as a relational provider returns the columns it fetched. It decides only how
-    /// the elements are built, never whether the query translates, so a selector of the other kind is not refused: it sees the tracked instance.
+    /// Classifies an element selector, of both leaf kinds: a referenced element leaf's (whose elements the read side materializes outside the change
+    /// tracker for a <see cref="ElementSelectorKind.ScalarMembersOnly"/> selector) and an owned collection's element <c>Select</c>
+    /// (<see cref="NativeProjectionBinder.TryMatchOwnedArraySelectLeaf"/>, evaluated over the stored element documents with no owned entity built,
+    /// <see cref="Expressions.OwnedElementStoredSelectExpression"/>). Either way the leaf returns the stored values it reads, as a relational provider
+    /// returns the columns it fetched. It decides only how the elements are read, never whether the query translates, so a selector of the other kind
+    /// is not refused: it sees the tracked instance.
     /// </summary>
     internal static ElementSelectorKind ClassifySelector(LambdaExpression? selector, IEntityType elementType)
     {

@@ -258,6 +258,38 @@ public class ElementSelectorKindTests
         Assert.Equal(ElementSelectorKind.Other, Classify(Expression.Lambda<Func<Element, string>>(body, element)));
     }
 
+    private class Holder
+    {
+        public int Id { get; set; }
+        public List<Kid> Kids { get; set; } = [];
+    }
+
+    private class Kid
+    {
+        public int W { get; set; }
+        public Nested Nested { get; set; } = null!;
+    }
+
+    private class Nested
+    {
+        public int X { get; set; }
+    }
+
+    private static ElementSelectorKind ClassifyOwned(Expression<Func<Kid, object?>> selector)
+    {
+        using var db = SingleEntityDbContext.Create<Holder>(
+            mb => mb.Entity<Holder>().OwnsMany(h => h.Kids, kid => kid.OwnsOne(k => k.Nested)));
+        return NativeReferencedElementMatcher.ClassifySelector(selector, db.Model.FindEntityType(typeof(Kid))!);
+    }
+
+    [Fact]
+    public void An_owned_element_s_scalar_read_is_ScalarMembersOnly()
+        => Assert.Equal(ElementSelectorKind.ScalarMembersOnly, ClassifyOwned(k => k.W));
+
+    [Fact]
+    public void An_owned_element_s_nested_owned_member_is_Other()
+        => Assert.Equal(ElementSelectorKind.Other, ClassifyOwned(k => k.Nested.X));
+
     [Fact]
     public void A_block_that_only_reads_scalars_is_ScalarMembersOnly()
     {

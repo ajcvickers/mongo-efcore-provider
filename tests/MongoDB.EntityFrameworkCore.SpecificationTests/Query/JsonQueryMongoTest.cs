@@ -988,9 +988,15 @@ JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }, { "$project" : { "_v" : { "$size"
 """);
     }
 
-    // Fails: tracking query projects an owned entity without its owner EF-X517
-    public override Task Json_collection_in_projection_with_anonymous_projection_of_scalars(bool async)
-        => SpecFails.ThrowsAsync(() => base.Json_collection_in_projection_with_anonymous_projection_of_scalars(async));
+    public override async Task Json_collection_in_projection_with_anonymous_projection_of_scalars(bool async)
+    {
+        await base.Json_collection_in_projection_with_anonymous_projection_of_scalars(async);
+
+        AssertMql(
+            """
+JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }
+""");
+    }
 
     // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Json_collection_in_projection_with_composition_where_and_anonymous_projection_of_scalars(bool async)

@@ -950,8 +950,15 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         }
 
         // An element Select over an owned collection staged as that collection's whole array (the emit side's
-        // TryMatchOwnedArraySelectLeaf): bind the array as a collection shaper and re-apply the Select over the
-        // materialized owned entities, so each member is read through its owned property's serializer.
+        // TryMatchOwnedArraySelectLeaf). A selector that only reads mapped scalar members of the element is evaluated over the
+        // stored element documents (OwnedElementStoredSelectExpression): no owned entity is built or tracked, whatever the
+        // query's tracking, so it reads the stored values. Any other selector is re-applied over the materialized owned
+        // entities (under TrackAll the owner's tracked instances), each member read through its owned property's serializer.
+        if (TryBindOwnedElementStoredSelect(methodCallExpression, out var storedSelect))
+        {
+            return storedSelect;
+        }
+
         if (QueryExpression.Select.Route == NativeRoute.Projection
             && NativeProjectionBinder.TryMatchOwnedArraySelectLeaf(
                 methodCallExpression, QueryExpression.CollectionExpression.EntityType,
@@ -1567,6 +1574,85 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         [NotNullWhen(true)] out Expression? arrayShaper)
     {
         arrayShaper = null;
+        if (!TryBindNativeArrayLeaf(candidateNavigation, out var arrayBinding, out var aliasedArray))
+        {
+            return false;
+        }
+
+        var navigation = candidateNavigation!;
+        var innerShaper = CreateElementShaperWithOwnedIncludes(navigation.TargetEntityType, aliasedArray.InnerProjection);
+
+        arrayShaper = new CollectionShaperExpression(
+            arrayBinding,
+            innerShaper,
+            navigation,
+            navigation.TargetEntityType.ClrType);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Binds an element <c>Select</c> over a root-declared owned collection (<c>e.Kids.Select(k =&gt; k.W).ToList()</c>) whose selector only reads
+    /// mapped scalar members of the element (<see cref="NativeReferencedElementMatcher.ClassifySelector"/>) to an
+    /// <see cref="OwnedElementStoredSelectExpression"/>, which builds no owned entity. On the native projection route the array is the leaf the
+    /// emit side staged (the same <see cref="NativeProjectionBinder.TryMatchOwnedArraySelectLeaf"/> predicate); on any other route the shaper reads
+    /// whole documents and the array is the navigation's own (the mixed shaper, a client-wrapped whole entity). Declines, binding nothing, for
+    /// any other selector.
+    /// </summary>
+    private bool TryBindOwnedElementStoredSelect(MethodCallExpression methodCallExpression, [NotNullWhen(true)] out Expression? result)
+    {
+        result = null;
+        var rootEntityType = QueryExpression.CollectionExpression.EntityType;
+        if (!NativeProjectionBinder.TryMatchOwnedArraySelectLeaf(
+                methodCallExpression, rootEntityType, out var navigation, out var arraySource, out var selector)
+            || NativeReferencedElementMatcher.ClassifySelector(selector, navigation.TargetEntityType) != ElementSelectorKind.ScalarMembersOnly)
+        {
+            return false;
+        }
+
+        if (QueryExpression.Select.Route == NativeRoute.Projection)
+        {
+            if (!TryBindNativeArrayLeaf(navigation, out var arrayBinding, out _))
+            {
+                return false;
+            }
+
+            result = new OwnedElementStoredSelectExpression(arrayBinding, navigation, selector);
+            return true;
+        }
+
+        // Whole documents: the array is read at the navigation's document path off the root entity's document. Only over the root entity's own
+        // shaper (a lambda parameter receiver is a collection element, which this does not bind).
+        if (arraySource.Arguments[0] is not MethodCallExpression { Arguments: [var receiver, _] }
+            || receiver.RemoveConvert() is not StructuralTypeShaperExpression)
+        {
+            return false;
+        }
+
+        // The same visit the Select arm below makes of its source; it binds the navigation's array and builds the collection shaper, of which only
+        // the array is kept.
+        if (Visit(arraySource) is not CollectionShaperExpression { Projection: IArrayProjectionExpression array } shaper
+            || shaper.Navigation != navigation)
+        {
+            throw new InvalidOperationException(CoreStrings.TranslationFailed(methodCallExpression.Print()));
+        }
+
+        result = new OwnedElementStoredSelectExpression((Expression)array, navigation, selector);
+        return true;
+    }
+
+    /// <summary>
+    /// Registers an owned entity-collection leaf on the native route as one member, read from the <c>$project</c> alias, and returns the
+    /// binding of its array, with no element shaper (see <see cref="TryBindNativeArrayProjection"/>, which builds one over it). Registers
+    /// nothing when it returns <see langword="false"/>.
+    /// </summary>
+    private bool TryBindNativeArrayLeaf(
+        INavigation? candidateNavigation,
+        [NotNullWhen(true)] out ProjectionBindingExpression? arrayBinding,
+        [NotNullWhen(true)] out ArrayAliasProjectionExpression? aliasedArray)
+    {
+        arrayBinding = null;
+        aliasedArray = null;
 
         // Same ProjectionMember (and alias override) ApplyProjection uses; a bare selector body has no last member,
         // so without the override this is null and the alias-agreement check below fails.
@@ -1583,21 +1669,12 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             return false;
         }
 
-        var navigation = candidateNavigation;
-        var aliasedArray = new ArrayAliasProjectionExpression(
-            navigation,
-            new RootReferenceExpression(navigation.DeclaringEntityType));
+        aliasedArray = new ArrayAliasProjectionExpression(
+            candidateNavigation,
+            new RootReferenceExpression(candidateNavigation.DeclaringEntityType));
 
         _projectionMapping[arrayProjectionMember] = aliasedArray;
-
-        var innerShaper = CreateElementShaperWithOwnedIncludes(navigation.TargetEntityType, aliasedArray.InnerProjection);
-
-        arrayShaper = new CollectionShaperExpression(
-            new ProjectionBindingExpression(QueryExpression, arrayProjectionMember, aliasedArray.Type),
-            innerShaper,
-            navigation,
-            navigation.TargetEntityType.ClrType);
-
+        arrayBinding = new ProjectionBindingExpression(QueryExpression, arrayProjectionMember, aliasedArray.Type);
         return true;
     }
 
