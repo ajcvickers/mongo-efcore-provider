@@ -234,10 +234,19 @@ Scope, joins, grouping:
       materializer does this (the DOM one is going away). Because no entity is built, the selector reads the stored value of each property, so a property
       getter or constructor normalization of the element type is not run (`Title { get => _title.ToUpperInvariant() }` reads the stored case), and a stored
       element missing a required scalar the lambda does NOT read no longer throws (one it reads still does); the owned-element fusion does the same. The
-      selector now runs eagerly per element inside the batch, bounded by the lookup limit for a terminal. A selector the rewriter declines (the element
-      itself, a user method, a nested member, `Rank.ToString()`) is still applied to the materialized, and under `TrackAll` tracked, entity, so it
-      still sees the unsaved change; that is unchanged from before, not worse. The lookup's array still holds whole documents
+      selector now runs eagerly per element inside the batch, bounded by the lookup limit for a terminal. The lookup's array still holds whole documents
       (no `TryNarrowArrayProjection` for it).
+      A selector the rewriter declines is applied to the materialized elements, and what it sees depends on how it uses them
+      (`NativeReferencedElementMatcher.ClassifySelector`, `ElementSelectorKind`):
+      - `ScalarMembersOnly` (every use of the element is the read of a mapped scalar property, e.g. `Rank.ToString()`, which the rewriter does not accept): the
+        elements are built outside the change tracker (`ArrayAliasProjectionExpression.UntrackedElements`, `MongoQueryContext.BeginUntracked`: EF's identity lookup finds
+        nothing and `StartTracking` starts nothing), so the selector reads the stored values and tracks nothing, as a relational provider reads the columns it
+        fetched. Only the streaming shaper does this; a hierarchy element type is shaped by the DOM one (not fused, not untracked), where the selector still
+        sees the tracked instance. Known gap, until that materializer goes.
+      - `Other` (the element itself, a user method, a nested member, a navigation or owned member): applied to the materialized, and under `TrackAll`
+        tracked, entity, so it sees the tracked instance and its unsaved change. This is EF Core's identity resolution (a tracking query never overwrites
+        a tracked instance with what it read), so it is deliberately not refused: tracking decides what a result is, never whether a query translates. A
+        scalar beside the element (`new { m, m.Method }`) is read from that same instance.
     - **`ElementAtOrDefault` of a negative index selects nothing** where `ElementAt` and `Skip` throw: the `$skip` stage carries a marker
       (`LookupExpression.ElementSkipNegativeIsEmpty`) that `MongoPipelineFactory.NormalizePagingStages` turns into an always-false `$match` and strips; it is part of
       lookup identity, so the two never share an alias.

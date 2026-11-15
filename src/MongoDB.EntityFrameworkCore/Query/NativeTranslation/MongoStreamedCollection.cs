@@ -80,6 +80,13 @@ internal sealed class MongoStreamedIncludeExpression(Expression entity, Expressi
     }
 }
 
+/// <summary>A serializer whose entities may be built outside the change tracker, whatever the query does for its other entities.</summary>
+internal interface IMongoUntrackedElementSerializer
+{
+    /// <summary>Whether the entities it reads are untracked.</summary>
+    bool Untracked { get; }
+}
+
 /// <summary>A serializer whose value is built by a shaper fragment that needs the query context (EF's materializers do).</summary>
 internal interface IMongoQueryContextSerializer<out T>
 {
@@ -110,25 +117,39 @@ internal sealed class MongoEntityLeafSerializer<T>(Func<QueryContext, IBsonReade
 
 /// <summary>
 /// Reads a BSON array of another collection's documents (a correlated subquery's <c>$lookup</c> array) into a <see cref="List{T}"/> of entities, each
-/// with the compiled one-pass entity reader. The entities are constructed with their tracking deferred when the query tracks, like any entity leaf.
+/// with the compiled one-pass entity reader. The entities are constructed with their tracking deferred when the query tracks, like any entity leaf,
+/// unless <paramref name="untracked"/>: then they are built as a no-tracking query would build them (<see cref="MongoQueryContext.BeginUntracked"/>) and
+/// nothing is deferred, because the list is only read from (an element leaf's scalar selector).
 /// </summary>
-internal sealed class MongoEntityListSerializer<T>(Func<QueryContext, IBsonReader, BsonDeserializationContext, T> read)
-    : IBsonSerializer<List<T>>, IMongoQueryContextSerializer<List<T>>
+internal sealed class MongoEntityListSerializer<T>(Func<QueryContext, IBsonReader, BsonDeserializationContext, T> read, bool untracked = false)
+    : IBsonSerializer<List<T>>, IMongoQueryContextSerializer<List<T>>, IMongoUntrackedElementSerializer
 {
     public Type ValueType => typeof(List<T>);
 
+    /// <summary>Whether the elements are built outside the change tracker.</summary>
+    public bool Untracked => untracked;
+
     public List<T> Deserialize(QueryContext queryContext, BsonDeserializationContext context)
     {
-        var reader = context.Reader;
-        var list = new List<T>();
-        reader.ReadStartArray();
-        while (reader.ReadBsonType() != BsonType.EndOfDocument)
+        var mongoContext = untracked ? (MongoQueryContext)queryContext : null;
+        mongoContext?.BeginUntracked();
+        try
         {
-            list.Add(read(queryContext, reader, context));
-        }
+            var reader = context.Reader;
+            var list = new List<T>();
+            reader.ReadStartArray();
+            while (reader.ReadBsonType() != BsonType.EndOfDocument)
+            {
+                list.Add(read(queryContext, reader, context));
+            }
 
-        reader.ReadEndArray();
-        return list;
+            reader.ReadEndArray();
+            return list;
+        }
+        finally
+        {
+            mongoContext?.EndUntracked();
+        }
     }
 
     public List<T> Deserialize(BsonDeserializationContext context, BsonDeserializationArgs args)
@@ -738,12 +759,17 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
             return null;
         }
 
+        // The array of an element leaf whose selector only reads scalar members (ArrayAliasProjectionExpression.UntrackedElements) is read as a
+        // no-tracking query reads it, so the selector sees the stored row; EF's tracking calls in the reader are no-ops under that scope.
+        var untracked = array is ArrayAliasProjectionExpression { UntrackedElements: true };
+
         IBsonSerializer serializer;
         try
         {
-            var reader = new MongoStreamingEntityMaterializerRewriter(elementType, _trackedQuery)
+            var reader = new MongoStreamingEntityMaterializerRewriter(elementType, _trackedQuery && !untracked)
                 .BuildRootEntityReader(shaper.InnerShaper, readIncludedCollections: true);
-            serializer = (IBsonSerializer)CreateEntityListSerializerMethod.MakeGenericMethod(elementType.ClrType).Invoke(null, [reader.Compile()])!;
+            serializer = (IBsonSerializer)CreateEntityListSerializerMethod.MakeGenericMethod(elementType.ClrType)
+                .Invoke(null, [reader.Compile(), untracked])!;
         }
         catch (NativeTranslationNotSupportedException)
         {
@@ -888,8 +914,8 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
     private static readonly MethodInfo CreateEntityListSerializerMethod =
         typeof(StreamedCollectionSubstituter).GetMethod(nameof(CreateEntityListSerializer), BindingFlags.NonPublic | BindingFlags.Static)!;
 
-    private static IBsonSerializer CreateEntityListSerializer<T>(Delegate reader)
-        => new MongoEntityListSerializer<T>((Func<QueryContext, IBsonReader, BsonDeserializationContext, T>)reader);
+    private static IBsonSerializer CreateEntityListSerializer<T>(Delegate reader, bool untracked)
+        => new MongoEntityListSerializer<T>((Func<QueryContext, IBsonReader, BsonDeserializationContext, T>)reader, untracked);
 
     private Expression? TryStream(BlockExpression block, ProjectionBindingExpression binding, CollectionShaperExpression shaper)
     {

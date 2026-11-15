@@ -97,6 +97,47 @@ public class ArrayAliasProjectionExpressionTests
         Assert.Same(sut, sut.Update(access, sut.InnerProjection));
     }
 
+    // The flag changes how the shaper builds the elements, and the shaper's bindings are keyed on the node, so two arrays that differ only in it
+    // must not be conflated (nor share a cached plan).
+    [Fact]
+    public void Elements_are_tracked_by_default()
+    {
+        var navigation = GetPostsNavigation();
+        var sut = new ArrayAliasProjectionExpression(navigation, new RootReferenceExpression(navigation.DeclaringEntityType));
+
+        Assert.False(sut.UntrackedElements);
+    }
+
+    [Fact]
+    public void Arrays_that_differ_only_in_UntrackedElements_are_not_equal()
+    {
+        var navigation = GetPostsNavigation();
+        var access = new RootReferenceExpression(navigation.DeclaringEntityType);
+        var identity = new object();
+
+        var tracked = new ArrayAliasProjectionExpression(navigation.TargetEntityType, access, identity);
+        var untracked = new ArrayAliasProjectionExpression(navigation.TargetEntityType, access, identity, untrackedElements: true);
+
+        Assert.NotEqual(tracked, untracked);
+        Assert.NotEqual(tracked.GetHashCode(), untracked.GetHashCode());
+        Assert.Equal(untracked, new ArrayAliasProjectionExpression(navigation.TargetEntityType, access, identity, untrackedElements: true));
+    }
+
+    [Fact]
+    public void Update_keeps_UntrackedElements()
+    {
+        var navigation = GetPostsNavigation();
+        var access = new RootReferenceExpression(navigation.DeclaringEntityType);
+        var sut = new ArrayAliasProjectionExpression(navigation.TargetEntityType, access, new object(), untrackedElements: true);
+
+        var updated = sut.Update(
+            new RootReferenceExpression(navigation.TargetEntityType),
+            new EntityProjectionExpression(navigation.TargetEntityType, new RootReferenceExpression(navigation.TargetEntityType)));
+
+        Assert.NotSame(sut, updated);
+        Assert.True(((ArrayAliasProjectionExpression)updated).UntrackedElements);
+    }
+
     private class Blog
     {
         public ObjectId Id { get; set; }

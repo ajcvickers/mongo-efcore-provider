@@ -157,11 +157,15 @@ internal static class MongoProjectionStreamingPlanner
         public IBsonSerializer Serializer { get; } = serializer;
         public Type ValueType { get; } = serializer.ValueType;
 
-        /// <summary>An entity read from a sub-document (see <see cref="MongoEntityLeafSerializer{T}"/>): constructed with tracking deferred when the query tracks.</summary>
+        /// <summary>
+        /// An entity read from a sub-document (see <see cref="MongoEntityLeafSerializer{T}"/>): constructed with tracking deferred when the query tracks.
+        /// A list built outside the change tracker defers nothing and has nothing to remap, so it is not an entity slot of a tracked row.
+        /// </summary>
         public bool IsEntity { get; } = serializer.GetType().IsGenericType
                                          && serializer.GetType().GetGenericTypeDefinition()
                                              is var definition
-                                         && (definition == typeof(MongoEntityLeafSerializer<>) || definition == typeof(MongoEntityListSerializer<>));
+                                         && (definition == typeof(MongoEntityLeafSerializer<>) || definition == typeof(MongoEntityListSerializer<>))
+                                         && serializer is not IMongoUntrackedElementSerializer { Untracked: true };
     }
 
     // Routes each entity slot's value through the replay's remap, wherever the rewritten shaper reads it.

@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
 
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
@@ -58,11 +59,39 @@ internal sealed class ReferencedElementShape
     /// </summary>
     public LambdaExpression? Selector { get; init; }
 
+    /// <summary>
+    /// What <see cref="Selector"/> does with the element it runs over. A selector that only reads mapped scalar properties of it can run over an element
+    /// that is not the tracked instance, so the leaf reads the stored row (see <see cref="ElementSelectorKind.ScalarMembersOnly"/>).
+    /// </summary>
+    public ElementSelectorKind SelectorKind { get; init; }
+
     /// <summary>The <c>Skip</c> count applied after the ordering (a constant or a query parameter), or <see langword="null"/>.</summary>
     public Expression? Skip { get; init; }
 
     /// <summary>The <c>Take</c> count applied after the skip (a constant or a query parameter; a <c>ToList</c> only), or <see langword="null"/>.</summary>
     public Expression? Take { get; init; }
+}
+
+/// <summary>What the selector of an element leaf does with the element it runs over.</summary>
+internal enum ElementSelectorKind
+{
+    /// <summary>There is no selector: the leaf is the element itself.</summary>
+    None,
+
+    /// <summary>
+    /// Every use of the element is the read of one of its mapped scalar properties (<c>m.Method</c>, <c>m.Rank + 1</c>, <c>new { m.Method, m.Rank }</c>),
+    /// so the selector's result depends only on the stored values it reads. It may run over an element materialized outside the change tracker: a
+    /// relational provider reads such values from the columns it fetched, never from an instance the context already tracks.
+    /// </summary>
+    ScalarMembersOnly,
+
+    /// <summary>
+    /// The selector uses the element in any other way (passes it to a method, keeps it in the result, reads a navigation, an owned or complex member,
+    /// or a shadow property). It runs over the element as a tracking query materializes it: resolved against the change tracker, so on a tracked row
+    /// it is the tracked instance with its unsaved changes, as for any entity a tracking query returns (EF Core's identity resolution never overwrites
+    /// a tracked instance with what the query read).
+    /// </summary>
+    Other
 }
 
 /// <summary>The operator an element leaf ends in.</summary>
@@ -245,10 +274,54 @@ internal static class NativeReferencedElementMatcher
             Filters = wheres.Skip(1).ToList(),
             Sorts = sorts,
             Selector = selector,
+            SelectorKind = ClassifySelector(selector, ((EntityQueryRootExpression)current).EntityType),
             Skip = skip,
             Take = take
         };
         return true;
+    }
+
+    /// <summary>
+    /// Classifies an element selector: the read side materializes the elements of a <see cref="ElementSelectorKind.ScalarMembersOnly"/> selector outside
+    /// the change tracker, so the leaf returns the stored values it reads, as a relational provider returns the columns it fetched. It decides only how
+    /// the elements are built, never whether the query translates, so a selector of the other kind is not refused: it sees the tracked instance.
+    /// </summary>
+    internal static ElementSelectorKind ClassifySelector(LambdaExpression? selector, IEntityType elementType)
+    {
+        if (selector is null)
+            return ElementSelectorKind.None;
+
+        var checker = new ScalarMemberReadChecker(selector.Parameters[0], elementType);
+        checker.Visit(selector.Body);
+        return checker.OnlyScalarMembers ? ElementSelectorKind.ScalarMembersOnly : ElementSelectorKind.Other;
+    }
+
+    private sealed class ScalarMemberReadChecker(ParameterExpression element, IEntityType elementType) : ExpressionVisitor
+    {
+        public bool OnlyScalarMembers { get; private set; } = true;
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (node.Expression == element)
+            {
+                // A navigation, an owned or complex member and a shadow property are not mapped scalar CLR properties of the element.
+                if (elementType.FindProperty(node.Member) is not { } property || property.IsShadowProperty())
+                    OnlyScalarMembers = false;
+
+                return node;
+            }
+
+            return base.VisitMember(node);
+        }
+
+        // Any use of the element other than as the receiver of a member read above.
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (node == element)
+                OnlyScalarMembers = false;
+
+            return node;
+        }
     }
 
     private static bool TryGetTerminal(string methodName, out ElementTerminal terminal)

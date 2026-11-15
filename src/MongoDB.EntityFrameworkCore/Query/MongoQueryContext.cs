@@ -80,6 +80,10 @@ public class MongoQueryContext : QueryContext
     // not performed (see MongoPendingTracking).
     private bool _deferring;
 
+    // While positive, entities are being materialized as a NoTracking query would: no identity lookup and no tracking, whatever the query does
+    // elsewhere. It takes precedence over deferral (see BeginUntracked).
+    private int _untrackedDepth;
+
     // The full record, once a row needs one: more than one tracked entity, shadow values, or an include to mark loaded.
     private MongoPendingTracking? _pending;
 
@@ -92,6 +96,18 @@ public class MongoQueryContext : QueryContext
 
     private MongoSimpleTracking? _lastSimple;
     private Dictionary<IEntityType, MongoSimpleTracking>? _simpleByType;
+
+    /// <summary>
+    /// Starts materializing entities as a <see cref="QueryTrackingBehavior.NoTracking"/> query would, until the matching <see cref="EndUntracked"/>:
+    /// EF's identity lookup finds nothing and <c>StartTracking</c> starts nothing, so the instances are built from the stored document alone and
+    /// are never the ones the context tracks. It is used for the elements an element leaf's scalar selector reads from, which must see the stored row
+    /// as a relational provider reads a column (<see cref="Query.NativeTranslation.ElementSelectorKind.ScalarMembersOnly"/>). It takes precedence over a row's deferred tracking, which is
+    /// left as it was. Calls nest.
+    /// </summary>
+    internal void BeginUntracked() => _untrackedDepth++;
+
+    /// <summary>Ends the scope started by <see cref="BeginUntracked"/>.</summary>
+    internal void EndUntracked() => _untrackedDepth--;
 
     /// <summary>
     /// Starts deferring the tracking of the row being materialized: until <see cref="EndDeferral"/>, EF's identity lookup and
@@ -169,6 +185,13 @@ public class MongoQueryContext : QueryContext
     /// <inheritdoc />
     public override InternalEntityEntry? TryGetEntry(IKey key, object[] keyValues, bool throwOnNullKey, out bool hasNullKey)
     {
+        // As for a deferred row, a null key part is answered by EF itself; nothing else is looked up, so nothing resolves to a tracked instance.
+        if (_untrackedDepth > 0 && Array.IndexOf(keyValues, null) < 0)
+        {
+            hasNullKey = false;
+            return null;
+        }
+
         if (!_deferring)
         {
             return base.TryGetEntry(key, keyValues, throwOnNullKey, out hasNullKey);
@@ -200,6 +223,11 @@ public class MongoQueryContext : QueryContext
     /// <inheritdoc />
     public override InternalEntityEntry StartTracking(IEntityType entityType, object entity, ValueBuffer valueBuffer)
     {
+        if (_untrackedDepth > 0)
+        {
+            return null!;
+        }
+
         if (!_deferring)
         {
             return ComplexDiscriminatorSeeding.Seed(base.StartTracking(entityType, entity, valueBuffer));
@@ -219,6 +247,11 @@ public class MongoQueryContext : QueryContext
     /// <inheritdoc />
     public override InternalEntityEntry StartTracking(IEntityType entityType, object entity, in ISnapshot snapshot)
     {
+        if (_untrackedDepth > 0)
+        {
+            return null!;
+        }
+
         if (!_deferring)
         {
             return ComplexDiscriminatorSeeding.Seed(base.StartTracking(entityType, entity, snapshot));
