@@ -265,7 +265,9 @@ Scope, joins, grouping:
       decline in `TryTranslateReferencedElementLeaf` (and in `TryStageKeyedArrayLookup`, through `onDecline`) records a reason from
       `ElementLeafDeclineReasons` on `MongoQueryExpression.ElementLeafDeclines`. The binding visitor fails inside that leaf as before, but
       with `CoreStrings.TranslationFailedWithDetails(<leaf>, <reason>)` instead of the bare `DbSet<T>()`, in every mode. The channel is
-      diagnostic only: it stages nothing and never changes which queries translate. The two sides see different trees (the read side has
+      diagnostic only: it stages nothing and never changes which queries translate. It is the one sanctioned exception to "a recognizer
+      must not mutate then decline": it writes only `ElementLeafDeclines`, never staging state, so don't copy the pattern for staging. A
+      reason names only a cause the binder established (`SelectorNotSelfContained` is the neutral fallback). The two sides see different trees (the read side has
       the source's shaper where the emit side has the selector's parameter), so leaves are matched on a normalized key
       (`ElementLeafDeclineKey`); a join-scope leaf is not matched and keeps the bare message. Reasons are shared constants: tests assert them.
       Note that an element type with ANY owned navigation is declined (`OwnedNavigations`): nav-expansion includes them through a

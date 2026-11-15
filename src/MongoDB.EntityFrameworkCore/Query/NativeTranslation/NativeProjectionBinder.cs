@@ -1685,36 +1685,73 @@ internal static class NativeProjectionBinder
         return checker.IsSelfContained;
     }
 
-    /// <summary>Whether <paramref name="expression"/> reads a query parameter (a captured value) anywhere (<see cref="NativeQueryParameter.TryGetQueryParameterName"/>).</summary>
-    internal static bool ReadsQueryParameter(Expression expression)
+    /// <summary>
+    /// The reason an element leaf's selector that <see cref="IsSelfContainedLambda"/> rejected is declined, naming only a cause found in it: the
+    /// owned-navigation include nav-expansion adds as a selector of its own (<c>m =&gt; Include(m, m.Detail)</c>), a captured value, a read of an
+    /// owned navigation of the element (nav-expansion spells <c>m.Detail</c> as <c>EF.Property(m, "Detail")</c>), any other <c>EF.Property</c>, or
+    /// else a neutral reason (a navigation or subquery reaches it as a query root; Task 9 names that one).
+    /// </summary>
+    private static string ClassifyNotSelfContainedSelector(LambdaExpression selector, IEntityType elementType)
     {
-        var finder = new QueryParameterFinder();
-        finder.Visit(expression);
-        return finder.Found;
+        if (selector.Body is IncludeExpression && selector.Body.UnwrapIncludes() == selector.Parameters[0])
+            return ElementLeafDeclineReasons.OwnedNavigations;
+
+        var finder = new SelectorDeclineFinder(selector.Parameters[0], elementType);
+        finder.Visit(selector.Body);
+        return finder.ReadsQueryParameter ? ElementLeafDeclineReasons.CapturedValueInSelector
+            : finder.ReadsOwnedNavigation ? ElementLeafDeclineReasons.SelectorReadsOwnedNavigation
+            : finder.UsesEFProperty ? ElementLeafDeclineReasons.SelectorUsesEFProperty
+            : ElementLeafDeclineReasons.SelectorNotSelfContained;
     }
 
-    private sealed class QueryParameterFinder : ExpressionVisitor
+    private sealed class SelectorDeclineFinder(ParameterExpression element, IEntityType elementType) : ExpressionVisitor
     {
-        public bool Found { get; private set; }
+        public bool ReadsQueryParameter { get; private set; }
+        public bool ReadsOwnedNavigation { get; private set; }
+        public bool UsesEFProperty { get; private set; }
 
         [return: NotNullIfNotNull(nameof(node))]
         public override Expression? Visit(Expression? node)
         {
-            if (Found || node is null)
-                return node;
-
-            if (NativeQueryParameter.TryGetQueryParameterName(node, out _))
+            if (node is not null && NativeQueryParameter.TryGetQueryParameterName(node, out _))
             {
-                Found = true;
+                ReadsQueryParameter = true;
                 return node;
             }
 
             return base.Visit(node);
         }
 
-        // Another extension node may not be reducible, so its children are not walked: a parameter inside one is not found.
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.IsEFPropertyMethod())
+            {
+                UsesEFProperty = true;
+                if (node.Arguments is [var receiver, ConstantExpression { Value: string name }]
+                    && receiver.RemoveConvert().UnwrapIncludes() == element
+                    && elementType.FindNavigation(name) is { } navigation
+                    && navigation.IsEmbedded())
+                {
+                    ReadsOwnedNavigation = true;
+                }
+            }
+
+            return base.VisitMethodCall(node);
+        }
+
+        // Walks into an extension node through its VisitChildren, so a captured value inside one is found. A node that neither reduces nor visits
+        // its children throws from the base visitor: it is left unwalked, and a cause inside it is not named (the neutral reason is).
         protected override Expression VisitExtension(Expression node)
-            => node;
+        {
+            try
+            {
+                return base.VisitExtension(node);
+            }
+            catch (ArgumentException)
+            {
+                return node;
+            }
+        }
     }
 
     private sealed class SelfContainedChecker : ExpressionVisitor
@@ -2337,6 +2374,8 @@ internal static class NativeProjectionBinder
         // A TPH-derived target needs the lookup narrowed by discriminator, as the navigation lookup's constructor does; a keyed lookup has no such stage and would count sibling-type documents. Declined.
         if (targetEntityType.BaseType is not null)
         {
+            // For an element leaf: defensive; believed unreachable because DerivedEntityRootNarrower rewrites Set<Derived>() to an OfType the
+            // matcher does not recognize. The other callers can reach this decline.
             onDecline?.Invoke(ElementLeafDeclineReasons.DerivedElementType);
             return false;
         }
@@ -2481,15 +2520,7 @@ internal static class NativeProjectionBinder
                 return Decline(ElementLeafDeclineReasons.OuterEntityInSelector);
 
             if (!IsSelfContainedLambda(selector))
-            {
-                // Nav-expansion includes an element's owned navigations as a selector of their own (`m => Include(m, m.Detail)`).
-                return Decline(
-                    selector.Body is IncludeExpression && selector.Body.UnwrapIncludes() == selector.Parameters[0]
-                        ? ElementLeafDeclineReasons.OwnedNavigations
-                        : ReadsQueryParameter(selector.Body)
-                            ? ElementLeafDeclineReasons.CapturedValueInSelector
-                            : ElementLeafDeclineReasons.SelectorNotSelfContained);
-            }
+                return Decline(ClassifyNotSelfContainedSelector(selector, target));
         }
 
         if (!NativeCorrelationMatcher.TryMatchCorrelation(
@@ -2520,6 +2551,8 @@ internal static class NativeProjectionBinder
 
         var limit = TranslateElementLimit(shape);
         var skip = TranslateElementSkip(shape);
+
+        // Defensive; believed unreachable because TryMatch already requires each count to be a constant or a query parameter.
         if ((shape.IsList && shape.Take is not null && limit is null)
             || ((shape.Skip ?? shape.ElementIndex) is not null && skip is null))
         {

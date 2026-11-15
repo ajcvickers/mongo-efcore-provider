@@ -100,12 +100,50 @@ public class NativeElementLeafRefusalTests(TemporaryDatabaseFixture database)
 
     [Theory]
     [MemberData(nameof(Modes))]
+    public void A_captured_value_in_a_subquery_of_the_element_selector_is_named(MongoQueryMode mode)
+    {
+        using var db = CreateContext(mode, nameof(A_captured_value_in_a_subquery_of_the_element_selector_is_named));
+        var name = "Rex";
+
+        AssertDeclined(
+            ElementLeafDeclineReasons.CapturedValueInSelector,
+            () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => db.Animals.Count(x => x.Name == name)).ToList()).ToList());
+    }
+
+    [Theory]
+    [MemberData(nameof(Modes))]
+    public void EF_Property_in_the_element_selector_is_named(MongoQueryMode mode)
+    {
+        using var db = CreateContext(mode, nameof(EF_Property_in_the_element_selector_is_named));
+
+        AssertDeclined(
+            ElementLeafDeclineReasons.SelectorUsesEFProperty,
+            () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => EF.Property<string>(m, "Name")).ToList()).ToList());
+    }
+
+    /// <summary>
+    /// A subquery in the selector is neither a captured value, an owned navigation nor <c>EF.Property</c>: the reason is the neutral one, which
+    /// names no cause the binder did not establish.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Modes))]
+    public void A_subquery_in_the_element_selector_gets_the_neutral_reason(MongoQueryMode mode)
+    {
+        using var db = CreateContext(mode, nameof(A_subquery_in_the_element_selector_gets_the_neutral_reason));
+
+        AssertDeclined(
+            ElementLeafDeclineReasons.SelectorNotSelfContained,
+            () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => db.Animals.Count(x => x.Name == "Rex")).ToList()).ToList());
+    }
+
+    [Theory]
+    [MemberData(nameof(Modes))]
     public void An_owned_reference_read_in_the_element_selector_is_named(MongoQueryMode mode)
     {
         using var db = CreateContext(mode, nameof(An_owned_reference_read_in_the_element_selector_is_named), withOwned: true);
 
         AssertDeclined(
-            ElementLeafDeclineReasons.SelectorNotSelfContained,
+            ElementLeafDeclineReasons.SelectorReadsOwnedNavigation,
             () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => m.Detail.Label).ToList()).ToList());
     }
 
@@ -116,7 +154,7 @@ public class NativeElementLeafRefusalTests(TemporaryDatabaseFixture database)
         using var db = CreateContext(mode, nameof(An_owned_collection_read_in_the_element_selector_is_named), withOwned: true);
 
         AssertDeclined(
-            ElementLeafDeclineReasons.SelectorNotSelfContained,
+            ElementLeafDeclineReasons.SelectorReadsOwnedNavigation,
             () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => m.Pieces.Count).ToList()).ToList());
     }
 

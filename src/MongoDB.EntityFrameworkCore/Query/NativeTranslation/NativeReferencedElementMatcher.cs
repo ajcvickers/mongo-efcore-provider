@@ -128,8 +128,15 @@ internal static class ElementLeafDeclineReasons
     public const string OuterEntityInSelector
         = "The element selector reads the outer entity; a selector over the elements of a projected collection can only read the element.";
 
+    public const string SelectorReadsOwnedNavigation
+        = "The element selector reads an owned navigation of the element; a selector over the elements of a projected collection can only read the element and its stored scalar properties.";
+
+    public const string SelectorUsesEFProperty
+        = "The element selector uses EF.Property, which cannot run over the materialized elements of a projected collection.";
+
+    /// <summary>The neutral reason: the selector contains something that cannot run over the materialized elements, which the binder did not identify further.</summary>
     public const string SelectorNotSelfContained
-        = "The element selector reads an owned member of the element or uses EF.Property, which a selector over the elements of a projected collection cannot.";
+        = "The element selector contains a part that cannot run over the materialized elements of a projected collection.";
 
     public const string Correlation
         = "The collection is not correlated with the outer entity by an equality of stored-alike key properties.";
@@ -140,9 +147,11 @@ internal static class ElementLeafDeclineReasons
     public const string SortKey
         = "An ordering key is not a scalar property of the element, stored in its default form, whose stored order is its CLR order.";
 
+    /// <summary>Defensive; believed unreachable because <see cref="NativeReferencedElementMatcher.TryMatch"/> already requires each count to be a constant or a query parameter.</summary>
     public const string Paging
         = "The Skip, Take or ElementAt count is not a constant or a query parameter.";
 
+    /// <summary>Defensive; believed unreachable because <c>DerivedEntityRootNarrower</c> rewrites <c>Set&lt;Derived&gt;()</c> to <c>Set&lt;Base&gt;().OfType&lt;Derived&gt;()</c> before nav-expansion, which TryMatch does not recognize.</summary>
     public const string DerivedElementType
         = "The element type is a derived type of a hierarchy, which the lookup of a projected collection cannot narrow by discriminator.";
 
