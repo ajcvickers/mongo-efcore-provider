@@ -106,13 +106,25 @@ JsonEntitiesBasic.
 """);
     }
 
-    // Fails: NullReferenceException while materializing EF-X529
-    public override Task Basic_json_projection_owned_reference_duplicated(bool async)
-        => SpecFails.ThrowsAsync(() => base.Basic_json_projection_owned_reference_duplicated(async));
+    public override async Task Basic_json_projection_owned_reference_duplicated(bool async)
+    {
+        await base.Basic_json_projection_owned_reference_duplicated(async);
 
-    // Fails: NullReferenceException while materializing EF-X529
-    public override Task Basic_json_projection_owned_reference_duplicated2(bool async)
-        => SpecFails.ThrowsAsync(() => base.Basic_json_projection_owned_reference_duplicated2(async));
+        AssertMql(
+            """
+JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }
+""");
+    }
+
+    public override async Task Basic_json_projection_owned_reference_duplicated2(bool async)
+    {
+        await base.Basic_json_projection_owned_reference_duplicated2(async);
+
+        AssertMql(
+            """
+JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }
+""");
+    }
 
     public override async Task Basic_json_projection_owned_collection_root(bool async)
     {
@@ -144,9 +156,15 @@ JsonEntitiesBasic.
 """);
     }
 
-    // Fails: NullReferenceException while materializing EF-X529
-    public override Task Json_projection_with_deduplication(bool async)
-        => SpecFails.ThrowsAsync(() => base.Json_projection_with_deduplication(async));
+    public override async Task Json_projection_with_deduplication(bool async)
+    {
+        await base.Json_projection_with_deduplication(async);
+
+        AssertMql(
+            """
+JsonEntitiesBasic.
+""");
+    }
 
     public override async Task Json_projection_with_deduplication_reverse_order(bool async)
     {
@@ -440,13 +458,25 @@ JsonEntitiesBasic.
 """);
     }
 
-    // Fails: NullReferenceException while materializing EF-X529
-    public override Task Basic_json_projection_owned_reference_duplicated_NoTrackingWithIdentityResolution(bool async)
-        => SpecFails.ThrowsAsync(() => base.Basic_json_projection_owned_reference_duplicated_NoTrackingWithIdentityResolution(async));
+    public override async Task Basic_json_projection_owned_reference_duplicated_NoTrackingWithIdentityResolution(bool async)
+    {
+        await base.Basic_json_projection_owned_reference_duplicated_NoTrackingWithIdentityResolution(async);
 
-    // Fails: NullReferenceException while materializing EF-X529
-    public override Task Basic_json_projection_owned_reference_duplicated2_NoTrackingWithIdentityResolution(bool async)
-        => SpecFails.ThrowsAsync(() => base.Basic_json_projection_owned_reference_duplicated2_NoTrackingWithIdentityResolution(async));
+        AssertMql(
+            """
+JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }
+""");
+    }
+
+    public override async Task Basic_json_projection_owned_reference_duplicated2_NoTrackingWithIdentityResolution(bool async)
+    {
+        await base.Basic_json_projection_owned_reference_duplicated2_NoTrackingWithIdentityResolution(async);
+
+        AssertMql(
+            """
+JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }
+""");
+    }
 
     // Fails: KeyNotFoundException while translating or materializing the query EF-X526
     public override Task Basic_json_projection_owned_collection_root_NoTrackingWithIdentityResolution(bool async)
@@ -628,9 +658,15 @@ JsonEntitiesCustomNaming.{ "$project" : { "_v" : "$OwnedReferenceRoot.OwnedRefer
 """);
     }
 
-    // Fails: NullReferenceException while materializing EF-X529
-    public override Task Custom_naming_projection_everything(bool async)
-        => SpecFails.ThrowsAsync(() => base.Custom_naming_projection_everything(async));
+    public override async Task Custom_naming_projection_everything(bool async)
+    {
+        await base.Custom_naming_projection_everything(async);
+
+        AssertMql(
+            """
+JsonEntitiesCustomNaming.
+""");
+    }
 
     public override async Task Project_entity_with_single_owned(bool async)
     {
@@ -674,9 +710,15 @@ JsonEntitiesBasic.{ "$lookup" : { "from" : "JsonEntitiesSingleOwned", "localFiel
 """);
     }
 
-    // Fails: NullReferenceException while materializing EF-X529
-    public override Task Left_join_json_entities_complex_projection_json_being_inner(bool async)
-        => SpecFails.ThrowsAsync(() => base.Left_join_json_entities_complex_projection_json_being_inner(async));
+    public override async Task Left_join_json_entities_complex_projection_json_being_inner(bool async)
+    {
+        await base.Left_join_json_entities_complex_projection_json_being_inner(async);
+
+        AssertMql(
+            """
+JsonEntitiesBasic.{ "$project" : { "_outer" : "$$ROOT", "_id" : 0 } }, { "$lookup" : { "from" : "JsonEntitiesSingleOwned", "localField" : "_outer._id", "foreignField" : "_id", "as" : "_inner" } }, { "$unwind" : { "path" : "$_inner", "preserveNullAndEmptyArrays" : true } }, { "$project" : { "_outer" : "$_outer", "_inner" : "$_inner", "_id" : 0 } }
+""");
+    }
 
     // Fails: a JSON-owned collection that is indexed (ElementAt/indexer), projected or composed in a subquery is not translated EF-X549
     public override Task Project_json_entity_FirstOrDefault_subquery_with_binding_on_top(bool async)
