@@ -50,18 +50,14 @@ public class StoreGeneratedFixupMongoTest(StoreGeneratedFixupMongoTest.StoreGene
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
-        {
-            base.ConfigureConventions(configurationBuilder);
-
-            // EF-X102: the provider owns, by convention, any type it reaches through a navigation that is not yet in the model, which breaks the
-            // upstream relationships; here every such type is an independent entity type.
-            configurationBuilder.DoNotOwnTypes((_, _) => true);
-        }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
+            // FirstLevel, SecondLevel and ThirdLevel have no DbSet and nothing outside their owner references them, so the provider embeds
+            // them (#65). The tests add, replace and save them as entities with store-generated keys, so register them as entities.
+            modelBuilder.Entity<FirstLevel>();
+            modelBuilder.Entity<SecondLevel>();
+            modelBuilder.Entity<ThirdLevel>();
             MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
             MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
             modelBuilder.RelaxUniqueForeignKeyIndexes();

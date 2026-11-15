@@ -143,9 +143,8 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void InversePropertyAttribute_from_ignored_base_can_be_ignored_to_remove_ambiguity()
         => base.InversePropertyAttribute_from_ignored_base_can_be_ignored_to_remove_ambiguity();
 
-    // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void InversePropertyAttribute_from_ignored_base_causes_ambiguity()
-        => SpecFails.Sync<global::System.NullReferenceException>(() => base.InversePropertyAttribute_from_ignored_base_causes_ambiguity(), "Object reference not set to an instance of an object.");
+        => base.InversePropertyAttribute_from_ignored_base_causes_ambiguity();
 
     public override void InversePropertyAttribute_is_noop_in_unambiguous_models()
         => base.InversePropertyAttribute_is_noop_in_unambiguous_models();
@@ -156,9 +155,8 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void InversePropertyAttribute_pointing_to_same_nav_on_base_with_one_ignored()
         => base.InversePropertyAttribute_pointing_to_same_nav_on_base_with_one_ignored();
 
-    // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void InversePropertyAttribute_pointing_to_same_skip_nav_on_base_causes_ambiguity()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.InversePropertyAttribute_pointing_to_same_skip_nav_on_base_causes_ambiguity(), "Assert.Equal() Failure: Strings differ");
+        => base.InversePropertyAttribute_pointing_to_same_skip_nav_on_base_causes_ambiguity();
 
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void InversePropertyAttribute_removes_ambiguity()
@@ -167,9 +165,9 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void InversePropertyAttribute_removes_ambiguity_from_the_ambiguous_end()
         => base.InversePropertyAttribute_removes_ambiguity_from_the_ambiguous_end();
 
-    // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
+    // Fails: Single-property primary key with a name other than Id must be mapped to '_id' (test model does not) EF-X547
     public override void InversePropertyAttribute_removes_ambiguity_when_combined_with_other_attributes()
-        => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.InversePropertyAttribute_removes_ambiguity_when_combined_with_other_attributes(), "Assert.Equal() Failure: Strings differ");
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.InversePropertyAttribute_removes_ambiguity_when_combined_with_other_attributes(), "must be mapped to element '_id'");
 
     // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void InversePropertyAttribute_removes_ambiguity_with_base_type()
@@ -178,9 +176,8 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void InversePropertyAttribute_removes_ambiguity_with_base_type_bidirectional()
         => base.InversePropertyAttribute_removes_ambiguity_with_base_type_bidirectional();
 
-    // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void InversePropertyAttribute_removes_ambiguity_with_base_type_ignored()
-        => SpecFails.Sync<global::System.NullReferenceException>(() => base.InversePropertyAttribute_removes_ambiguity_with_base_type_ignored(), "Object reference not set to an instance of an object.");
+        => base.InversePropertyAttribute_removes_ambiguity_with_base_type_ignored();
 
     // Fails: [Column(TypeName)] is reported as an error by default EF-X312
     public override void InverseProperty_with_case_sensitive_clr_property()
@@ -214,11 +211,11 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
 
     // Fails: Model validation requires key property to be mapped to _id EF-X307
     public override void Key_from_base_type_is_recognized()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Key_from_base_type_is_recognized(), "The entity type 'OKeyBase' primary key property 'OrderLineNo' must be ");
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Key_from_base_type_is_recognized(), "The entity type 'DODerived' primary key property ");
 
     // Fails: Model validation requires key property to be mapped to _id EF-X307
     public override void Key_from_base_type_is_recognized_if_base_discovered_first()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Key_from_base_type_is_recognized_if_base_discovered_first(), "The entity type 'OKeyBase' primary key property 'OrderLineNo' must be ");
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Key_from_base_type_is_recognized_if_base_discovered_first(), "The entity type 'DODerived' primary key property ");
 
     public override void Key_from_base_type_is_recognized_if_discovered_through_relationship()
         => base.Key_from_base_type_is_recognized_if_discovered_through_relationship();
@@ -287,9 +284,8 @@ public class DataAnnotationMongoTest(DataAnnotationMongoTest.DataAnnotationMongo
     public override void NotMappedAttribute_removes_ambiguity_in_relationship_building()
         => SpecFails.Sync<global::Xunit.Sdk.XunitException>(() => base.NotMappedAttribute_removes_ambiguity_in_relationship_building(), "Assert.Contains() Failure: Item not found in collection");
 
-    // Fails: Relationship/navigation discovery differs (navigations become owned by convention) EF-X308
     public override void NotMappedAttribute_removes_ambiguity_in_relationship_building_with_base()
-        => SpecFails.Sync<global::System.NullReferenceException>(() => base.NotMappedAttribute_removes_ambiguity_in_relationship_building_with_base(), "Object reference not set to an instance of an object.");
+        => base.NotMappedAttribute_removes_ambiguity_in_relationship_building_with_base();
 
     public override void NotMapped_on_abstract_base_class_property_ignores_it()
         => base.NotMapped_on_abstract_base_class_property_ignores_it();

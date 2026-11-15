@@ -48,15 +48,6 @@ public class ManyToManyTrackingMongoTest(ManyToManyTrackingMongoTest.ManyToManyT
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
-        {
-            base.ConfigureConventions(configurationBuilder);
-
-            // EF-X102: the provider owns, by convention, any type it reaches through a navigation that is not yet in the model, which breaks the
-            // upstream relationships; here every such type is an independent entity type.
-            configurationBuilder.DoNotOwnTypes((type, _) => type.Name.Contains("Join"));
-        }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);

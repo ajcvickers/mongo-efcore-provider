@@ -54,9 +54,8 @@ public class ModelBuilding101MongoTest : ModelBuilding101TestBase
     public override void ManyToManyWithNavsToJoinClassTest()
         => SpecFails.Throws<InvalidOperationException>(() => base.ManyToManyWithNavsToJoinClassTest());
 
-    // Fails: Join-class foreign key discovery is ambiguous EF-X401
     public override void ManyToManyWithNavsToAndFromJoinClassTest()
-        => SpecFails.Throws<InvalidOperationException>(() => base.ManyToManyWithNavsToAndFromJoinClassTest());
+        => base.ManyToManyWithNavsToAndFromJoinClassTest();
 
     // Fails: Join-class foreign key discovery is ambiguous EF-X401
     public override void ManyToManyWithPayloadAndNavsToJoinClassTest()

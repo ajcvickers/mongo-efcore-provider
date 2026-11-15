@@ -45,18 +45,15 @@ public class PropertyValuesMongoTest(PropertyValuesMongoTest.PropertyValuesMongo
         protected override ITestStoreFactory TestStoreFactory
             => _testStoreFactory!;
 
-        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
-        {
-            base.ConfigureConventions(configurationBuilder);
-
-            // EF-X102: the provider owns, by convention, any type it reaches through a navigation that is not yet in the model, which breaks the
-            // upstream relationships; here every such type is an independent entity type.
-            configurationBuilder.DoNotOwnTypes((_, _) => true);
-        }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
+            // On EF8 and EF9, MailRoom is first embedded (it has no DbSet) and given an ordinal key, which stays when the fixture's
+            // explicit relationships later make it independent, so the foreign key is created over that key. Register it first.
+            modelBuilder.Entity<MailRoom>();
             base.OnModelCreating(modelBuilder, context);
+            // Whiteboard has no DbSet and nothing outside its owner references it, so the provider embeds it (#65). The tests track it
+            // as an entity, so register it as one.
+            modelBuilder.Entity<Whiteboard>();
             MongoSpecModelHelpers.MapSingleKeysToId(modelBuilder, generateIntegerKeys: true);
             MongoSpecModelHelpers.RelaxNullableUniqueIndexes(modelBuilder);
             modelBuilder.RelaxUniqueForeignKeyIndexes();

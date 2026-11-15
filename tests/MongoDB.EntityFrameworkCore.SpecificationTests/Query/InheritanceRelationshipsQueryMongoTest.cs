@@ -503,15 +503,6 @@ ReferencedEntities.{ "$lookup" : { "from" : "PrincipalEntities", "let" : { "loca
             await base.InitializeAsync();
         }
 
-        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
-        {
-            base.ConfigureConventions(configurationBuilder);
-
-            // A type deriving from an entity type that is reached through a navigation before it is in the model is owned by default, which
-            // breaks the explicit one-to-one between BaseInheritanceRelationshipEntity and its derived type (EF-X538).
-            configurationBuilder.DoNotOwnTypes((type, model) => model.GetEntityTypes().Any(e => e.FindOwnership() == null && type.IsSubclassOf(e.ClrType)));
-        }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder, DbContext context)
         {
             base.OnModelCreating(modelBuilder, context);
