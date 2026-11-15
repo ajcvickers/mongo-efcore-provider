@@ -305,6 +305,29 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
         Assert.All(kids, kid => Assert.Contains(owners, owner => owner.Kids.Contains(kid.Entity)));
     }
 
+    // An Other selector (it uses the element itself) as a bare body is native too (#122): untracked it matches the in-memory oracle; tracked,
+    // EF's refusal of an owned entity without its owner stays (R1).
+    [Fact]
+    public void Bare_other_selector_is_native()
+    {
+        var collection = Seed();
+        using var db = Create(collection, MongoQueryMode.NativeOnly);
+
+        var rows = db.Entities.AsNoTracking().OrderBy(e => e.Id)
+            .Select(r => r.Kids.Select(k => new { k, k.W }).ToList()).ToList();
+
+        var expected = StoredRoots(collection).Select(r => r.Kids.Select(k => new { k, k.W }).ToList()).ToList();
+        Assert.Equal(
+            expected.Select(r => r.Select(p => $"{p.k.Label}:{p.k.W}:{p.k.Weight}:{p.k.Size}:{p.W}").ToList()).ToList(),
+            rows.Select(r => r.Select(p => $"{p.k.Label}:{p.k.W}:{p.k.Weight}:{p.k.Size}:{p.W}").ToList()).ToList());
+        Assert.Equal(["a:1:10.5:Small:1", "b:2:20.25:Big:2"], rows[0].Select(p => $"{p.k.Label}:{p.k.W}:{p.k.Weight}:{p.k.Size}:{p.W}"));
+        Assert.Empty(db.ChangeTracker.Entries());
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.OrderBy(e => e.Id).Select(r => r.Kids.Select(k => new { k, k.W }).ToList()).ToList());
+        Assert.Contains("owned entity without a corresponding owner", exception.Message);
+    }
+
     // R1: tracking decides what a result is, never whether a query translates; EF Core's own refusal of an owned entity without its owner stays.
     [Fact]
     public void Bare_owned_collection_tracked_keeps_efs_refusal()
