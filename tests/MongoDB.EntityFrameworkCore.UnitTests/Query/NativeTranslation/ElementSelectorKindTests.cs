@@ -19,6 +19,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query;
 using MongoDB.EntityFrameworkCore.Extensions;
 using MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 using MongoDB.EntityFrameworkCore.UnitTests.TestUtilities;
@@ -164,6 +166,107 @@ public class ElementSelectorKindTests
     {
         var suffix = "!";
         AssertScalarOnly(e => e.Method + suffix);
+    }
+
+    /// <summary>A query parameter as nav-expansion leaves it (EF8/EF9: a prefixed <see cref="ParameterExpression"/>; EF10+: <c>QueryParameterExpression</c>).</summary>
+    private static Expression QueryParameter(string name, Type type)
+#if EF8 || EF9
+        => Expression.Parameter(type, QueryCompilationContext.QueryParameterPrefix + name);
+#else
+        => new QueryParameterExpression("__" + name, type);
+#endif
+
+    private static Expression<Func<Element, string>> MethodPlusQueryParameter()
+    {
+        var element = Expression.Parameter(typeof(Element), "e");
+        var body = Expression.Call(
+            typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!,
+            Expression.Property(element, nameof(Element.Method)),
+            QueryParameter("suffix_0", typeof(string)));
+        return Expression.Lambda<Func<Element, string>>(body, element);
+    }
+
+    [Fact]
+    public void A_query_parameter_is_not_a_use_of_the_element()
+        => Assert.Equal(ElementSelectorKind.ScalarMembersOnly, Classify(MethodPlusQueryParameter()));
+
+    [Fact]
+    public void A_selector_reading_a_query_parameter_is_self_contained()
+        => Assert.True(NativeProjectionBinder.IsSelfContainedLambda(MethodPlusQueryParameter()));
+
+    [Fact]
+    public void A_selector_reading_another_free_parameter_is_not_self_contained()
+    {
+        var element = Expression.Parameter(typeof(Element), "e");
+        var outer = Expression.Parameter(typeof(string), "outer");
+        var lambda = Expression.Lambda<Func<Element, string>>(
+            Expression.Call(
+                typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!,
+                Expression.Property(element, nameof(Element.Method)), outer),
+            element);
+
+        Assert.False(NativeProjectionBinder.IsSelfContainedLambda(lambda));
+    }
+
+    [Fact]
+    public void ReplaceQueryParameters_reads_each_query_parameter_from_the_query_context()
+    {
+        var selector = MethodPlusQueryParameter();
+        var body = NativeQueryParameter.ReplaceQueryParameters(selector.Body, QueryCompilationContext.QueryContextParameter);
+        var compiled = Expression.Lambda<Func<QueryContext, Element, string>>(
+            body, QueryCompilationContext.QueryContextParameter, selector.Parameters[0]).Compile();
+
+        using var db = SingleEntityDbContext.Create<Element>();
+        var queryContext = db.GetService<IQueryContextFactory>().Create();
+#if EF8 || EF9
+        queryContext.AddParameter(QueryCompilationContext.QueryParameterPrefix + "suffix_0", "!");
+#else
+        queryContext.Parameters["__suffix_0"] = "!";
+#endif
+
+        Assert.Equal("Tattoo!", compiled(queryContext, new Element { Method = "Tattoo" }));
+        Assert.False(NativeQueryParameter.TryGetQueryParameterName(body, out _));
+    }
+
+    [Fact]
+    public void The_streaming_cursor_accepts_a_query_parameter_read_from_the_query_context()
+    {
+        using var db = SingleEntityDbContext.Create<Element>();
+        var elementType = db.Model.FindEntityType(typeof(Element))!;
+        var method = elementType.FindProperty(nameof(Element.Method))!;
+        var local = Expression.Variable(typeof(string), "method");
+        var selector = MethodPlusQueryParameter();
+        var body = NativeQueryParameter.ReplaceQueryParameters(selector.Body, QueryCompilationContext.QueryContextParameter);
+
+        var rewriter = new MongoElementSelectorRewriter(
+            elementType, new Dictionary<Microsoft.EntityFrameworkCore.Metadata.IProperty, ParameterExpression> { [method] = local },
+            selector.Parameters[0]);
+        var rewritten = rewriter.Visit(body)!;
+
+        Assert.Equal([method], rewriter.Used);
+        Assert.False(ExpressionReferences(rewritten, selector.Parameters[0]));
+
+        // Only a read from the shaper's own query-context parameter is accepted, not one from any other expression.
+        Assert.Throws<NativeTranslationNotSupportedException>(
+            () => new MongoElementSelectorRewriter(
+                elementType, new Dictionary<Microsoft.EntityFrameworkCore.Metadata.IProperty, ParameterExpression> { [method] = local },
+                selector.Parameters[0]).Visit(NativeQueryParameter.ReplaceQueryParameters(selector.Body, Expression.Parameter(typeof(QueryContext), "other"))));
+    }
+
+    private static bool ExpressionReferences(Expression expression, ParameterExpression parameter)
+    {
+        var found = false;
+        new ParameterFinder(p => found |= p == parameter).Visit(expression);
+        return found;
+    }
+
+    private sealed class ParameterFinder(Action<ParameterExpression> onParameter) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            onParameter(node);
+            return node;
+        }
     }
 
     [Fact]

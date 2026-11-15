@@ -161,6 +161,39 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
         Assert.DoesNotContain("Weight", command);
     }
 
+    // The cursor accepts a captured value in the lambda (read from the query context), so the Select is still fused and the pipeline narrowed.
+    [Fact]
+    public void Captured_variable_in_selector_is_read_in_place_by_the_streaming_shaper()
+    {
+        var collection = Seed();
+        var commands = new List<string>();
+        var settings = database.Client.Settings.Clone();
+        settings.ClusterConfigurator = b => b.Subscribe<MongoDB.Driver.Core.Events.CommandStartedEvent>(e =>
+        {
+            if (e.CommandName == "aggregate" && e.Command["aggregate"].AsString == collection.CollectionNamespace.CollectionName)
+            {
+                commands.Add(e.Command.ToJson());
+            }
+        });
+
+        using var db = CreateWithUnsavedChange(
+            new MongoClient(settings).GetDatabase(collection.Database.DatabaseNamespace.DatabaseName)
+                .GetCollection<Owner>(collection.CollectionNamespace.CollectionName),
+            MongoQueryMode.NativeOnly);
+
+        foreach (var offset in new[] { 10, 20 })
+        {
+            commands.Clear();
+            var row = db.Entities.Where(e => e.Id == 1)
+                .Select(e => new { e.Name, Ws = e.Kids.Select(k => k.W + offset).ToList() }).Single();
+
+            Assert.Equal([1 + offset, 2 + offset], row.Ws);
+            var command = Assert.Single(commands);
+            Assert.True(command.Contains("\"$$e.W\""), command);
+            Assert.DoesNotContain("Label", command);
+        }
+    }
+
     [Fact]
     public void Untracked_scalar_select_reads_stored_values()
     {
@@ -421,6 +454,62 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
             Assert.Equal([1, 2], row.Ws);
             Assert.Equal(before, db.ChangeTracker.Entries().Count());
         }
+    }
+
+    /// <summary>
+    /// A captured variable in the element selector (#119) is read from the query context on every execution, never baked into the cached shaper:
+    /// the same query runs twice in one context with different values. The forms take different read paths: fused into the streaming cursor
+    /// (<c>Fused</c>), the stored-value DOM shaper because the array is also read whole (<c>BesideArray</c>), beside the whole owner
+    /// (<c>BesideRoot</c>), the stored-value DOM shaper because the cursor declines the lambda (<c>Declined</c>), a bare body (<c>Bare</c>), and an
+    /// <c>Other</c> selector over the materialized
+    /// owned entities (untracked: EF refuses an owned entity without its owner under tracking).
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.NoTracking)]
+    public void Captured_variable_in_selector_reads_per_execution(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        var collection = Seed();
+        using var db = CreateWithUnsavedChange(collection, mode);
+        var query = db.Entities.AsTracking(tracking).Where(e => e.Id == 1);
+
+        List<int> Fused(int offset)
+            => query.Select(r => new { r.Name, Ws = r.Kids.Select(k => k.W + offset).ToList() }).Single().Ws;
+
+        // Untracked: EF refuses the owned collection without its owner under tracking.
+        List<int> BesideArray(int offset)
+            => db.Entities.AsNoTracking().Where(e => e.Id == 1)
+                .Select(r => new { r.Kids, Ws = r.Kids.Select(k => k.W + offset).ToList() }).Single().Ws;
+
+        List<int> BesideRoot(int offset)
+            => query.Select(r => new { r, Ws = r.Kids.Select(k => k.W + offset).ToList() }).Single().Ws;
+
+        List<string> Declined(int offset)
+            => query.Select(r => new { r.Name, Ws = r.Kids.Select(k => (k.W + offset).ToString()).ToList() }).Single().Ws;
+
+        List<int> Bare(int offset)
+            => query.Select(r => r.Kids.Select(k => k.W + offset).ToList()).Single();
+
+        List<string> Other(int offset)
+            => db.Entities.AsNoTracking().Where(e => e.Id == 1)
+                .Select(r => r.Kids.Select(k => new { k, V = k.W + offset }).ToList()).Single()
+                .Select(p => $"{p.k.Label}:{p.V}").ToList();
+
+        Assert.Equal([11, 12], Fused(10));
+        Assert.Equal([21, 22], Fused(20));
+        Assert.Equal([11, 12], BesideArray(10));
+        Assert.Equal([21, 22], BesideArray(20));
+        Assert.Equal([11, 12], BesideRoot(10));
+        Assert.Equal([21, 22], BesideRoot(20));
+        Assert.Equal(["11", "12"], Declined(10));
+        Assert.Equal(["21", "22"], Declined(20));
+        Assert.Equal([11, 12], Bare(10));
+        Assert.Equal([21, 22], Bare(20));
+        Assert.Equal(["a:11", "b:12"], Other(10));
+        Assert.Equal(["a:21", "b:22"], Other(20));
     }
 
     private static SingleEntityDbContext<Owner> Create(IMongoCollection<Owner> collection, MongoQueryMode mode)

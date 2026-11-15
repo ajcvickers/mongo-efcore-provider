@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -756,6 +757,69 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         Assert.Equal("Microchip", Run(0));
         Assert.Equal("Tattoo", Run(1));
         Assert.Null(Run(2));
+    }
+
+    /// <summary>
+    /// A captured variable in the element selector (#119) is read from the query context on every execution, never baked into the cached shaper:
+    /// the same query runs twice in one context with different values. Each form takes a different read path: fused into the streaming cursor
+    /// (<c>Fused</c>), materialized untracked because the cursor declines the lambda (<c>Declined</c>), run over the materialized (and under
+    /// <c>TrackAll</c> tracked) element (<c>Other</c>), under a single-result terminal (<c>Terminal</c>), and beside the root entity
+    /// (<c>BesideRoot</c>). <c>DriverLinq</c> reads whole documents with the mixed shaper, the native modes with the streaming one.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.NoTracking)]
+    public void Captured_variable_in_selector_reads_per_execution(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Captured_variable_in_selector_reads_per_execution) + mode + tracking, out var withMethods, out _, tracking: tracking);
+        var query = db.Animals.Where(a => a.Id == withMethods);
+
+        List<string> Fused(string suffix)
+            => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Method + suffix).ToList()).Single();
+
+        List<string> Declined(string suffix)
+            => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Rank.ToString() + suffix).ToList()).Single();
+
+        List<string> Other(string suffix)
+            => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Describe() + suffix).ToList()).Single();
+
+        string Terminal(string suffix)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Method + suffix).First()).Single();
+
+        string BesideRoot(string suffix)
+        {
+            var row = query.Select(a => new { a, L = a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Method + suffix).ToList() }).Single();
+            return row.a.Name + ":" + string.Join(",", row.L);
+        }
+
+        Assert.Equal(["Tattoo!"], Fused("!"));
+        Assert.Equal(["Tattoo?"], Fused("?"));
+        Assert.Equal(["2!"], Declined("!"));
+        Assert.Equal(["2?"], Declined("?"));
+        Assert.Equal(["Tattoo!"], Other("!"));
+        Assert.Equal(["Tattoo?"], Other("?"));
+        Assert.Equal("Microchip!", Terminal("!"));
+        Assert.Equal("Microchip?", Terminal("?"));
+        Assert.Equal("Rex:Microchip!,Tattoo!", BesideRoot("!"));
+        Assert.Equal("Rex:Microchip?,Tattoo?", BesideRoot("?"));
+    }
+
+    /// <summary>A captured value admitted in the selector admits nothing else: the outer entity beside it is still declined, naming the outer entity.</summary>
+    [Fact]
+    public void Captured_variable_beside_the_outer_entity_in_selector_is_still_declined()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Captured_variable_beside_the_outer_entity_in_selector_is_still_declined), out var withMethods, out _);
+        var suffix = "!";
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => db.Animals.Where(a => a.Id == withMethods)
+                .Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Method + suffix + a.Name).ToList()).Single());
+        Assert.Contains(MongoDB.EntityFrameworkCore.Query.NativeTranslation.ElementLeafDeclineReasons.OuterEntityInSelector, exception.Message);
     }
 
     [Fact]

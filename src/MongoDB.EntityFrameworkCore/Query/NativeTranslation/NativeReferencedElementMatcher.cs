@@ -122,9 +122,6 @@ internal static class ElementLeafDeclineReasons
     public const string OwnedNavigations
         = "The element type has owned navigations, which are not supported for the elements of a projected collection.";
 
-    public const string CapturedValueInSelector
-        = "The element selector reads a captured value; a selector over the elements of a projected collection can only read the element.";
-
     public const string OuterEntityInSelector
         = "The element selector reads the outer entity; a selector over the elements of a projected collection can only read the element.";
 

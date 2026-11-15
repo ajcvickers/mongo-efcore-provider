@@ -75,16 +75,17 @@ public class NativeElementLeafRefusalTests(TemporaryDatabaseFixture database)
         public int P { get; set; }
     }
 
+    /// <summary>A captured value is read per execution (#119), so it is not what is declined: the outer entity beside it is, and is named.</summary>
     [Theory]
     [MemberData(nameof(Modes))]
-    public void A_captured_value_in_the_element_selector_is_named(MongoQueryMode mode)
+    public void The_outer_entity_beside_a_captured_value_in_the_element_selector_is_named(MongoQueryMode mode)
     {
-        using var db = CreateContext(mode, nameof(A_captured_value_in_the_element_selector_is_named));
+        using var db = CreateContext(mode, nameof(The_outer_entity_beside_a_captured_value_in_the_element_selector_is_named));
         var sfx = "!";
 
         AssertDeclined(
-            ElementLeafDeclineReasons.CapturedValueInSelector,
-            () => db.Animals.Select(a => a.Methods.Where(m => m.Rank == 2).Select(m => m.Name + sfx).ToList()).ToList());
+            ElementLeafDeclineReasons.OuterEntityInSelector,
+            () => db.Animals.Select(a => a.Methods.Where(m => m.Rank == 2).Select(m => m.Name + sfx + a.Name).ToList()).ToList());
     }
 
     [Theory]
@@ -100,13 +101,13 @@ public class NativeElementLeafRefusalTests(TemporaryDatabaseFixture database)
 
     [Theory]
     [MemberData(nameof(Modes))]
-    public void A_captured_value_in_a_subquery_of_the_element_selector_is_named(MongoQueryMode mode)
+    public void A_subquery_reading_a_captured_value_in_the_element_selector_gets_the_neutral_reason(MongoQueryMode mode)
     {
-        using var db = CreateContext(mode, nameof(A_captured_value_in_a_subquery_of_the_element_selector_is_named));
+        using var db = CreateContext(mode, nameof(A_subquery_reading_a_captured_value_in_the_element_selector_gets_the_neutral_reason));
         var name = "Rex";
 
         AssertDeclined(
-            ElementLeafDeclineReasons.CapturedValueInSelector,
+            ElementLeafDeclineReasons.SelectorNotSelfContained,
             () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).Select(m => db.Animals.Count(x => x.Name == name)).ToList()).ToList());
     }
 

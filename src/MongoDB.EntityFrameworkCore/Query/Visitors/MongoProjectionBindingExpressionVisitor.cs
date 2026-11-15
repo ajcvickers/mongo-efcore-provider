@@ -1006,7 +1006,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                         .Single(m => m.Name == nameof(Enumerable.Select) && m.GetParameters()[1].ParameterType.GetGenericArguments().Length == 2)
                         .MakeGenericMethod(elementType, resultType),
                     elements,
-                    elementSelector));
+                    ReadQueryParametersPerExecution(elementSelector)));
         }
 
         // A projected cross-collection collection-navigation Count (`c.Orders.Count`) is lowered by EF to
@@ -1647,7 +1647,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 return false;
             }
 
-            result = new OwnedElementStoredSelectExpression(arrayBinding, navigation, selector);
+            result = new OwnedElementStoredSelectExpression(arrayBinding, navigation, ReadQueryParametersPerExecution(selector));
             return true;
         }
 
@@ -1673,7 +1673,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 $"Internal error: an embedded owned collection '{navigation.Name}' did not bind to its array.");
         }
 
-        result = new OwnedElementStoredSelectExpression((Expression)array, navigation, selector);
+        result = new OwnedElementStoredSelectExpression((Expression)array, navigation, ReadQueryParametersPerExecution(selector));
         return true;
     }
 
@@ -1773,6 +1773,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         _projectionMapping[arrayProjectionMember] = aliasedArray;
 
         var innerShaper = CreateElementShaperWithOwnedIncludes(targetType, aliasedArray.InnerProjection);
+        var shapeSelector = shape.Selector is { } matchedSelector ? ReadQueryParametersPerExecution(matchedSelector) : null;
         Expression collection = new CollectionShaperExpression(
             new ProjectionBindingExpression(QueryExpression, arrayProjectionMember, aliasedArray.Type),
             innerShaper,
@@ -1783,8 +1784,8 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         {
             // The terminal runs over the (at most one, or for Single two) materialized entities the lookup kept, so it throws for an empty or
             // ambiguous group as LINQ does. Last read the reversed ordering and ElementAt skipped to its index, so each is the first element.
-            var elementType = shape.Selector?.ReturnType ?? targetType.ClrType;
-            var elements = shape.Selector is { } elementSelector
+            var elementType = shapeSelector?.ReturnType ?? targetType.ClrType;
+            var elements = shapeSelector is { } elementSelector
                 ? Expression.Call(
                     EnumerableMethods.Select.MakeGenericMethod(targetType.ClrType, elementSelector.ReturnType), collection, elementSelector)
                 : collection;
@@ -1805,7 +1806,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                     ElementAtOrDefaultMethod.MakeGenericMethod(elementType), elements, Expression.Constant(0))
             };
         }
-        else if (shape.Selector is { } selector)
+        else if (shapeSelector is { } selector)
         {
             // The selector runs over the materialized entities, as for an element Select over an owned collection.
             result = Expression.Call(
@@ -1822,6 +1823,15 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
         return true;
     }
+
+    /// <summary>
+    /// An element selector as the shaper runs it: each query parameter (a captured value) is read from the query context of this execution
+    /// (<see cref="NativeQueryParameter.ReplaceQueryParameters"/>), never baked into the cached shaper. Every consumer of the selector downstream (the DOM
+    /// and mixed shapers' stored-value lowering, the streaming cursor's <see cref="MongoElementSelectorRewriter"/>) sees this form.
+    /// </summary>
+    private static LambdaExpression ReadQueryParametersPerExecution(LambdaExpression selector)
+        => Expression.Lambda(
+            NativeQueryParameter.ReplaceQueryParameters(selector.Body, QueryCompilationContext.QueryContextParameter), selector.Parameters);
 
     /// <summary>
     /// The shaper for one element of an alias-addressed owned array: wrapped in an <see cref="IncludeExpression"/> per

@@ -1677,7 +1677,11 @@ internal static class NativeProjectionBinder
         return true;
     }
 
-    /// <summary>Whether <paramref name="lambda"/> can be compiled and run on its own over materialized owned entities: no parameter other than its own (a query parameter or the root wouldn't exist there) and no <c>EF.Property</c> call, which throws outside a query.</summary>
+    /// <summary>
+    /// Whether <paramref name="lambda"/> can be compiled and run on its own over the materialized elements: no parameter other than its own and query
+    /// parameters (the root wouldn't exist there; a query parameter is read from the query context, <see cref="NativeQueryParameter.ReplaceQueryParameters"/>)
+    /// and no <c>EF.Property</c> call, which throws outside a query.
+    /// </summary>
     internal static bool IsSelfContainedLambda(LambdaExpression lambda)
     {
         var checker = new SelfContainedChecker();
@@ -1687,9 +1691,9 @@ internal static class NativeProjectionBinder
 
     /// <summary>
     /// The reason an element leaf's selector that <see cref="IsSelfContainedLambda"/> rejected is declined, naming only a cause found in it: the
-    /// owned-navigation include nav-expansion adds as a selector of its own (<c>m =&gt; Include(m, m.Detail)</c>), a captured value, a read of an
-    /// owned navigation of the element (nav-expansion spells <c>m.Detail</c> as <c>EF.Property(m, "Detail")</c>), any other <c>EF.Property</c>, or
-    /// else a neutral reason (a navigation or subquery reaches it as a query root; Task 9 names that one).
+    /// owned-navigation include nav-expansion adds as a selector of its own (<c>m =&gt; Include(m, m.Detail)</c>), a read of an owned navigation of
+    /// the element (nav-expansion spells <c>m.Detail</c> as <c>EF.Property(m, "Detail")</c>), any other <c>EF.Property</c>, or else a neutral
+    /// reason (a navigation or subquery reaches it as a query root; Task 9 names that one). A captured value is never the cause: it is admitted.
     /// </summary>
     private static string ClassifyNotSelfContainedSelector(LambdaExpression selector, IEntityType elementType)
     {
@@ -1698,29 +1702,20 @@ internal static class NativeProjectionBinder
 
         var finder = new SelectorDeclineFinder(selector.Parameters[0], elementType);
         finder.Visit(selector.Body);
-        return finder.ReadsQueryParameter ? ElementLeafDeclineReasons.CapturedValueInSelector
-            : finder.ReadsOwnedNavigation ? ElementLeafDeclineReasons.SelectorReadsOwnedNavigation
+        return finder.ReadsOwnedNavigation ? ElementLeafDeclineReasons.SelectorReadsOwnedNavigation
             : finder.UsesEFProperty ? ElementLeafDeclineReasons.SelectorUsesEFProperty
             : ElementLeafDeclineReasons.SelectorNotSelfContained;
     }
 
     private sealed class SelectorDeclineFinder(ParameterExpression element, IEntityType elementType) : ExpressionVisitor
     {
-        public bool ReadsQueryParameter { get; private set; }
         public bool ReadsOwnedNavigation { get; private set; }
         public bool UsesEFProperty { get; private set; }
 
+        // A query parameter is a leaf the base visitor cannot always walk (EF10's QueryParameterExpression); it is admitted, so it is no cause.
         [return: NotNullIfNotNull(nameof(node))]
         public override Expression? Visit(Expression? node)
-        {
-            if (node is not null && NativeQueryParameter.TryGetQueryParameterName(node, out _))
-            {
-                ReadsQueryParameter = true;
-                return node;
-            }
-
-            return base.Visit(node);
-        }
+            => node is not null && NativeQueryParameter.TryGetQueryParameterName(node, out _) ? node : base.Visit(node);
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
@@ -1759,6 +1754,12 @@ internal static class NativeProjectionBinder
         private readonly HashSet<ParameterExpression> _declared = [];
 
         public bool IsSelfContained { get; private set; } = true;
+
+        // A query parameter (a captured value) is admitted: the shaper reads it from the query context per execution
+        // (NativeQueryParameter.ReplaceQueryParameters), never from the cached plan.
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+            => node is not null && NativeQueryParameter.TryGetQueryParameterName(node, out _) ? node : base.Visit(node);
 
         protected override Expression VisitLambda<T>(Expression<T> node)
         {
@@ -2513,7 +2514,8 @@ internal static class NativeProjectionBinder
         if (target.GetNavigations().Any(n => n.IsEagerLoaded && !n.IsEmbedded()))
             return Decline(ElementLeafDeclineReasons.EagerLoadedNavigation);
 
-        // The selector runs over the materialized entities, so it must stand alone (no query parameter, no outer entity, no EF.Property).
+        // The selector runs over the materialized entities, so it must stand alone (no outer entity, no EF.Property); a query parameter is read from
+        // the query context per execution.
         if (shape.Selector is { } selector)
         {
             if (selector.Body.ReferencesParameter(outerParameter))
