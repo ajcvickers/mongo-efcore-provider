@@ -612,7 +612,8 @@ Shapers and projections:
   that leaf as the document itself; one predicate, `MongoElementRefExpression.IsWholeRootDocument`). The lambda must be self-contained
   (`IsSelfContainedLambda`). A lambda reading the outer entity crashes shaper build in every mode (pre-existing). What the shaper does
   with the elements depends on the selector, classified by the same `NativeReferencedElementMatcher.ClassifySelector` as an element
-  leaf's (#32; owned and navigation members of the element are `Other`):
+  leaf's (#32; owned and navigation members of the element are `Other`, and so is a read of an OWNED element's primary-key or
+  ownership-FK property, which is synthesized, not stored: `IsOwnedTypeKey` gives it element name ""):
   - **`ScalarMembersOnly` reads the stored values and builds no owned entity (#121)**, in every query mode and for every tracking
     behavior. The binding visitor (`TryBindOwnedElementStoredSelect`) binds an `OwnedElementStoredSelectExpression`, which holds the
     array (the leaf's projection binding on the native projection route; the navigation's `ObjectArrayProjectionExpression` on every other
