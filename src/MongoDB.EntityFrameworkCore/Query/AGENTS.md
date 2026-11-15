@@ -216,7 +216,7 @@ Scope, joins, grouping:
     `Build` (zero is an empty array, a negative count throws), see Paging below. Each distinct (filters, sort, skip, limit) gets its own
     `_fN` alias; parameters are told apart by name (`LookupExpression.SameElementCount`), never by value.
     - **The terminal is explicit** (`ElementTerminal`): `ToList`, `First`/`FirstOrDefault`, `Single`/`SingleOrDefault`, `Last`/`LastOrDefault`,
-      `ElementAt`/`ElementAtOrDefault`, optionally under a scalar `Select` (applied to the materialized entities, as for a list). The lookup keeps what
+      `ElementAt`/`ElementAtOrDefault`, optionally under a scalar `Select` (fused into the read when it can be, see #32 below; otherwise applied to the materialized entities, as for a list). The lookup keeps what
       the terminal needs and the shaper runs the real LINQ operator over it, so empty and ambiguous groups throw as LINQ does: one element for
       `First`/`Last`/`ElementAt`, **two for `Single`** (a second match must be visible to throw), the `Skip` count or the `ElementAt` index as the lookup
       skip, and `Last` as the first element of the REVERSED ordering (`ReferencedElementShape.ReversesSort`; it needs an ordering and declines with a
@@ -224,9 +224,20 @@ Scope, joins, grouping:
       disagree. `ElementAt` with a `Skip` in the chain declines.
     - **Bare bodies are admitted** (`Select(c => c.Orders.OrderBy(..).FirstOrDefault())`). The emit side stages the leaf under the provisional bare alias and
       `TryBindAsBareProjection` remaps it to the derived alias; the read side resolves a null member name through the bare-body alias override.
-    - **Known gap (#32): a scalar selector runs on the materialized, and under `TrackAll` tracked, entity**, so an unsaved change to an already tracked row
-      is returned instead of the stored value. The `ToList` + `Select` form had it already. The fix is to read a direct scalar member from the element
-      document in both materialization paths, not to materialize the entity.
+    - **A scalar selector reads the stored value, not the tracked entity (#32).** `Select(<element leaf's keyed array>, l => <scalar body>)` is fused by
+      `StreamedCollectionSubstituter.TryStreamReferencedElementSelect` when the streaming shaper is chosen (`StreamedCollectionSubstituter.TryRewrite` and `MongoProjectionStreamingPlanner.TryPlan` accept the
+      query), the element type is not owned and is `StreamingEligibility.IsEligible` (so no hierarchy), the alias is not also read whole, and
+      `MongoElementSelectorRewriter` accepts the lambda (member reads of the element's scalar properties, operators, conditionals, anonymous types,
+      `string`/`Math`/`Nullable<T>` methods; `int.ToString()`, `DateTime` methods, `EF.Property` and collection `Contains` are not accepted), tracked or not: the cursor evaluates
+      it per element (`BuildReferencedCollectionSelectReader`) and yields the `List<TResult>`, so no element entity is constructed, resolved against the
+      change tracker or tracked, and an unsaved change to an already tracked row is never read. The terminal then runs over that list. Only the streaming
+      materializer does this (the DOM one is going away). Because no entity is built, the selector reads the stored value of each property, so a property
+      getter or constructor normalization of the element type is not run (`Title { get => _title.ToUpperInvariant() }` reads the stored case), and a stored
+      element missing a required scalar the lambda does NOT read no longer throws (one it reads still does); the owned-element fusion does the same. The
+      selector now runs eagerly per element inside the batch, bounded by the lookup limit for a terminal. A selector the rewriter declines (the element
+      itself, a user method, a nested member, `Rank.ToString()`) is still applied to the materialized, and under `TrackAll` tracked, entity, so it
+      still sees the unsaved change; that is unchanged from before, not worse. The lookup's array still holds whole documents
+      (no `TryNarrowArrayProjection` for it).
     - **`ElementAtOrDefault` of a negative index selects nothing** where `ElementAt` and `Skip` throw: the `$skip` stage carries a marker
       (`LookupExpression.ElementSkipNegativeIsEmpty`) that `MongoPipelineFactory.NormalizePagingStages` turns into an always-false `$match` and strips; it is part of
       lookup identity, so the two never share an alias.
@@ -236,7 +247,7 @@ Scope, joins, grouping:
     - The read side finds the lookup by the member's alias in `LookupExpression.ElementLeafAliases` (written at the binder's commit),
       never by re-deriving it (`TryBindReferencedElementLeaf`, native route only). The shaper is a `CollectionShaperExpression` with NO
       navigation over an `ArrayAliasProjectionExpression`: the list is assigned plainly and never fixed up into the principal's own
-      collection (it would hold only the filtered subset). A scalar `Select` is re-applied to the materialized entities. The leaf is
+      collection (it would hold only the filtered subset). A scalar `Select` the streaming reader cannot fuse (#32 above) is re-applied to the materialized entities. The leaf is
       not an `isArrayLeaf` (siblings such as `Count` stay readable) but sets `HasArrayProjectionLeaf`.
     - Two element leaves of one element type in a projection need distinct `Identity` (the projection member) on their
       `ArrayAliasProjectionExpression` and element `RootReferenceExpression`: otherwise they are structurally equal and the shaper
