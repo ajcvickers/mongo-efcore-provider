@@ -69,11 +69,14 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         public IdentificationKind Kind { get; set; }
         public ObjectId AnimalId { get; set; }
         public Animal Animal { get; set; } = null!;
+
+        /// <summary>A client-side method over the whole element, so a selector calling it uses the element itself.</summary>
+        public string Describe() => Method;
     }
 
     private AnimalDbContext CreateContext(
         MongoQueryMode mode, string name, out ObjectId withMethods, out ObjectId withoutMethods,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null, QueryTrackingBehavior? tracking = null)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var animals = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + "A" + suffix;
@@ -101,7 +104,7 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
             },
         ]);
 
-        return new AnimalDbContext(database, animals, methods, mode, loggerFactory);
+        return new AnimalDbContext(database, animals, methods, mode, loggerFactory, tracking);
     }
 
     [Fact]
@@ -486,6 +489,182 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         Assert.Same(animal, row.Animal);
         Assert.Equal("Tattoo", row.Last);
         Assert.Equal(["Microchip", "Tattoo"], row.All.Select(x => x.Method));
+        Assert.Equal("Unsaved", tracked.Method);
+    }
+
+    /// <summary>
+    /// A scalar selector the streaming fusion declines (<c>Rank.ToString()</c>, <c>Kind.ToString()</c>) is still answered from the stored row: its
+    /// elements are built outside the change tracker, whichever terminal reads them.
+    /// </summary>
+    [Theory]
+    [InlineData("First", "2")]
+    [InlineData("LastOrDefault", "2")]
+    [InlineData("SingleOrDefault", "2")]
+    [InlineData("ElementAtOrDefault", "2")]
+    [InlineData("SkipTake", "2")]
+    [InlineData("List", "1,2")]
+    [InlineData("Enum", "Visual")]
+    [InlineData("Concatenated", "Tattoo2")]
+    public void A_scalar_selector_the_fusion_declines_returns_the_stored_row(string form, string expected)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_scalar_selector_the_fusion_declines_returns_the_stored_row) + form, out var withMethods, out _);
+
+        var tracked = db.IdentificationMethods.Single(m => m.AnimalId == withMethods && m.Rank == 2);
+        var trackedId = tracked.Id;
+        tracked.Method = "Unsaved";
+        tracked.Rank = 99;
+        tracked.Kind = IdentificationKind.Unknown;
+        var trackedBefore = db.ChangeTracker.Entries<IdentificationMethod>().Count();
+
+        var query = db.Animals.Where(a => a.Id == withMethods);
+        string? result = form switch
+        {
+            "First" => query
+                .Select(a => a.IdentificationMethods.Where(m => m.Id == trackedId).OrderBy(m => m.Id).Select(m => m.Rank.ToString()).First()).Single(),
+            "LastOrDefault" => query
+                .Select(a => a.IdentificationMethods.OrderBy(m => m.Id).Select(m => m.Rank.ToString()).LastOrDefault()).Single(),
+            "SingleOrDefault" => query
+                .Select(a => a.IdentificationMethods.Where(m => m.Id == trackedId).Select(m => m.Rank.ToString()).SingleOrDefault()).Single(),
+            "ElementAtOrDefault" => query
+                .Select(a => a.IdentificationMethods.OrderBy(m => m.Id).Select(m => m.Rank.ToString()).ElementAtOrDefault(1)).Single(),
+            "SkipTake" => query
+                .Select(a => a.IdentificationMethods.OrderBy(m => m.Id).Skip(1).Take(1).Select(m => m.Rank.ToString()).ToList())
+                .Single().Single(),
+            "List" => string.Join(
+                ",", query.Select(a => a.IdentificationMethods.OrderBy(m => m.Id).Select(m => m.Rank.ToString()).ToList()).Single()),
+            "Enum" => query
+                .Select(a => a.IdentificationMethods.Where(m => m.Id == trackedId).Select(m => m.Kind.ToString()).ToList())
+                .Single().Single(),
+            _ => query
+                .Select(a => a.IdentificationMethods.Where(m => m.Id == trackedId).Select(m => m.Method + m.Rank.ToString()).ToList())
+                .Single().Single()
+        };
+
+        Assert.Equal(expected, result);
+        Assert.Equal("Unsaved", tracked.Method);
+        Assert.Equal(99, tracked.Rank);
+        Assert.Equal(trackedBefore, db.ChangeTracker.Entries<IdentificationMethod>().Count());
+    }
+
+    [Fact]
+    public async Task A_scalar_selector_the_fusion_declines_returns_the_stored_row_when_enumerated_asynchronously()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_scalar_selector_the_fusion_declines_returns_the_stored_row_when_enumerated_asynchronously),
+            out var withMethods, out _);
+
+        var tracked = await db.IdentificationMethods.SingleAsync(m => m.AnimalId == withMethods && m.Rank == 2);
+        var trackedId = tracked.Id;
+        tracked.Rank = 99;
+        var query = db.Animals.Where(a => a.Id == withMethods);
+
+        Assert.Equal(
+            "2",
+            await query.Select(a => a.IdentificationMethods.Where(m => m.Id == trackedId).OrderBy(m => m.Id).Select(m => m.Rank.ToString()).First())
+                .SingleAsync());
+        Assert.Equal(
+            ["2"],
+            await query.Select(a => a.IdentificationMethods.Where(m => m.Id == trackedId).Select(m => m.Rank.ToString()).ToList()).SingleAsync());
+
+        Assert.Equal(99, tracked.Rank);
+        Assert.Single(db.ChangeTracker.Entries<IdentificationMethod>());
+    }
+
+    /// <summary>
+    /// What follows a declined scalar leaf in the same projection is built as usual: the tracked root entity beside it keeps its identity, and a whole
+    /// element beside it is the tracked instance, while the leaf itself reads the stored row.
+    /// </summary>
+    [Theory]
+    [InlineData("RootBesideLeaf")]
+    [InlineData("ElementBesideLeaf")]
+    public void An_entity_projected_beside_a_declined_scalar_leaf_is_still_the_tracked_instance(string form)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(An_entity_projected_beside_a_declined_scalar_leaf_is_still_the_tracked_instance) + form,
+            out var withMethods, out _);
+
+        var tracked = db.IdentificationMethods.Single(m => m.AnimalId == withMethods && m.Rank == 2);
+        var trackedId = tracked.Id;
+        tracked.Rank = 99;
+        var animal = db.Animals.Single(a => a.Id == withMethods);
+        var query = db.Animals.Where(a => a.Id == withMethods);
+
+        if (form == "RootBesideLeaf")
+        {
+            var row = query
+                .Select(a => new { a, R = a.IdentificationMethods.Where(m => m.Id == trackedId).OrderBy(m => m.Id).Select(m => m.Rank.ToString()).First() })
+                .Single();
+            Assert.Equal("2", row.R);
+            Assert.Same(animal, row.a);
+        }
+        else
+        {
+            var row = query
+                .Select(a => new
+                {
+                    R = a.IdentificationMethods.Where(m => m.Id == trackedId).OrderBy(m => m.Id).Select(m => m.Rank.ToString()).First(),
+                    E = a.IdentificationMethods.Where(m => m.Id == trackedId).OrderBy(m => m.Id).First()
+                })
+                .Single();
+            Assert.Equal("2", row.R);
+            Assert.Same(tracked, row.E);
+            Assert.Equal(99, row.E.Rank);
+        }
+    }
+
+    /// <summary>
+    /// A selector that uses the element itself (returns it, keeps it beside a scalar, calls a method on it) runs over the element as a tracking query
+    /// materializes it: the tracked instance, with its unsaved change. That is EF Core's identity resolution, which never overwrites a tracked instance
+    /// with what the query read, so it is not refused. A query that does not track, or that resolves against its own state manager, reads the stored row.
+    /// Whether tracking applies comes from the context's default or from the query. The value of a scalar read beside the element (<c>m.Method</c> in
+    /// <c>new { m, m.Method }</c>) is not pinned for a tracking query: EF Core's other providers read it per leaf as a stored value, this one reads it from
+    /// the tracked instance (see Query/AGENTS.md), and the test must not make either a rule.
+    /// </summary>
+    [Theory]
+    [InlineData(QueryTrackingBehavior.TrackAll, "Default", true)]
+    [InlineData(QueryTrackingBehavior.TrackAll, "AsTracking", true)]
+    [InlineData(QueryTrackingBehavior.TrackAll, "AsNoTracking", false)]
+    [InlineData(QueryTrackingBehavior.TrackAll, "AsNoTrackingWithIdentityResolution", false)]
+    [InlineData(QueryTrackingBehavior.NoTracking, "Default", false)]
+    [InlineData(QueryTrackingBehavior.NoTracking, "AsTracking", true)]
+    [InlineData(QueryTrackingBehavior.NoTrackingWithIdentityResolution, "Default", false)]
+    public void A_selector_that_uses_the_element_sees_the_tracked_instance_only_when_the_query_tracks(
+        QueryTrackingBehavior defaultBehavior, string perQuery, bool expectTrackedInstance)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly,
+            nameof(A_selector_that_uses_the_element_sees_the_tracked_instance_only_when_the_query_tracks) + defaultBehavior + perQuery,
+            out var withMethods, out _, tracking: defaultBehavior);
+
+        var tracked = db.IdentificationMethods.AsTracking().Single(m => m.AnimalId == withMethods && m.Rank == 2);
+        tracked.Method = "Unsaved";
+
+        var animals = perQuery switch
+        {
+            "AsTracking" => db.Animals.AsTracking(),
+            "AsNoTracking" => db.Animals.AsNoTracking(),
+            "AsNoTrackingWithIdentityResolution" => db.Animals.AsNoTrackingWithIdentityResolution(),
+            _ => db.Animals.AsQueryable()
+        };
+        var query = animals.Where(a => a.Id == withMethods);
+        var expected = expectTrackedInstance ? "Unsaved" : "Tattoo";
+
+        Assert.Equal(
+            expected,
+            query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Describe()).ToList()).Single().Single());
+
+        var element = query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m).ToList()).Single().Single();
+        Assert.Equal(expectTrackedInstance, ReferenceEquals(tracked, element));
+        Assert.Equal(expected, element.Method);
+
+        var beside = query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => new { m, m.Method }).ToList()).Single().Single();
+        Assert.Equal(expectTrackedInstance, ReferenceEquals(tracked, beside.m));
+        if (!expectTrackedInstance)
+        {
+            Assert.Equal("Tattoo", beside.Method);
+        }
+
         Assert.Equal("Unsaved", tracked.Method);
     }
 
@@ -971,15 +1150,15 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
 
         public AnimalDbContext(
             TemporaryDatabaseFixture database, string animals, string methods, MongoQueryMode mode,
-            ILoggerFactory? loggerFactory)
-            : base(Configure(database, mode, loggerFactory))
+            ILoggerFactory? loggerFactory, QueryTrackingBehavior? tracking = null)
+            : base(Configure(database, mode, loggerFactory, tracking))
         {
             _animals = animals;
             _methods = methods;
         }
 
         private static DbContextOptions<AnimalDbContext> Configure(
-            TemporaryDatabaseFixture database, MongoQueryMode mode, ILoggerFactory? loggerFactory)
+            TemporaryDatabaseFixture database, MongoQueryMode mode, ILoggerFactory? loggerFactory, QueryTrackingBehavior? tracking)
         {
             var builder = new DbContextOptionsBuilder<AnimalDbContext>()
                 .UseMongoDB(database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName,
@@ -990,6 +1169,11 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
             if (loggerFactory != null)
             {
                 builder = builder.UseLoggerFactory(loggerFactory).EnableSensitiveDataLogging();
+            }
+
+            if (tracking is { } behavior)
+            {
+                builder = builder.UseQueryTrackingBehavior(behavior);
             }
 
             return builder.Options;

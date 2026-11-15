@@ -1651,8 +1651,12 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         if (lookup is null)
             return false;
 
+        // A selector that only reads scalar members of the element and that the streaming shaper does not fuse (MongoElementSelectorRewriter declined it,
+        // e.g. `Rank.ToString()`) is answered from the stored row: the elements are materialized outside the change tracker, so it cannot return an
+        // unsaved change to a row the context already tracks, and the leaf tracks nothing.
         var aliasedArray = new ArrayAliasProjectionExpression(
-            targetType, new RootReferenceExpression(targetType, arrayProjectionMember), arrayProjectionMember);
+            targetType, new RootReferenceExpression(targetType, arrayProjectionMember), arrayProjectionMember,
+            untrackedElements: shape.SelectorKind == ElementSelectorKind.ScalarMembersOnly);
         _projectionMapping[arrayProjectionMember] = aliasedArray;
 
         var innerShaper = CreateElementShaperWithOwnedIncludes(targetType, aliasedArray.InnerProjection);

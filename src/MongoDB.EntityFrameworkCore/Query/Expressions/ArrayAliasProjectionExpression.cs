@@ -31,7 +31,7 @@ internal sealed class ArrayAliasProjectionExpression : Expression, IPrintableExp
         INavigation navigation,
         Expression accessExpression,
         EntityProjectionExpression? innerProjection = null)
-        : this(navigation.TargetEntityType, navigation, accessExpression, innerProjection, identity: null)
+        : this(navigation.TargetEntityType, navigation, accessExpression, innerProjection, identity: null, untrackedElements: false)
     {
     }
 
@@ -47,12 +47,14 @@ internal sealed class ArrayAliasProjectionExpression : Expression, IPrintableExp
     /// would conflate them.
     /// </param>
     /// <param name="innerProjection">The per-element projection, or <see langword="null"/> for a fresh one.</param>
+    /// <param name="untrackedElements">Whether the elements are materialized outside the change tracker (see <see cref="UntrackedElements"/>).</param>
     public ArrayAliasProjectionExpression(
         IEntityType targetType,
         Expression accessExpression,
         object identity,
-        EntityProjectionExpression? innerProjection = null)
-        : this(targetType, null, accessExpression, innerProjection, identity)
+        EntityProjectionExpression? innerProjection = null,
+        bool untrackedElements = false)
+        : this(targetType, null, accessExpression, innerProjection, identity, untrackedElements)
     {
     }
 
@@ -61,10 +63,12 @@ internal sealed class ArrayAliasProjectionExpression : Expression, IPrintableExp
         INavigation? navigation,
         Expression accessExpression,
         EntityProjectionExpression? innerProjection,
-        object? identity)
+        object? identity,
+        bool untrackedElements)
     {
         TargetEntityType = targetType;
         Identity = identity;
+        UntrackedElements = untrackedElements;
         Type = typeof(IEnumerable<>).MakeGenericType(targetType.ClrType);
         Navigation = navigation;
         AccessExpression = accessExpression;
@@ -82,6 +86,14 @@ internal sealed class ArrayAliasProjectionExpression : Expression, IPrintableExp
 
     /// <summary>The projection member that tells a navigation-less array from another of the same type, or <see langword="null"/>.</summary>
     public object? Identity { get; }
+
+    /// <summary>
+    /// Whether the elements are materialized as a no-tracking query would, even in a query that tracks: they are never resolved against, or
+    /// added to, the change tracker. Set for the array behind an element leaf whose selector only reads scalar members of the element, so the
+    /// selector sees the stored row and not an unsaved change to a row the context already tracks. Both shapers honour it (the streamed
+    /// one and the DOM one).
+    /// </summary>
+    public bool UntrackedElements { get; }
 
     /// <summary>The collection navigation this array materializes into, or <see langword="null"/> for none.</summary>
     public INavigation? Navigation { get; }
@@ -103,7 +115,7 @@ internal sealed class ArrayAliasProjectionExpression : Expression, IPrintableExp
         Expression accessExpression,
         EntityProjectionExpression innerProjection)
         => accessExpression != AccessExpression || innerProjection != InnerProjection
-            ? new ArrayAliasProjectionExpression(TargetEntityType, Navigation, accessExpression, innerProjection, Identity)
+            ? new ArrayAliasProjectionExpression(TargetEntityType, Navigation, accessExpression, innerProjection, Identity, UntrackedElements)
             : this;
 
     void IPrintableExpression.Print(ExpressionPrinter expressionPrinter)
@@ -121,9 +133,10 @@ internal sealed class ArrayAliasProjectionExpression : Expression, IPrintableExp
         => TargetEntityType == other.TargetEntityType
            && Navigation == other.Navigation
            && Equals(Identity, other.Identity)
+           && UntrackedElements == other.UntrackedElements
            && AccessExpression.Equals(other.AccessExpression)
            && InnerProjection.Equals(other.InnerProjection);
 
     public override int GetHashCode()
-        => HashCode.Combine(TargetEntityType, Navigation, Identity, AccessExpression, InnerProjection);
+        => HashCode.Combine(TargetEntityType, Navigation, Identity, AccessExpression, InnerProjection, UntrackedElements);
 }
