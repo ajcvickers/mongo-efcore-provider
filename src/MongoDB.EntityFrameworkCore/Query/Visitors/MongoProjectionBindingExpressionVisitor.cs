@@ -1622,19 +1622,25 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         }
 
         // Whole documents: the array is read at the navigation's document path off the root entity's document. Only over the root entity's own
-        // shaper (a lambda parameter receiver is a collection element, which this does not bind).
+        // shaper (a lambda parameter receiver is a collection element, which this does not bind), and only for an embedded collection: the
+        // navigation arm of VisitMethodCall binds exactly that to a CollectionShaperExpression over an ObjectArrayProjectionExpression
+        // (EntityProjectionExpression.BindMember/BindNavigation). Everything here is decided before anything is visited, so a decline leaves the
+        // query to the generic Select arm below, as before this binding existed.
         if (arraySource.Arguments[0] is not MethodCallExpression { Arguments: [var receiver, _] }
-            || receiver.RemoveConvert() is not StructuralTypeShaperExpression)
+            || receiver.RemoveConvert() is not StructuralTypeShaperExpression
+            || !navigation.IsCollection
+            || !navigation.IsEmbedded())
         {
             return false;
         }
 
         // The same visit the Select arm below makes of its source; it binds the navigation's array and builds the collection shaper, of which only
-        // the array is kept.
+        // the array is kept. The checks above make any other result impossible; the guard only keeps a future change from binding the wrong array.
         if (Visit(arraySource) is not CollectionShaperExpression { Projection: IArrayProjectionExpression array } shaper
             || shaper.Navigation != navigation)
         {
-            throw new InvalidOperationException(CoreStrings.TranslationFailed(methodCallExpression.Print()));
+            throw new InvalidOperationException(
+                $"Internal error: an embedded owned collection '{navigation.Name}' did not bind to its array.");
         }
 
         result = new OwnedElementStoredSelectExpression((Expression)array, navigation, selector);

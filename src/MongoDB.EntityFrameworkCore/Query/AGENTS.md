@@ -123,7 +123,10 @@ Scope, joins, grouping:
   (`GetStreamingCollectionAliases`); filtered, paged and discriminator-narrowed Includes only change which elements the array holds.
 - **A dotted projection alias is a path of sub-documents.** The projection row reader descends one level per segment (`BuildNameLoop`), so an owned collection
   under owned references (`b.Home.Notes`) and a nested construction's scalars (`GetPropertyValueAtPath`, `GetElementValueAtPath`) are slots like any other.
-  An owned array read both whole and through a fused element `Select` is read whole, the `Select` re-applied (one element is read once).
+  One element of the cursor is read once, so an array read both whole and through a fusable element `Select` cannot be fused. A referenced
+  element leaf's keyed array is then read whole and the `Select` re-applied to the list; an owned array's `ScalarMembersOnly` `Select`
+  (`OwnedElementStoredSelectExpression`) declines streaming instead, and the DOM shaper serves the query (the `Select` must read the stored
+  values, never the constructed elements; #121).
 - **A collection Include on a join's inner entity** is the array inside the joined document and streams with it; a REFERENCE Include on it is a `$lookup`
   of its own at the root, which a single-document reader cannot see, so it keeps the DOM. A whole-element `SelectMany` over an owned collection streams: its
   documents are the elements, with no owner document to take keys from.

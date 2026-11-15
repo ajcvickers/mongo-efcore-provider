@@ -254,8 +254,10 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
         _unfusedAliases = unfusedAliases;
     }
 
-    // One element of the cursor is read once: an owned array that is also read whole (or through a second element Select) cannot also be read
-    // through a fused element Select. Those aliases are found by a first pass and read whole, with the Select re-applied to the list.
+    // One element of the cursor is read once: an array that is also read whole (or through a second element Select) cannot also be read through a
+    // fused element Select. Those aliases are found by a first pass. A referenced element leaf's keyed array is then read whole, with the Select
+    // re-applied to the list (TryStreamReferencedElementSelect); an owned array's stored Select declines instead, leaving the query to the DOM
+    // shaper, because it must read the stored values, not the constructed elements (TryStreamOwnedElementStoredSelect).
     private readonly HashSet<string> _unfusedAliases;
     private readonly List<string> _fusedAliasReads = [];
     private readonly List<string> _wholeAliasReads = [];
