@@ -105,6 +105,10 @@ internal static class NativeProjectionBinder
         private readonly Dictionary<string, ClientConditionalRead> _clientConditionalReads = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _clientConditionalMemberNames = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _clientConditionalReadAliases = [];
+        // Members (BareProjectionMemberKey for a bare body) the shaper evaluates over operands staged as leaves of their own (TryStageClientOperandMember), and those
+        // operands: one staged projection per distinct operand, under a `_cr<N>` alias.
+        private readonly List<string> _clientOperandMembers = [];
+        private readonly List<(Expression Operand, string Alias)> _clientOperandReads = [];
 
         public ProjectionBindSession(MongoQueryExpression mongoQ, LambdaExpression selector)
         {
@@ -199,6 +203,11 @@ internal static class NativeProjectionBinder
                         _hasClientEvaluatedLeaf = true;
                         continue;
                     }
+
+                    // An operator or conditional over element leaves (`R = a.Nav.OrderBy(..).First().Rank + 1`): each operand is staged as a leaf of its own and the
+                    // shaper evaluates the operator over what it read.
+                    if (ReferenceEquals(memberValue, member) && TryStageClientOperandMember(memberName, member))
+                        continue;
 
                     return false;
                 }
@@ -319,7 +328,8 @@ internal static class NativeProjectionBinder
                 // Untranslatable (embeds a client method, or constructs over the whole entity: `new object[] { x }`, `new Wrapper(x) { City = x.City }`): if every entity reference is the whole entity, fetch whole documents and evaluate client-side.
                 if (!IsClientOnlyWholeEntityExpression(_mongoQ, _selector.Body, _selector.Parameters[0]))
                 {
-                    return false;
+                    // An operator or conditional over element leaves, as in the wrapped arm. Last, so a decline after it staged operands declines the selector.
+                    return TryStageClientOperandMember(MongoSelectDefinition.BareProjectionMemberKey, _selector.Body);
                 }
 
                 _mongoQ.Select.HasClientWrappedWholeEntityShaper = true;
@@ -479,7 +489,7 @@ internal static class NativeProjectionBinder
                         continue;
 
                     stagedReads.Add(read.Value);
-                    var readAlias = ClientConditionalReadAliasPrefix + _clientConditionalReadAliases.Count;
+                    var readAlias = NextClientReadAlias();
                     if (!TryStageLeaf(readAlias, read.Field, read.Value, throwsOnNull: false))
                         return false;
 
@@ -594,6 +604,189 @@ internal static class NativeProjectionBinder
                 _mongoQ.Select.AddClientConditionalMember(clientConditionalMember);
             foreach (var clientConditionalReadAlias in _clientConditionalReadAliases)
                 _mongoQ.Select.AddClientConditionalRead(clientConditionalReadAlias);
+            foreach (var clientOperandMember in _clientOperandMembers)
+                _mongoQ.Select.AddClientOperandMember(clientOperandMember);
+            foreach (var (_, clientOperandAlias) in _clientOperandReads)
+                _mongoQ.Select.AddClientConditionalRead(clientOperandAlias);
+        }
+
+        // The first `_cr<N>` no leaf of this projection is staged under yet.
+        private string NextClientReadAlias()
+        {
+            for (var n = 0; ; n++)
+            {
+                var alias = ClientConditionalReadAliasPrefix + n;
+                if (!_seenAliases.Contains(alias))
+                    return alias;
+            }
+        }
+
+        /// <summary>
+        /// Stages a member the shaper evaluates over its operands (<see cref="ClassifyClientOperandNode"/>): an operator or conditional over at least one element leaf
+        /// (<c>a.Nav.OrderBy(..).First().Rank + 1</c>, <c>a.Name == "Rex" ? a.Nav.OrderBy(..).First().Name : "n/a"</c>). Each element leaf and each other
+        /// row-reading operand is staged as a leaf of its own under a <c>_cr&lt;N&gt;</c> alias; the read side
+        /// (<c>MongoProjectionBindingExpressionVisitor.BindClientOperands</c>) binds each operand there and rebuilds the operator over them, so only the
+        /// branch a conditional takes runs its element leaf's terminal. False declines the selector, after recording why for an element leaf (R7).
+        /// </summary>
+        /// <remarks>
+        /// Only a terminal whose empty-group behavior in C# is LINQ's is admitted (<c>First</c>, <c>Single</c>, <c>Last</c>, <c>ElementAt</c>, <c>ToList</c>).
+        /// An <c>OrDefault</c> terminal declines (<see cref="ElementLeafDeclineReasons.OrDefaultMemberUnderOperator"/>): EF lowers <c>FirstOrDefault().Rank</c> to
+        /// <c>(int)Select(m =&gt; (int?)m.Rank).FirstOrDefault()</c> and null-propagates a missing element, where the operator evaluated in C# would throw or read null.
+        /// </remarks>
+        private bool TryStageClientOperandMember(string memberKey, Expression value)
+        {
+            var selectorParameter = _selector.Parameters[0];
+            if (ClassifyClientOperandNode(value, selectorParameter) != ClientOperandNodeKind.Operator)
+                return false;
+
+            if (!TryStageOperands(value))
+                return false;
+
+            _clientOperandMembers.Add(memberKey);
+            _hasClientEvaluatedLeaf = true;
+            return true;
+
+            bool TryStageOperands(Expression node)
+            {
+                switch (ClassifyClientOperandNode(node, selectorParameter))
+                {
+                    case ClientOperandNodeKind.RowIndependent:
+                        return true;
+
+                    case ClientOperandNodeKind.Operator:
+                        return GetClientOperatorOperands(node).All(TryStageOperands);
+
+                    case ClientOperandNodeKind.ElementLeaf:
+                        // Each occurrence is a leaf of its own, even of one leaf: the read side binds every occurrence under a member of its own, and two
+                        // members reading one element leaf alias would share one shaper variable (see ArrayAliasProjectionExpression's Identity).
+                        NativeReferencedElementMatcher.TryMatch(node, out var shape);
+                        if (shape!.Terminal is ElementTerminal.FirstOrDefault or ElementTerminal.SingleOrDefault
+                            or ElementTerminal.LastOrDefault or ElementTerminal.ElementAtOrDefault)
+                        {
+                            _mongoQ.RecordElementLeafDecline(node, selectorParameter, ElementLeafDeclineReasons.OrDefaultMemberUnderOperator);
+                            return false;
+                        }
+
+                        var elementAlias = NextClientReadAlias();
+                        if (!TryTranslateReferencedElementLeaf(_mongoQ, selectorParameter, node, elementAlias, _staged, out var elementArray)
+                            || !TryStageLeaf(elementAlias, elementArray, node, throwsOnNull: false))
+                            return false;
+
+                        _clientOperandReads.Add((node, elementAlias));
+                        return true;
+
+                    default:
+                        // An operand that is not an element leaf and holds none, read as an ordinary leaf (`a.Name == "Rex"`). One that holds an element leaf
+                        // under anything but an operator (a method over it) declines.
+                        if (ContainsElementLeaf(node))
+                            return false;
+
+                        if (_clientOperandReads.Exists(r => ExpressionEqualityComparer.Instance.Equals(r.Operand, node)))
+                            return true;
+
+                        var readAlias = NextClientReadAlias();
+                        if (!TryTranslateLeaf(_mongoQ, _translator, selectorParameter, node, readAlias, _staged, out var read, out var isArrayLeaf, out _, out var throwsOnNull)
+                            || isArrayLeaf
+                            || !TryStageLeaf(readAlias, read, node, throwsOnNull))
+                            return false;
+
+                        _clientOperandReads.Add((node, readAlias));
+                        return true;
+                }
+            }
+        }
+    }
+
+    /// <summary>What a node of a member the shaper evaluates over its operands is (<see cref="ClassifyClientOperandNode"/>).</summary>
+    internal enum ClientOperandNodeKind
+    {
+        /// <summary>An operator or conditional that holds an element leaf: the shaper evaluates it over its operands.</summary>
+        Operator,
+
+        /// <summary>An element leaf (<see cref="NativeReferencedElementMatcher.TryMatch"/>), staged and read as a member leaf.</summary>
+        ElementLeaf,
+
+        /// <summary>The same for every row (<see cref="IsRowIndependentLeaf"/>), evaluated in place.</summary>
+        RowIndependent,
+
+        /// <summary>Anything else: one leaf, staged and read whole.</summary>
+        Read
+    }
+
+    /// <summary>
+    /// Classifies a node of a member the shaper evaluates over its operands. Shared by the emit side (<c>TryStageClientOperandMember</c>) and the read side
+    /// (<c>MongoProjectionBindingExpressionVisitor.BindClientOperands</c>), which walk the member the same way, so they agree on which nodes are operands.
+    /// <paramref name="selectorParameter"/> is <see langword="null"/> on the read side (see <see cref="IsRowIndependentLeaf"/>).
+    /// </summary>
+    internal static ClientOperandNodeKind ClassifyClientOperandNode(Expression node, ParameterExpression? selectorParameter)
+        => NativeReferencedElementMatcher.TryMatch(node, out _)
+            ? ClientOperandNodeKind.ElementLeaf
+            : IsClientOperator(node) && ContainsElementLeaf(node)
+                ? ClientOperandNodeKind.Operator
+                : IsRowIndependentLeaf(node, selectorParameter)
+                    ? ClientOperandNodeKind.RowIndependent
+                    : ClientOperandNodeKind.Read;
+
+    /// <summary>The operands of an <see cref="ClientOperandNodeKind.Operator"/> node, in the order both sides walk them.</summary>
+    internal static IEnumerable<Expression> GetClientOperatorOperands(Expression node)
+        => node switch
+        {
+            BinaryExpression binary => [binary.Left, binary.Right],
+            UnaryExpression unary => [unary.Operand],
+            ConditionalExpression conditional => [conditional.Test, conditional.IfTrue, conditional.IfFalse],
+            _ => []
+        };
+
+    // The operators the shaper evaluates in C#: arithmetic, comparison, logical, coalesce, numeric casts and nullable lifts, negation, a conditional.
+    private static bool IsClientOperator(Expression node)
+        => node switch
+        {
+            BinaryExpression { Conversion: null, NodeType: not (ExpressionType.ArrayIndex or ExpressionType.Assign) } => true,
+            UnaryExpression
+            {
+                NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked or ExpressionType.Not or ExpressionType.Negate
+                or ExpressionType.NegateChecked or ExpressionType.UnaryPlus
+            } => true,
+            ConditionalExpression => true,
+            _ => false
+        };
+
+    /// <summary>Whether <paramref name="node"/> holds an element leaf (<see cref="NativeReferencedElementMatcher.TryMatch"/>) anywhere.</summary>
+    internal static bool ContainsElementLeaf(Expression node)
+    {
+        var finder = new ElementLeafFinder();
+        finder.Visit(node);
+        return finder.Found;
+    }
+
+    private sealed class ElementLeafFinder : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+        {
+            if (Found || node is null)
+                return node;
+
+            if (NativeReferencedElementMatcher.TryMatch(node, out _))
+            {
+                Found = true;
+                return node;
+            }
+
+            if (node.NodeType != ExpressionType.Extension)
+                return base.Visit(node);
+
+            // An extension node that neither reduces nor visits its children throws from the base visitor; it holds no element leaf.
+            try
+            {
+                return base.Visit(node);
+            }
+            catch (ArgumentException)
+            {
+                return node;
+            }
         }
     }
 

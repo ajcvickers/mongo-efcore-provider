@@ -39,6 +39,8 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     private readonly Dictionary<ProjectionMember, Expression> _projectionMapping = new();
     private readonly Dictionary<ProjectionMember, Type> _aliasedConstructionMembers = new();
     private readonly Dictionary<ProjectionMember, string> _explicitProjectionAliases = new();
+    // The element leaf operands BindClientOperands has bound in this Translate() call, by alias.
+    private readonly HashSet<string> _boundElementOperandAliases = new(StringComparer.Ordinal);
     private readonly Stack<ProjectionMember> _projectionMembers = new();
     private readonly Dictionary<ParameterExpression, CollectionShaperExpression> _collectionShaperMapping = new();
     private readonly Stack<INavigation> _includedNavigations = new();
@@ -73,6 +75,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         _translatedRootExpression = expression;
         _aliasedConstructionMembers.Clear();
         _explicitProjectionAliases.Clear();
+        _boundElementOperandAliases.Clear();
 
         var result = Visit(expression);
 
@@ -129,6 +132,15 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         {
             case null:
                 return null;
+
+            // An operator or conditional over element leaves that the binder staged operand by operand (IsClientOperandMember): bind each operand under a
+            // member of its own and evaluate the operator in the shaper over them (BindClientOperands).
+            case BinaryExpression or UnaryExpression or ConditionalExpression
+                when QueryExpression.Select.Route == NativeRoute.Projection
+                     && QueryExpression.Select.IsClientOperandMember(GetCurrentProjectionMember().Last?.Name)
+                     && NativeProjectionBinder.ClassifyClientOperandNode(expression, selectorParameter: null)
+                     == NativeProjectionBinder.ClientOperandNodeKind.Operator:
+                return BindClientOperands(expression);
 
             // A row-independent Convert/member-of-constant leaf left on the shaper (HasClientEvaluatedProjectionLeaf,
             // IsRowIndependentLeaf). Nothing is projected for it, so the arms below would bind an alias $project never
@@ -1871,6 +1883,98 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
 
     private ProjectionMember GetCurrentProjectionMember()
         => _projectionMembers.Peek();
+
+    /// <summary>
+    /// Binds a member the native binder staged operand by operand (<c>NativeProjectionBinder.TryStageClientOperandMember</c>): the operators are rebuilt
+    /// for the shaper to evaluate, each operand is bound under a member of its own named by the alias the emit side staged it under (taken from the staged
+    /// read, <see cref="MongoSelectDefinition.TryGetClientConditionalReadAlias"/>), so an element leaf binds as a member leaf
+    /// (<see cref="TryBindReferencedElementLeaf"/>), and a row-independent operand is evaluated in place. The operand reads happen when the row is read;
+    /// an element leaf's terminal (<c>First</c>, ...) is part of the operand and runs only where the rebuilt operator evaluates it, so a conditional
+    /// runs only the branch it takes.
+    /// </summary>
+    private Expression BindClientOperands(Expression node)
+    {
+        switch (NativeProjectionBinder.ClassifyClientOperandNode(node, selectorParameter: null))
+        {
+            case NativeProjectionBinder.ClientOperandNodeKind.RowIndependent:
+                return MatchTypes(Visit(node), node.Type);
+
+            case NativeProjectionBinder.ClientOperandNodeKind.Operator:
+                switch (node)
+                {
+                    case BinaryExpression binary:
+                        return binary.Update(
+                            MatchTypes(BindClientOperands(binary.Left), binary.Left.Type),
+                            binary.Conversion,
+                            MatchTypes(BindClientOperands(binary.Right), binary.Right.Type));
+                    case UnaryExpression unary:
+                        return unary.Update(MatchTypes(BindClientOperands(unary.Operand), unary.Operand.Type));
+                    case ConditionalExpression conditional:
+                        return Expression.Condition(
+                            MatchTypes(BindClientOperands(conditional.Test), typeof(bool)),
+                            MatchTypes(BindClientOperands(conditional.IfTrue), conditional.IfTrue.Type),
+                            MatchTypes(BindClientOperands(conditional.IfFalse), conditional.IfFalse.Type),
+                            conditional.Type);
+                }
+
+                break;
+
+            case var kind:
+                // Each occurrence of an element leaf was staged under an alias of its own; a scalar operand read twice shares one.
+                var isElementLeaf = kind == NativeProjectionBinder.ClientOperandNodeKind.ElementLeaf;
+                if (!QueryExpression.Select.TryGetClientConditionalReadAlias(
+                        node, out var alias, isElementLeaf ? _boundElementOperandAliases : null))
+                {
+                    break;
+                }
+
+                if (isElementLeaf)
+                    _boundElementOperandAliases.Add(alias);
+
+                // Registered explicitly: two members may read one staged operand, which must not be renamed by AddToProjection's de-dup.
+                var operandMember = GetCurrentProjectionMember().Append(new ClientOperandMemberInfo(alias));
+                _explicitProjectionAliases[operandMember] = alias;
+                _projectionMembers.Push(operandMember);
+                try
+                {
+                    return MatchTypes(Visit(node), node.Type);
+                }
+                finally
+                {
+                    _projectionMembers.Pop();
+                }
+        }
+
+        // The two sides disagree about the shape: fail loudly rather than read a field the pipeline does not emit.
+        throw new InvalidOperationException(
+            $"Operand '{node.Print()}' of a client-evaluated projection member was not staged by the native projection binder.");
+    }
+
+    /// <summary>
+    /// The member an operand of a client-evaluated projection member is bound under (<see cref="BindClientOperands"/>): named by the alias the operand is
+    /// staged under, so every lookup by member name (<see cref="MongoSelectDefinition.ResolveProjectionAlias"/>) resolves to that alias. Not a member of
+    /// any type; two are equal when their names are.
+    /// </summary>
+    private sealed class ClientOperandMemberInfo(string alias) : MemberInfo
+    {
+        public override Type? DeclaringType => null;
+
+        public override MemberTypes MemberType => MemberTypes.Custom;
+
+        public override string Name { get; } = alias;
+
+        public override Type? ReflectedType => null;
+
+        public override object[] GetCustomAttributes(bool inherit) => [];
+
+        public override object[] GetCustomAttributes(Type attributeType, bool inherit) => [];
+
+        public override bool IsDefined(Type attributeType, bool inherit) => false;
+
+        public override bool Equals(object? obj) => obj is ClientOperandMemberInfo other && other.Name == Name;
+
+        public override int GetHashCode() => Name.GetHashCode(StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Registers <paramref name="leaf"/> whole as the current projection member's mapping and returns the binding

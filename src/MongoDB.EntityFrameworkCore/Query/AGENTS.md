@@ -275,6 +275,18 @@ Scope, joins, grouping:
       (`ElementLeafDeclineKey`); a join-scope leaf is not matched and keeps the bare message. Reasons are shared constants: tests assert them.
       Note that an element type with ANY owned navigation is declined (`OwnedNavigations`): nav-expansion includes them through a
       `Select(m => Include(m, ..))` selector, which is not self-contained.
+    - **An element leaf as an operand** (`R = a.Nav.OrderBy(..).First().Rank + 1`, `a.Name == "Rex" ? a.Nav.OrderBy(..).First().Name : "n/a"`, bare or
+      wrapped) is a member the shaper evaluates over its operands (`NativeProjectionBinder.TryStageClientOperandMember`, the last resort after the
+      client-conditional arm). Both sides walk the member with one classifier, `ClassifyClientOperandNode`: an operator or conditional holding an element
+      leaf is rebuilt in the shaper; each element leaf, and each other row-reading operand (the test `a.Name == "Rex"`), is staged as a leaf of its own
+      under a `_cr<N>` alias (`NextClientReadAlias`, shared with the client-conditional branch reads); a row-independent operand is evaluated in place.
+      The read side (`BindClientOperands`, admitted by `MongoSelectDefinition.IsClientOperandMember`) binds each operand under a synthetic member named
+      by its alias (`ClientOperandMemberInfo`, found from the staged read by `TryGetClientConditionalReadAlias`), so the element leaf binds as a member
+      leaf. The terminal (`First`, ...) stays inside the rebuilt operator, so a conditional runs only the leaf of the branch it takes, and an empty
+      group throws as LINQ does. Only `First`, `Single`, `Last`, `ElementAt` and `ToList` are admitted: an `OrDefault` terminal declines
+      (`OrDefaultMemberUnderOperator`), because EF lowers `FirstOrDefault().Rank` to `(int)Select(m => (int?)m.Rank).FirstOrDefault()` and
+      null-propagates a missing element where the operator evaluated in C# would throw or read null. Such a member counts as a client conditional
+      (`HasClientConditionalProjectionLeaf`). A method over an element leaf (`First().Method.ToUpper()`) is not an operator and still declines.
     - The read side finds the lookup by the member's alias in `LookupExpression.ElementLeafAliases` (written at the binder's commit),
       never by re-deriving it (`TryBindReferencedElementLeaf`, native route only). The shaper is a `CollectionShaperExpression` with NO
       navigation over an `ArrayAliasProjectionExpression`: the list is assigned plainly and never fixed up into the principal's own

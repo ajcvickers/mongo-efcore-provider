@@ -927,6 +927,161 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         }
     }
 
+    // An element leaf as an operand of a client-evaluated member (#119): the leaf is staged and read as a member leaf, and the shaper
+    // evaluates the enclosing expression over what it read. An unsaved change to the tracked rank-1 row shows the leaf reads the stored
+    // values (R3) in a tracking query as well.
+
+    private static IdentificationMethod TrackAndChangeRank1(AnimalDbContext db, ObjectId animalId)
+    {
+        var tracked = db.IdentificationMethods.AsTracking().Single(m => m.AnimalId == animalId && m.Rank == 1);
+        tracked.Method = "Unsaved";
+        tracked.Rank = 10;
+        return tracked;
+    }
+
+    /// <summary>
+    /// Only the branch taken is evaluated, as in C#: Fido has no methods, and the <c>First</c> in the branch not taken for him must not throw.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    public void Conditional_over_element_leaf(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Conditional_over_element_leaf) + mode + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank1(db, withMethods);
+        var animals = db.Animals.Where(a => a.Id == withMethods || a.Id == withoutMethods);
+
+        var results = animals
+            .Select(a => new { a.Name, M = a.Name == "Rex" ? a.IdentificationMethods.OrderBy(m => m.Rank).First().Method : "n/a" })
+            .ToList();
+
+        Assert.Equal("Microchip", results.Single(r => r.Name == "Rex").M);
+        Assert.Equal("n/a", results.Single(r => r.Name == "Fido").M);
+
+        // A row read in the other branch, as a bare body.
+        var named = animals
+            .Select(a => a.Name != "Rex" ? a.Name : a.IdentificationMethods.OrderByDescending(m => m.Rank).First().Method)
+            .ToList();
+        Assert.Equal(["Fido", "Tattoo"], named.Order());
+
+        // A list leaf in a branch.
+        var lists = animals
+            .Select(a => new
+            {
+                a.Name,
+                L = a.Name == "Rex" ? a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Method).ToList() : new List<string>()
+            })
+            .ToList();
+        Assert.Equal(["Microchip", "Tattoo"], lists.Single(r => r.Name == "Rex").L);
+        Assert.Empty(lists.Single(r => r.Name == "Fido").L);
+
+        // The taken branch over an empty group still throws, as LINQ's First does.
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => animals
+                .Select(a => new { a.Name, M = a.Name == "Fido" ? a.IdentificationMethods.OrderBy(m => m.Rank).First().Method : "n/a" })
+                .ToList());
+        Assert.Equal("Sequence contains no elements", exception.Message);
+        Assert.Equal("Unsaved", tracked.Method);
+    }
+
+    /// <summary>
+    /// A computed leaf, as a member and as a bare body: the operator runs over the leaf's value, and an empty group throws as LINQ's <c>First</c> does.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    public void Computed_over_element_leaf(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Computed_over_element_leaf) + mode + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank1(db, withMethods);
+
+        var rex = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new { a.Name, R = a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank + 1 })
+            .Single();
+        Assert.Equal(2, rex.R);
+
+        var bare = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank + 1)
+            .Single();
+        Assert.Equal(2, bare);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => db.Animals
+                .Where(a => a.Id == withoutMethods)
+                .Select(a => new { a.Name, R = a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank + 1 })
+                .Single());
+        Assert.Equal("Sequence contains no elements", exception.Message);
+        Assert.Equal(10, tracked.Rank);
+    }
+
+    /// <summary>Each admitted terminal as an operand, two leaves in one member, and a leaf beside a row read in one operator.</summary>
+    [Fact]
+    public void Admitted_terminals_as_operands()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Admitted_terminals_as_operands), out var withMethods, out _);
+
+        var row = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new
+            {
+                Last = a.IdentificationMethods.OrderBy(m => m.Rank).Last().Rank * 10,
+                Single = a.IdentificationMethods.Where(m => m.Rank == 2).Single().Rank - 1,
+                ElementAt = -a.IdentificationMethods.OrderBy(m => m.Rank).ElementAt(1).Rank,
+                Listed = a.Name == "Rex" ? a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Rank).ToList() : null,
+                Two = a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank + a.IdentificationMethods.OrderBy(m => m.Rank).Last().Rank,
+                Beside = a.Name + ":" + a.IdentificationMethods.OrderBy(m => m.Rank).First().Method
+            })
+            .Single();
+
+        Assert.Equal(20, row.Last);
+        Assert.Equal(1, row.Single);
+        Assert.Equal(-2, row.ElementAt);
+        Assert.Equal([1, 2], row.Listed!);
+        Assert.Equal(3, row.Two);
+        Assert.Equal("Rex:Microchip", row.Beside);
+    }
+
+    /// <summary>
+    /// An <c>OrDefault</c> terminal under a member read inside an operator is refused in every mode, naming why: EF null-propagates
+    /// <c>FirstOrDefault().Rank</c> where C# would throw, so the shaper cannot evaluate the operator in C#.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, "Rank")]
+    [InlineData(MongoQueryMode.Native, "Rank")]
+    [InlineData(MongoQueryMode.DriverLinq, "Rank")]
+    [InlineData(MongoQueryMode.NativeOnly, "Method")]
+    [InlineData(MongoQueryMode.NativeOnly, "Conditional")]
+    public void OrDefault_member_under_operator_is_refused(MongoQueryMode mode, string form)
+    {
+        using var db = CreateContext(
+            mode, nameof(OrDefault_member_under_operator_is_refused) + mode + form, out var withMethods, out _);
+        var query = db.Animals.Where(a => a.Id == withMethods);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => form switch
+            {
+                "Rank" => query.Select(a => new { a.Name, R = a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault()!.Rank + 1 })
+                    .Single().R.ToString(),
+                "Method" => query.Select(a => new { a.Name, R = a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault()!.Method + "!" })
+                    .Single().R,
+                _ => query.Select(a => new { a.Name, R = a.Name == "Rex" ? a.IdentificationMethods.OrderBy(m => m.Rank).LastOrDefault()!.Method : "n/a" })
+                    .Single().R
+            });
+        Assert.Contains(
+            MongoDB.EntityFrameworkCore.Query.NativeTranslation.ElementLeafDeclineReasons.OrDefaultMemberUnderOperator, exception.Message);
+    }
+
     // No driver-LINQ oracle: expected values are hand-computed from the seed, with several candidates per case so a
     // wrong pick gives a different answer.
 

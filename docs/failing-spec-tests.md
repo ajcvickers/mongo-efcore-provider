@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 4,887 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,457 |
-| ... active in the EF8 build | 1,064 | 2,576 |
-| ... active in the EF9 build | 1,141 | 3,092 |
-| ... active in the EF10 build | 882 | 3,240 |
-| ... active in the EF11 build | not measured | 3,270 |
+| `// Fails:` tag lines | 1,206 | 4,878 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,452 |
+| ... active in the EF8 build | 1,064 | 2,571 |
+| ... active in the EF9 build | 1,141 | 3,087 |
+| ... active in the EF10 build | 882 | 3,235 |
+| ... active in the EF11 build | not measured | 3,265 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 58 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,

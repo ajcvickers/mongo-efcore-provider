@@ -160,6 +160,13 @@ internal static class ElementLeafDeclineReasons
 
     public const string LookupConflict
         = "The lookup of the collection conflicts with another lookup of the query.";
+
+    /// <summary>
+    /// A member of an <c>OrDefault</c> terminal's element (<c>FirstOrDefault().Rank + 1</c>) read inside an operator or conditional: EF
+    /// null-propagates the member of a missing element where C# would throw, so the shaper cannot evaluate the enclosing expression in C#.
+    /// </summary>
+    public const string OrDefaultMemberUnderOperator
+        = "A member of the element of a FirstOrDefault, SingleOrDefault, LastOrDefault or ElementAtOrDefault is read inside an operator or conditional, where a missing element would read null instead of throwing.";
 }
 
 /// <summary>

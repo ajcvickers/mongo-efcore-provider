@@ -250,13 +250,13 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
 #endif
 
 #if (EF10 || EF11) || EF9
-    // Fails: Cross-document navigation access issue EF-216
+    // Fails: FirstOrDefault().Member under an operator is refused, naming why (OrDefaultMemberUnderOperator) EF-216
     public override Task Can_read_back_mapped_enum_from_collection_first_or_default()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "The LINQ expression 'DbSet<AnimalIdentification>()' could not be trans");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "A member of the element of a FirstOrDefault");
 #elif EF8
-    // Fails: Cross-document navigation access issue EF-216
+    // Fails: FirstOrDefault().Member under an operator is refused, naming why (OrDefaultMemberUnderOperator) EF-216
     public override void Can_read_back_mapped_enum_from_collection_first_or_default()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "The LINQ expression 'DbSet<AnimalIdentification>()' could not be trans");
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "A member of the element of a FirstOrDefault");
 #endif
 
     public override void Equals_method_over_enum_works()
