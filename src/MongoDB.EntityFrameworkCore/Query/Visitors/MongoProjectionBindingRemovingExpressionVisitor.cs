@@ -462,9 +462,15 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                     // No navigation: a plain list of the materialized entities, assigned by the projection, not fixed up into a principal.
                     if (collectionShaperExpression.Navigation is not { } navigation)
                     {
-                        return Expression.Call(
+                        Expression list = Expression.Call(
                             EnumerableMethods.ToList.MakeGenericMethod(collectionShaperExpression.ElementType),
                             entities);
+
+                        // Elements an element leaf's scalar selector reads from are built as a no-tracking query would build them, whatever this query
+                        // does: the list is built here, inside the scope, so no element is resolved against or added to the change tracker.
+                        return arrayProjection is ArrayAliasProjectionExpression { UntrackedElements: true }
+                            ? MongoQueryContext.RunUntracked(list)
+                            : list;
                     }
 
                     return Expression.Call(

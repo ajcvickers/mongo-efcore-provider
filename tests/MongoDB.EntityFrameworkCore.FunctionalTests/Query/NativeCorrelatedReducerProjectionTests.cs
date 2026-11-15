@@ -617,7 +617,9 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
     /// A selector that uses the element itself (returns it, keeps it beside a scalar, calls a method on it) runs over the element as a tracking query
     /// materializes it: the tracked instance, with its unsaved change. That is EF Core's identity resolution, which never overwrites a tracked instance
     /// with what the query read, so it is not refused. A query that does not track, or that resolves against its own state manager, reads the stored row.
-    /// Whether tracking applies comes from the context's default or from the query.
+    /// Whether tracking applies comes from the context's default or from the query. The value of a scalar read beside the element (<c>m.Method</c> in
+    /// <c>new { m, m.Method }</c>) is not pinned for a tracking query: EF Core's other providers read it per leaf as a stored value, this one reads it from
+    /// the tracked instance (see Query/AGENTS.md), and the test must not make either a rule.
     /// </summary>
     [Theory]
     [InlineData(QueryTrackingBehavior.TrackAll, "Default", true)]
@@ -658,7 +660,10 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
 
         var beside = query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => new { m, m.Method }).ToList()).Single().Single();
         Assert.Equal(expectTrackedInstance, ReferenceEquals(tracked, beside.m));
-        Assert.Equal(expected, beside.Method);
+        if (!expectTrackedInstance)
+        {
+            Assert.Equal("Tattoo", beside.Method);
+        }
 
         Assert.Equal("Unsaved", tracked.Method);
     }

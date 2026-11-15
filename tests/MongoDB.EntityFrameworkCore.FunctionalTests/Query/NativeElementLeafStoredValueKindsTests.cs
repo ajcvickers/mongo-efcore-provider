@@ -202,6 +202,48 @@ public class NativeElementLeafStoredValueKindsTests(TemporaryDatabaseFixture dat
         Assert.Equal(trackedBefore, db.ChangeTracker.Entries().Count());
     }
 
+    /// <summary>
+    /// A scalar selector the streaming fusion declines (<c>Rank.ToString()</c>), over an element that owns a reference and a collection, in the same
+    /// projection as the tracked root entity: the root keeps its identity and is tracked as usual, the elements are built outside the change tracker
+    /// with their owned navigations read from the document, and nothing is tracked for the leaf.
+    /// </summary>
+    [Theory]
+    [InlineData("First")]
+    [InlineData("List")]
+    public void A_declined_scalar_leaf_over_an_element_with_owned_navigations_beside_a_tracked_root_reads_the_stored_row(string form)
+    {
+        using var db = CreateContext(
+            nameof(A_declined_scalar_leaf_over_an_element_with_owned_navigations_beside_a_tracked_root_reads_the_stored_row) + form, out var owner);
+
+        var root = db.Owners.Single(o => o.Id == owner);
+        var tattoo = db.Items.Single(i => i.OwnerId == owner && i.Rank == 2);
+        tattoo.Rank = 99;
+        tattoo.Detail.Label = "Unsaved label";
+        var trackedBefore = db.ChangeTracker.Entries().Count();
+
+        var query = db.Owners.Where(o => o.Id == owner);
+        if (form == "First")
+        {
+            var row = query
+                .Select(o => new { o, R = o.Items.Where(i => i.Note == "Tattoo").OrderBy(i => i.Note).Select(i => i.Rank.ToString()).First() })
+                .Single();
+            Assert.Equal("2", row.R);
+            Assert.Same(root, row.o);
+        }
+        else
+        {
+            var row = query
+                .Select(o => new { o, R = o.Items.OrderBy(i => i.Rank).Select(i => i.Rank.ToString()).ToList() })
+                .Single();
+            Assert.Equal(["1", "2"], row.R);
+            Assert.Same(root, row.o);
+        }
+
+        Assert.Equal(99, tattoo.Rank);
+        Assert.Equal("Unsaved label", tattoo.Detail.Label);
+        Assert.Equal(trackedBefore, db.ChangeTracker.Entries().Count());
+    }
+
     private class ItemDbContext : DbContext
     {
         private readonly string _owners;

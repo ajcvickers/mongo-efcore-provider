@@ -80,13 +80,6 @@ internal sealed class MongoStreamedIncludeExpression(Expression entity, Expressi
     }
 }
 
-/// <summary>A serializer whose entities may be built outside the change tracker, whatever the query does for its other entities.</summary>
-internal interface IMongoUntrackedElementSerializer
-{
-    /// <summary>Whether the entities it reads are untracked.</summary>
-    bool Untracked { get; }
-}
-
 /// <summary>A serializer whose value is built by a shaper fragment that needs the query context (EF's materializers do).</summary>
 internal interface IMongoQueryContextSerializer<out T>
 {
@@ -122,12 +115,9 @@ internal sealed class MongoEntityLeafSerializer<T>(Func<QueryContext, IBsonReade
 /// nothing is deferred, because the list is only read from (an element leaf's scalar selector).
 /// </summary>
 internal sealed class MongoEntityListSerializer<T>(Func<QueryContext, IBsonReader, BsonDeserializationContext, T> read, bool untracked = false)
-    : IBsonSerializer<List<T>>, IMongoQueryContextSerializer<List<T>>, IMongoUntrackedElementSerializer
+    : IBsonSerializer<List<T>>, IMongoQueryContextSerializer<List<T>>
 {
     public Type ValueType => typeof(List<T>);
-
-    /// <summary>Whether the elements are built outside the change tracker.</summary>
-    public bool Untracked => untracked;
 
     public List<T> Deserialize(QueryContext queryContext, BsonDeserializationContext context)
     {

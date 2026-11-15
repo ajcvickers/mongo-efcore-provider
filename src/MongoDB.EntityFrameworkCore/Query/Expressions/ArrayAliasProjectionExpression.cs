@@ -90,8 +90,8 @@ internal sealed class ArrayAliasProjectionExpression : Expression, IPrintableExp
     /// <summary>
     /// Whether the elements are materialized as a no-tracking query would, even in a query that tracks: they are never resolved against, or
     /// added to, the change tracker. Set for the array behind an element leaf whose selector only reads scalar members of the element, so the
-    /// selector sees the stored row and not an unsaved change to a row the context already tracks. Only the streaming shaper honours it: the
-    /// DOM shaper (a hierarchy element type) still resolves the elements against the change tracker.
+    /// selector sees the stored row and not an unsaved change to a row the context already tracks. Both shapers honour it (the streamed
+    /// one and the DOM one).
     /// </summary>
     public bool UntrackedElements { get; }
 

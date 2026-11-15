@@ -89,7 +89,8 @@ internal enum ElementSelectorKind
     /// The selector uses the element in any other way (passes it to a method, keeps it in the result, reads a navigation, an owned or complex member,
     /// or a shadow property). It runs over the element as a tracking query materializes it: resolved against the change tracker, so on a tracked row
     /// it is the tracked instance with its unsaved changes, as for any entity a tracking query returns (EF Core's identity resolution never overwrites
-    /// a tracked instance with what the query read).
+    /// a tracked instance with what the query read). The scalars such a selector reads from the element are read from that instance too, where a
+    /// relational provider would read each of them as a column: a divergence from EF Core, not a rule to rely on.
     /// </summary>
     Other
 }
@@ -304,8 +305,9 @@ internal static class NativeReferencedElementMatcher
         {
             if (node.Expression == element)
             {
-                // A navigation, an owned or complex member and a shadow property are not mapped scalar CLR properties of the element.
-                if (elementType.FindProperty(node.Member) is not { } property || property.IsShadowProperty())
+                // A navigation and an owned or complex member are not mapped scalar CLR properties of the element. (A shadow property has no CLR
+                // member: it is read through EF.Property, which passes the element as an argument and so is not a member read.)
+                if (elementType.FindProperty(node.Member) is null)
                     OnlyScalarMembers = false;
 
                 return node;

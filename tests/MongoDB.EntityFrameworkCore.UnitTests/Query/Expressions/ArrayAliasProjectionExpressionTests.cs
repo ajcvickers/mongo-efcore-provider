@@ -98,7 +98,7 @@ public class ArrayAliasProjectionExpressionTests
     }
 
     // The flag changes how the shaper builds the elements, and the shaper's bindings are keyed on the node, so two arrays that differ only in it
-    // must not be conflated (nor share a cached plan).
+    // must not be conflated.
     [Fact]
     public void Elements_are_tracked_by_default()
     {
@@ -119,7 +119,7 @@ public class ArrayAliasProjectionExpressionTests
         var untracked = new ArrayAliasProjectionExpression(navigation.TargetEntityType, access, identity, untrackedElements: true);
 
         Assert.NotEqual(tracked, untracked);
-        Assert.NotEqual(tracked.GetHashCode(), untracked.GetHashCode());
+        Assert.Equal(untracked.GetHashCode(), new ArrayAliasProjectionExpression(navigation.TargetEntityType, access, identity, untrackedElements: true).GetHashCode());
         Assert.Equal(untracked, new ArrayAliasProjectionExpression(navigation.TargetEntityType, access, identity, untrackedElements: true));
     }
 

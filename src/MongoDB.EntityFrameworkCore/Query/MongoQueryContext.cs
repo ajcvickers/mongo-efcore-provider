@@ -110,6 +110,23 @@ public class MongoQueryContext : QueryContext
     internal void EndUntracked() => _untrackedDepth--;
 
     /// <summary>
+    /// Wraps <paramref name="expression"/>, written over the query context parameter, in the untracked scope, ended however it exits. The expression
+    /// must do all its materializing inside itself (build a list, not hand back a lazy sequence).
+    /// </summary>
+    internal static System.Linq.Expressions.Expression RunUntracked(System.Linq.Expressions.Expression expression)
+    {
+        var queryContext = System.Linq.Expressions.Expression.Convert(QueryCompilationContext.QueryContextParameter, typeof(MongoQueryContext));
+        return System.Linq.Expressions.Expression.Block(
+            expression.Type,
+            System.Linq.Expressions.Expression.Call(queryContext, typeof(MongoQueryContext).GetMethod(
+                nameof(BeginUntracked), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!),
+            System.Linq.Expressions.Expression.TryFinally(
+                expression,
+                System.Linq.Expressions.Expression.Call(queryContext, typeof(MongoQueryContext).GetMethod(
+                    nameof(EndUntracked), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!)));
+    }
+
+    /// <summary>
     /// Starts deferring the tracking of the row being materialized: until <see cref="EndDeferral"/>, EF's identity lookup and
     /// <c>StartTracking</c> calls are recorded rather than performed.
     /// </summary>

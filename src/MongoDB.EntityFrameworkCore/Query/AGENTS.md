@@ -241,12 +241,17 @@ Scope, joins, grouping:
       - `ScalarMembersOnly` (every use of the element is the read of a mapped scalar property, e.g. `Rank.ToString()`, which the rewriter does not accept): the
         elements are built outside the change tracker (`ArrayAliasProjectionExpression.UntrackedElements`, `MongoQueryContext.BeginUntracked`: EF's identity lookup finds
         nothing and `StartTracking` starts nothing), so the selector reads the stored values and tracks nothing, as a relational provider reads the columns it
-        fetched. Only the streaming shaper does this; a hierarchy element type is shaped by the DOM one (not fused, not untracked), where the selector still
-        sees the tracked instance. Known gap, until that materializer goes.
+        fetched. Both shapers do this (the streamed one in `MongoEntityListSerializer`, the DOM one by wrapping the list in `MongoQueryContext.RunUntracked`), so the
+        result does not depend on which one the query takes. The DOM shaper is taken for a hierarchy element type, for a projection with a member the streaming
+        planner cannot stream, past 32 slots, and on the fallback routes; the fusion above is streaming only, so there the whole element is built (untracked) and the
+        selector runs over it.
       - `Other` (the element itself, a user method, a nested member, a navigation or owned member): applied to the materialized, and under `TrackAll`
-        tracked, entity, so it sees the tracked instance and its unsaved change. This is EF Core's identity resolution (a tracking query never overwrites
-        a tracked instance with what it read), so it is deliberately not refused: tracking decides what a result is, never whether a query translates. A
-        scalar beside the element (`new { m, m.Method }`) is read from that same instance.
+        tracked, entity, so it sees the tracked instance and its unsaved change. That is EF Core's identity resolution (a tracking query never overwrites a
+        tracked instance with what it read), and it is not refused: EF refuses a query because of its tracking behavior only when it cannot build a coherent
+        result under it (an owned entity without its owner under `TrackAll`, an include cycle without a query state manager), and an element used as an entity
+        under `TrackAll` is coherent. The scalars such a selector reads from the element (`new { m, m.Method }`, `m.Method + m.Describe()`) are read from that same
+        instance, where a relational, Cosmos or InMemory provider reads each one as a stored value and only the entity as the tracked instance (per leaf, not
+        per selector): a known divergence, not a rule, so no test pins the value of such a scalar.
     - **`ElementAtOrDefault` of a negative index selects nothing** where `ElementAt` and `Skip` throw: the `$skip` stage carries a marker
       (`LookupExpression.ElementSkipNegativeIsEmpty`) that `MongoPipelineFactory.NormalizePagingStages` turns into an always-false `$match` and strips; it is part of
       lookup identity, so the two never share an alias.
