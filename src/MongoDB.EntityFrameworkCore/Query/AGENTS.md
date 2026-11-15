@@ -261,6 +261,15 @@ Scope, joins, grouping:
     - **`let c = <single-result subquery>` plus `c.Member` reads** is rewritten before nav-expansion (`LetSingleResultMemberRewriter`, EF11) to one
       member-selecting single-result subquery per read, all sharing one keyed lookup. Only a `let` whose every use is a member read; an `OrDefault`
       terminal needs a nullable member (a missing element's value-type member would read `default`, where EF reads null).
+    - **A declined element leaf names why (R7).** Element leaves have no driver-LINQ fallback, so once `TryMatch` recognized a leaf every
+      decline in `TryTranslateReferencedElementLeaf` (and in `TryStageKeyedArrayLookup`, through `onDecline`) records a reason from
+      `ElementLeafDeclineReasons` on `MongoQueryExpression.ElementLeafDeclines`. The binding visitor fails inside that leaf as before, but
+      with `CoreStrings.TranslationFailedWithDetails(<leaf>, <reason>)` instead of the bare `DbSet<T>()`, in every mode. The channel is
+      diagnostic only: it stages nothing and never changes which queries translate. The two sides see different trees (the read side has
+      the source's shaper where the emit side has the selector's parameter), so leaves are matched on a normalized key
+      (`ElementLeafDeclineKey`); a join-scope leaf is not matched and keeps the bare message. Reasons are shared constants: tests assert them.
+      Note that an element type with ANY owned navigation is declined (`OwnedNavigations`): nav-expansion includes them through a
+      `Select(m => Include(m, ..))` selector, which is not self-contained.
     - The read side finds the lookup by the member's alias in `LookupExpression.ElementLeafAliases` (written at the binder's commit),
       never by re-deriving it (`TryBindReferencedElementLeaf`, native route only). The shaper is a `CollectionShaperExpression` with NO
       navigation over an `ArrayAliasProjectionExpression`: the list is assigned plainly and never fixed up into the principal's own

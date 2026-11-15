@@ -1685,6 +1685,38 @@ internal static class NativeProjectionBinder
         return checker.IsSelfContained;
     }
 
+    /// <summary>Whether <paramref name="expression"/> reads a query parameter (a captured value) anywhere (<see cref="NativeQueryParameter.TryGetQueryParameterName"/>).</summary>
+    internal static bool ReadsQueryParameter(Expression expression)
+    {
+        var finder = new QueryParameterFinder();
+        finder.Visit(expression);
+        return finder.Found;
+    }
+
+    private sealed class QueryParameterFinder : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+        {
+            if (Found || node is null)
+                return node;
+
+            if (NativeQueryParameter.TryGetQueryParameterName(node, out _))
+            {
+                Found = true;
+                return node;
+            }
+
+            return base.Visit(node);
+        }
+
+        // Another extension node may not be reducible, so its children are not walked: a parameter inside one is not found.
+        protected override Expression VisitExtension(Expression node)
+            => node;
+    }
+
     private sealed class SelfContainedChecker : ExpressionVisitor
     {
         private readonly HashSet<ParameterExpression> _declared = [];
@@ -2294,7 +2326,8 @@ internal static class NativeProjectionBinder
         MongoExpression? elementSkip = null,
         IReadOnlyList<LookupOuterCondition>? outerConditions = null,
         IReadOnlyList<LookupExpression>? nestedLookups = null,
-        bool negativeSkipIsEmpty = false)
+        bool negativeSkipIsEmpty = false,
+        Action<string>? onDecline = null)
     {
         keyedLookup = null;
         elementSort ??= [];
@@ -2303,7 +2336,10 @@ internal static class NativeProjectionBinder
 
         // A TPH-derived target needs the lookup narrowed by discriminator, as the navigation lookup's constructor does; a keyed lookup has no such stage and would count sibling-type documents. Declined.
         if (targetEntityType.BaseType is not null)
+        {
+            onDecline?.Invoke(ElementLeafDeclineReasons.DerivedElementType);
             return false;
+        }
 
         MongoExpression? filterPredicate = null;
         var aliasSuffix = "";
@@ -2316,9 +2352,15 @@ internal static class NativeProjectionBinder
         {
             foreach (var filter in filters)
             {
-                if (filter.ReferencesParameter(outerParameter)
-                    || !new MongoExpressionTranslator(targetEntityType, filter.Parameters[0]).TryTranslate(filter.Body, out var translated))
+                if (filter.ReferencesParameter(outerParameter))
                 {
+                    onDecline?.Invoke(ElementLeafDeclineReasons.ElementFilterReadsOuterEntity);
+                    return false;
+                }
+
+                if (!new MongoExpressionTranslator(targetEntityType, filter.Parameters[0]).TryTranslate(filter.Body, out var translated))
+                {
+                    onDecline?.Invoke(ElementLeafDeclineReasons.ElementFilter);
                     return false;
                 }
 
@@ -2347,7 +2389,10 @@ internal static class NativeProjectionBinder
             targetEntityType, keyParts, filters, filterPredicate, aliasSuffix, elementSort, elementLimit, elementSkip, outerConditions, nestedLookups);
         keyed.ElementSkipNegativeIsEmpty = negativeSkipIsEmpty;
         if (!NativeCorrelationMatcher.TryStageNativeCollectionLookup(mongoQ, keyed, staged.Lookups, out keyedLookup))
+        {
+            onDecline?.Invoke(ElementLeafDeclineReasons.LookupConflict);
             return false;
+        }
 
         if (!staged.BareCountStamps.Contains(keyedLookup))
             staged.BareCountStamps.Add(keyedLookup);
@@ -2417,23 +2462,44 @@ internal static class NativeProjectionBinder
         if (!NativeReferencedElementMatcher.TryMatch(leafExpression, out var shape))
             return false;
 
+        // From here on the leaf is an element leaf, which has no driver-LINQ fallback: each decline records why, and the read side names
+        // it when it fails to bind the leaf (R7). Recording is diagnostic only; it stages nothing and changes no route.
+        bool Decline(string reason)
+        {
+            mongoQ.RecordElementLeafDecline(leafExpression, outerParameter, reason);
+            return false;
+        }
+
         var target = shape.Root.EntityType;
         if (target.GetNavigations().Any(n => n.IsEagerLoaded && !n.IsEmbedded()))
-            return false;
+            return Decline(ElementLeafDeclineReasons.EagerLoadedNavigation);
 
         // The selector runs over the materialized entities, so it must stand alone (no query parameter, no outer entity, no EF.Property).
-        if (shape.Selector is { } selector
-            && (selector.Body.ReferencesParameter(outerParameter) || !IsSelfContainedLambda(selector)))
+        if (shape.Selector is { } selector)
         {
-            return false;
+            if (selector.Body.ReferencesParameter(outerParameter))
+                return Decline(ElementLeafDeclineReasons.OuterEntityInSelector);
+
+            if (!IsSelfContainedLambda(selector))
+            {
+                // Nav-expansion includes an element's owned navigations as a selector of their own (`m => Include(m, m.Detail)`).
+                return Decline(
+                    selector.Body is IncludeExpression && selector.Body.UnwrapIncludes() == selector.Parameters[0]
+                        ? ElementLeafDeclineReasons.OwnedNavigations
+                        : ReadsQueryParameter(selector.Body)
+                            ? ElementLeafDeclineReasons.CapturedValueInSelector
+                            : ElementLeafDeclineReasons.SelectorNotSelfContained);
+            }
         }
 
         if (!NativeCorrelationMatcher.TryMatchCorrelation(
-                shape.Correlation.Body, mongoQ.CollectionExpression.EntityType, outerParameter, target, out var keyParts, out var conditions)
-            || !TryTranslateOuterConditions(conditions, out var outerConditions))
+                shape.Correlation.Body, mongoQ.CollectionExpression.EntityType, outerParameter, target, out var keyParts, out var conditions))
         {
-            return false;
+            return Decline(ElementLeafDeclineReasons.Correlation);
         }
+
+        if (!TryTranslateOuterConditions(conditions, out var outerConditions))
+            return Decline(ElementLeafDeclineReasons.OuterCondition);
 
         var sort = new List<(string Field, int Direction)>();
         foreach (var (key, ascending) in shape.Sorts)
@@ -2445,7 +2511,7 @@ internal static class NativeProjectionBinder
                 || !StoredOrdering.PreservesClrOrderingForAggregateAndSort(keyField.Property)
                 || !StoredSerialization.HasDefaultKeySerialization(keyField.Property))
             {
-                return false;
+                return Decline(ElementLeafDeclineReasons.SortKey);
             }
 
             // Last is the first element of the reversed ordering.
@@ -2455,13 +2521,19 @@ internal static class NativeProjectionBinder
         var limit = TranslateElementLimit(shape);
         var skip = TranslateElementSkip(shape);
         if ((shape.IsList && shape.Take is not null && limit is null)
-            || ((shape.Skip ?? shape.ElementIndex) is not null && skip is null)
-            || !TryStageKeyedArrayLookup(
+            || ((shape.Skip ?? shape.ElementIndex) is not null && skip is null))
+        {
+            return Decline(ElementLeafDeclineReasons.Paging);
+        }
+
+        string? stagingDecline = null;
+        if (!TryStageKeyedArrayLookup(
                 mongoQ, outerParameter, target, keyParts, shape.Filters.Concat(conditions.Element).ToList(),
                 staged, out var keyedLookup, sort, limit, skip, outerConditions,
-                negativeSkipIsEmpty: shape.Terminal == ElementTerminal.ElementAtOrDefault))
+                negativeSkipIsEmpty: shape.Terminal == ElementTerminal.ElementAtOrDefault,
+                onDecline: reason => stagingDecline = reason))
         {
-            return false;
+            return Decline(stagingDecline ?? ElementLeafDeclineReasons.LookupConflict);
         }
 
         staged.ElementLeaves.Add((keyedLookup, alias));

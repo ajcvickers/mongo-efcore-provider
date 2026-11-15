@@ -171,7 +171,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                         Expression.Constant(parameterExpression.Name));
                 }
 
-                throw new InvalidOperationException(CoreStrings.TranslationFailed(parameterExpression.Print()));
+                throw CreateTranslationFailedException(parameterExpression);
 #else
             case QueryParameterExpression queryParameter:
                 return Expression.Call(
@@ -182,7 +182,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
             case ParameterExpression parameterExpression:
                 return _collectionShaperMapping.ContainsKey(parameterExpression)
                     ? parameterExpression
-                    : throw new InvalidOperationException(CoreStrings.TranslationFailed(parameterExpression.Print()));
+                    : throw CreateTranslationFailedException(parameterExpression);
 #endif
 
             case ConstantExpression:
@@ -884,7 +884,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                             // ambiguous: guessing would prefix the wrong "_lookup_<Nav>." path and return wrong results, so fail.
                             if (intermediateMatches.Count > 1)
                             {
-                                throw new InvalidOperationException(CoreStrings.TranslationFailed(extensionExpression.Print()));
+                                throw CreateTranslationFailedException(extensionExpression);
                             }
 
                             var intermediateLookup = intermediateMatches.Count == 1 ? intermediateMatches[0] : null;
@@ -927,13 +927,43 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                     return newIncludeExpression;
                 }
             default:
-                throw new InvalidOperationException(CoreStrings.TranslationFailed(extensionExpression.Print()));
+                throw CreateTranslationFailedException(extensionExpression);
         }
     }
+
+    /// <summary>
+    /// The element leaf being visited that the native binder recognized and declined (<see cref="MongoQueryExpression.ElementLeafDeclines"/>),
+    /// with the reason, while its subtree is visited; <see langword="null"/> outside one.
+    /// </summary>
+    private (Expression Leaf, string Reason)? _declinedElementLeaf;
+
+    /// <summary>
+    /// EF's "could not be translated" for a node this visitor cannot bind. Inside a declined element leaf it names the leaf and the reason
+    /// the native binder recorded (R7), since an element leaf has no driver-LINQ fallback; otherwise it names <paramref name="expression"/>.
+    /// </summary>
+    private InvalidOperationException CreateTranslationFailedException(Expression expression)
+        => _declinedElementLeaf is { } declined
+            ? new InvalidOperationException(CoreStrings.TranslationFailedWithDetails(declined.Leaf.Print(), declined.Reason))
+            : new InvalidOperationException(CoreStrings.TranslationFailed(expression.Print()));
 
     /// <inheritdoc />
     protected override Expression VisitMethodCall(MethodCallExpression methodCallExpression)
     {
+        // An element leaf the native binder declined: visit it as before, but a failure inside it names the reason. The binding itself is
+        // unchanged, so this changes no outcome, only the message of a failure.
+        if (_declinedElementLeaf is null && QueryExpression.FindElementLeafDecline(methodCallExpression) is { } decline)
+        {
+            _declinedElementLeaf = decline;
+            try
+            {
+                return VisitMethodCall(methodCallExpression);
+            }
+            finally
+            {
+                _declinedElementLeaf = null;
+            }
+        }
+
         // A projected element leaf over a cross-document collection (`c.Orders.OrderBy(..).ToList()`, `.FirstOrDefault()`), staged at
         // emit time as a keyed array lookup (NativeProjectionBinder.TryTranslateReferencedElementLeaf). Native route only.
         if (TryBindReferencedElementLeaf(methodCallExpression, out var boundElements))
@@ -1077,7 +1107,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                     break;
 
                 default:
-                    throw new InvalidOperationException(CoreStrings.TranslationFailed(methodCallExpression.Print()));
+                    throw CreateTranslationFailedException(methodCallExpression);
             }
 
             Expression? navigationProjection;
@@ -1116,7 +1146,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                     }
 
                 default:
-                    throw new InvalidOperationException(CoreStrings.TranslationFailed(methodCallExpression.Print()));
+                    throw CreateTranslationFailedException(methodCallExpression);
             }
         }
 
@@ -1230,7 +1260,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 && !ReferenceEquals(visitedSource, methodCallExpression.Arguments[0])
                 && !method.GetParameters()[0].ParameterType.IsAssignableFrom(visitedSource.Type))
             {
-                throw new InvalidOperationException(CoreStrings.TranslationFailed(methodCallExpression.Print()));
+                throw CreateTranslationFailedException(methodCallExpression);
             }
         }
 
@@ -1477,7 +1507,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 break;
 
             default:
-                throw new InvalidOperationException(CoreStrings.TranslationFailed(memberExpression.Print()));
+                throw CreateTranslationFailedException(memberExpression);
         }
 
         var navigationProjection = innerEntityProjection.BindMember(
@@ -1506,7 +1536,7 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
                 }
 
             default:
-                throw new InvalidOperationException(CoreStrings.TranslationFailed(memberExpression.Print()));
+                throw CreateTranslationFailedException(memberExpression);
         }
 
         Expression NullSafeUpdate(Expression? expression)

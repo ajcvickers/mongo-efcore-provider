@@ -177,6 +177,91 @@ internal sealed partial class MongoQueryExpression : Expression
     internal void ReplaceAliasedConstructionMembers(IReadOnlyDictionary<ProjectionMember, Type> aliasedConstructionMembers)
         => AliasedConstructionMembers = new Dictionary<ProjectionMember, Type>(aliasedConstructionMembers);
 
+    private readonly List<(Expression Leaf, string Reason)> _elementLeafDeclines = [];
+    private readonly List<Expression> _elementLeafDeclineKeys = [];
+
+    /// <summary>
+    /// The element leaves <c>NativeReferencedElementMatcher.TryMatch</c> recognized and the native binder then declined, each with the reason
+    /// (<c>ElementLeafDeclineReasons</c>). Diagnostic only: written by the emit side, read by the binding visitor to name the unsupported part when
+    /// the leaf fails to bind, so it never changes which queries translate.
+    /// </summary>
+    internal IReadOnlyList<(Expression Leaf, string Reason)> ElementLeafDeclines
+        => _elementLeafDeclines;
+
+    /// <summary>
+    /// Records why the native binder declined <paramref name="leaf"/>, a leaf of the selector whose parameter is <paramref name="outerParameter"/>.
+    /// The first reason recorded for a leaf is kept.
+    /// </summary>
+    internal void RecordElementLeafDecline(Expression leaf, ParameterExpression outerParameter, string reason)
+    {
+        var key = ElementLeafDeclineKey.FromEmitSide(leaf, outerParameter);
+        if (FindElementLeafDeclineIndex(key) >= 0)
+            return;
+
+        _elementLeafDeclines.Add((leaf, reason));
+        _elementLeafDeclineKeys.Add(key);
+    }
+
+    /// <summary>
+    /// The decline recorded for <paramref name="leaf"/> as the binding visitor sees it (the selector's parameter replaced by the source's
+    /// shaper), or <see langword="null"/>.
+    /// </summary>
+    internal (Expression Leaf, string Reason)? FindElementLeafDecline(Expression leaf)
+    {
+        if (_elementLeafDeclines.Count == 0)
+            return null;
+
+        var index = FindElementLeafDeclineIndex(ElementLeafDeclineKey.FromReadSide(leaf));
+        return index >= 0 ? _elementLeafDeclines[index] : null;
+    }
+
+    private int FindElementLeafDeclineIndex(Expression key)
+        => _elementLeafDeclineKeys.FindIndex(k => ExpressionEqualityComparer.Instance.Equals(k, key));
+
+    /// <summary>
+    /// One form of an element leaf for both sides: the emit side sees the selector's parameter where the read side sees the shaper EF
+    /// substituted for it, so each is replaced by a parameter of the same type and a fixed name (the structural comparer compares a free
+    /// parameter by name and type). A leaf over a join scope (a transparent-identifier parameter) is not matched, and its failure keeps the
+    /// plain message.
+    /// </summary>
+    private sealed class ElementLeafDeclineKey : ExpressionVisitor
+    {
+        private const string OuterName = "<element-leaf-outer>";
+
+        private readonly ParameterExpression? _outerParameter;
+
+        private ElementLeafDeclineKey(ParameterExpression? outerParameter)
+            => _outerParameter = outerParameter;
+
+        public static Expression FromEmitSide(Expression leaf, ParameterExpression outerParameter)
+            => Normalize(leaf, outerParameter);
+
+        public static Expression FromReadSide(Expression leaf)
+            => Normalize(leaf, null);
+
+        // An extension node that neither reduces nor visits its children throws from the base visitor: such a leaf keeps its own form, so
+        // it matches only itself and its failure keeps the plain message.
+        private static Expression Normalize(Expression leaf, ParameterExpression? outerParameter)
+        {
+            try
+            {
+                return new ElementLeafDeclineKey(outerParameter).Visit(leaf);
+            }
+            catch (ArgumentException)
+            {
+                return leaf;
+            }
+        }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+            => _outerParameter is not null && node == _outerParameter ? Parameter(node.Type, OuterName) : node;
+
+        protected override Expression VisitExtension(Expression node)
+            => _outerParameter is null && node is StructuralTypeShaperExpression
+                ? Parameter(node.Type, OuterName)
+                : base.VisitExtension(node);
+    }
+
     private Dictionary<ProjectionMember, string> _explicitProjectionAliases = new();
 
     // An explicit alias names one staged read, which several members may share (`Id = x.Name, Name = x.Name`): reuse

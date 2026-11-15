@@ -110,6 +110,53 @@ internal enum ElementTerminal
 }
 
 /// <summary>
+/// Why the native binder declined an element leaf that <see cref="NativeReferencedElementMatcher.TryMatch"/> recognized: the detail of
+/// <c>CoreStrings.TranslationFailedWithDetails</c>, recorded on <see cref="Expressions.MongoQueryExpression.ElementLeafDeclines"/> and thrown by the
+/// read side when it reaches the leaf. Element leaves have no driver-LINQ fallback, so the same reason is reported in every query mode.
+/// </summary>
+internal static class ElementLeafDeclineReasons
+{
+    public const string EagerLoadedNavigation
+        = "The element type has an eagerly loaded navigation to another collection, which is not loaded for the elements of a projected collection.";
+
+    public const string OwnedNavigations
+        = "The element type has owned navigations, which are not supported for the elements of a projected collection.";
+
+    public const string CapturedValueInSelector
+        = "The element selector reads a captured value; a selector over the elements of a projected collection can only read the element.";
+
+    public const string OuterEntityInSelector
+        = "The element selector reads the outer entity; a selector over the elements of a projected collection can only read the element.";
+
+    public const string SelectorNotSelfContained
+        = "The element selector reads an owned member of the element or uses EF.Property, which a selector over the elements of a projected collection cannot.";
+
+    public const string Correlation
+        = "The collection is not correlated with the outer entity by an equality of stored-alike key properties.";
+
+    public const string OuterCondition
+        = "A condition on the outer entity in the correlation does not compare a default-stored property with a constant or query parameter.";
+
+    public const string SortKey
+        = "An ordering key is not a scalar property of the element, stored in its default form, whose stored order is its CLR order.";
+
+    public const string Paging
+        = "The Skip, Take or ElementAt count is not a constant or a query parameter.";
+
+    public const string DerivedElementType
+        = "The element type is a derived type of a hierarchy, which the lookup of a projected collection cannot narrow by discriminator.";
+
+    public const string ElementFilterReadsOuterEntity
+        = "An element filter reads the outer entity, a second correlation.";
+
+    public const string ElementFilter
+        = "An element filter could not be translated.";
+
+    public const string LookupConflict
+        = "The lookup of the collection conflicts with another lookup of the query.";
+}
+
+/// <summary>
 /// Recognizes <see cref="ReferencedElementShape"/>. Purely structural and side-effect free, so the emit side
 /// (<see cref="NativeProjectionBinder"/>) and the read side (<c>MongoProjectionBindingExpressionVisitor</c>) can both call it; the
 /// emit side alone decides admissibility and records the leaf on the lookup it staged.
