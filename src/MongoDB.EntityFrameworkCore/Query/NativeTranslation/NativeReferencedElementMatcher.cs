@@ -174,11 +174,19 @@ internal static class ElementLeafDeclineReasons
         = "The lookup of the collection conflicts with another lookup of the query.";
 
     /// <summary>
-    /// A member of an <c>OrDefault</c> terminal's element (<c>FirstOrDefault().Rank + 1</c>) read inside an operator or conditional: EF
-    /// null-propagates the member of a missing element where C# would throw, so the shaper cannot evaluate the enclosing expression in C#.
+    /// An <c>OrDefault</c> terminal (<c>FirstOrDefault().Rank + 1</c>, a cast over one, a whole <c>FirstOrDefault()</c> under <c>??</c> or
+    /// <c>?:</c>) inside an operator, cast or conditional: EF null-propagates a missing element where C# would throw, so the shaper cannot
+    /// evaluate the enclosing expression in C#.
     /// </summary>
     public const string OrDefaultMemberUnderOperator
-        = "A member of the element of a FirstOrDefault, SingleOrDefault, LastOrDefault or ElementAtOrDefault is read inside an operator or conditional, where a missing element would read null instead of throwing.";
+        = "An OrDefault terminal (FirstOrDefault, SingleOrDefault, LastOrDefault, ElementAtOrDefault) inside an operator, cast or conditional is not supported; its missing element would propagate as null where C# would throw.";
+
+    /// <summary>
+    /// The leaf is an argument of a construction that names no members (a positional constructor or a container), whose read side binds the
+    /// argument by position through the result type's serializer and so cannot run the element selector.
+    /// </summary>
+    public const string ConstructorArgument
+        = "An element of a projected collection cannot be read as an argument of a constructor call that names no members; project it as a member of an anonymous or named type instead.";
 }
 
 /// <summary>
@@ -426,9 +434,100 @@ internal static class NativeReferencedElementMatcher
                 }
             }
 
+            // A Queryable operator chain over an owned collection read (top-down, so an intermediate operator never has to stand alone).
+            if (TryRewriteToEnumerable(node, out var enumerableCall) && node.Type.IsAssignableFrom(enumerableCall.Type))
+                return enumerableCall;
+
             return base.VisitMethodCall(node);
         }
 
+        // Nav-expansion reads an owned collection as `Queryable.X(AsQueryable(<owned read>), ..)`. The shaper evaluates the selector per element
+        // and row, and a Queryable operator over an EnumerableQuery compiles an expression tree on every call, so an operator chain over an owned
+        // read this rewriter produces becomes the Enumerable overloads with the same name and shape, their quoted lambdas unquoted. The caller keeps
+        // the result only when it can stand where the call stood (a terminal such as Count, not an IQueryable the parent expects); an operator
+        // with no matching Enumerable overload leaves the chain as it is.
+        private bool TryRewriteToEnumerable(MethodCallExpression call, [NotNullWhen(true)] out Expression? enumerableCall)
+        {
+            enumerableCall = null;
+            if (call.Method.DeclaringType != typeof(Queryable)
+                || call.Method.Name == nameof(Queryable.AsQueryable)
+                || call.Arguments.Count == 0)
+            {
+                return false;
+            }
+
+            Expression source;
+            switch (call.Arguments[0])
+            {
+                case MethodCallExpression { Method.Name: nameof(Queryable.AsQueryable), Arguments: [var asQueryableSource] } asQueryable
+                    when asQueryable.Method.DeclaringType == typeof(Queryable):
+                    source = Visit(asQueryableSource);
+                    if (!_ownedReads.ContainsKey(source.RemoveConvert()))
+                        return false;
+
+                    break;
+
+                case MethodCallExpression inner when TryRewriteToEnumerable(inner, out var innerEnumerable):
+                    source = innerEnumerable;
+                    break;
+
+                default:
+                    return false;
+            }
+
+            var queryableParameters = call.Method.GetParameters();
+            var genericArguments = call.Method.IsGenericMethod ? call.Method.GetGenericArguments() : [];
+            foreach (var candidate in typeof(Enumerable).GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (candidate.Name != call.Method.Name
+                    || candidate.IsGenericMethodDefinition != call.Method.IsGenericMethod
+                    || (candidate.IsGenericMethodDefinition && candidate.GetGenericArguments().Length != genericArguments.Length)
+                    || candidate.GetParameters().Length != queryableParameters.Length)
+                {
+                    continue;
+                }
+
+                MethodInfo method;
+                try
+                {
+                    method = candidate.IsGenericMethodDefinition ? candidate.MakeGenericMethod(genericArguments) : candidate;
+                }
+                catch (System.ArgumentException)
+                {
+                    continue;
+                }
+
+                var parameters = method.GetParameters();
+                if (!parameters[0].ParameterType.IsAssignableFrom(source.Type))
+                    continue;
+
+                var matches = true;
+                for (var i = 1; matches && i < parameters.Length; i++)
+                {
+                    var queryableType = queryableParameters[i].ParameterType;
+                    matches = parameters[i].ParameterType
+                              == (queryableType.IsGenericType && queryableType.GetGenericTypeDefinition() == typeof(Expression<>)
+                                  ? queryableType.GetGenericArguments()[0]
+                                  : queryableType);
+                }
+
+                if (!matches)
+                    continue;
+
+                var arguments = new Expression[parameters.Length];
+                arguments[0] = source;
+                for (var i = 1; i < parameters.Length; i++)
+                {
+                    var argument = call.Arguments[i] is UnaryExpression { NodeType: ExpressionType.Quote } quoted ? quoted.Operand : call.Arguments[i];
+                    arguments[i] = Visit(argument);
+                }
+
+                enumerableCall = Expression.Call(method, arguments);
+                return true;
+            }
+
+            return false;
+        }
         private bool IsElementUnderEmbeddedIncludes(IncludeExpression include)
         {
             Expression current = include;

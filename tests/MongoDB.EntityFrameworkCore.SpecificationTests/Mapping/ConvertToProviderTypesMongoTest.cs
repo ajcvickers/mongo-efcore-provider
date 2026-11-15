@@ -252,11 +252,11 @@ public class ConvertToProviderTypesMongoTest(ConvertToProviderTypesMongoTest.Con
 #if (EF10 || EF11) || EF9
     // Fails: FirstOrDefault().Member under an operator is refused, naming why (OrDefaultMemberUnderOperator) EF-216
     public override Task Can_read_back_mapped_enum_from_collection_first_or_default()
-        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "A member of the element of a FirstOrDefault");
+        => SpecFails.Async<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "An OrDefault terminal (FirstOrDefault, SingleOrDefault, LastOrDefault, ElementAtOrDefault) inside an operator");
 #elif EF8
     // Fails: FirstOrDefault().Member under an operator is refused, naming why (OrDefaultMemberUnderOperator) EF-216
     public override void Can_read_back_mapped_enum_from_collection_first_or_default()
-        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "A member of the element of a FirstOrDefault");
+        => SpecFails.Sync<global::System.InvalidOperationException>(() => base.Can_read_back_mapped_enum_from_collection_first_or_default(), "An OrDefault terminal (FirstOrDefault, SingleOrDefault, LastOrDefault, ElementAtOrDefault) inside an operator");
 #endif
 
     public override void Equals_method_over_enum_works()

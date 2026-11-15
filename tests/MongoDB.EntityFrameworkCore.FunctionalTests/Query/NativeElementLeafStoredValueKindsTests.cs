@@ -311,6 +311,38 @@ public class NativeElementLeafStoredValueKindsTests(TemporaryDatabaseFixture dat
     }
 
     /// <summary>
+    /// Operators with lambdas over an owned collection of the element (nav-expansion's <c>Queryable</c> operators over <c>AsQueryable</c>, run as
+    /// the matching <c>Enumerable</c> operators): the same values as the operators over the stored (or, tracked, the tracked) elements.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, true)]
+    [InlineData(MongoQueryMode.NativeOnly, false)]
+    [InlineData(MongoQueryMode.Native, true)]
+    [InlineData(MongoQueryMode.DriverLinq, false)]
+    public void Owned_collection_operators_in_selector(MongoQueryMode mode, bool tracked)
+    {
+        using var db = CreateContext(nameof(Owned_collection_operators_in_selector) + mode + tracked, out var owner, mode);
+
+        var tattoo = db.Items.Single(i => i.OwnerId == owner && i.Rank == 2);
+        tattoo.Pieces.Add(new Piece { Name = "p4" });
+
+        var query = tracked ? db.Owners.Where(o => o.Id == owner) : db.Owners.AsNoTracking().Where(o => o.Id == owner);
+        var row = query.Select(o => o.Items.OrderBy(i => i.Rank)
+                .Select(i => new
+                {
+                    NotP2 = i.Pieces.Count(p => p.Name != "p2"),
+                    HasP3 = i.Pieces.Any(p => p.Name == "p3"),
+                    Names = string.Join(",", i.Pieces.Where(p => p.Name != "p1").Select(p => p.Name))
+                })
+                .ToList())
+            .Single();
+
+        Assert.Equal([1, tracked ? 2 : 1], row.Select(r => r.NotP2));
+        Assert.Equal([false, true], row.Select(r => r.HasP3));
+        Assert.Equal(["", tracked ? "p2,p3,p4" : "p2,p3"], row.Select(r => r.Names));
+    }
+
+    /// <summary>
     /// The elements themselves, of a type that owns a reference and a collection: nav-expansion includes the owned navigations through a selector of
     /// their own, which is no selector. Under <c>TrackAll</c> each element is the tracked instance with its owned graph; without tracking, the stored
     /// element with its stored owned values.

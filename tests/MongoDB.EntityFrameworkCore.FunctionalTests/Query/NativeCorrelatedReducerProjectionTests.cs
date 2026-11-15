@@ -809,6 +809,45 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
     }
 
     /// <summary>A captured value admitted in the selector admits nothing else: the outer entity beside it is still declined, naming the outer entity.</summary>
+    /// <summary>
+    /// A captured nullable value type in the element selector, null and then a value: the query context holds the parameter as <c>int?</c>, and
+    /// its null must reach the selector as null, on each read path (fused, declined, <c>Other</c>, terminal).
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.NoTracking)]
+    public void Captured_nullable_value_in_selector_reads_null_and_a_value(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Captured_nullable_value_in_selector_reads_null_and_a_value) + mode + tracking, out var withMethods, out _,
+            tracking: tracking);
+        var query = db.Animals.Where(a => a.Id == withMethods);
+
+        List<int?> Fused(int? bonus)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Rank + bonus).ToList()).Single();
+
+        List<string> Declined(int? bonus)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => (m.Rank + bonus).ToString()!).ToList()).Single();
+
+        List<bool> Other(int? bonus)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Describe() == "Tattoo" && bonus == null).ToList()).Single();
+
+        int? Terminal(int? bonus)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => bonus ?? m.Rank).First()).Single();
+
+        Assert.Equal([null, null], Fused(null));
+        Assert.Equal([6, 7], Fused(5));
+        Assert.Equal(["", ""], Declined(null));
+        Assert.Equal(["6", "7"], Declined(5));
+        Assert.Equal([false, true], Other(null));
+        Assert.Equal([false, false], Other(5));
+        Assert.Equal(1, Terminal(null));
+        Assert.Equal(5, Terminal(5));
+    }
+
     [Fact]
     public void Captured_variable_beside_the_outer_entity_in_selector_is_still_declined()
     {
@@ -1050,6 +1089,39 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         Assert.Equal([1, 2], row.Listed!);
         Assert.Equal(3, row.Two);
         Assert.Equal("Rex:Microchip", row.Beside);
+    }
+
+    /// <summary>
+    /// A short-circuiting operator over an element leaf evaluates the leaf only when C# would: Fido has no methods, and <c>First</c> over his empty
+    /// group is never run. Not under <c>DriverLinq</c>: a row-reading operand (<c>Any()</c>, <c>a.Name</c>) is staged under a <c>_cr&lt;N&gt;</c>
+    /// alias that a whole-document read does not have, so it fails at compile time there (Query/AGENTS.md, computed sibling of an element leaf).
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.NoTracking)]
+    public void Short_circuit_operators_over_an_element_leaf(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Short_circuit_operators_over_an_element_leaf) + mode + tracking, out _, out _, tracking: tracking);
+
+        var andAlso = db.Animals
+            .Select(a => new { a.Name, B = a.IdentificationMethods.Any() && a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank > 0 })
+            .ToList();
+        Assert.True(andAlso.Single(r => r.Name == "Rex").B);
+        Assert.False(andAlso.Single(r => r.Name == "Fido").B);
+
+        var orElse = db.Animals
+            .Select(a => new { a.Name, B = !a.IdentificationMethods.Any() || a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank > 1 })
+            .ToList();
+        Assert.False(orElse.Single(r => r.Name == "Rex").B);
+        Assert.True(orElse.Single(r => r.Name == "Fido").B);
+
+        var coalesce = db.Animals
+            .Select(a => new { a.Name, M = a.Name ?? a.IdentificationMethods.OrderBy(m => m.Rank).First().Method })
+            .ToList();
+        Assert.Equal(["Fido", "Rex"], coalesce.Select(r => r.M).Order());
     }
 
     /// <summary>

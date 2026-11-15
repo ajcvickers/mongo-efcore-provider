@@ -276,7 +276,16 @@ Scope, joins, grouping:
       What is refused today, and why: an eagerly loaded cross-collection navigation of the element, the outer entity in the selector, `EF.Property`
       in it (`SelectorUsesEFProperty`), a subquery in it (neutral `SelectorNotSelfContained`), a navigation of the element read in it (below), a
       correlation that is not a key equality, a sort key that is not a default-stored scalar, an element filter reading the outer entity or not
-      translating, and an `OrDefault` member under an operator (below). A captured value is NOT refused (next bullet).
+      translating, an `OrDefault` member under an operator (below), and an element leaf as an argument of a construction that names no
+      members (`ConstructorArgument`, next bullet). A captured value is NOT refused (next bullet but one).
+    - **An element leaf as an argument of a member-less construction is refused** (`new Holder(a.Name, a.Nav.Select(m => new Info(..)).ToList())`,
+      a positional container element; `ConstructorArgument`). The positional shaper (`BuildPositionalCtorProjectionShaper`) and the mixed reader bind
+      such an argument by position and read the array through the result type's serializer, which never runs the element selector: silently the
+      stored values for a DTO that ignores extra elements, a `FormatException` otherwise. Both positional arms check every argument with
+      `IsElementLeaf` (the matcher plus the navigation-list arm's own structural match) before staging and record the reason; the same leaf as a
+      member of an anonymous or named type, or as the only argument of a constructor (the bare-body path binds the leaf itself), runs the selector.
+      A member-less construction nested inside an anonymous type is not translated either, with the bare message. Reading such an argument for
+      real needs per-argument binding on the positional shaper (follow-up).
     - **A captured value in an element selector is read per execution** (`m => m.Name + suffix`, #119). `IsSelfContainedLambda` admits a query
       parameter, and the binding visitor puts every element selector into the shaper through `ReadQueryParametersPerExecution`
       (`NativeQueryParameter.ReplaceQueryParameters`: each parameter becomes `QueryContext.Parameters[name]`), at each of its three binding sites
@@ -291,7 +300,11 @@ Scope, joins, grouping:
       R2): a selector reading an owned member (`m.Detail.Label`, `m.Pieces.Count`) is `Other`, so under `TrackAll` it runs over the tracked
       element with its tracked owned graph (an unsaved change is seen) and, untracked, over the stored element. The element and its owned
       entities are tracked together or not at all, never an owned entity without its owner. An `EF.Property` the user wrote (or a shadow
-      property) is not rewritten and is still refused.
+      property) is not rewritten and is still refused. Nav-expansion's `Queryable.X(AsQueryable(<owned read>), ..)` chains over such a read
+      (`m.Pieces.Count`, `m.Pieces.Where(..).Count()`) become the matching `Enumerable` operators, lambdas unquoted (the shaper runs the selector
+      per element and row, and a `Queryable` operator over an `EnumerableQuery` compiles a tree per call); an operator with no `Enumerable`
+      overload, or a chain whose result must stay an `IQueryable`, is left as it is. A missing optional owned reference read in the selector
+      (`i.Detail.Label` for an element with no `Detail`) throws `NullReferenceException` in the shaper, as C# would.
     - **A navigation of the element to another collection read in the selector is refused, naming it** (`m.Animal.Name`, also as
       `First().Animal.Name`, #119). Nav-expansion turns it into a `Join` (EF10+: `LeftJoin` for an optional one) onto `DbSet<Animal>` with a
       `TransparentIdentifier` result directly below the selector (only the required `Join` is tested); `TryMatch` recognizes that join (only there, only one, only when the outer
@@ -307,7 +320,8 @@ Scope, joins, grouping:
       under a `_cr<N>` alias (`NextClientReadAlias`, shared with the client-conditional branch reads); a row-independent operand is evaluated in place.
       The read side (`BindClientOperands`, admitted by `MongoSelectDefinition.IsClientOperandMember`) binds each operand under a synthetic member named
       by its alias (`ClientOperandMemberInfo`, found from the staged read by `TryGetClientConditionalReadAlias`), so the element leaf binds as a member
-      leaf. The terminal (`First`, ...) stays inside the rebuilt operator, so a conditional runs only the leaf of the branch it takes, and an empty
+      leaf. So a projection member can be a synthetic `MemberInfo` (`ClientOperandMemberInfo`, null `DeclaringType`): never reflect over projection
+      members (`DeclaringType`, `GetValue`, attributes). The terminal (`First`, ...) stays inside the rebuilt operator, so a conditional runs only the leaf of the branch it takes, and an empty
       group throws as LINQ does. Only `First`, `Single`, `Last`, `ElementAt` and `ToList` are admitted: an `OrDefault` terminal declines
       (`OrDefaultMemberUnderOperator`), because EF lowers `FirstOrDefault().Rank` to `(int)Select(m => (int?)m.Rank).FirstOrDefault()` and
       null-propagates a missing element where the operator evaluated in C# would throw or read null. Such a member counts as a client conditional

@@ -1785,8 +1785,9 @@ Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 10 }, { "$match" : { "_id" :
 
     public override async Task Client_projection_via_ctor_arguments(bool async)
     {
-        // Fails: Subquery selection: an element leaf whose selector constructs a class, as a constructor argument, is read through the class map EF-X001
-        await SpecFails.ThrowsAsync<global::System.FormatException>(() => base.Client_projection_via_ctor_arguments(async), "does not match any field or property");
+        // Fails: Subquery selection: an element leaf as an argument of a member-less constructor is refused (its selector would be ignored) EF-X001
+        await SpecFails.ThrowsAsync<InvalidOperationException>(
+            () => base.Client_projection_via_ctor_arguments(async), "cannot be read as an argument of a constructor call that names no members");
     }
 
     public override async Task Client_projection_with_string_initialization_with_scalar_subquery(bool async)

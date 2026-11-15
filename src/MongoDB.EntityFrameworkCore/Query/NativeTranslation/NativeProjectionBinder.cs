@@ -239,6 +239,9 @@ internal static class NativeProjectionBinder
 
         private bool TryBindPositionalConstructor(IReadOnlyList<(string MemberName, Expression Value)> members)
         {
+            if (DeclinesElementLeafArguments(members.Select(m => NativeCaseMapping.PeelCaseMapping(m.Value))))
+                return false;
+
             foreach (var (memberName, member) in members)
             {
                 var memberValue = NativeCaseMapping.PeelCaseMapping(member);
@@ -263,6 +266,9 @@ internal static class NativeProjectionBinder
 
         private bool TryBindPositionalContainer(IReadOnlyList<(string MemberName, Expression Value)> elements)
         {
+            if (DeclinesElementLeafArguments(elements.Select(e => NativeCaseMapping.PeelCaseMapping(UnwrapContainerElementBoxing(e.Value)))))
+                return false;
+
             foreach (var (elementName, element) in elements)
             {
                 var elementOperand = UnwrapContainerElementBoxing(element);
@@ -276,6 +282,25 @@ internal static class NativeProjectionBinder
 
             _hasPositionalCtorProjection = true;
             return true;
+        }
+
+        // An element leaf as an argument of a construction that names no members (a positional constructor or container) is refused (R7): the
+        // positional shaper (BuildPositionalCtorProjectionShaper) and the mixed reader bind such an argument by position, reading the array
+        // through the result type's serializer, which never runs the element selector (silently the stored values for a DTO that ignores
+        // extra elements). Checked before anything is staged; the reason is recorded for every such argument, the read side reports it.
+        private bool DeclinesElementLeafArguments(IEnumerable<Expression> arguments)
+        {
+            var declined = false;
+            foreach (var argument in arguments)
+            {
+                if (IsElementLeaf(_mongoQ, _selector.Parameters[0], argument))
+                {
+                    _mongoQ.RecordElementLeafDecline(argument, _selector.Parameters[0], ElementLeafDeclineReasons.ConstructorArgument);
+                    declined = true;
+                }
+            }
+
+            return declined;
         }
 
         // Bare body (`b => b.Title`, `b => b.Posts.Count`): with no member name the alias is derived from the translated leaf and registered as an override
@@ -2860,6 +2885,37 @@ internal static class NativeProjectionBinder
     {
         navigation = null;
 
+        if (!TryMatchProjectedCollectionNavigationList(mongoQ, outerParameter, leafExpression, out var matchedNavigation))
+        {
+            return false;
+        }
+
+        // The member must be read back under the lookup's own alias; check it before staging anything, so a decline leaves no lookup behind.
+        if (expectedAlias is not null && expectedAlias != LookupExpression.GetLookupAlias(matchedNavigation))
+        {
+            return false;
+        }
+
+        // As for the Count leaf: a TPH-derived target declines, a bare Include lookup for the same nav is reused, and a different PipelineKind (filtered Include) declines rather than read the wrong shape.
+        if (!NativeCorrelationMatcher.TryStageNativeCollectionLookup(
+                mongoQ, new LookupExpression(matchedNavigation), staged.Lookups, out _))
+        {
+            return false;
+        }
+
+        navigation = matchedNavigation;
+        return true;
+    }
+
+    /// <summary>The structural part of <see cref="TryTranslateProjectedCollectionNavigationList"/>: recognizes the leaf and stages nothing.</summary>
+    private static bool TryMatchProjectedCollectionNavigationList(
+        MongoQueryExpression mongoQ,
+        ParameterExpression outerParameter,
+        Expression leafExpression,
+        [NotNullWhen(true)] out INavigation? matchedNavigation)
+    {
+        matchedNavigation = null;
+
         if (leafExpression is not MethodCallExpression
             {
                 Method: { DeclaringType: var materializeDeclaring } materializeMethod,
@@ -2886,27 +2942,17 @@ internal static class NativeProjectionBinder
         }
 
         // The source must be exactly the navigation-join Where; anything layered on top (filtered Include) declines.
-        if (!NativeCorrelationMatcher.TryMatchCorrelatedRootWhere(mongoQ, outerParameter, whereArg, out var matchedNavigation))
-        {
-            return false;
-        }
-
-        // The member must be read back under the lookup's own alias; check it before staging anything, so a decline leaves no lookup behind.
-        if (expectedAlias is not null && expectedAlias != LookupExpression.GetLookupAlias(matchedNavigation))
-        {
-            return false;
-        }
-
-        // As for the Count leaf: a TPH-derived target declines, a bare Include lookup for the same nav is reused, and a different PipelineKind (filtered Include) declines rather than read the wrong shape.
-        if (!NativeCorrelationMatcher.TryStageNativeCollectionLookup(
-                mongoQ, new LookupExpression(matchedNavigation), staged.Lookups, out _))
-        {
-            return false;
-        }
-
-        navigation = matchedNavigation;
-        return true;
+        return NativeCorrelationMatcher.TryMatchCorrelatedRootWhere(mongoQ, outerParameter, whereArg, out matchedNavigation);
     }
+
+    /// <summary>
+    /// Whether <paramref name="argument"/> is an element leaf over a cross-document collection: one <see cref="TryTranslateReferencedElementLeaf"/>
+    /// recognizes (<see cref="NativeReferencedElementMatcher.TryMatch"/>) or one the projected navigation-list arm claims
+    /// (<see cref="TryMatchProjectedCollectionNavigationList"/>). Stages nothing.
+    /// </summary>
+    private static bool IsElementLeaf(MongoQueryExpression mongoQ, ParameterExpression outerParameter, Expression argument)
+        => NativeReferencedElementMatcher.TryMatch(argument, out _)
+           || TryMatchProjectedCollectionNavigationList(mongoQ, outerParameter, argument, out _);
 
     /// <summary>
     /// Recognizes a reference-collection-nav reducer projected inline (<c>a.IdentificationMethods.FirstOrDefault().Method</c>), staging its <c>$lookup</c> sub-pipeline and <see cref="MongoCorrelatedReducerLeaf"/>,
