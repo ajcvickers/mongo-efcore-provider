@@ -924,8 +924,8 @@ LevelOne.{ "$lookup" : { "from" : "Level2", "let" : { "localField" : "$_id" }, "
 
     public override async Task Projecting_collection_with_FirstOrDefault(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Projecting_collection_with_FirstOrDefault(async), "could not be translated");
+        // Fails: Query translates natively but returns different data than the expected result EF-X600 (depends on the time zone: passes in UTC) EF-X720
+        await SpecFails.EitherAsync(() => base.Projecting_collection_with_FirstOrDefault(async));
     }
 
 #if EF8 || EF9 || (EF10 || EF11)

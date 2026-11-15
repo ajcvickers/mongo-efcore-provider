@@ -1190,8 +1190,7 @@ internal static class NativeProjectionBinder
         // Projected reference-collection-nav list (`Orders = c.Orders.ToList()`): the read side comes from MongoProjectionBindingExpressionVisitor.TryBindProjectedCollectionNavigation in every mode; this arm
         // only keeps Route native and retains the $lookup field under its alias. Wrapped bodies only. Reuses isArrayLeaf (shares the array leaf's hazards; _id retention is inert).
         if (allowWholeRootEntityLeaf
-            && TryTranslateProjectedCollectionNavigationList(mongoQ, outerParameter, leafExpression, staged, out var listNavigation)
-            && alias == LookupExpression.GetLookupAlias(listNavigation))
+            && TryTranslateProjectedCollectionNavigationList(mongoQ, outerParameter, leafExpression, staged, expectedAlias: alias, out var listNavigation))
         {
             result = new MongoElementRefExpression(alias, listNavigation.TargetEntityType.ClrType);
             isArrayLeaf = true;
@@ -1874,7 +1873,7 @@ internal static class NativeProjectionBinder
         // A projected reference-collection-nav list (`Orders = c.Orders.ToList()`) is read back by TryBindProjectedCollectionNavigation under the lookup's own alias (_lookup_<Nav>), whatever the member is
         // named. The throwaway staging is fine: this only picks the alias; TryTranslateLeaf re-matches to stage the lookup.
         if (TryTranslateProjectedCollectionNavigationList(
-                mongoQ, outerParameter, leafExpression, new PendingProjectionStaging(), out var refNavigation))
+                mongoQ, outerParameter, leafExpression, new PendingProjectionStaging(), expectedAlias: null, out var refNavigation))
         {
             return LookupExpression.GetLookupAlias(refNavigation);
         }
@@ -2659,9 +2658,10 @@ internal static class NativeProjectionBinder
     }
 
     /// <summary>
-    /// Recognizes a projected reference-collection-navigation list leaf (<c>Orders = c.Orders.ToList()</c>, or <c>ToArray</c>/<c>ToHashSet</c>, optionally with a ThenInclude <c>Select</c>), lowered to
-    /// <c>Enumerable.ToList(Queryable.Where(DbSet&lt;Target&gt;(), joinPredicate))</c>. The shaper is built by <see cref="Visitors.MongoProjectionBindingExpressionVisitor.TryBindProjectedCollectionNavigation"/>;
-    /// this only marks the member representable and retains the <c>$lookup</c> field through <c>$project</c>.
+    /// Recognizes a projected reference-collection-navigation list leaf (<c>Orders = c.Orders.ToList()</c>, or <c>ToArray</c>/<c>ToHashSet</c>) whose element <c>Select</c> materializes the
+    /// element entity (identity or ThenInclude), lowered to <c>Enumerable.ToList(Queryable.Select(Queryable.Where(DbSet&lt;Target&gt;(), joinPredicate), selector))</c>. The shaper is built by
+    /// <see cref="Visitors.MongoProjectionBindingExpressionVisitor.TryBindProjectedCollectionNavigation"/>; this only marks the member representable and retains the <c>$lookup</c> field through
+    /// <c>$project</c>. With <paramref name="expectedAlias"/>, a member alias other than the lookup's declines before anything is staged.
     /// </summary>
     /// <remarks>
     /// Accepts a strict subset of the bind side, declining filtered-Include shapes. For a <c>List&lt;T&gt;</c>-declared navigation only <c>ToList()</c> reaches this shape; <c>ToArray()</c>/<c>ToHashSet()</c> lower to
@@ -2672,6 +2672,7 @@ internal static class NativeProjectionBinder
         ParameterExpression outerParameter,
         Expression leafExpression,
         PendingProjectionStaging staged,
+        string? expectedAlias,
         [NotNullWhen(true)] out INavigation? navigation)
     {
         navigation = null;
@@ -2687,18 +2688,28 @@ internal static class NativeProjectionBinder
             return false;
         }
 
-        var whereArg = materializeArg;
-        if (whereArg is MethodCallExpression
+        // The read side binds only a Select that materializes the element entity itself (identity, or ThenInclude IncludeExpressions around it),
+        // so this arm claims exactly that, through the read side's own predicate. A scalar selector (`a.Nav.Select(m => m.Rank.ToString()).ToList()`)
+        // or a list with no Select at all (`a.Nav.ToList()`) is an element leaf, left to TryTranslateReferencedElementLeaf (#122).
+        if (materializeArg is not MethodCallExpression
             {
-                Method: { Name: nameof(Queryable.Select), DeclaringType: var selectDeclaring }
-            } selectCall
-            && selectDeclaring == typeof(Queryable))
+                Method: { Name: nameof(Queryable.Select), DeclaringType: var selectDeclaring },
+                Arguments: [var whereArg, var selectorArg]
+            }
+            || selectDeclaring != typeof(Queryable)
+            || !Visitors.MongoProjectionBindingExpressionVisitor.IsProjectedNavigationListSelector(selectorArg))
         {
-            whereArg = selectCall.Arguments[0];
+            return false;
         }
 
         // The source must be exactly the navigation-join Where; anything layered on top (filtered Include) declines.
         if (!NativeCorrelationMatcher.TryMatchCorrelatedRootWhere(mongoQ, outerParameter, whereArg, out var matchedNavigation))
+        {
+            return false;
+        }
+
+        // The member must be read back under the lookup's own alias; check it before staging anything, so a decline leaves no lookup behind.
+        if (expectedAlias is not null && expectedAlias != LookupExpression.GetLookupAlias(matchedNavigation))
         {
             return false;
         }

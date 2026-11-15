@@ -3864,29 +3864,32 @@ Customers.{ "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Orders", "local
 
     public override async Task Projection_skip_collection_projection(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Projection_skip_collection_projection(async));
+        await base.Projection_skip_collection_projection(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$match" : { "_id" : { "$lt" : 10300 } } }, { "$sort" : { "_id" : 1 } }, { "$skip" : 5 }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }, { "$project" : { "OrderID" : "$_id", "ProductIds" : "$_lookup_OrderDetail__id_OrderID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_take_collection_projection(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Projection_take_collection_projection(async));
+        await base.Projection_take_collection_projection(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$match" : { "_id" : { "$lt" : 10300 } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 10 }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }, { "$project" : { "OrderID" : "$_id", "ProductIds" : "$_lookup_OrderDetail__id_OrderID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_skip_take_collection_projection(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Projection_skip_take_collection_projection(async));
+        await base.Projection_skip_take_collection_projection(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$match" : { "_id" : { "$lt" : 10300 } } }, { "$sort" : { "_id" : 1 } }, { "$skip" : 5 }, { "$limit" : 10 }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }, { "$project" : { "OrderID" : "$_id", "ProductIds" : "$_lookup_OrderDetail__id_OrderID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_skip_projection(bool async)

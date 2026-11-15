@@ -838,6 +838,95 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         Assert.Equal(new string?[] { null, "Microchip" }, methods);
     }
 
+    // An element leaf with only the correlation (no Where/OrderBy in the chain) as a member of a construction (#122).
+    // An unsaved change to a tracked method row shows whether the leaf reads the stored values (R3) or the materialized element (R4).
+
+    private static IdentificationMethod TrackAndChangeRank2(AnimalDbContext db, ObjectId animalId)
+    {
+        var tracked = db.IdentificationMethods.AsTracking().Single(m => m.AnimalId == animalId && m.Rank == 2);
+        tracked.Method = "Unsaved";
+        tracked.Rank = 20;
+        return tracked;
+    }
+
+    [Theory]
+    [InlineData(QueryTrackingBehavior.TrackAll)]
+    [InlineData(QueryTrackingBehavior.NoTracking)]
+    public void Correlation_only_leaf_beside_root_reads_stored_values(QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Correlation_only_leaf_beside_root_reads_stored_values) + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank2(db, withMethods);
+
+        var results = db.Animals
+            .Where(a => a.Id == withMethods || a.Id == withoutMethods)
+            .Select(a => new { a, M = a.IdentificationMethods.Select(m => m.Rank.ToString()).ToList() })
+            .ToList();
+
+        var rex = results.Single(r => r.a.Id == withMethods);
+        var fido = results.Single(r => r.a.Id == withoutMethods);
+        Assert.Equal("Rex", rex.a.Name);
+        Assert.Equal(["1", "2"], rex.M.Order());
+        Assert.Empty(fido.M);
+        Assert.Equal(20, tracked.Rank);
+    }
+
+    [Theory]
+    [InlineData(QueryTrackingBehavior.TrackAll)]
+    [InlineData(QueryTrackingBehavior.NoTracking)]
+    public void Correlation_only_leaf_beside_scalar(QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Correlation_only_leaf_beside_scalar) + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank2(db, withMethods);
+        var trackedBefore = db.ChangeTracker.Entries<IdentificationMethod>().Count();
+
+        var results = db.Animals
+            .Where(a => a.Id == withMethods || a.Id == withoutMethods)
+            .Select(a => new { a.Name, M = a.IdentificationMethods.Select(m => m.Method).ToList() })
+            .ToList();
+
+        Assert.Equal(["Microchip", "Tattoo"], results.Single(r => r.Name == "Rex").M.Order());
+        Assert.Empty(results.Single(r => r.Name == "Fido").M);
+        Assert.Equal("Unsaved", tracked.Method);
+        Assert.Equal(trackedBefore, db.ChangeTracker.Entries<IdentificationMethod>().Count());
+    }
+
+    [Theory]
+    [InlineData(QueryTrackingBehavior.TrackAll)]
+    [InlineData(QueryTrackingBehavior.NoTracking)]
+    public void Correlation_only_entity_list_beside_root(QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Correlation_only_entity_list_beside_root) + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank2(db, withMethods);
+
+        var results = db.Animals
+            .Where(a => a.Id == withMethods || a.Id == withoutMethods)
+            .Select(a => new { a, M = a.IdentificationMethods.ToList() })
+            .ToList();
+
+        var rex = results.Single(r => r.a.Id == withMethods);
+        Assert.Equal("Rex", rex.a.Name);
+        Assert.Empty(results.Single(r => r.a.Id == withoutMethods).M);
+        Assert.Equal(2, rex.M.Count);
+        var row = rex.M.Single(m => m.Id == tracked.Id);
+        if (tracking == QueryTrackingBehavior.TrackAll)
+        {
+            // R4: the element as materialized is the tracked instance, with its unsaved change.
+            Assert.Same(tracked, row);
+        }
+        else
+        {
+            Assert.NotSame(tracked, row);
+            Assert.Equal("Tattoo", row.Method);
+            Assert.Equal(2, row.Rank);
+        }
+    }
+
     // No driver-LINQ oracle: expected values are hand-computed from the seed, with several candidates per case so a
     // wrong pick gives a different answer.
 

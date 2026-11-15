@@ -209,7 +209,10 @@ Scope, joins, grouping:
   - **Element leaves, `ToList`/`FirstOrDefault` of the group** (`c.Orders.Where(..).OrderBy(..).Skip(..).Take(..).ToList()`,
     `.FirstOrDefault(pred)`, off a GroupJoin group, `Select(o => o.Total).ToList()`) match `NativeReferencedElementMatcher` (structural,
     shared by both sides) and stage ONE keyed array lookup, whether or not a navigation exists
-    (`TryTranslateReferencedElementLeaf`, correlation via `TryMatchCorrelationKeys`, never the navigation). Filters ride in
+    (`TryTranslateReferencedElementLeaf`, correlation via `TryMatchCorrelationKeys`, never the navigation). The projected
+    navigation-list arm ahead of it (`TryTranslateProjectedCollectionNavigationList`) claims only a `Select` the read side binds
+    (`IsProjectedNavigationListSelector`: the element itself or its ThenIncludes), checking the alias before staging; so a correlation-only
+    leaf beside other members (`new { a, M = a.Nav.Select(m => m.X).ToList() }`, `new { a, M = a.Nav.ToList() }`) is an element leaf (#122). Filters ride in
     `InnerPredicate`; ordering, `Skip` and the limit are the typed `ElementSort`/`ElementSkip`/`ElementLimit`, rendered by `RenderLookup`
     after the filter (not `PipelineStages`: `HasPipeline` would make the lookup non-native). A filter moved ahead of the ordering is
     equivalent, but `Skip`/`Take` must be the OUTERMOST operators: a `Where` after them filters the page, so it declines. `Take` on a

@@ -2403,8 +2403,12 @@ Gears.{ "$match" : { "_id.Nickname" : { "$ne" : "Marcus" } } }, { "$sort" : { "_
 
     public override async Task Correlated_collections_project_anonymous_collection_result(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Correlated_collections_project_anonymous_collection_result(async), "could not be translated");
+        await base.Correlated_collections_project_anonymous_collection_result(async);
+
+        AssertMql(
+            """
+Squads.{ "$match" : { "_id" : { "$lt" : 20 } } }, { "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : "_id.SquadId", "as" : "_lookup_Gear__id_SquadId__id" } }, { "$project" : { "Name" : "$Name", "Collection" : "$_lookup_Gear__id_SquadId__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Correlated_collections_nested(bool async)
@@ -3033,8 +3037,12 @@ Squads.{ "$set" : { "__sort0" : { "$literal" : 42 } } }, { "$sort" : { "__sort0"
 
     public override async Task Correlated_collection_order_by_constant(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Correlated_collection_order_by_constant(async), "could not be translated");
+        await base.Correlated_collection_order_by_constant(async);
+
+        AssertMql(
+            """
+Gears.{ "$set" : { "__sort0" : { "$literal" : 1 } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapon_OwnerFullName_FullName" } }, { "$project" : { "Nickname" : "$_id.Nickname", "Weapons" : "$_lookup_Weapon_OwnerFullName_FullName", "_id" : 0 } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -3075,8 +3083,12 @@ Squads.{ "$lookup" : { "from" : "Gears", "localField" : "_id", "foreignField" : 
 
     public override async Task Correlated_collection_order_by_constant_null_of_non_mapped_type(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Correlated_collection_order_by_constant_null_of_non_mapped_type(async), "could not be translated");
+        await base.Correlated_collection_order_by_constant_null_of_non_mapped_type(async);
+
+        AssertMql(
+            """
+Gears.{ "$set" : { "__sort0" : { "$literal" : null } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapon_OwnerFullName_FullName" } }, { "$project" : { "Nickname" : "$_id.Nickname", "Weapons" : "$_lookup_Weapon_OwnerFullName_FullName", "_id" : 0 } }
+""");
     }
 
 #if EF8 || EF9 || (EF10 || EF11)
@@ -3291,8 +3303,12 @@ Gears.{ "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignFie
 
     public override async Task Correlated_collection_with_complex_order_by_funcletized_to_constant_bool(bool async)
     {
-        // Fails: Query shape (navigation/projection/set operation) not translated EF-X526
-        await SpecFails.ThrowsAsync(() => base.Correlated_collection_with_complex_order_by_funcletized_to_constant_bool(async), "could not be translated");
+        await base.Correlated_collection_with_complex_order_by_funcletized_to_constant_bool(async);
+
+        AssertMql(
+            """
+Gears.{ "$set" : { "__sort0" : { "$in" : ["$_id.Nickname", { "$literal" : [] }] } } }, { "$sort" : { "__sort0" : -1 } }, { "$unset" : ["__sort0"] }, { "$lookup" : { "from" : "Weapons", "localField" : "FullName", "foreignField" : "OwnerFullName", "as" : "_lookup_Weapon_OwnerFullName_FullName" } }, { "$project" : { "Nickname" : "$_id.Nickname", "Weapons" : "$_lookup_Weapon_OwnerFullName_FullName", "_id" : 0 } }
+""");
     }
 
 #if (EF10 || EF11)

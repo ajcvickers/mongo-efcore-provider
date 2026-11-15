@@ -79,11 +79,13 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
         // The selector must materialize the element entity itself (identity, optionally wrapped in ThenInclude
         // IncludeExpressions). Anything else (o => o.OrderID) is an arbitrary correlated subquery, not a navigation
         // materialization, and must not be rerouted through a $lookup.
-        var selectorBody = UnwrapLambdaBody(selectCall.Arguments[1], out var selectorParameter);
-        if (selectorParameter == null || !IsEntityMaterializingSelector(selectorBody, selectorParameter))
+        // The emit side (NativeProjectionBinder.TryTranslateProjectedCollectionNavigationList) claims a list leaf through the same predicate.
+        if (!IsProjectedNavigationListSelector(selectCall.Arguments[1]))
         {
             return false;
         }
+
+        var selectorBody = UnwrapLambdaBody(selectCall.Arguments[1], out _);
 
         // The source must be exactly the single navigation-join Where; extra operators indicate an arbitrary subquery.
         if (selectCall.Arguments[0] is not MethodCallExpression
@@ -283,6 +285,16 @@ internal sealed partial class MongoProjectionBindingExpressionVisitor : Expressi
     /// </summary>
     private static bool IsEntityMaterializingSelector(Expression body, ParameterExpression parameter)
         => body.UnwrapIncludes() == parameter;
+
+    /// <summary>
+    /// Whether a projected collection-navigation list's element <c>Select</c> selector (possibly quoted) materializes the element entity itself, the
+    /// only selector <see cref="TryBindProjectedCollectionNavigation"/> binds. The emit side's list arm calls it so the two sides claim the same leaves.
+    /// </summary>
+    internal static bool IsProjectedNavigationListSelector(Expression selector)
+    {
+        var body = UnwrapLambdaBody(selector, out var parameter);
+        return parameter != null && IsEntityMaterializingSelector(body, parameter);
+    }
 
     /// <summary>
     /// Locate the outer entity <see cref="StructuralTypeShaperExpression"/> — the principal side of the join —
