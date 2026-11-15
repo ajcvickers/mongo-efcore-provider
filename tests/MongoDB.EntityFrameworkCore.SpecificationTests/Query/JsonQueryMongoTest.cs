@@ -1669,13 +1669,15 @@ JsonEntitiesBasic.{ "$project" : { "Id" : "$_id", "x" : "$$ROOT", "_id" : 0 } }
     public override Task Json_projection_second_element_projected_before_owner_nested_as_well_as_root_AsNoTrackingWithIdentityResolution(bool async)
         => SpecFails.ThrowsAsync(() => base.Json_projection_second_element_projected_before_owner_nested_as_well_as_root_AsNoTrackingWithIdentityResolution(async), "could not be translated");
 
-    // Fails: tracking query projects an owned entity without its owner EF-X517
+    // Fails: the selector returns the owned entity itself (not a scalar member of it), so a tracking query projects an owned entity without its owner. EF Core
+    // refuses that on every provider and upstream expects the failure (relational overrides assert it); only a scalar-only element Select is exempt (R1, R5) EF-X517
     public override Task Project_json_reference_in_tracking_query_fails(bool async)
-        => SpecFails.ThrowsAsync(() => base.Project_json_reference_in_tracking_query_fails(async));
+        => SpecFails.ThrowsAsync(() => base.Project_json_reference_in_tracking_query_fails(async), "owned entity without a corresponding owner");
 
-    // Fails: tracking query projects an owned entity without its owner EF-X517
+    // Fails: the selector returns the owned collection itself (not a scalar member of its elements), so a tracking query projects owned entities without
+    // their owner. EF Core refuses that on every provider and upstream expects the failure; only a scalar-only element Select is exempt (R1, R5) EF-X517
     public override Task Project_json_collection_in_tracking_query_fails(bool async)
-        => SpecFails.ThrowsAsync(() => base.Project_json_collection_in_tracking_query_fails(async));
+        => SpecFails.ThrowsAsync(() => base.Project_json_collection_in_tracking_query_fails(async), "owned entity without a corresponding owner");
 
     // Fails: NullReferenceException while materializing EF-X529
     public override Task Project_json_entity_in_tracking_query_fails_even_when_owner_is_present(bool async)

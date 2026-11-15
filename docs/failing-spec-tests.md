@@ -279,7 +279,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X514 | Owned indexer properties / owned-collection element expressions not supported by driver LINQ | 16 |
 | EF-X515 | Wrong results for owned-collection operators (ElementAt/Union/...) | 5 |
 | EF-X516 | Server aggregate error for owned-collection element access | 2 |
-| EF-X517 | Projecting an owned entity without its owner in a tracking query | 5 |
+| EF-X517 | Projecting an owned entity (or an owned reference's indexer, or `.ToArray()` over an owned element Select) without its owner in a tracking query; EF Core refuses this too. A scalar-only owned element `Select(..).ToList()` is exempt | 5 |
 | EF-X518 | Provider throws a different exception type than the base test expects | 2 |
 | EF-X519 | Hierarchy materialization fails: discriminator value does not match the requested type | 1 |
 | EF-X520 | ElementAt/indexer call is rebuilt with the wrong number of arguments | 4 |

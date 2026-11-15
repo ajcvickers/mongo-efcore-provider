@@ -102,7 +102,9 @@ public class OwnedEntityQueryMongoTest : OwnedEntityQueryTestBase
 
     public override async Task OwnsMany_correlated_projection(bool async)
     {
-        // Fails: Projecting an owned entity without its owner in a tracking query EF-X517
+        // Fails: the element Select is `.ToArray()`, and the owned element Select is matched only as `.ToList()` (`TryMatchOwnedArraySelectLeaf`), so the
+        // owned collection shaper is built and the tracking query projects owned entities without their owner. The empty selector `name => new NameDto()`
+        // reads no member, so with `.ToList()` it translates and constructs nothing EF-X517
         await SpecFails.ThrowsAsync(() => base.OwnsMany_correlated_projection(async), "owned entity without a corresponding owner");
     }
 
