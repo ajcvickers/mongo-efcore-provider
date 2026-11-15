@@ -163,6 +163,18 @@ public class NativeElementLeafRefusalTests(TemporaryDatabaseFixture database)
             () => db.Animals.Select(a => a.Methods.OrderBy(m => m.Rank).First().Animal.Name).ToList());
     }
 
+    /// <summary>The same navigation in an element leaf used as an operand of a conditional is refused with the same reason.</summary>
+    [Theory]
+    [MemberData(nameof(Modes))]
+    public void A_navigation_of_the_element_read_in_an_operand_leaf_is_named(MongoQueryMode mode)
+    {
+        using var db = CreateContext(mode, nameof(A_navigation_of_the_element_read_in_an_operand_leaf_is_named));
+
+        AssertDeclined(
+            ElementLeafDeclineReasons.SelectorReadsNavigation("Method", "Animal"),
+            () => db.Animals.Select(a => new { a.Name, N = a.Name == "Rex" ? a.Methods.OrderBy(m => m.Rank).First().Animal.Name : "n/a" }).ToList());
+    }
+
     /// <summary>
     /// An owned member of the element is read in the selector (#119, NativeElementLeafStoredValueKindsTests), but not through <c>EF.Property</c>,
     /// which is still what is named when the selector holds both.
