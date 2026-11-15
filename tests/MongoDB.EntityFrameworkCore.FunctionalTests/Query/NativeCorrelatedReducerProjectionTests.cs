@@ -317,7 +317,7 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
     /// A scalar selector over a single-result terminal projects the stored value: it must not resolve the identity of, or track, the intermediate
     /// entity, so an unsaved change to an already tracked row is not returned. Tracking is the default, and the row is tracked here.
     /// </summary>
-    [Theory(Skip = "Fails: the selector runs on the tracked instance, so it returns the unsaved value. https://github.com/ajcvickers/mongo-efcore-provider/issues/32")]
+    [Theory]
     [InlineData("First")]
     [InlineData("FirstOrDefault")]
     [InlineData("Single")]
@@ -348,6 +348,145 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         Assert.Equal("Unsaved", tracked.Method);
         // Nothing was tracked for the projection: the one tracked row is still the only one.
         Assert.Equal(trackedBefore, db.ChangeTracker.Entries<IdentificationMethod>().Count());
+    }
+
+    /// <summary>
+    /// The scalar selector of a list with a computed element, and several beside other projected members all read the stored values too: no element entity is
+    /// resolved against the change tracker, so the unsaved change to the tracked row is not seen, and nothing is tracked for the projection.
+    /// </summary>
+    [Fact]
+    public void Scalar_selectors_of_lists_and_constructions_return_stored_values_for_a_tracked_row()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly,
+            nameof(Scalar_selectors_of_lists_and_constructions_return_stored_values_for_a_tracked_row),
+            out var withMethods, out _);
+
+        var tracked = db.IdentificationMethods.Single(m => m.AnimalId == withMethods && m.Rank == 2);
+        tracked.Method = "Unsaved";
+        tracked.Rank = 20;
+        var trackedBefore = db.ChangeTracker.Entries<IdentificationMethod>().Count();
+
+        var list = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => a.IdentificationMethods.Where(m => m.Id == tracked.Id).OrderBy(m => m.Id).Select(m => m.Method + "!" + m.Rank * 2).ToList())
+            .Single();
+        Assert.Equal(["Tattoo!4"], list);
+
+        var computed = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new
+            {
+                a.Id,
+                Method = a.IdentificationMethods.Where(m => m.Id == tracked.Id).OrderBy(m => m.Id).First().Method,
+                Rank = a.IdentificationMethods.Where(m => m.Id == tracked.Id).OrderBy(m => m.Id).First().Rank
+            })
+            .Single();
+        Assert.Equal(withMethods, computed.Id);
+        Assert.Equal("Tattoo", computed.Method);
+        Assert.Equal(2, computed.Rank);
+
+        Assert.Equal("Unsaved", tracked.Method);
+        Assert.Equal(20, tracked.Rank);
+        Assert.Equal(trackedBefore, db.ChangeTracker.Entries<IdentificationMethod>().Count());
+    }
+
+    /// <summary>
+    /// The stored value is read in every query mode and tracking behavior of the query: tracked, <c>AsNoTracking</c> and
+    /// <c>AsNoTrackingWithIdentityResolution</c>, with an unsaved change to the same row held by a tracked context.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.Native, "Tracked")]
+    [InlineData(MongoQueryMode.Native, "NoTracking")]
+    [InlineData(MongoQueryMode.Native, "NoTrackingWithIdentityResolution")]
+    [InlineData(MongoQueryMode.NativeOnly, "NoTracking")]
+    [InlineData(MongoQueryMode.NativeOnly, "NoTrackingWithIdentityResolution")]
+    public void A_scalar_selector_returns_the_stored_value_in_every_query_mode_and_tracking_behavior(MongoQueryMode mode, string tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(A_scalar_selector_returns_the_stored_value_in_every_query_mode_and_tracking_behavior) + tracking,
+            out var withMethods, out _);
+
+        var tracked = db.IdentificationMethods.Single(m => m.AnimalId == withMethods && m.Rank == 2);
+        tracked.Method = "Unsaved";
+
+        var animals = tracking switch
+        {
+            "NoTracking" => db.Animals.AsNoTracking(),
+            "NoTrackingWithIdentityResolution" => db.Animals.AsNoTrackingWithIdentityResolution(),
+            _ => db.Animals.AsQueryable()
+        };
+
+        var single = animals.Where(a => a.Id == withMethods)
+            .Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).OrderBy(m => m.Rank).First().Method).Single();
+        var list = animals.Where(a => a.Id == withMethods)
+            .Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Method).ToList()).Single();
+
+        Assert.Equal("Tattoo", single);
+        Assert.Equal(["Microchip", "Tattoo"], list);
+        Assert.Equal("Unsaved", tracked.Method);
+    }
+
+    /// <summary>
+    /// A group with no element reads as LINQ does for the fused scalar selector: <c>First</c> throws, <c>FirstOrDefault</c> reads null and the list is
+    /// empty, in the same query as a parent that has elements.
+    /// </summary>
+    [Fact]
+    public void A_scalar_selector_over_an_empty_group_reads_as_LINQ_does()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_scalar_selector_over_an_empty_group_reads_as_LINQ_does), out var withMethods, out var withoutMethods);
+
+        var rows = db.Animals
+            .OrderBy(a => a.Name)
+            .Select(a => new
+            {
+                a.Id,
+                First = a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault()!.Method,
+                All = a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Method).ToList()
+            })
+            .ToList();
+
+        Assert.Equal(2, rows.Count);
+        var fido = rows.Single(r => r.Id == withoutMethods);
+        Assert.Null(fido.First);
+        Assert.Empty(fido.All);
+        var rex = rows.Single(r => r.Id == withMethods);
+        Assert.Equal("Microchip", rex.First);
+        Assert.Equal(["Microchip", "Tattoo"], rex.All);
+
+        Assert.Throws<InvalidOperationException>(
+            () => db.Animals.Where(a => a.Id == withoutMethods)
+                .Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).First().Method).Single());
+    }
+
+    /// <summary>
+    /// A tracked root entity beside a fused leaf keeps its identity, and the leaf and the list beside it read the stored values.
+    /// </summary>
+    [Fact]
+    public void A_tracked_root_beside_a_scalar_selector_leaf_keeps_its_identity()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(A_tracked_root_beside_a_scalar_selector_leaf_keeps_its_identity), out var withMethods, out _);
+
+        var tracked = db.IdentificationMethods.Single(m => m.AnimalId == withMethods && m.Rank == 2);
+        tracked.Method = "Unsaved";
+        var animal = db.Animals.Single(a => a.Id == withMethods);
+
+        var row = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new
+            {
+                Animal = a,
+                Last = a.IdentificationMethods.OrderBy(m => m.Rank).Last().Method,
+                All = a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => new { m.Method, m.Rank }).ToList()
+            })
+            .Single();
+
+        Assert.Same(animal, row.Animal);
+        Assert.Equal("Tattoo", row.Last);
+        Assert.Equal(["Microchip", "Tattoo"], row.All.Select(x => x.Method));
+        Assert.Equal("Unsaved", tracked.Method);
     }
 
     /// <summary>

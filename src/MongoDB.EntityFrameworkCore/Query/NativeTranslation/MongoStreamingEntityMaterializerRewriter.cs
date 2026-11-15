@@ -400,12 +400,25 @@ internal sealed class MongoStreamingEntityMaterializerRewriter
     /// </summary>
     public LambdaExpression BuildOwnedCollectionSelectReader(
         INavigation navigation, LambdaExpression selector, out IReadOnlyList<string> elementNames)
+        => BuildCollectionSelectReader(navigation.TargetEntityType, ownerKeysAbsent: true, selector, out elementNames);
+
+    /// <summary>
+    /// Builds a reader of an element <c>Select</c> over the keyed array of another collection's documents that a correlated subquery's element leaf
+    /// reads (<c>a.Methods.OrderBy(m =&gt; m.Rank).First().Method</c>): as <see cref="BuildOwnedCollectionSelectReader"/>, with elements that are
+    /// documents of their own, so their keys are read from them. No element entity is constructed, so none is resolved against, or tracked by, the
+    /// state manager: the selector sees the stored values, never an already tracked instance's.
+    /// </summary>
+    public LambdaExpression BuildReferencedCollectionSelectReader(
+        IEntityType elementType, LambdaExpression selector, out IReadOnlyList<string> elementNames)
+        => BuildCollectionSelectReader(elementType, ownerKeysAbsent: false, selector, out elementNames);
+
+    private LambdaExpression BuildCollectionSelectReader(
+        IEntityType target, bool ownerKeysAbsent, LambdaExpression selector, out IReadOnlyList<string> elementNames)
     {
         _reader = Expression.Parameter(typeof(IBsonReader), "__reader");
         _context = Expression.Parameter(typeof(BsonDeserializationContext), "__context");
-        _ownerKeysAbsent = true;
+        _ownerKeysAbsent = ownerKeysAbsent;
 
-        var target = navigation.TargetEntityType;
         var full = BuildPlan(target, present: null, new Dictionary<IProperty, ParameterExpression>(),
             new Dictionary<IComplexProperty, ParameterExpression>(), allowLookupReferences: false);
 

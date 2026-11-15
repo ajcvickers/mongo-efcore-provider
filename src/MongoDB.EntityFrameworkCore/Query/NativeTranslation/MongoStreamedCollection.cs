@@ -337,8 +337,12 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
     // root-level owned collection (NativeProjectionBinder.TryMatchOwnedArraySelectLeaf). When the lambda reads only scalar members of its
     // element (MongoElementSelectorRewriter), the cursor evaluates it per element straight off the reader and yields the List<TResult>, so no
     // owned entity (nor its nested owned types) is constructed. Anything else leaves the collection to be read whole and the Select to run on it.
+    // Under an untracked query only: a tracked owned element is part of its owner, so it is read whole. The same Select over the keyed array of a
+    // referenced element leaf (TryStreamReferencedElementSelect) is fused whatever the tracking, since it must not resolve against the change tracker.
     protected override Expression VisitMethodCall(MethodCallExpression node)
-        => !_trackedQuery && TryStreamElementSelect(node) is { } fused ? fused : base.VisitMethodCall(node);
+        => !_trackedQuery && TryStreamElementSelect(node) is { } fused
+            ? fused
+            : TryStreamReferencedElementSelect(node) is { } referencedFused ? referencedFused : base.VisitMethodCall(node);
 
     private Expression? TryStreamElementSelect(MethodCallExpression toList)
     {
@@ -723,40 +727,7 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
     private Expression? TryStreamEntityCollection(
         BlockExpression block, ProjectionBindingExpression? binding, IArrayProjectionExpression? inlineArray, CollectionShaperExpression shaper)
     {
-        var index = binding == null
-            ? 0
-            : binding.ProjectionMember == null
-                ? binding.Index
-                : _queryExpression.GetMappedProjection(binding.ProjectionMember) is ConstantExpression { Value: int mapped } ? mapped : null;
-        string? alias;
-        IArrayProjectionExpression array;
-        if (inlineArray != null)
-        {
-            alias = inlineArray.ArrayFieldName;
-            array = inlineArray;
-        }
-        else if (index is { } projectionIndex
-                 && _queryExpression.Projection[projectionIndex] is { Alias: { } projectedAlias, Expression: IArrayProjectionExpression projected })
-        {
-            alias = projectedAlias;
-            array = projected;
-        }
-        else
-        {
-            return null;
-        }
-
-        if (alias == null || array.AccessExpression is not RootReferenceExpression)
-        {
-            return null;
-        }
-
-        // Either the filtered, ordered or paged list of a correlated subquery, which materializes into no navigation, or the collection navigation
-        // itself (`new { c.Id, c.Orders }`), whose elements are another collection's documents.
-        var navigation = shaper.Navigation as INavigation;
-        if (navigation == null
-                ? array.OwnerEntityType != null || array is not ArrayAliasProjectionExpression
-                : !navigation.IsCollection || navigation.TargetEntityType.IsOwned() || navigation.DeclaringEntityType != _rootEntityType)
+        if (!TryResolveEntityArray(binding, inlineArray, shaper, out var alias, out var array, out var navigation))
         {
             return null;
         }
@@ -781,6 +752,7 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
 
         RemovedVariables.AddRange(CollectVariables(block));
         Replaced++;
+        _wholeAliasReads.Add(alias);
         var listType = typeof(List<>).MakeGenericType(elementType.ClrType);
         Expression streamed = new MongoStreamedCollectionExpression(alias, listType, serializer);
         if (navigation == null)
@@ -795,6 +767,122 @@ internal sealed class StreamedCollectionSubstituter : System.Linq.Expressions.Ex
             Expression.Constant(navigation.DeclaringEntityType.DisplayName()),
             Expression.Constant(navigation.Name),
             streamed);
+    }
+
+    // The `$project` alias and array of a collection of another collection's entities, and the navigation it materializes into (null for the
+    // filtered, ordered or paged list of a correlated subquery, which materializes into no navigation).
+    private bool TryResolveEntityArray(
+        ProjectionBindingExpression? binding, IArrayProjectionExpression? inlineArray, CollectionShaperExpression shaper,
+        [NotNullWhen(true)] out string? alias, [NotNullWhen(true)] out IArrayProjectionExpression? array, out INavigation? navigation)
+    {
+        alias = null;
+        array = null;
+        navigation = null;
+
+        var index = binding == null
+            ? 0
+            : binding.ProjectionMember == null
+                ? binding.Index
+                : _queryExpression.GetMappedProjection(binding.ProjectionMember) is ConstantExpression { Value: int mapped } ? mapped : null;
+        if (inlineArray != null)
+        {
+            alias = inlineArray.ArrayFieldName;
+            array = inlineArray;
+        }
+        else if (index is { } projectionIndex
+                 && _queryExpression.Projection[projectionIndex] is { Alias: { } projectedAlias, Expression: IArrayProjectionExpression projected })
+        {
+            alias = projectedAlias;
+            array = projected;
+        }
+        else
+        {
+            return false;
+        }
+
+        if (alias == null || array.AccessExpression is not RootReferenceExpression)
+        {
+            return false;
+        }
+
+        // Either the filtered, ordered or paged list of a correlated subquery, which materializes into no navigation, or the collection navigation
+        // itself (`new { c.Id, c.Orders }`), whose elements are another collection's documents.
+        navigation = shaper.Navigation as INavigation;
+        return navigation == null
+            ? array.OwnerEntityType == null && array is ArrayAliasProjectionExpression
+            : navigation.IsCollection && !navigation.TargetEntityType.IsOwned() && navigation.DeclaringEntityType == _rootEntityType;
+    }
+
+    // `Select(<element leaf's keyed array>, l => l.Member)`: the scalar selector of a correlated single-result subquery or list, which the binding
+    // visitor re-applies over the entities (`TryBindReferencedElementLeaf`). When the lambda reads only scalar members of its element
+    // (MongoElementSelectorRewriter), the cursor evaluates it per element straight off the reader and yields the List<TResult>, so no element entity is
+    // constructed: none is resolved against the change tracker, so a tracked row's unsaved change is never read (#32), and none is tracked, so it is fused
+    // for a tracked query too (an owned element is only fused untracked, TryStreamElementSelect). Anything else leaves the list of entities to be read whole and the Select to run on it.
+    private Expression? TryStreamReferencedElementSelect(MethodCallExpression select)
+    {
+        if (select is not
+            {
+                Method: { Name: nameof(Enumerable.Select), DeclaringType: var selectType },
+                Arguments: [var source, LambdaExpression { Parameters.Count: 1 } selector]
+            }
+            || selectType != typeof(Enumerable))
+        {
+            return null;
+        }
+
+        if (source is UnaryExpression { NodeType: ExpressionType.Convert } convert)
+        {
+            source = convert.Operand;
+        }
+
+        if (source is not BlockExpression
+            {
+                Variables: [{ } arrayVariable],
+                Expressions:
+                [
+                    BinaryExpression { NodeType: ExpressionType.Assign, Right: UnaryExpression { NodeType: ExpressionType.TypeAs, Operand: var arrayOperand } },
+                    CollectionShaperExpression shaper
+                ]
+            } block
+            || arrayVariable.Type != typeof(BsonArray))
+        {
+            return null;
+        }
+
+        var binding = arrayOperand as ProjectionBindingExpression;
+        var inlineArray = arrayOperand as IArrayProjectionExpression;
+        if ((binding == null) == (inlineArray == null)
+            || !TryResolveEntityArray(binding, inlineArray, shaper, out var alias, out var array, out var navigation)
+            || navigation != null)
+        {
+            return null;
+        }
+
+        var elementType = array.InnerProjection.EntityType;
+        if (elementType.IsOwned()
+            || !StreamingEligibility.IsEligible(elementType)
+            || selector.Parameters[0].Type != elementType.ClrType
+            || _unfusedAliases.Contains(alias))
+        {
+            return null;
+        }
+
+        IBsonSerializer serializer;
+        try
+        {
+            var reader = new MongoStreamingEntityMaterializerRewriter(elementType, trackedQuery: false)
+                .BuildReferencedCollectionSelectReader(elementType, selector, out _);
+            serializer = (IBsonSerializer)CreateSerializerMethod.MakeGenericMethod(selector.ReturnType).Invoke(null, [reader.Compile()])!;
+        }
+        catch (NativeTranslationNotSupportedException)
+        {
+            return null;
+        }
+
+        RemovedVariables.AddRange(CollectVariables(block));
+        Replaced++;
+        _fusedAliasReads.Add(alias);
+        return new MongoStreamedCollectionExpression(alias, typeof(List<>).MakeGenericType(selector.ReturnType), serializer);
     }
 
     private static readonly MethodInfo CreateEntityListSerializerMethod =
