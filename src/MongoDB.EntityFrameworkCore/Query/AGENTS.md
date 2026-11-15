@@ -605,7 +605,11 @@ Shapers and projections:
   plain-`Select` callers only); never widen `allowPositionalConstructorArguments`, which `GroupBy`/`SelectMany` result
   selectors share. `new List<T> { ... }` is not a container.
 - **An element `Select` over a root-declared owned collection** (`e.Kids.Select(k => k.W).ToList()`) is staged as the
-  collection's whole array (`TryMatchOwnedArraySelectLeaf`, the one predicate both sides call). The lambda must be self-contained
+  collection's whole array (`TryMatchOwnedArraySelectLeaf`, the one predicate both sides call), as a wrapped member, as a bare body
+  (`Select(r => r.Kids.Select(k => k.W).ToList())`: staged under the array's document path, read back through the bare alias override, like a
+  bare `r => r.Kids`) and beside the whole root (`new { r, Ws = ... }`: the array leaf's sibling-readability check admits a `$$ROOT` leaf; a late
+  fallback that strips the projection then reads the whole documents with the mixed reader (`ReadsWholeRootLeafFromStrippedDocuments`), which reads
+  that leaf as the document itself; one predicate, `MongoElementRefExpression.IsWholeRootDocument`). The lambda must be self-contained
   (`IsSelfContainedLambda`). A lambda reading the outer entity crashes shaper build in every mode (pre-existing). What the shaper does
   with the elements depends on the selector, classified by the same `NativeReferencedElementMatcher.ClassifySelector` as an element
   leaf's (#32; owned and navigation members of the element are `Other`):

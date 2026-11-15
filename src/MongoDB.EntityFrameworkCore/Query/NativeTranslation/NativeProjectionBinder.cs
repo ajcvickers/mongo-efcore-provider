@@ -283,11 +283,15 @@ internal static class NativeProjectionBinder
                 return false;
             }
 
-            // Provisional alias; only IsNativeArrayProjectionLeaf's alias-agreement conjunct reads it (vacuous for a bare array body).
-            var provisionalAlias = _selector.Body is MaterializeCollectionNavigationExpression materializeBare
-                ? (materializeBare.Navigation as INavigation)?.TargetEntityType.GetContainingElementName()
-                  ?? BareLeafProvisionalAlias
-                : BareLeafProvisionalAlias;
+            // Provisional alias; only IsNativeArrayProjectionLeaf's alias-agreement conjunct reads it (vacuous for a bare array body: a bare owned
+            // collection, or an element Select over one, `r => r.Kids.Select(k => k.W).ToList()`, staged as the whole array and read back through
+            // the bare alias override).
+            var bareArrayNavigation = _selector.Body is MaterializeCollectionNavigationExpression materializeBare
+                ? materializeBare.Navigation as INavigation
+                : TryMatchOwnedArraySelectLeaf(_selector.Body, _mongoQ.CollectionExpression.EntityType, out var selectedBare, out _, out _)
+                    ? selectedBare
+                    : null;
+            var provisionalAlias = bareArrayNavigation?.TargetEntityType.GetContainingElementName() ?? BareLeafProvisionalAlias;
 
             // false keeps a true bare `b => b.Address` declining; the ctor-wrap arm passes true.
             if (!TryBindAsBareProjection(_selector.Body, provisionalAlias, allowWholeRootEntityLeafForThis: false))
@@ -485,12 +489,15 @@ internal static class NativeProjectionBinder
 
             // With an array or owned-nav-entity leaf present, a late fallback runs EF's client-side mixed shaper over whole un-projected documents (ProjectionAnalyzer.CanPushDown
             // refuses entity-typed leaves), so every other leaf must read correctly off a whole document (a plain top-level field whose alias equals its element name). Renamed,
-            // dotted and computed leaves don't, so the projection declines; the array/nav-entity leaves are skipped (their alias == document path check proves them).
+            // dotted and computed leaves don't, so the projection declines; the array/nav-entity leaves are skipped (their alias == document path check proves them). A
+            // whole-root-entity leaf (`new { r, Ws = r.Kids.Select(..).ToList() }`) is read there as the document itself, through the same predicate
+            // (MongoElementRefExpression.IsWholeRootDocument, MongoProjectionBindingRemovingExpressionVisitor.IsWholeRootEntityAlias).
             if (_hasArrayLeaf || _hasOwnedNavEntityLeaf)
             {
                 for (var i = 0; i < _projections.Count; i++)
                 {
-                    if (_leafIsArray[i] || _leafIsOwnedNavEntity[i] || IsWholeDocumentReadableLeaf(_projections[i].Expression))
+                    if (_leafIsArray[i] || _leafIsOwnedNavEntity[i] || IsWholeDocumentReadableLeaf(_projections[i].Expression)
+                        || MongoElementRefExpression.IsWholeRootDocument(_projections[i].Expression))
                         continue;
 
                     // A dotted scalar of a wrapped body (`new { b.Home.City, b.Home.Notes }`) takes its document path as its alias (same alias == document-path invariant as array leaves);
@@ -1137,10 +1144,11 @@ internal static class NativeProjectionBinder
             return true;
         }
 
-        // Element Select over an owned collection (`new { b.Posts, Titles = b.Posts.Select(p => p.Title).ToList() }`): the whole array is staged (sharing the alias of a bare `b.Posts`) and the shaper
-        // re-applies the Select over the materialized owned entities (TryMatchOwnedArraySelectLeaf).
-        if (allowWholeRootEntityLeaf
-            && TryMatchOwnedArraySelectLeaf(
+        // Element Select over an owned collection (`new { b.Posts, Titles = b.Posts.Select(p => p.Title).ToList() }`, or a bare body): the whole array is staged (sharing the alias of a bare
+        // `b.Posts`) and the shaper applies the Select to it (TryMatchOwnedArraySelectLeaf; a ScalarMembersOnly selector over the stored elements). Bare or wrapped, like the bare owned
+        // collection arm above: IsNativeArrayProjectionLeaf, the read side's own predicate, admits only an alias equal to the array's document path, which a bare body's provisional
+        // alias is (TryBindBareBody) and no positional or placeholder alias can be.
+        if (TryMatchOwnedArraySelectLeaf(
                 leafExpression, mongoQ.CollectionExpression.EntityType, out var selectedArray, out var selectedArraySource, out _)
             && IsNativeArrayProjectionLeaf(selectedArray, mongoQ.CollectionExpression.EntityType, alias)
             && translator.TryTranslateOwnedCollectionArray(selectedArraySource, out var selectedArrayRef))

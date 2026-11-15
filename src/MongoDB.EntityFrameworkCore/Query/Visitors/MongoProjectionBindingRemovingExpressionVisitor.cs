@@ -93,11 +93,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     private bool IsWholeRootEntityAlias(string? alias)
         => alias != null
            && _queryExpression.Select.Projection.Any(
-               p => p.Alias == alias
-                    && p.Expression is MongoElementRefExpression
-                    {
-                        Path: MongoElementRefExpression.WholeRootDocumentPath
-                    });
+               p => p.Alias == alias && MongoElementRefExpression.IsWholeRootDocument(p.Expression));
 
     /// <summary>
     /// Whether <paramref name="alias"/> names a reference-collection-nav <c>First</c> leaf that must throw

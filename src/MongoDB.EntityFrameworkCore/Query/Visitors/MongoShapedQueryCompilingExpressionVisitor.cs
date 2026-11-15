@@ -323,6 +323,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                                               // driver's push-down of the same Select doesn't produce; the mixed
                                               // reader evaluates both off whole documents.
                                               || mongoQueryExpression.Select.HasClientConditionalProjectionLeaf
+                                              || ReadsWholeRootLeafFromStrippedDocuments(mongoQueryExpression.Select)
                     ? (bsonDoc, behavior) => new MongoMixedProjectionBindingRemovingExpressionVisitor(
                         rootEntityType, mongoQueryExpression, bsonDoc, behavior)
                     : null);
@@ -631,6 +632,17 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
     /// </remarks>
     internal static bool ShouldStripBareProjectionOnFallback(MongoSelectDefinition select)
         => select.HasDocumentPathAliasOverride;
+
+    /// <summary>
+    /// Whether a late decline strips the projection (<see cref="ShouldStripBareProjectionOnFallback"/>) of a select that also stages a
+    /// whole-root-entity (<c>$$ROOT</c>) leaf, as an owned array leaf beside the whole root does (<c>new { r, Ws = r.Kids.Select(..).ToList() }</c>).
+    /// The DOM reader would look the whole-root leaf up by its alias in a whole document and miss it; the mixed reader reads it as the document
+    /// itself (<c>MongoProjectionBindingRemovingExpressionVisitor.IsWholeRootEntityAlias</c>), and every other leaf of such a select reads its
+    /// document path, which equals its alias (the projection binder's sibling-readability check). <c>internal</c> for unit tests.
+    /// </summary>
+    internal static bool ReadsWholeRootLeafFromStrippedDocuments(MongoSelectDefinition select)
+        => ShouldStripBareProjectionOnFallback(select)
+           && select.Projection.Any(p => MongoElementRefExpression.IsWholeRootDocument(p.Expression));
 
     /// <summary>
     /// Whether the <see cref="NativeRoute.Projection"/> route staged a whole-entity join inner leaf, whose alias

@@ -994,7 +994,7 @@ JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }, { "$project" : { "_v" : { "$size"
 
         AssertMql(
             """
-JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }
+JsonEntitiesBasic.{ "$sort" : { "_id" : 1 } }, { "$project" : { "OwnedCollectionRoot" : { "$cond" : [{ "$isArray" : "$OwnedCollectionRoot" }, { "$map" : { "input" : "$OwnedCollectionRoot", "as" : "e", "in" : { "$cond" : [{ "$eq" : [{ "$type" : "$$e" }, "object"] }, { "Name" : "$$e.Name", "Number" : "$$e.Number" }, "$$e"] } } }, "$OwnedCollectionRoot"] }, "_id" : "$_id" } }
 """);
     }
 

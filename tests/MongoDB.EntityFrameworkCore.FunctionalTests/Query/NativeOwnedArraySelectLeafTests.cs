@@ -76,9 +76,6 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
 
     private static readonly MongoQueryMode[] AllModes = [MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq];
 
-    // Shapes the native translator does not take yet (a whole owner beside the leaf, #121 Task 3): the provider's mixed shaper serves them.
-    private static readonly MongoQueryMode[] FallbackModes = [MongoQueryMode.Native, MongoQueryMode.DriverLinq];
-
     [Fact]
     public void Select_leaf_beside_the_whole_array_reads_through_the_owned_serializer()
         => NativeModeAssert.NativeAndExpected(
@@ -183,7 +180,7 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
     public void Tracked_owner_beside_scalar_select_reads_stored_values()
     {
         var collection = Seed();
-        foreach (var mode in FallbackModes)
+        foreach (var mode in AllModes)
         {
             using var db = CreateWithUnsavedChange(collection, mode);
             var tracked = db.Entities.Local.Single(e => e.Id == 1);
@@ -207,7 +204,7 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
     public void Owner_after_scalar_select_reads_stored_values()
     {
         var collection = Seed();
-        foreach (var mode in FallbackModes)
+        foreach (var mode in AllModes)
         {
             using var db = CreateWithUnsavedChange(collection, mode);
 
@@ -238,7 +235,9 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
     public void Other_selector_beside_owner_sees_tracked_instance()
     {
         var collection = Seed();
-        foreach (var mode in FallbackModes)
+        // Not native: EF drops the identity Select, leaving `ToList(AsQueryable(EF.Property(e, "Kids")))`, which no projection leaf arm
+        // matches (neither the bare owned collection nor the element Select), so the provider's mixed shaper serves it.
+        foreach (var mode in new[] { MongoQueryMode.Native, MongoQueryMode.DriverLinq })
         {
             using var db = CreateWithUnsavedChange(collection, mode);
 
@@ -248,6 +247,78 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
             Assert.Equal(99, row.Ks[1].W);
             Assert.Same(row.r.Kids[1], row.Ks[1]);
         }
+    }
+
+    public static TheoryData<QueryTrackingBehavior> TrackingBehaviors
+        => new(QueryTrackingBehavior.TrackAll, QueryTrackingBehavior.NoTracking, QueryTrackingBehavior.NoTrackingWithIdentityResolution);
+
+    // R1, R3: a bare body is native, reads the stored values (not the tracked owner's unsaved change) and tracks nothing, for every tracking behavior.
+    [Theory]
+    [MemberData(nameof(TrackingBehaviors))]
+    public void Bare_scalar_select_is_native(QueryTrackingBehavior tracking)
+    {
+        var collection = Seed();
+        using var db = CreateWithUnsavedChange(collection, MongoQueryMode.NativeOnly);
+        var before = db.ChangeTracker.Entries().Count();
+
+        var rows = db.Entities.AsTracking(tracking).OrderBy(e => e.Id)
+            .Select(r => r.Kids.Select(k => k.W).ToList()).ToList();
+
+        Assert.Equal(StoredRoots(collection).Select(r => r.Kids.Select(k => k.W).ToList()).ToList(), rows);
+        Assert.Equal([[1, 2], []], rows);
+        Assert.Equal(before, db.ChangeTracker.Entries().Count());
+    }
+
+    // R5, R6: beside the whole root the leaf reads the stored values; under TrackAll the root is the tracked instance (with its unsaved change)
+    // and its owned graph is tracked only with it, otherwise it is a fresh instance read from the store and nothing new is tracked.
+    [Theory]
+    [MemberData(nameof(TrackingBehaviors))]
+    public void Whole_root_beside_scalar_select_is_native(QueryTrackingBehavior tracking)
+    {
+        var collection = Seed();
+        using var db = CreateWithUnsavedChange(collection, MongoQueryMode.NativeOnly);
+        var tracked = db.Entities.Local.Single(e => e.Id == 1);
+        var before = db.ChangeTracker.Entries().Count();
+
+        var row = db.Entities.AsTracking(tracking).Where(e => e.Id == 1)
+            .Select(e => new { r = e, Ws = e.Kids.Select(k => k.W).ToList() }).Single();
+
+        var stored = StoredRoots(collection).Where(e => e.Id == 1).Select(e => new { r = e, Ws = e.Kids.Select(k => k.W).ToList() }).Single();
+        Assert.Equal(stored.Ws, row.Ws);
+        Assert.Equal([1, 2], row.Ws);
+        Assert.Equal(before, db.ChangeTracker.Entries().Count());
+
+        if (tracking == QueryTrackingBehavior.TrackAll)
+        {
+            Assert.Same(tracked, row.r);
+            Assert.Equal(99, row.r.Kids[1].W);
+        }
+        else
+        {
+            Assert.NotSame(tracked, row.r);
+            Assert.Equal(stored.r.Kids.Select(k => k.W), row.r.Kids.Select(k => k.W));
+        }
+
+        var owners = db.ChangeTracker.Entries<Owner>().Select(o => o.Entity).ToList();
+        var kids = db.ChangeTracker.Entries<Kid>().ToList();
+        Assert.Equal(2, kids.Count);
+        Assert.All(kids, kid => Assert.Contains(owners, owner => owner.Kids.Contains(kid.Entity)));
+    }
+
+    // R1: tracking decides what a result is, never whether a query translates; EF Core's own refusal of an owned entity without its owner stays.
+    [Fact]
+    public void Bare_owned_collection_tracked_keeps_efs_refusal()
+    {
+        var collection = Seed();
+        using var db = Create(collection, MongoQueryMode.NativeOnly);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => db.Entities.OrderBy(e => e.Id).Select(r => r.Kids).ToList());
+        Assert.Contains("owned entity without a corresponding owner", exception.Message);
+
+        var kids = db.Entities.AsNoTracking().OrderBy(e => e.Id).Select(r => r.Kids).ToList();
+        Assert.Equal([["a", "b"], []], kids.Select(k => k.Select(kid => kid.Label).ToList()).ToList());
+        Assert.Empty(db.ChangeTracker.Entries());
     }
 
     [Fact]
@@ -350,6 +421,13 @@ public class NativeOwnedArraySelectLeafTests(TemporaryDatabaseFixture database) 
         var root = db.Entities.Single(e => e.Id == 1);
         root.Kids[1].W = 99;
         return db;
+    }
+
+    // The oracle: the stored roots, materialized without tracking, so a query evaluated over them in memory reads the stored values.
+    private static List<Owner> StoredRoots(IMongoCollection<Owner> collection)
+    {
+        using var db = Create(collection, MongoQueryMode.NativeOnly);
+        return db.Entities.AsNoTracking().OrderBy(e => e.Id).ToList();
     }
 
     private IMongoCollection<Owner> Seed()
