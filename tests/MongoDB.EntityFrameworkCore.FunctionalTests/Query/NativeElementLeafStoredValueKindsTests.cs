@@ -200,6 +200,7 @@ public class NativeElementLeafStoredValueKindsTests(TemporaryDatabaseFixture dat
         Assert.Equal("Unsaved label", tattoo.Detail.Label);
         Assert.Equal(3, tattoo.Pieces.Count);
         Assert.Equal(trackedBefore, db.ChangeTracker.Entries().Count());
+        AssertNoOwnedEntryWithoutItsOwner(db);
     }
 
     /// <summary>
@@ -242,6 +243,29 @@ public class NativeElementLeafStoredValueKindsTests(TemporaryDatabaseFixture dat
         Assert.Equal(99, tattoo.Rank);
         Assert.Equal("Unsaved label", tattoo.Detail.Label);
         Assert.Equal(trackedBefore, db.ChangeTracker.Entries().Count());
+        AssertNoOwnedEntryWithoutItsOwner(db);
+    }
+
+    /// <summary>
+    /// The invariant behind all of this: an owned entity is never tracked without its owner (its key cannot be known without an owner instance),
+    /// so no query, however it reads the elements, may leave an owned entry in the change tracker whose owner is not tracked and does not hold it.
+    /// </summary>
+    private static void AssertNoOwnedEntryWithoutItsOwner(DbContext db)
+    {
+        var entries = db.ChangeTracker.Entries().ToList();
+        var ownedEntries = entries.Where(e => e.Metadata.IsOwned()).ToList();
+        Assert.NotEmpty(ownedEntries); // the tracked row owns entities, so the check is not vacuous
+        foreach (var owned in ownedEntries)
+        {
+            var ownership = owned.Metadata.FindOwnership()!;
+            var navigation = ownership.PrincipalToDependent!;
+            var held = entries.Any(
+                e => e.Metadata == ownership.PrincipalEntityType
+                     && e.Navigation(navigation.Name).CurrentValue is { } value
+                     && (ReferenceEquals(value, owned.Entity)
+                         || value is System.Collections.IEnumerable items && items.Cast<object>().Any(i => ReferenceEquals(i, owned.Entity))));
+            Assert.True(held, $"{owned.Metadata.DisplayName()} is tracked without a tracked owner that holds it.");
+        }
     }
 
     private class ItemDbContext : DbContext
