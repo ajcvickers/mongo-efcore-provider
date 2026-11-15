@@ -748,21 +748,25 @@ public class BulkOperationsEventDataTests(TemporaryDatabaseFixture database)
         Assert.Equal(0, data[1].ModifyCount);
     }
 
-    // Each event's Elapsed is timed from the start of its own round trip. The collector stalls for two seconds between the two phases, so a
-    // clock that ran from the start of the operation would put those seconds on every phase-2 event.
+    // Each event's Elapsed is timed from the start of its own round trip. The collector stalls between the two phases, so a clock that ran
+    // from the start of the operation would put the whole stall on every phase-2 event. The ceiling is half the stall as measured, not a
+    // fixed duration, so a slow round trip on a loaded machine (#117) cannot fail the test, while a regression still adds the full stall.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Elapsed_is_timed_per_round_trip_not_across_the_operation(bool async)
     {
         var collection = Seed(nameof(Elapsed_is_timed_per_round_trip_not_across_the_operation) + async);
+        var stalled = TimeSpan.Zero;
         using var collector = BulkEventCollector.Start(
             collection.CollectionNamespace,
             (name, data) =>
             {
                 if (Short(name) == "ExecutedBulkUpdate" && ((MongoBulkUpdateEventData)data).Phase == "ReadTargets")
                 {
-                    Thread.Sleep(TimeSpan.FromSeconds(2));
+                    var stopwatch = Stopwatch.StartNew();
+                    Thread.Sleep(TimeSpan.FromSeconds(5));
+                    stalled = stopwatch.Elapsed;
                 }
             });
         using var db = SingleEntityDbContext.Create(collection);
@@ -772,8 +776,10 @@ public class BulkOperationsEventDataTests(TemporaryDatabaseFixture database)
         var data = collector.Events.Select(e => (MongoBulkUpdateEventData)e.Data).ToList();
         Assert.Equal(4, data.Count);
         Assert.Equal("WriteTargets", data[2].Phase);
-        Assert.True(data[2].Elapsed < TimeSpan.FromSeconds(1), $"Executing: {data[2].Elapsed}");
-        Assert.True(data[3].Elapsed < TimeSpan.FromSeconds(1), $"Executed: {data[3].Elapsed}");
+        var ceiling = stalled / 2;
+        Assert.True(ceiling > TimeSpan.Zero, "The collector never stalled.");
+        Assert.True(data[2].Elapsed < ceiling, $"Executing: {data[2].Elapsed} (stalled {stalled})");
+        Assert.True(data[3].Elapsed < ceiling, $"Executed: {data[3].Elapsed} (stalled {stalled})");
     }
 
     [Fact]
