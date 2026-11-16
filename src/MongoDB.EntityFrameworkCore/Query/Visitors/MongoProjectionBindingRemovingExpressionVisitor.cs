@@ -93,11 +93,7 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
     private bool IsWholeRootEntityAlias(string? alias)
         => alias != null
            && _queryExpression.Select.Projection.Any(
-               p => p.Alias == alias
-                    && p.Expression is MongoElementRefExpression
-                    {
-                        Path: MongoElementRefExpression.WholeRootDocumentPath
-                    });
+               p => p.Alias == alias && MongoElementRefExpression.IsWholeRootDocument(p.Expression));
 
     /// <summary>
     /// Whether <paramref name="alias"/> names a reference-collection-nav <c>First</c> leaf that must throw
@@ -384,6 +380,9 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
                 return BsonBinding.CreateGetStreamedValueExpression(
                     DocParameter, streamedCollection.Alias, streamedCollection.Serializer, streamedCollection.Type, streamedCollection.MissingMessage);
 
+            case OwnedElementStoredSelectExpression storedSelect:
+                return BuildOwnedElementStoredSelect(storedSelect);
+
             case CollectionShaperExpression collectionShaperExpression:
                 {
                     IArrayProjectionExpression arrayProjection;
@@ -524,6 +523,84 @@ internal class MongoProjectionBindingRemovingExpressionVisitor : ExpressionVisit
         }
 
         return base.VisitExtension(extensionExpression);
+    }
+
+    /// <summary>
+    /// Lowers an <see cref="OwnedElementStoredSelectExpression"/> to
+    /// <c>ToList(Select(Cast&lt;BsonDocument&gt;(&lt;stored array&gt; ?? new BsonArray()), e =&gt; &lt;selector body&gt;))</c>, in which each read
+    /// of a scalar member of the element is the read of its stored element through the property's serializer. No owned entity is constructed,
+    /// so nothing is resolved against or added to the change tracker, and a stored element missing a member the selector does not read is not
+    /// an error (one it reads and requires still is).
+    /// </summary>
+    private Expression BuildOwnedElementStoredSelect(OwnedElementStoredSelectExpression storedSelect)
+    {
+        // The array is found as the injector's array assignment finds a collection shaper's (VisitBinary): by the leaf's alias, or by the
+        // navigation's document path, off the document of the array's owner.
+        IArrayProjectionExpression arrayProjection;
+        string? arrayName;
+        switch (storedSelect.ArrayProjection)
+        {
+            case ProjectionBindingExpression arrayBinding
+                when GetProjection(arrayBinding) is { Expression: IArrayProjectionExpression projected } projection:
+                arrayProjection = projected;
+                arrayName = projection.Alias ?? projected.ArrayFieldName;
+                break;
+            case IArrayProjectionExpression inlineArray:
+                arrayProjection = inlineArray;
+                arrayName = inlineArray.ArrayFieldName;
+                break;
+            default:
+                throw new InvalidOperationException(CoreStrings.TranslationFailed(storedSelect.Print()));
+        }
+
+        if (arrayName is null)
+        {
+            throw new InvalidOperationException(CoreStrings.TranslationFailed(storedSelect.Print()));
+        }
+
+        // A missing or BSON-null stored array is an empty list, as for a collection shaper.
+        var storedArray = Expression.Coalesce(
+            CreateGetValueExpression(arrayProjection.AccessExpression, arrayName, true, typeof(BsonArray)),
+            Expression.New(typeof(BsonArray)));
+
+        var selector = storedSelect.Selector;
+        var elementDocument = Expression.Parameter(typeof(BsonDocument), "storedElement");
+        var body = new StoredElementMemberReadRewriter(
+                selector.Parameters[0], elementDocument, storedSelect.Navigation.TargetEntityType)
+            .Visit(selector.Body);
+
+        return Expression.Call(
+            EnumerableMethods.ToList.MakeGenericMethod(selector.ReturnType),
+            Expression.Call(
+                EnumerableMethods.Select.MakeGenericMethod(typeof(BsonDocument), selector.ReturnType),
+                Expression.Call(EnumerableMethods.Cast.MakeGenericMethod(typeof(BsonDocument)), storedArray),
+                Expression.Lambda(body, elementDocument)));
+    }
+
+    // Replaces each read of a mapped scalar property of the element with the read of its stored element; ClassifySelector admitted the
+    // selector only if those are its only uses of the element.
+    private sealed class StoredElementMemberReadRewriter(
+        ParameterExpression element,
+        ParameterExpression elementDocument,
+        IEntityType elementType) : ExpressionVisitor
+    {
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (node.Expression != element)
+            {
+                return base.VisitMember(node);
+            }
+
+            var property = elementType.FindProperty(node.Member)
+                           ?? throw new InvalidOperationException(CoreStrings.TranslationFailed(node.Print()));
+            return BsonBinding.CreateGetValueExpression(elementDocument, property.GetElementName(), property, node.Type)
+                .ConvertIfRequired(node.Type);
+        }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+            => node == element
+                ? throw new InvalidOperationException(CoreStrings.TranslationFailed(node.Print()))
+                : node;
     }
 
     /// <summary>

@@ -207,21 +207,21 @@ public class Ef362ArrayLeafPathTests
     }
 
     [Fact]
-    public void A_whole_root_entity_leaf_beside_an_owned_hop_array_leaf_declines_the_whole_projection()
+    public void A_whole_root_entity_leaf_beside_an_owned_hop_array_leaf_is_read_by_the_mixed_reader_after_a_late_decline()
     {
-        // A whole-root leaf ("$ROOT" element ref) must never coexist with a document-path alias override: that
-        // override triggers ShouldStripBareProjectionOnFallback, handing whole documents to a visitor that can't
-        // read a "$$ROOT" alias. Admitting an array leaf requires every sibling to pass IsWholeDocumentReadableLeaf,
-        // which rejects the element ref, so the whole projection must decline with nothing partially committed.
-        // Widening IsWholeDocumentReadableLeaf to admit MongoElementRefExpression makes this fail.
+        // A whole-root leaf ("$ROOT" element ref) beside an array leaf is admitted (#122): the array leaf's document-path alias override
+        // makes a late decline strip the projection (ShouldStripBareProjectionOnFallback) and read whole documents, where the DOM reader
+        // would look the "$$ROOT" alias up and miss it. So such a select must take the mixed reader on that path, which reads the leaf as
+        // the document itself (IsWholeRootEntityAlias). Dropping ReadsWholeRootLeafFromStrippedDocuments from the fallback reader choice
+        // reintroduces the miss.
         var (query, selector) = OwnedHopArraySelector(wholeRootLeaf: true);
 
-        Assert.False(NativeProjectionBinder.TryPopulateNativeProjection(query, selector));
+        Assert.True(NativeProjectionBinder.TryPopulateNativeProjection(query, selector));
 
-        // Nothing committed: no projections, no alias override (hence no strip), no array-leaf provenance.
-        Assert.Empty(query.Select.Projection);
-        Assert.False(query.Select.HasDocumentPathAliasOverride);
-        Assert.False(query.Select.HasArrayProjectionLeaf);
+        Assert.Equal(["Root", "Home.Notes", "_id"], query.Select.Projection.Select(p => p.Alias).ToArray());
+        Assert.True(query.Select.HasDocumentPathAliasOverride);
+        Assert.True(query.Select.HasArrayProjectionLeaf);
+        Assert.True(MongoDB.EntityFrameworkCore.Query.Visitors.MongoShapedQueryCompilingExpressionVisitor.ReadsWholeRootLeafFromStrippedDocuments(query.Select));
     }
 
     [Fact]
@@ -236,5 +236,7 @@ public class Ef362ArrayLeafPathTests
         Assert.Equal(["Title", "Home.Notes", "_id"], query.Select.Projection.Select(p => p.Alias).ToArray());
         Assert.True(query.Select.HasDocumentPathAliasOverride);
         Assert.True(query.Select.HasArrayProjectionLeaf);
+        // No whole-root leaf: the DOM reader serves a late decline, as before.
+        Assert.False(MongoDB.EntityFrameworkCore.Query.Visitors.MongoShapedQueryCompilingExpressionVisitor.ReadsWholeRootLeafFromStrippedDocuments(query.Select));
     }
 }

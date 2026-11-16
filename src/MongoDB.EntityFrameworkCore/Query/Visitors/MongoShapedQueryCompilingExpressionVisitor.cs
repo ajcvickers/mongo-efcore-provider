@@ -193,6 +193,22 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         return Expression.Constant(Expression.Lambda(body, contextParameter).Compile(), typeof(Func<,>).MakeGenericType(typeof(QueryContext), valueType));
     }
 
+    /// <summary>
+    /// Removes the lifted document variables from the <c>Variables</c> of every nested block, including those inside nested lambdas, so
+    /// that every read sees the one variable the lift declares. Changes nothing else.
+    /// </summary>
+    private sealed class LiftedVariableRedeclarationRemover(IReadOnlyCollection<ParameterExpression> lifted) : System.Linq.Expressions.ExpressionVisitor
+    {
+        protected override Expression VisitBlock(BlockExpression node)
+        {
+            var expressions = Visit(node.Expressions);
+            var variables = node.Variables.Where(v => !lifted.Contains(v)).ToList();
+            return variables.Count == node.Variables.Count && ReferenceEquals(expressions, node.Expressions)
+                ? node
+                : Expression.Block(node.Type, variables, expressions);
+        }
+    }
+
     private sealed class ParameterReplacer(ParameterExpression search, ParameterExpression replacement) : System.Linq.Expressions.ExpressionVisitor
     {
         protected override Expression VisitParameter(ParameterExpression node)
@@ -307,6 +323,7 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
                                               // driver's push-down of the same Select doesn't produce; the mixed
                                               // reader evaluates both off whole documents.
                                               || mongoQueryExpression.Select.HasClientConditionalProjectionLeaf
+                                              || ReadsWholeRootLeafFromStrippedDocuments(mongoQueryExpression.Select)
                     ? (bsonDoc, behavior) => new MongoMixedProjectionBindingRemovingExpressionVisitor(
                         rootEntityType, mongoQueryExpression, bsonDoc, behavior)
                     : null);
@@ -617,6 +634,17 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         => select.HasDocumentPathAliasOverride;
 
     /// <summary>
+    /// Whether a late decline strips the projection (<see cref="ShouldStripBareProjectionOnFallback"/>) of a select that also stages a
+    /// whole-root-entity (<c>$$ROOT</c>) leaf, as an owned array leaf beside the whole root does (<c>new { r, Ws = r.Kids.Select(..).ToList() }</c>).
+    /// The DOM reader would look the whole-root leaf up by its alias in a whole document and miss it; the mixed reader reads it as the document
+    /// itself (<c>MongoProjectionBindingRemovingExpressionVisitor.IsWholeRootEntityAlias</c>), and every other leaf of such a select reads its
+    /// document path, which equals its alias (the projection binder's sibling-readability check). <c>internal</c> for unit tests.
+    /// </summary>
+    internal static bool ReadsWholeRootLeafFromStrippedDocuments(MongoSelectDefinition select)
+        => ShouldStripBareProjectionOnFallback(select)
+           && select.Projection.Any(p => MongoElementRefExpression.IsWholeRootDocument(p.Expression));
+
+    /// <summary>
     /// Whether the <see cref="NativeRoute.Projection"/> route staged a whole-entity join inner leaf, whose alias
     /// (the <c>$lookup</c> prefix, e.g. <c>_lookup_Orders</c>) the driver-LINQ bridge never renders.
     /// </summary>
@@ -871,9 +899,13 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             bsonDocParameter, trackingBehavior).Visit(injectedBody);
 
         // Lift all BsonDocument/BsonArray variables to the lambda level so they are
-        // accessible across entity boundaries in join projections.
+        // accessible across entity boundaries in join projections. The injector also declares each
+        // variable in the block of the entity that assigns it; those inner declarations are removed
+        // first, because an inner declaration shadows the lifted one and a read outside that block
+        // (an owned array read beside its owner) would see the outer, never-assigned variable.
         if (bsonInjector.AllVariables.Count > 0)
         {
+            domShaperBody = new LiftedVariableRedeclarationRemover(bsonInjector.AllVariables).Visit(domShaperBody);
             domShaperBody = Expression.Block(
                 domShaperBody.Type,
                 bsonInjector.AllVariables,

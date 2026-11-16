@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 4,895 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,465 |
+| `// Fails:` tag lines | 1,206 | 4,887 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,457 |
 | ... active in the EF8 build | 1,064 | 2,576 |
-| ... active in the EF9 build | 1,141 | 3,100 |
-| ... active in the EF10 build | 882 | 3,245 |
-| ... active in the EF11 build | not measured | 3,275 |
+| ... active in the EF9 build | 1,141 | 3,092 |
+| ... active in the EF10 build | 882 | 3,240 |
+| ... active in the EF11 build | not measured | 3,270 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 58 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -279,7 +279,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X514 | Owned indexer properties / owned-collection element expressions not supported by driver LINQ | 16 |
 | EF-X515 | Wrong results for owned-collection operators (ElementAt/Union/...) | 5 |
 | EF-X516 | Server aggregate error for owned-collection element access | 2 |
-| EF-X517 | Projecting an owned entity without its owner in a tracking query | 6 |
+| EF-X517 | Projecting an owned entity (or an owned reference's indexer, or `.ToArray()` over an owned element Select) without its owner in a tracking query; EF Core refuses this too. A scalar-only owned element `Select(..).ToList()` is exempt | 5 |
 | EF-X518 | Provider throws a different exception type than the base test expects | 2 |
 | EF-X519 | Hierarchy materialization fails: discriminator value does not match the requested type | 1 |
 | EF-X520 | ElementAt/indexer call is rebuilt with the wrong number of arguments | 4 |
@@ -290,7 +290,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X526 | Query shape (navigation/projection/set operation) not translated | 713 |
 | EF-X527 | Expression not supported by the driver LINQ translator | 185 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
-| EF-X529 | NullReferenceException during query execution/materialization | 10 |
+| EF-X529 | NullReferenceException during query execution/materialization | 3 |
 | EF-X530 | Wrong results compared with the reference (client) evaluation | 238 |
 | EF-X531 | ArgumentNullException (null string/source argument) during translation or materialization | 10 |
 | EF-X532 | GroupBy over all columns builds an invalid materialization expression (QueryingEnumerable not assignable) | 9 |

@@ -632,13 +632,15 @@ OwnedPerson.
 
     public override async Task Projecting_indexer_property_ignores_include(bool async)
     {
-        // Fails: Projecting an owned entity (indexer) without its owner in a tracking query EF-X517
+        // Fails: `c.PersonAddress["ZipCode"]` reads an indexer property of an owned *reference*, which binds the owned entity itself and so a tracking query
+        // projects it without its owner; only a scalar-only Select over an owned *collection* reads stored values instead EF-X517
         await SpecFails.ThrowsAsync(() => base.Projecting_indexer_property_ignores_include(async), "owned entity without a corresponding owner");
     }
 
     public override async Task Projecting_indexer_property_ignores_include_converted(bool async)
     {
-        // Fails: Projecting an owned entity (indexer) without its owner in a tracking query EF-X517
+        // Fails: `(int)c.PersonAddress["ZipCode"]` reads an indexer property of an owned *reference*, which binds the owned entity itself and so a tracking
+        // query projects it without its owner; only a scalar-only Select over an owned *collection* reads stored values instead EF-X517
         await SpecFails.ThrowsAsync(() => base.Projecting_indexer_property_ignores_include_converted(async), "owned entity without a corresponding owner");
     }
 

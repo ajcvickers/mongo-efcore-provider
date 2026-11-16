@@ -283,9 +283,12 @@ internal static class NativeReferencedElementMatcher
     }
 
     /// <summary>
-    /// Classifies an element selector: the read side materializes the elements of a <see cref="ElementSelectorKind.ScalarMembersOnly"/> selector outside
-    /// the change tracker, so the leaf returns the stored values it reads, as a relational provider returns the columns it fetched. It decides only how
-    /// the elements are built, never whether the query translates, so a selector of the other kind is not refused: it sees the tracked instance.
+    /// Classifies an element selector, of both leaf kinds: a referenced element leaf's (whose elements the read side materializes outside the change
+    /// tracker for a <see cref="ElementSelectorKind.ScalarMembersOnly"/> selector) and an owned collection's element <c>Select</c>
+    /// (<see cref="NativeProjectionBinder.TryMatchOwnedArraySelectLeaf"/>, evaluated over the stored element documents with no owned entity built,
+    /// <see cref="Expressions.OwnedElementStoredSelectExpression"/>). Either way the leaf returns the stored values it reads, as a relational provider
+    /// returns the columns it fetched. It decides only how the elements are read, never whether the query translates, so a selector of the other kind
+    /// is not refused: it sees the tracked instance.
     /// </summary>
     internal static ElementSelectorKind ClassifySelector(LambdaExpression? selector, IEntityType elementType)
     {
@@ -307,7 +310,7 @@ internal static class NativeReferencedElementMatcher
             {
                 // A navigation and an owned or complex member are not mapped scalar CLR properties of the element. (A shadow property has no CLR
                 // member: it is read through EF.Property, which passes the element as an argument and so is not a member read.)
-                if (elementType.FindProperty(node.Member) is null)
+                if (elementType.FindProperty(node.Member) is not { } property || IsOwnedKeyOrOwnerKey(property))
                     OnlyScalarMembers = false;
 
                 return node;
@@ -315,6 +318,12 @@ internal static class NativeReferencedElementMatcher
 
             return base.VisitMember(node);
         }
+
+        // An owned element's primary key and ownership foreign key are synthesized by the entity path (IsOwnedTypeKey: element name ""), not
+        // stored, so a stored-value read would find no element: such a read builds the element (Other). A referenced element's key is stored.
+        private bool IsOwnedKeyOrOwnerKey(IProperty property)
+            => elementType.FindOwnership() is { } ownership
+               && (property.IsPrimaryKey() || ownership.Properties.Contains(property));
 
         // Any use of the element other than as the receiver of a member read above.
         protected override Expression VisitParameter(ParameterExpression node)

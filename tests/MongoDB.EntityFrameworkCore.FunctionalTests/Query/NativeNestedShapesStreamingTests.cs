@@ -273,7 +273,7 @@ public class NativeNestedShapesStreamingTests(TemporaryDatabaseFixture database)
     }
 
     [Fact]
-    public void An_owned_collection_read_whole_and_through_an_element_Select_streams()
+    public void An_owned_collection_read_whole_and_through_an_element_Select_reads_both()
     {
         var suffix = Seed();
 
@@ -287,8 +287,19 @@ public class NativeNestedShapesStreamingTests(TemporaryDatabaseFixture database)
 
         Assert.Equal(["2+5:a+b", ":", "1:c"], results);
 
-        using var streaming = Db(MongoQueryMode.NativeOnly, suffix);
-        AssertStreams(streaming.Places.AsNoTracking().Select(p => new { Days = p.Visits.Select(v => v.Days).ToList(), p.Visits }));
+        // The cursor reads an element of the array once, so it cannot both fuse the scalar Select and read the array whole; the Select reads the
+        // stored values, never the constructed elements, so the DOM shaper serves the query (#121).
+        using var dom = Db(MongoQueryMode.NativeOnly, suffix);
+        var enumerator = ((IEnumerable)dom.Places.AsNoTracking().Select(p => new { Days = p.Visits.Select(v => v.Days).ToList(), p.Visits }))
+            .GetEnumerator();
+        try
+        {
+            Assert.Equal(typeof(BsonDocument), enumerator.GetType().GetGenericArguments()[0]);
+        }
+        finally
+        {
+            (enumerator as IDisposable)?.Dispose();
+        }
     }
 
     [Fact]

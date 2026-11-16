@@ -27,8 +27,9 @@ namespace MongoDB.EntityFrameworkCore.FunctionalTests.Query;
 /// <summary>
 /// An element <c>Select</c> over an owned collection whose lambda reads only scalar members of the element
 /// (<c>o.Lines.Select(l => l.Sku).ToList()</c>) is evaluated by the cursor straight off the reader: the owned element, and the owned types it
-/// holds, are never constructed. A lambda that needs more than that (the element itself, a nested owned member, a method of the user's types)
-/// reads the collection whole and runs the <c>Select</c> over it, as before. What the query returns is the same either way.
+/// holds, are never constructed. One the cursor does not run (a method of the user's types over scalar members) is evaluated by the DOM shaper over
+/// the stored element documents, so the element is not constructed either. A lambda that needs more than scalar members (the element itself, a
+/// nested owned member) reads the collection whole and runs the <c>Select</c> over it. What the query returns is the same either way.
 /// </summary>
 public class NativeOwnedCollectionSelectStreamingTests(TemporaryDatabaseFixture database)
     : IClassFixture<TemporaryDatabaseFixture>
@@ -132,18 +133,20 @@ public class NativeOwnedCollectionSelectStreamingTests(TemporaryDatabaseFixture 
     }
 
     [Fact]
-    public void A_select_that_calls_a_method_of_the_users_type_still_constructs_the_element()
+    public void A_select_that_calls_a_method_of_the_users_type_over_scalar_members_constructs_no_element()
     {
         var suffix = Seed();
         using var db = Db(MongoQueryMode.NativeOnly, suffix);
 
+        // The cursor does not run the user's method while it deserializes the batch: the DOM shaper evaluates the Select, still over the stored
+        // element documents, since the method's arguments are scalar members of the element (#121).
         Line.Constructed = 0;
         var tags = db.Orders.AsNoTracking().OrderBy(o => o.Id)
             .Select(o => new { o.Code, Items = o.Lines.Select(l => Tagged(l.Sku)).ToList() })
             .AsEnumerable().Select(r => $"{r.Code}:[{string.Join(",", r.Items)}]").ToList();
 
         Assert.Equal(["a:[<s1>,<s2>]", "b:[<s3>]", "c:[]", "d:[]", "e:[]"], tags);
-        Assert.NotEqual(0, Line.Constructed);
+        Assert.Equal(0, Line.Constructed);
     }
 
     // A method of the test's own type: running it while the driver deserializes the batch could have side effects, so the cursor leaves it to the shaper.
