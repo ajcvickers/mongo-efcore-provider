@@ -157,6 +157,39 @@ public class NativeElementLeafConstructorArgumentTests(TemporaryDatabaseFixture 
         Assert.Equal(["Fido:", "Rex:10:Microchip!,20:Tattoo!"], filtered.Order());
     }
 
+    private class PairE(string name, List<Method> methods)
+    {
+        public string Name { get; } = name;
+        public List<Method> Methods { get; } = methods;
+    }
+
+    /// <summary>
+    /// A whole navigation list with no selector as a constructor argument reads the element entities through their own serializer, so
+    /// there is no selector to ignore: it is not refused, and works natively as on release. DriverLinq never supported it (the driver-LINQ
+    /// bridge's cross-DbSet refusal, unchanged).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ModesAndTracking))]
+    public void A_navigation_list_with_no_selector_as_a_constructor_argument_is_read(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(mode, tracking, nameof(A_navigation_list_with_no_selector_as_a_constructor_argument_is_read));
+
+        var query = db.Animals.Select(a => new PairE(a.Name, a.Methods.ToList()));
+
+        if (mode == MongoQueryMode.DriverLinq)
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => query.ToList());
+            Assert.Contains("Unsupported cross-DbSet query", exception.Message);
+            return;
+        }
+
+        var rows = query
+            .ToList()
+            .Select(r => $"{r.Name}:{string.Join(",", r.Methods.OrderBy(m => m.Rank).Select(m => $"{m.Rank}:{m.Name}"))}");
+
+        Assert.Equal(["Fido:", "Rex:1:Microchip,2:Tattoo"], rows.Order());
+    }
+
     private class OnlyInfos(List<Info> infos)
     {
         public List<Info> Infos { get; } = infos;

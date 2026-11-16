@@ -284,16 +284,17 @@ internal static class NativeProjectionBinder
             return true;
         }
 
-        // An element leaf as an argument of a construction that names no members (a positional constructor or container) is refused (R7): the
-        // positional shaper (BuildPositionalCtorProjectionShaper) and the mixed reader bind such an argument by position, reading the array
-        // through the result type's serializer, which never runs the element selector (silently the stored values for a DTO that ignores
-        // extra elements). Checked before anything is staged; the reason is recorded for every such argument, the read side reports it.
+        // An element leaf with a selector as an argument of a construction that names no members (a positional constructor or container) is
+        // refused (R7): the positional shaper (BuildPositionalCtorProjectionShaper) and the mixed reader bind such an argument by position,
+        // reading the array through the result type's serializer, which never runs the element selector (silently the stored values for a DTO
+        // that ignores extra elements). A whole entity list (`a.Methods.ToList()`) has no selector to lose and still binds. Checked before
+        // anything is staged; the reason is recorded for every such argument, the read side reports it.
         private bool DeclinesElementLeafArguments(IEnumerable<Expression> arguments)
         {
             var declined = false;
             foreach (var argument in arguments)
             {
-                if (IsElementLeaf(_mongoQ, _selector.Parameters[0], argument))
+                if (IsElementLeafWithSelector(argument))
                 {
                     _mongoQ.RecordElementLeafDecline(argument, _selector.Parameters[0], ElementLeafDeclineReasons.ConstructorArgument);
                     declined = true;
@@ -2946,13 +2947,13 @@ internal static class NativeProjectionBinder
     }
 
     /// <summary>
-    /// Whether <paramref name="argument"/> is an element leaf over a cross-document collection: one <see cref="TryTranslateReferencedElementLeaf"/>
-    /// recognizes (<see cref="NativeReferencedElementMatcher.TryMatch"/>) or one the projected navigation-list arm claims
-    /// (<see cref="TryMatchProjectedCollectionNavigationList"/>). Stages nothing.
+    /// Whether <paramref name="argument"/> is an element leaf with an element selector over a cross-document collection
+    /// (<see cref="NativeReferencedElementMatcher.TryMatch"/> with a non-null <see cref="ReferencedElementShape.Selector"/>): the one shape
+    /// whose selector a positional read would ignore. A leaf with no selector (<c>a.Methods.ToList()</c>) and the projected navigation-list
+    /// arm read the element entities through their own serializer, which is correct positionally, so they are not refused. Stages nothing.
     /// </summary>
-    private static bool IsElementLeaf(MongoQueryExpression mongoQ, ParameterExpression outerParameter, Expression argument)
-        => NativeReferencedElementMatcher.TryMatch(argument, out _)
-           || TryMatchProjectedCollectionNavigationList(mongoQ, outerParameter, argument, out _);
+    private static bool IsElementLeafWithSelector(Expression argument)
+        => NativeReferencedElementMatcher.TryMatch(argument, out var shape) && shape.Selector is not null;
 
     /// <summary>
     /// Recognizes a reference-collection-nav reducer projected inline (<c>a.IdentificationMethods.FirstOrDefault().Method</c>), staging its <c>$lookup</c> sub-pipeline and <see cref="MongoCorrelatedReducerLeaf"/>,

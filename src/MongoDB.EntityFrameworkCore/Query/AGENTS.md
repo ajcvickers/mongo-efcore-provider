@@ -282,7 +282,9 @@ Scope, joins, grouping:
       a positional container element; `ConstructorArgument`). The positional shaper (`BuildPositionalCtorProjectionShaper`) and the mixed reader bind
       such an argument by position and read the array through the result type's serializer, which never runs the element selector: silently the
       stored values for a DTO that ignores extra elements, a `FormatException` otherwise. Both positional arms check every argument with
-      `IsElementLeaf` (the matcher plus the navigation-list arm's own structural match) before staging and record the reason; the same leaf as a
+      `IsElementLeafWithSelector` (a `NativeReferencedElementMatcher.TryMatch` leaf with a non-null selector) before staging and record the
+      reason. A leaf with no selector (`new Pair(a.Name, a.Methods.ToList())`) reads whole entities through their own serializer, so it is not
+      refused and stays native, as on release; the same leaf with a selector as a
       member of an anonymous or named type, or as the only argument of a constructor (the bare-body path binds the leaf itself), runs the selector.
       A member-less construction nested inside an anonymous type is not translated either, with the bare message. Reading such an argument for
       real needs per-argument binding on the positional shaper (follow-up).
