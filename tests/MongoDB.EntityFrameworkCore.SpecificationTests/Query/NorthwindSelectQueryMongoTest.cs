@@ -1302,10 +1302,12 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^A", "o
 
     public override async Task Collection_projection_AsNoTracking_OrderBy(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() => base.Collection_projection_AsNoTracking_OrderBy(async));
+        await base.Collection_projection_AsNoTracking_OrderBy(async);
 
-        AssertMql();
+        AssertMql(
+            """
+Customers.{ "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Order_CustomerID__id" } }, { "$project" : { "CustomerID" : "$_id", "Orders" : "$_lookup_Order_CustomerID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Coalesce_over_nullable_uint(bool async)
@@ -1783,10 +1785,9 @@ Customers.{ "$sort" : { "_id" : 1 } }, { "$limit" : 10 }, { "$match" : { "_id" :
 
     public override async Task Client_projection_via_ctor_arguments(bool async)
     {
-        // Fails: Subquery selection EF-X001
-        await AssertTranslationFailed(() => base.Client_projection_via_ctor_arguments(async));
-
-        AssertMql();
+        // Fails: Subquery selection: an element leaf as an argument of a member-less constructor is refused (its selector would be ignored) EF-X001
+        await SpecFails.ThrowsAsync<InvalidOperationException>(
+            () => base.Client_projection_via_ctor_arguments(async), "cannot be read as an argument of a constructor call that names no members");
     }
 
     public override async Task Client_projection_with_string_initialization_with_scalar_subquery(bool async)

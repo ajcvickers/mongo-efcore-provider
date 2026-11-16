@@ -102,25 +102,88 @@ public class NativeProjectedCollectionListLeafTests
         Assert.Empty(mongoQ.GetPendingLookups());
     }
 
+    /// <summary>
+    /// `c.Orders.ToList()` with no Include reaches the binder as <c>ToList(Where(DbSet&lt;Order&gt;(), corr))</c>, with no element <c>Select</c>. The read
+    /// side's TryBindProjectedCollectionNavigation binds only a list whose <c>Select</c> materializes the element, so the list arm leaves this one to the
+    /// element leaf, which reads it from a keyed array under the member's own alias (#122).
+    /// </summary>
     [Fact]
-    public void Bare_ToList_is_recognized_and_retains_the_lookup_alias()
+    public void Bare_ToList_without_an_element_Select_is_an_element_leaf()
     {
         var mongoQ = BindAccepted(q => q.Select(c => new { c.Name, Orders = c.Orders.ToList() }));
 
+        var lookup = Assert.Single(mongoQ.GetPendingLookups());
+        Assert.True(lookup.IsCorrelatedArraySource);
+        Assert.Equal(["Orders"], lookup.ElementLeafAliases);
+        Assert.DoesNotContain(mongoQ.Select.Projection, p => p.Alias == "_lookup_Orders");
+    }
+
+    /// <summary>
+    /// No element leaf terminal is <c>ToArray</c>, and with no element <c>Select</c> the read side never bound it as a navigation list either (it was
+    /// accepted here and failed at the binding visitor), so it declines.
+    /// </summary>
+    [Fact]
+    public void Bare_ToArray_without_an_element_Select_declines()
+        => AssertDeclined(q => q.Select(c => new { c.Name, Orders = c.Orders.ToArray() }));
+
+    [Fact]
+    public void A_scalar_element_Select_is_an_element_leaf_not_a_navigation_list()
+    {
+        var mongoQ = BindAccepted(q => q.Select(c => new { c.Name, Ids = c.Orders.Select(o => o.Id.ToString()).ToList() }));
+
+        var lookup = Assert.Single(mongoQ.GetPendingLookups());
+        Assert.True(lookup.IsCorrelatedArraySource);
+        Assert.Equal(["Ids"], lookup.ElementLeafAliases);
+    }
+
+    /// <summary>
+    /// The shape the list arm claims: the correlation <c>Where</c> under an element <c>Select</c> that materializes the element (here the identity;
+    /// nav-expansion writes it with ThenInclude <c>IncludeExpression</c>s around the parameter). Spelled by rewriting the bound tree, since a
+    /// user query without an Include never has the <c>Select</c>.
+    /// </summary>
+    [Fact]
+    public void An_element_materializing_Select_is_recognized_and_retains_the_lookup_alias()
+    {
+        var (accepted, mongoQ) = Bind(
+            q => q.Select(c => new { c.Name, Orders = c.Orders.ToList() }),
+            WrapListSourceInIdentitySelect);
+
+        Assert.True(accepted);
         var lookup = Assert.Single(mongoQ.GetPendingLookups());
         Assert.Equal("_lookup_Orders", lookup.As);
         Assert.Equal(LookupPipelineKind.None, lookup.PipelineKind);
 
         var projection = Assert.Single(mongoQ.Select.Projection, p => p.Alias == "_lookup_Orders");
-        Assert.Equal(
-            "_lookup_Orders",
-            Assert.IsType<MongoElementRefExpression>(projection.Expression).Path);
+        Assert.Equal("_lookup_Orders", Assert.IsType<MongoElementRefExpression>(projection.Expression).Path);
+
+        // The array leaf sets hasArrayLeaf, which requires sibling scalars to be whole-document-readable (Name is) and
+        // retains the owner's "_id" (see TryPopulateNativeProjection's commit block), so three members are expected.
+        Assert.Equal(3, mongoQ.Select.Projection.Count);
+        Assert.Contains(mongoQ.Select.Projection, p => p.Alias == "Name");
+        Assert.Contains(mongoQ.Select.Projection, p => p.Alias == "_id");
     }
 
     [Fact]
-    public void Bare_ToArray_is_recognized()
+    public void Two_navigation_lists_over_the_same_navigation_decline()
     {
-        BindAccepted(q => q.Select(c => new { c.Name, Orders = c.Orders.ToArray() }));
+        // Both leaves derive the same "_lookup_Orders" alias; the seenAliases.Add collision declines the whole
+        // projection rather than deduping.
+        var (accepted, mongoQ) = Bind(
+            q => q.Select(c => new { A = c.Orders.ToList(), B = c.Orders.ToList() }),
+            WrapListSourceInIdentitySelect);
+
+        Assert.False(accepted);
+        Assert.Empty(mongoQ.Select.Projection);
+        Assert.Empty(mongoQ.GetPendingLookups());
+    }
+
+    [Fact]
+    public void Two_bare_lists_over_the_same_navigation_share_one_element_array()
+    {
+        var mongoQ = BindAccepted(q => q.Select(c => new { A = c.Orders.ToList(), B = c.Orders.ToList() }));
+
+        var lookup = Assert.Single(mongoQ.GetPendingLookups());
+        Assert.Equal(["A", "B"], lookup.ElementLeafAliases.Order().ToArray());
     }
 
     [Fact]
@@ -128,29 +191,32 @@ public class NativeProjectedCollectionListLeafTests
     {
         // EF's NavigationExpandingExpressionVisitor only unwraps MaterializeCollectionNavigationExpression for
         // Enumerable.ToList/ToArray, so `nav.ToHashSet()` never reaches the Where-wrapped shape and the recognizer
-        // declines (driver-LINQ fallback, correct data).
+        // declines.
         AssertDeclined(q => q.Select(c => new { c.Name, Orders = c.Orders.ToHashSet() }));
     }
 
-    [Fact]
-    public void ThenInclude_wrapped_shape_is_still_recognized()
-    {
-        // This harness never runs the bind-side pass, so it doesn't cover AddLookup alias dedup with a separate
-        // Include (spec/functional tests do). It proves the recognizer still matches a selector body wrapped in
-        // `IncludeExpression` by `.ThenInclude()`, via IsEntityMaterializingSelector's unwrap loop.
-        var mongoQ = BindAccepted(q =>
-            q.Include(c => c.Orders).ThenInclude(o => o.OrderDetails)
-                .Select(c => new { c.Name, Orders = c.Orders.ToList() }));
+    /// <summary>Wraps every list's correlation source, <c>ToList(Where(..))</c>, in <c>Select(o =&gt; o)</c>.</summary>
+    private static LambdaExpression WrapListSourceInIdentitySelect(LambdaExpression selector)
+        => (LambdaExpression)new IdentitySelectWrapper().Visit(selector);
 
-        Assert.Single(mongoQ.GetPendingLookups(), l => l.As == "_lookup_Orders");
-    }
-
-    [Fact]
-    public void Two_list_leaves_over_the_same_navigation_decline()
+    private sealed class IdentitySelectWrapper : ExpressionVisitor
     {
-        // Both leaves derive the same "_lookup_Orders" alias; the seenAliases.Add collision declines the whole
-        // projection (safe driver-LINQ fallback) rather than deduping.
-        AssertDeclined(q => q.Select(c => new { A = c.Orders.ToList(), B = c.Orders.ToList() }));
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.DeclaringType == typeof(Enumerable)
+                && node.Method.Name == nameof(Enumerable.ToList)
+                && node.Arguments is [MethodCallExpression { Method.Name: nameof(Queryable.Where) } where])
+            {
+                var elementType = node.Method.GetGenericArguments()[0];
+                var element = Expression.Parameter(elementType, "o");
+                var select = Expression.Call(
+                    typeof(Queryable), nameof(Queryable.Select), [elementType, elementType],
+                    where, Expression.Quote(Expression.Lambda(element, element)));
+                return node.Update(null, [select]);
+            }
+
+            return base.VisitMethodCall(node);
+        }
     }
 
     /// <summary>
@@ -266,19 +332,6 @@ public class NativeProjectedCollectionListLeafTests
         var mongoQ = BindAccepted(q => q.Select(c => new { c.Name, Orders = c.Orders.OrderBy(o => o.Id).ToList() }));
 
         Assert.True(mongoQ.Select.HasArrayProjectionLeaf);
-    }
-
-    [Fact]
-    public void Composes_with_a_plain_scalar_sibling_leaf()
-    {
-        var mongoQ = BindAccepted(q => q.Select(c => new { c.Name, Orders = c.Orders.ToList() }));
-
-        // The array leaf sets hasArrayLeaf, which requires sibling scalars to be whole-document-readable (Name is) and
-        // retains the owner's "_id" (see TryPopulateNativeProjection's commit block), so three members are expected.
-        Assert.Equal(3, mongoQ.Select.Projection.Count);
-        Assert.Contains(mongoQ.Select.Projection, p => p.Alias == "Name");
-        Assert.Contains(mongoQ.Select.Projection, p => p.Alias == "_lookup_Orders");
-        Assert.Contains(mongoQ.Select.Projection, p => p.Alias == "_id");
     }
 
     /// <summary>

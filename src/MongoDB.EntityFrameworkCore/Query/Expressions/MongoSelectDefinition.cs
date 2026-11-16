@@ -834,7 +834,25 @@ internal sealed class MongoSelectDefinition
     /// between rows, so <c>Distinct</c> (which would dedup by the projected test and branch reads) declines too.
     /// </summary>
     internal bool HasClientConditionalProjectionLeaf
-        => _clientConditionalMembers is { Count: > 0 };
+        => _clientConditionalMembers is { Count: > 0 } || _clientOperandMembers is { Count: > 0 };
+
+    private HashSet<string>? _clientOperandMembers;
+
+    /// <summary>
+    /// Records that <paramref name="memberName"/>'s leaf is an operator or conditional over element leaves
+    /// (<c>a.Nav.OrderBy(..).First().Rank + 1</c>): each operand is projected under a <c>_cr&lt;N&gt;</c> alias (registered with
+    /// <see cref="AddClientConditionalRead"/>) and the shaper evaluates the operator over them. Counts as a client-evaluated ternary for
+    /// <see cref="HasClientConditionalProjectionLeaf"/>: its value differs between rows too.
+    /// </summary>
+    internal void AddClientOperandMember(string memberName)
+        => (_clientOperandMembers ??= new HashSet<string>(StringComparer.Ordinal)).Add(memberName);
+
+    /// <summary>
+    /// Whether <paramref name="memberName"/> (null for a bare body) holds a member the shaper evaluates over its operands; the read side's admission test,
+    /// together with <c>NativeProjectionBinder.ClassifyClientOperandNode</c>.
+    /// </summary>
+    internal bool IsClientOperandMember(string? memberName)
+        => _clientOperandMembers?.Contains(memberName ?? BareProjectionMemberKey) == true;
 
     /// <summary>
     /// Whether <paramref name="memberName"/> holds a client-evaluated ternary whose staged test is
@@ -845,15 +863,20 @@ internal sealed class MongoSelectDefinition
 
     private HashSet<string>? _clientConditionalReadAliases;
 
-    /// <summary>Records that <paramref name="alias"/> is a row read inside a client-evaluated ternary's branch (<c>Name = x.Name</c>).</summary>
+    /// <summary>
+    /// Records that <paramref name="alias"/> is a row read inside a client-evaluated ternary's branch (<c>Name = x.Name</c>), or an operand of a member the
+    /// shaper evaluates over its operands (<see cref="AddClientOperandMember"/>).
+    /// </summary>
     internal void AddClientConditionalRead(string alias)
         => (_clientConditionalReadAliases ??= new HashSet<string>(StringComparer.Ordinal)).Add(alias);
 
     /// <summary>
     /// The alias the emit side staged a ternary branch read under, matched structurally. The read side takes the alias
     /// from here, never from the member path, and registers it explicitly (<c>MongoQueryExpression.ApplyProjection</c>).
+    /// An alias in <paramref name="exclude"/> is skipped: each occurrence of one element leaf operand is staged under an alias of its own.
     /// </summary>
-    internal bool TryGetClientConditionalReadAlias(Expression read, [NotNullWhen(true)] out string? alias)
+    internal bool TryGetClientConditionalReadAlias(
+        Expression read, [NotNullWhen(true)] out string? alias, IReadOnlySet<string>? exclude = null)
     {
         alias = null;
         if (_clientConditionalReadAliases is null)
@@ -864,6 +887,7 @@ internal sealed class MongoSelectDefinition
         foreach (var projection in _projections)
         {
             if (_clientConditionalReadAliases.Contains(projection.Alias)
+                && exclude?.Contains(projection.Alias) != true
                 && projection.Source is { } source
                 && Microsoft.EntityFrameworkCore.Query.ExpressionEqualityComparer.Instance.Equals(source, read))
             {

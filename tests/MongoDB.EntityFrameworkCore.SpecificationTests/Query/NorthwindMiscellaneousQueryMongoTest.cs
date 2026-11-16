@@ -3864,29 +3864,32 @@ Customers.{ "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Orders", "local
 
     public override async Task Projection_skip_collection_projection(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Projection_skip_collection_projection(async));
+        await base.Projection_skip_collection_projection(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$match" : { "_id" : { "$lt" : 10300 } } }, { "$sort" : { "_id" : 1 } }, { "$skip" : 5 }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }, { "$project" : { "OrderID" : "$_id", "ProductIds" : "$_lookup_OrderDetail__id_OrderID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_take_collection_projection(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Projection_take_collection_projection(async));
+        await base.Projection_take_collection_projection(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$match" : { "_id" : { "$lt" : 10300 } } }, { "$sort" : { "_id" : 1 } }, { "$limit" : 10 }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }, { "$project" : { "OrderID" : "$_id", "ProductIds" : "$_lookup_OrderDetail__id_OrderID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_skip_take_collection_projection(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.Projection_skip_take_collection_projection(async));
+        await base.Projection_skip_take_collection_projection(async);
 
         AssertMql(
-        );
+            """
+Orders.{ "$match" : { "_id" : { "$lt" : 10300 } } }, { "$sort" : { "_id" : 1 } }, { "$skip" : 5 }, { "$limit" : 10 }, { "$lookup" : { "from" : "OrderDetails", "localField" : "_id", "foreignField" : "_id.OrderID", "as" : "_lookup_OrderDetail__id_OrderID__id" } }, { "$project" : { "OrderID" : "$_id", "ProductIds" : "$_lookup_OrderDetail__id_OrderID__id", "_id" : 0 } }
+""");
     }
 
     public override async Task Projection_skip_projection(bool async)
@@ -4136,11 +4139,12 @@ Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "o
 
     public override async Task First_on_collection_in_projection(bool async)
     {
-        // Fails: Cross-document navigation access issue EF-216
-        await AssertTranslationFailed(() => base.First_on_collection_in_projection(async));
+        await base.First_on_collection_in_projection(async);
 
         AssertMql(
-        );
+            """
+Customers.{ "$match" : { "_id" : { "$regularExpression" : { "pattern" : "^F", "options" : "s" } } } }, { "$sort" : { "_id" : 1 } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "as" : "_lookup_Orders" } }, { "$lookup" : { "from" : "Orders", "localField" : "_id", "foreignField" : "CustomerID", "pipeline" : [{ "$limit" : 1 }], "as" : "_lookup_Order_CustomerID__id_f1" } }, { "$project" : { "CustomerID" : "$_id", "_cr0" : { "$gte" : [{ "$size" : { "$ifNull" : ["$_lookup_Orders", []] } }, 1] }, "_cr1" : "$_lookup_Order_CustomerID__id_f1", "_id" : 0 } }
+""");
     }
 
     public override async Task SelectMany_correlated_subquery_hard(bool async)

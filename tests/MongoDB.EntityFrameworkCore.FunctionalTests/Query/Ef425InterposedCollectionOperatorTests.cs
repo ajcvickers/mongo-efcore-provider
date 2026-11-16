@@ -179,10 +179,10 @@ public class Ef425InterposedCollectionOperatorTests(TemporaryDatabaseFixture dat
     public void Owned_collection_Select_with_no_interposed_operator_still_works()
     {
         // Regression control asserting data: the same Select/ToList without an interposed operator. An "idempotent Add"
-        // fix would pass this while the shapes above silently returned wrong data.
+        // fix would pass this while the shapes above silently returned wrong data. Native as a bare body (#122).
         var collection = Seed(nameof(Owned_collection_Select_with_no_interposed_operator_still_works));
 
-        foreach (var mode in new[] {MongoQueryMode.Native, MongoQueryMode.DriverLinq})
+        foreach (var mode in new[] {MongoQueryMode.NativeOnly, MongoQueryMode.Native, MongoQueryMode.DriverLinq})
         {
             using var db = CreateContext(collection, mode);
 
@@ -195,17 +195,5 @@ public class Ef425InterposedCollectionOperatorTests(TemporaryDatabaseFixture dat
             Assert.Empty(rows[0]);                                  // "empty"
             Assert.Equal(new[] { "a", "b", "a" }, rows[1].ToArray());       // "two"
         }
-    }
-
-    [Fact]
-    public void Owned_collection_Select_with_no_interposed_operator_is_a_driver_linq_fallback()
-    {
-        // A bare projected collection body never populates Select.Projection, so NativeOnly throws the gate exception here.
-        var collection = Seed(nameof(Owned_collection_Select_with_no_interposed_operator_is_a_driver_linq_fallback));
-
-        using var db = CreateContext(collection, MongoQueryMode.NativeOnly);
-
-        Assert.Throws<NativeTranslationNotSupportedException>(
-            () => db.Entities.AsNoTracking().Select(b => b.Posts.Select(p => p.Heading).ToList()).ToList());
     }
 }

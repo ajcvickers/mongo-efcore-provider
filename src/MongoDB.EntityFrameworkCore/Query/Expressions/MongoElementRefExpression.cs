@@ -39,6 +39,15 @@ internal sealed class MongoElementRefExpression(
     internal const string WholeRootDocumentPath = "$ROOT";
 
     /// <summary>
+    /// Whether <paramref name="expression"/> is the whole current document (<see cref="WholeRootDocumentPath"/>), a whole-root-entity
+    /// projection leaf. The one predicate for the emit side (<c>NativeProjectionBinder</c>'s sibling-readability check) and the read side
+    /// (<c>MongoProjectionBindingRemovingExpressionVisitor.IsWholeRootEntityAlias</c>, which reads such a leaf as the document itself on the
+    /// fallback route).
+    /// </summary>
+    internal static bool IsWholeRootDocument(MongoExpression? expression)
+        => expression is MongoElementRefExpression { Path: WholeRootDocumentPath };
+
+    /// <summary>
     /// <see cref="Path"/> meaning <c>$$REMOVE</c>. Inside a <c>$group</c> accumulator input,
     /// <c>{"$cond": [pred, value, "$$REMOVE"]}</c> makes Min/Max/Sum/Average/$push/$addToSet skip the element;
     /// a null sentinel would instead corrupt Min (null sorts below every number/date).

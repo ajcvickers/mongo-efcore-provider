@@ -17,6 +17,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Query;
 
 namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 
@@ -24,7 +25,8 @@ namespace MongoDB.EntityFrameworkCore.Query.NativeTranslation;
 /// Rewrites the lambda of an element <c>Select</c> over an owned collection (<c>l =&gt; l.Sku</c>, <c>l =&gt; new { l.Sku, Twice = l.Qty * 2 }</c>) so it
 /// can run on locals the cursor filled, with no element instance: each read of a scalar member of the element becomes its local. The lambda
 /// runs while the driver deserializes the batch, before any row is returned and for rows the caller may never read, so it must be free of side
-/// effects: only member reads, operators, conditionals, anonymous-type construction and a few framework methods are accepted. Anything else (the
+/// effects: only member reads, operators, conditionals, anonymous-type construction, a few framework methods and a captured value read from the query
+/// context (<see cref="NativeQueryParameter.IsQueryParameterRead"/>) are accepted. Anything else (the
 /// element itself, a nested owned member, a method or constructor of the user's types, a nested lambda) throws
 /// <see cref="NativeTranslationNotSupportedException"/>, and the collection is read whole and the <c>Select</c> run over it as before.
 /// </summary>
@@ -49,6 +51,13 @@ internal sealed class MongoElementSelectorRewriter(
 
     public override Expression? Visit(Expression? node)
     {
+        // A captured value, read from this execution's query context (NativeQueryParameter.ReplaceQueryParameters): a dictionary lookup, side-effect
+        // free, and the reader lambda takes the same query-context parameter.
+        if (node != null && NativeQueryParameter.IsQueryParameterRead(node, QueryCompilationContext.QueryContextParameter))
+        {
+            return node;
+        }
+
         if (node != null && !AllowedNodeTypes.Contains(node.NodeType))
         {
             throw Unsupported(node);

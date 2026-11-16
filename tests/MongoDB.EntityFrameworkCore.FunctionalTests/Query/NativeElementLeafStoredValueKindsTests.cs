@@ -73,7 +73,7 @@ public class NativeElementLeafStoredValueKindsTests(TemporaryDatabaseFixture dat
         public string Name { get; set; } = "";
     }
 
-    private ItemDbContext CreateContext(string name, out ObjectId owner)
+    private ItemDbContext CreateContext(string name, out ObjectId owner, MongoQueryMode mode = MongoQueryMode.NativeOnly)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var owners = TemporaryDatabaseFixtureBase.CreateCollectionName(name) + "O" + suffix;
@@ -96,7 +96,7 @@ public class NativeElementLeafStoredValueKindsTests(TemporaryDatabaseFixture dat
             seed.SaveChanges();
         }
 
-        return new ItemDbContext(database, owners, items);
+        return new ItemDbContext(database, owners, items, mode);
     }
 
     /// <summary>Both rows are tracked and changed; the selector reads the stored one, and tracks nothing further.</summary>
@@ -247,6 +247,175 @@ public class NativeElementLeafStoredValueKindsTests(TemporaryDatabaseFixture dat
     }
 
     /// <summary>
+    /// An owned reference member of the element read in the selector (#119): the selector uses the element other than through a scalar property
+    /// (<see cref="MongoDB.EntityFrameworkCore.Query.NativeTranslation.ElementSelectorKind.Other"/>), so under <c>TrackAll</c> it runs over the
+    /// tracked instance, unsaved change included, and without tracking over the stored element.
+    /// </summary>
+    [Theory]
+    [InlineData("List", true)]
+    [InlineData("List", false)]
+    [InlineData("First", true)]
+    [InlineData("First", false)]
+    public void Owned_reference_member_in_selector(string form, bool tracked)
+    {
+        using var db = CreateContext(nameof(Owned_reference_member_in_selector) + form + tracked, out var owner);
+
+        var tattoo = db.Items.Single(i => i.OwnerId == owner && i.Rank == 2);
+        tattoo.Detail.Label = "Unsaved label";
+        tattoo.Pieces.Add(new Piece { Name = "Unsaved piece" });
+        var trackedBefore = db.ChangeTracker.Entries().Count();
+
+        var query = tracked ? db.Owners.Where(o => o.Id == owner) : db.Owners.AsNoTracking().Where(o => o.Id == owner);
+        var expectedTattoo = tracked ? "Unsaved label" : "ink";
+        if (form == "List")
+        {
+            Assert.Equal(["chip", expectedTattoo], query.Select(o => o.Items.OrderBy(i => i.Rank).Select(i => i.Detail.Label).ToList()).Single());
+        }
+        else
+        {
+            Assert.Equal(expectedTattoo, query.Select(o => o.Items.Where(i => i.Rank == 2).OrderBy(i => i.Rank).First().Detail.Label).Single());
+        }
+
+        Assert.Equal("Unsaved label", tattoo.Detail.Label);
+        AssertTrackingAfterOwnedMemberSelector(db, tracked, trackedBefore);
+    }
+
+    /// <summary>An owned collection of the element read in the selector (#119), as <see cref="Owned_reference_member_in_selector"/>.</summary>
+    [Theory]
+    [InlineData("List", true)]
+    [InlineData("List", false)]
+    [InlineData("First", true)]
+    [InlineData("First", false)]
+    public void Owned_collection_count_in_selector(string form, bool tracked)
+    {
+        using var db = CreateContext(nameof(Owned_collection_count_in_selector) + form + tracked, out var owner);
+
+        var tattoo = db.Items.Single(i => i.OwnerId == owner && i.Rank == 2);
+        tattoo.Detail.Label = "Unsaved label";
+        tattoo.Pieces.Add(new Piece { Name = "Unsaved piece" });
+        var trackedBefore = db.ChangeTracker.Entries().Count();
+
+        var query = tracked ? db.Owners.Where(o => o.Id == owner) : db.Owners.AsNoTracking().Where(o => o.Id == owner);
+        var expectedTattoo = tracked ? 3 : 2;
+        if (form == "List")
+        {
+            Assert.Equal([1, expectedTattoo], query.Select(o => o.Items.OrderBy(i => i.Rank).Select(i => i.Pieces.Count).ToList()).Single());
+        }
+        else
+        {
+            Assert.Equal(expectedTattoo, query.Select(o => o.Items.Where(i => i.Rank == 2).OrderBy(i => i.Rank).First().Pieces.Count).Single());
+        }
+
+        Assert.Equal(3, tattoo.Pieces.Count);
+        AssertTrackingAfterOwnedMemberSelector(db, tracked, trackedBefore);
+    }
+
+    /// <summary>
+    /// Operators with lambdas over an owned collection of the element (nav-expansion's <c>Queryable</c> operators over <c>AsQueryable</c>, run as
+    /// the matching <c>Enumerable</c> operators): the same values as the operators over the stored (or, tracked, the tracked) elements.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, true)]
+    [InlineData(MongoQueryMode.NativeOnly, false)]
+    [InlineData(MongoQueryMode.Native, true)]
+    [InlineData(MongoQueryMode.DriverLinq, false)]
+    public void Owned_collection_operators_in_selector(MongoQueryMode mode, bool tracked)
+    {
+        using var db = CreateContext(nameof(Owned_collection_operators_in_selector) + mode + tracked, out var owner, mode);
+
+        var tattoo = db.Items.Single(i => i.OwnerId == owner && i.Rank == 2);
+        tattoo.Pieces.Add(new Piece { Name = "p4" });
+
+        var query = tracked ? db.Owners.Where(o => o.Id == owner) : db.Owners.AsNoTracking().Where(o => o.Id == owner);
+        var row = query.Select(o => o.Items.OrderBy(i => i.Rank)
+                .Select(i => new
+                {
+                    NotP2 = i.Pieces.Count(p => p.Name != "p2"),
+                    HasP3 = i.Pieces.Any(p => p.Name == "p3"),
+                    Names = string.Join(",", i.Pieces.Where(p => p.Name != "p1").Select(p => p.Name))
+                })
+                .ToList())
+            .Single();
+
+        Assert.Equal([1, tracked ? 2 : 1], row.Select(r => r.NotP2));
+        Assert.Equal([false, true], row.Select(r => r.HasP3));
+        Assert.Equal(["", tracked ? "p2,p3,p4" : "p2,p3"], row.Select(r => r.Names));
+    }
+
+    /// <summary>
+    /// The elements themselves, of a type that owns a reference and a collection: nav-expansion includes the owned navigations through a selector of
+    /// their own, which is no selector. Under <c>TrackAll</c> each element is the tracked instance with its owned graph; without tracking, the stored
+    /// element with its stored owned values.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Elements_with_owned_navigations_beside_a_scalar(bool tracked)
+    {
+        using var db = CreateContext(nameof(Elements_with_owned_navigations_beside_a_scalar) + tracked, out var owner);
+
+        var tattoo = db.Items.Single(i => i.OwnerId == owner && i.Rank == 2);
+        tattoo.Detail.Label = "Unsaved label";
+        tattoo.Pieces.Add(new Piece { Name = "Unsaved piece" });
+
+        var query = tracked ? db.Owners.Where(o => o.Id == owner) : db.Owners.AsNoTracking().Where(o => o.Id == owner);
+        var row = query.Select(o => new { o.Name, Items = o.Items.OrderBy(i => i.Rank).ToList() }).Single();
+
+        Assert.Equal("Rex", row.Name);
+        Assert.Equal(["chip", tracked ? "Unsaved label" : "ink"], row.Items.Select(i => i.Detail.Label));
+        Assert.Equal([1, tracked ? 3 : 2], row.Items.Select(i => i.Pieces.Count));
+        if (tracked)
+        {
+            Assert.Same(tattoo, row.Items[1]);
+        }
+        else
+        {
+            Assert.NotSame(tattoo, row.Items[1]);
+        }
+
+        AssertNoOwnedEntryWithoutItsOwner(db);
+    }
+
+    /// <summary>
+    /// The owned-member selectors and the elements with their owned graph are answered by the element leaf's own lookup, which has no driver-LINQ
+    /// fallback, so they give the same rows in every query mode.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.Native, true)]
+    [InlineData(MongoQueryMode.Native, false)]
+    [InlineData(MongoQueryMode.DriverLinq, true)]
+    [InlineData(MongoQueryMode.DriverLinq, false)]
+    public void Owned_members_in_selector_in_every_query_mode(MongoQueryMode mode, bool tracked)
+    {
+        using var db = CreateContext(nameof(Owned_members_in_selector_in_every_query_mode) + mode + tracked, out var owner, mode);
+
+        var tattoo = db.Items.Single(i => i.OwnerId == owner && i.Rank == 2);
+        tattoo.Detail.Label = "Unsaved label";
+        tattoo.Pieces.Add(new Piece { Name = "Unsaved piece" });
+
+        var query = tracked ? db.Owners.Where(o => o.Id == owner) : db.Owners.AsNoTracking().Where(o => o.Id == owner);
+        Assert.Equal(
+            ["chip", tracked ? "Unsaved label" : "ink"],
+            query.Select(o => o.Items.OrderBy(i => i.Rank).Select(i => i.Detail.Label).ToList()).Single());
+        Assert.Equal([1, tracked ? 3 : 2], query.Select(o => o.Items.OrderBy(i => i.Rank).Select(i => i.Pieces.Count).ToList()).Single());
+        var items = query.Select(o => new { o.Name, Items = o.Items.OrderBy(i => i.Rank).ToList() }).Single().Items;
+        Assert.Equal(["chip", tracked ? "Unsaved label" : "ink"], items.Select(i => i.Detail.Label));
+        AssertNoOwnedEntryWithoutItsOwner(db);
+    }
+
+    // Under TrackAll the selector ran over the tracked elements, so the untracked Microchip row (and its owned graph) is now tracked with its owner;
+    // without tracking nothing new is tracked.
+    private static void AssertTrackingAfterOwnedMemberSelector(DbContext db, bool tracked, int trackedBefore)
+    {
+        if (!tracked)
+        {
+            Assert.Equal(trackedBefore, db.ChangeTracker.Entries().Count());
+        }
+
+        AssertNoOwnedEntryWithoutItsOwner(db);
+    }
+
+    /// <summary>
     /// The invariant behind all of this: an owned entity is never tracked without its owner (its key cannot be known without an owner instance),
     /// so no query, however it reads the elements, may leave an owned entry in the change tracker whose owner is not tracked and does not hold it.
     /// </summary>
@@ -273,12 +442,12 @@ public class NativeElementLeafStoredValueKindsTests(TemporaryDatabaseFixture dat
         private readonly string _owners;
         private readonly string _items;
 
-        public ItemDbContext(TemporaryDatabaseFixture database, string owners, string items)
+        public ItemDbContext(TemporaryDatabaseFixture database, string owners, string items, MongoQueryMode mode = MongoQueryMode.NativeOnly)
             : base(
                 new DbContextOptionsBuilder<ItemDbContext>()
                     .UseMongoDB(
                         database.Client, database.MongoDatabase.DatabaseNamespace.DatabaseName,
-                        b => b.UseQueryMode(MongoQueryMode.NativeOnly))
+                        b => b.UseQueryMode(mode))
                     .ReplaceService<IModelCacheKeyFactory, IgnoreCacheKeyFactory>()
                     .ConfigureWarnings(x => x.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning))
                     .Options)

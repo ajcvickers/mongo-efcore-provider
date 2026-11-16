@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 4,895 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,465 |
-| ... active in the EF8 build | 1,064 | 2,576 |
-| ... active in the EF9 build | 1,141 | 3,100 |
-| ... active in the EF10 build | 882 | 3,245 |
-| ... active in the EF11 build | not measured | 3,275 |
+| `// Fails:` tag lines | 1,206 | 4,878 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,452 |
+| ... active in the EF8 build | 1,064 | 2,571 |
+| ... active in the EF9 build | 1,141 | 3,087 |
+| ... active in the EF10 build | 882 | 3,235 |
+| ... active in the EF11 build | not measured | 3,265 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 58 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -48,15 +48,15 @@ Ten largest tickets (distinct overridden methods, all EF versions):
 
 | Ticket | Methods | Subject |
 | --- | --- | --- |
-| EF-X526 | 713 | Query shape (navigation/projection/set operation) not translated |
+| EF-X526 | 707 | Query shape (navigation/projection/set operation) not translated |
 | EF-X101 | 8 | Entities added without an explicit key get Id 0 (no int/long key generation), so tracking/saving them ... |
 | EF-X530 | 238 | Wrong results compared with the reference (client) evaluation |
 | EF-216 | 245 | Navigations that cross collection boundaries cannot be translated; surfaces as Unsupported cross-DbSet... |
 | EF-X102 | 8 | Relationship discovery between root entity types fails at model build (Unable to determine the relatio... |
 | EF-X527 | 185 | Expression not supported by the driver LINQ translator |
-| EF-X600 | 202 | Query translates natively but returns different data than the expected result  |
+| EF-X600 | 204 | Query translates natively but returns different data than the expected result  |
 | EF-149 | 147 | GroupBy translation is severely limited; most non-trivial group-by shapes fail to translate. |
-| EF-X001 | 137 | Sub-query selection across DbSets is not translated |
+| EF-X001 | 136 | Sub-query selection across DbSets is not translated |
 | EF-X316 | 121 | Collections of exotic element types / geometry types cannot be mapped (JsonTypes model) |
 
 `EF-X526`, `EF-X527` and `EF-X530` are deliberately coarse buckets (the failure message was grouped by shape, not triaged
@@ -169,7 +169,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 
 | Temp ticket | Subject | Count |
 | --- | --- | --- |
-| EF-X001 | Sub-query selection across DbSets is not translated | 137 |
+| EF-X001 | Sub-query selection across DbSets is not translated | 136 |
 | EF-X002 | Provider throws a different exception than the EF translation-failure message | 29 |
 | EF-X003 | Driver-level feature gaps surfaced as test failures | 9 |
 | EF-X004 | ~~Float `Sum`/`Average` truncation (likely duplicate of EF-228)~~ — resolved, no remaining tags | 0 |
@@ -279,7 +279,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X514 | Owned indexer properties / owned-collection element expressions not supported by driver LINQ | 16 |
 | EF-X515 | Wrong results for owned-collection operators (ElementAt/Union/...) | 5 |
 | EF-X516 | Server aggregate error for owned-collection element access | 2 |
-| EF-X517 | Projecting an owned entity without its owner in a tracking query | 6 |
+| EF-X517 | Projecting an owned entity (or an owned reference's indexer, or `.ToArray()` over an owned element Select) without its owner in a tracking query; EF Core refuses this too. A scalar-only owned element `Select(..).ToList()` is exempt | 5 |
 | EF-X518 | Provider throws a different exception type than the base test expects | 2 |
 | EF-X519 | Hierarchy materialization fails: discriminator value does not match the requested type | 1 |
 | EF-X520 | ElementAt/indexer call is rebuilt with the wrong number of arguments | 4 |
@@ -287,10 +287,10 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X522 | Generated int key not assigned (no value generation), so tracking conflicts | 47 |
 | EF-X523 | Model validation rejects the relationship (owned/nested owned or ambiguous FK) | 2 |
 | EF-X525 | EF8/EF9: filtered query with multiple filtered entities returns duplicate rows | 1 |
-| EF-X526 | Query shape (navigation/projection/set operation) not translated | 713 |
+| EF-X526 | Query shape (navigation/projection/set operation) not translated | 707 |
 | EF-X527 | Expression not supported by the driver LINQ translator | 185 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
-| EF-X529 | NullReferenceException during query execution/materialization | 10 |
+| EF-X529 | NullReferenceException during query execution/materialization | 3 |
 | EF-X530 | Wrong results compared with the reference (client) evaluation | 238 |
 | EF-X531 | ArgumentNullException (null string/source argument) during translation or materialization | 10 |
 | EF-X532 | GroupBy over all columns builds an invalid materialization expression (QueryingEnumerable not assignable) | 9 |
@@ -310,7 +310,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X538 | Fixed (#65). A type deriving from a root entity type that was first reached through a navigation (the base type's navigation to its derived type, with no `DbSet` for the derived type) was owned by convention, which cut it off from its base type's hierarchy and broke the explicit one-to-one between the two ("the dependent side could not be determined"). Such a type is no longer auto-owned, so `InheritanceRelationshipsQueryMongoFixture` no longer needs `DoNotOwnTypes` | 0 |
 | EF-X548 | `JsonQueryTestBase<>`: saving a `uint[]`, `List<uint>` or `ulong[]` property holding a value above `Int32.MaxValue` / `Int64.MaxValue` throws `OverflowException` (`UInt32Serializer` goes through `RepresentationConverter.ToInt32`). The fixture clamps those seed values so the rest of the suite runs; the tests that compare them with the expected data (the `TestUnsignedInt32Collection` family) still fail with a value mismatch | 34 |
 | EF-X549 | A JSON-owned collection that is indexed (`ElementAt`/indexer), projected or composed in a subquery is not translated (`The LINQ expression 'EF.Property<List<JsonOwned...>>(...)' could not be translated`) | 81 |
-| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 202 |
+| EF-X600 | Query translates natively but returns different data than the expected result (found when re-baselining the port against `release`; not yet triaged) | 204 |
 | EF-X601 | The server rejects the generated pipeline (`MongoCommandException`) | 5 |
 | EF-X602 | Serialization/format error (`FormatException`) while translating or materializing | 38 |
 | EF-X603 | `ArgumentException` / `ArgumentNullException` while translating or materializing | 67 |
@@ -325,7 +325,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X705 | Exception type only, not a regression: an unsupported query throws `FormatException` / `ArgumentException` where the upstream test expects `InvalidOperationException` (not contract, see `AGENTS.md`) | 5 |
 | EF-X710 | EF11 only: the generated compiled model throws `InvalidCastException` from a static constructor on a background thread and crashes the test host; `CompiledModelTestBase` is excluded on EF11 | 0 |
 | EF-X711 | EF11 only: xUnit v3 rejects a class that hides an inherited test with a `new` method ("has overloads"), so the hiding methods used on EF8 to EF10 for non-virtual upstream tests are not compiled on EF11 and the inherited tests that fail as base are skipped at run time (`Ef11TestSkips`); the reason names the ticket | 0 |
-| EF-X720 | Time zone dependent: a `DateTime` of kind Unspecified is treated as local time (EF-X006), so these `ComplexNavigations*` (and some Translations) tests return values shifted by an hour wherever the machine zone has daylight saving time on the data dates (Europe/London), and pass in UTC, as on the CI runners. `SpecFails.Either` requires a pass in a UTC environment and accepts the known failure elsewhere. Reproduced on Linux (WSL) with and without `TZ=UTC`: the OS makes no difference | 167 |
+| EF-X720 | Time zone dependent: a `DateTime` of kind Unspecified is treated as local time (EF-X006), so these `ComplexNavigations*` (and some Translations) tests return values shifted by an hour wherever the machine zone has daylight saving time on the data dates (Europe/London), and pass in UTC, as on the CI runners. `SpecFails.Either` requires a pass in a UTC environment and accepts the known failure elsewhere. Reproduced on Linux (WSL) with and without `TZ=UTC`: the OS makes no difference | 169 |
 | EF-X721 | Non-deterministic: the entity graphs of the `ManyToManyTracking`, `StoreGenerated` and `Updates` tests all have default key 0 (EF-X101), so which entity hits the duplicate key first, and so the exception (or whether one is thrown), depends on the traversal order and varies from run to run (hash randomization). Their exact-exception assertions on EF11 use `SpecFails.AnyOutcome`. Seen on EF11 only; not seen on EF8 to EF10 | 123 |
 | EF-X800 | Convert/Parse of a string to byte/decimal/double/short/int/long (`Parse(ToString(b.Int))`) is not supported by the driver LINQ translator (EF11 `*_Parse` tests) | 6 |
 | EF-X801 | `Random.Shared.Next`, `new Random().Next` and `EF.Functions.Random` cannot be evaluated or translated | 7 |

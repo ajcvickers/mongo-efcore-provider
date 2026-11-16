@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -758,6 +759,108 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
         Assert.Null(Run(2));
     }
 
+    /// <summary>
+    /// A captured variable in the element selector (#119) is read from the query context on every execution, never baked into the cached shaper:
+    /// the same query runs twice in one context with different values. Each form takes a different read path: fused into the streaming cursor
+    /// (<c>Fused</c>), materialized untracked because the cursor declines the lambda (<c>Declined</c>), run over the materialized (and under
+    /// <c>TrackAll</c> tracked) element (<c>Other</c>), under a single-result terminal (<c>Terminal</c>), and beside the root entity
+    /// (<c>BesideRoot</c>). <c>DriverLinq</c> reads whole documents with the mixed shaper, the native modes with the streaming one.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.NoTracking)]
+    public void Captured_variable_in_selector_reads_per_execution(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Captured_variable_in_selector_reads_per_execution) + mode + tracking, out var withMethods, out _, tracking: tracking);
+        var query = db.Animals.Where(a => a.Id == withMethods);
+
+        List<string> Fused(string suffix)
+            => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Method + suffix).ToList()).Single();
+
+        List<string> Declined(string suffix)
+            => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Rank.ToString() + suffix).ToList()).Single();
+
+        List<string> Other(string suffix)
+            => query.Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Describe() + suffix).ToList()).Single();
+
+        string Terminal(string suffix)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Method + suffix).First()).Single();
+
+        string BesideRoot(string suffix)
+        {
+            var row = query.Select(a => new { a, L = a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Method + suffix).ToList() }).Single();
+            return row.a.Name + ":" + string.Join(",", row.L);
+        }
+
+        Assert.Equal(["Tattoo!"], Fused("!"));
+        Assert.Equal(["Tattoo?"], Fused("?"));
+        Assert.Equal(["2!"], Declined("!"));
+        Assert.Equal(["2?"], Declined("?"));
+        Assert.Equal(["Tattoo!"], Other("!"));
+        Assert.Equal(["Tattoo?"], Other("?"));
+        Assert.Equal("Microchip!", Terminal("!"));
+        Assert.Equal("Microchip?", Terminal("?"));
+        Assert.Equal("Rex:Microchip!,Tattoo!", BesideRoot("!"));
+        Assert.Equal("Rex:Microchip?,Tattoo?", BesideRoot("?"));
+    }
+
+    /// <summary>A captured value admitted in the selector admits nothing else: the outer entity beside it is still declined, naming the outer entity.</summary>
+    /// <summary>
+    /// A captured nullable value type in the element selector, null and then a value: the query context holds the parameter as <c>int?</c>, and
+    /// its null must reach the selector as null, on each read path (fused, declined, <c>Other</c>, terminal).
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.NoTracking)]
+    public void Captured_nullable_value_in_selector_reads_null_and_a_value(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Captured_nullable_value_in_selector_reads_null_and_a_value) + mode + tracking, out var withMethods, out _,
+            tracking: tracking);
+        var query = db.Animals.Where(a => a.Id == withMethods);
+
+        List<int?> Fused(int? bonus)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Rank + bonus).ToList()).Single();
+
+        List<string> Declined(int? bonus)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => (m.Rank + bonus).ToString()!).ToList()).Single();
+
+        List<bool> Other(int? bonus)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Describe() == "Tattoo" && bonus == null).ToList()).Single();
+
+        int? Terminal(int? bonus)
+            => query.Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => bonus ?? m.Rank).First()).Single();
+
+        Assert.Equal([null, null], Fused(null));
+        Assert.Equal([6, 7], Fused(5));
+        Assert.Equal(["", ""], Declined(null));
+        Assert.Equal(["6", "7"], Declined(5));
+        Assert.Equal([false, true], Other(null));
+        Assert.Equal([false, false], Other(5));
+        Assert.Equal(1, Terminal(null));
+        Assert.Equal(5, Terminal(5));
+    }
+
+    [Fact]
+    public void Captured_variable_beside_the_outer_entity_in_selector_is_still_declined()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Captured_variable_beside_the_outer_entity_in_selector_is_still_declined), out var withMethods, out _);
+        var suffix = "!";
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => db.Animals.Where(a => a.Id == withMethods)
+                .Select(a => a.IdentificationMethods.Where(m => m.Rank == 2).Select(m => m.Method + suffix + a.Name).ToList()).Single());
+        Assert.Contains(MongoDB.EntityFrameworkCore.Query.NativeTranslation.ElementLeafDeclineReasons.OuterEntityInSelector, exception.Message);
+    }
+
     [Fact]
     public void A_bare_selector_body_reads_the_leaf()
     {
@@ -772,6 +875,283 @@ public class NativeCorrelatedReducerProjectionTests(TemporaryDatabaseFixture dat
 
         // Fido (no methods) sorts before Rex.
         Assert.Equal(new string?[] { null, "Microchip" }, methods);
+    }
+
+    // An element leaf with only the correlation (no Where/OrderBy in the chain) as a member of a construction (#122).
+    // An unsaved change to a tracked method row shows whether the leaf reads the stored values (R3) or the materialized element (R4).
+
+    private static IdentificationMethod TrackAndChangeRank2(AnimalDbContext db, ObjectId animalId)
+    {
+        var tracked = db.IdentificationMethods.AsTracking().Single(m => m.AnimalId == animalId && m.Rank == 2);
+        tracked.Method = "Unsaved";
+        tracked.Rank = 20;
+        return tracked;
+    }
+
+    [Theory]
+    [InlineData(QueryTrackingBehavior.TrackAll)]
+    [InlineData(QueryTrackingBehavior.NoTracking)]
+    public void Correlation_only_leaf_beside_root_reads_stored_values(QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Correlation_only_leaf_beside_root_reads_stored_values) + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank2(db, withMethods);
+
+        var results = db.Animals
+            .Where(a => a.Id == withMethods || a.Id == withoutMethods)
+            .Select(a => new { a, M = a.IdentificationMethods.Select(m => m.Rank.ToString()).ToList() })
+            .ToList();
+
+        var rex = results.Single(r => r.a.Id == withMethods);
+        var fido = results.Single(r => r.a.Id == withoutMethods);
+        Assert.Equal("Rex", rex.a.Name);
+        Assert.Equal(["1", "2"], rex.M.Order());
+        Assert.Empty(fido.M);
+        Assert.Equal(20, tracked.Rank);
+    }
+
+    [Theory]
+    [InlineData(QueryTrackingBehavior.TrackAll)]
+    [InlineData(QueryTrackingBehavior.NoTracking)]
+    public void Correlation_only_leaf_beside_scalar(QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Correlation_only_leaf_beside_scalar) + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank2(db, withMethods);
+        var trackedBefore = db.ChangeTracker.Entries<IdentificationMethod>().Count();
+
+        var results = db.Animals
+            .Where(a => a.Id == withMethods || a.Id == withoutMethods)
+            .Select(a => new { a.Name, M = a.IdentificationMethods.Select(m => m.Method).ToList() })
+            .ToList();
+
+        Assert.Equal(["Microchip", "Tattoo"], results.Single(r => r.Name == "Rex").M.Order());
+        Assert.Empty(results.Single(r => r.Name == "Fido").M);
+        Assert.Equal("Unsaved", tracked.Method);
+        Assert.Equal(trackedBefore, db.ChangeTracker.Entries<IdentificationMethod>().Count());
+    }
+
+    [Theory]
+    [InlineData(QueryTrackingBehavior.TrackAll)]
+    [InlineData(QueryTrackingBehavior.NoTracking)]
+    public void Correlation_only_entity_list_beside_root(QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Correlation_only_entity_list_beside_root) + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank2(db, withMethods);
+
+        var results = db.Animals
+            .Where(a => a.Id == withMethods || a.Id == withoutMethods)
+            .Select(a => new { a, M = a.IdentificationMethods.ToList() })
+            .ToList();
+
+        var rex = results.Single(r => r.a.Id == withMethods);
+        Assert.Equal("Rex", rex.a.Name);
+        Assert.Empty(results.Single(r => r.a.Id == withoutMethods).M);
+        Assert.Equal(2, rex.M.Count);
+        var row = rex.M.Single(m => m.Id == tracked.Id);
+        if (tracking == QueryTrackingBehavior.TrackAll)
+        {
+            // R4: the element as materialized is the tracked instance, with its unsaved change.
+            Assert.Same(tracked, row);
+        }
+        else
+        {
+            Assert.NotSame(tracked, row);
+            Assert.Equal("Tattoo", row.Method);
+            Assert.Equal(2, row.Rank);
+        }
+    }
+
+    // An element leaf as an operand of a client-evaluated member (#119): the leaf is staged and read as a member leaf, and the shaper
+    // evaluates the enclosing expression over what it read. An unsaved change to the tracked rank-1 row shows the leaf reads the stored
+    // values (R3) in a tracking query as well.
+
+    private static IdentificationMethod TrackAndChangeRank1(AnimalDbContext db, ObjectId animalId)
+    {
+        var tracked = db.IdentificationMethods.AsTracking().Single(m => m.AnimalId == animalId && m.Rank == 1);
+        tracked.Method = "Unsaved";
+        tracked.Rank = 10;
+        return tracked;
+    }
+
+    /// <summary>
+    /// Only the branch taken is evaluated, as in C#: Fido has no methods, and the <c>First</c> in the branch not taken for him must not throw.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    public void Conditional_over_element_leaf(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Conditional_over_element_leaf) + mode + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank1(db, withMethods);
+        var animals = db.Animals.Where(a => a.Id == withMethods || a.Id == withoutMethods);
+
+        var results = animals
+            .Select(a => new { a.Name, M = a.Name == "Rex" ? a.IdentificationMethods.OrderBy(m => m.Rank).First().Method : "n/a" })
+            .ToList();
+
+        Assert.Equal("Microchip", results.Single(r => r.Name == "Rex").M);
+        Assert.Equal("n/a", results.Single(r => r.Name == "Fido").M);
+
+        // A row read in the other branch, as a bare body.
+        var named = animals
+            .Select(a => a.Name != "Rex" ? a.Name : a.IdentificationMethods.OrderByDescending(m => m.Rank).First().Method)
+            .ToList();
+        Assert.Equal(["Fido", "Tattoo"], named.Order());
+
+        // A list leaf in a branch.
+        var lists = animals
+            .Select(a => new
+            {
+                a.Name,
+                L = a.Name == "Rex" ? a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Method).ToList() : new List<string>()
+            })
+            .ToList();
+        Assert.Equal(["Microchip", "Tattoo"], lists.Single(r => r.Name == "Rex").L);
+        Assert.Empty(lists.Single(r => r.Name == "Fido").L);
+
+        // The taken branch over an empty group still throws, as LINQ's First does.
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => animals
+                .Select(a => new { a.Name, M = a.Name == "Fido" ? a.IdentificationMethods.OrderBy(m => m.Rank).First().Method : "n/a" })
+                .ToList());
+        Assert.Equal("Sequence contains no elements", exception.Message);
+        Assert.Equal("Unsaved", tracked.Method);
+    }
+
+    /// <summary>
+    /// A computed leaf, as a member and as a bare body: the operator runs over the leaf's value, and an empty group throws as LINQ's <c>First</c> does.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.DriverLinq, QueryTrackingBehavior.TrackAll)]
+    public void Computed_over_element_leaf(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Computed_over_element_leaf) + mode + tracking,
+            out var withMethods, out var withoutMethods, tracking: tracking);
+        var tracked = TrackAndChangeRank1(db, withMethods);
+
+        var rex = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new { a.Name, R = a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank + 1 })
+            .Single();
+        Assert.Equal(2, rex.R);
+
+        var bare = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank + 1)
+            .Single();
+        Assert.Equal(2, bare);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => db.Animals
+                .Where(a => a.Id == withoutMethods)
+                .Select(a => new { a.Name, R = a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank + 1 })
+                .Single());
+        Assert.Equal("Sequence contains no elements", exception.Message);
+        Assert.Equal(10, tracked.Rank);
+    }
+
+    /// <summary>Each admitted terminal as an operand, two leaves in one member, and a leaf beside a row read in one operator.</summary>
+    [Fact]
+    public void Admitted_terminals_as_operands()
+    {
+        using var db = CreateContext(
+            MongoQueryMode.NativeOnly, nameof(Admitted_terminals_as_operands), out var withMethods, out _);
+
+        var row = db.Animals
+            .Where(a => a.Id == withMethods)
+            .Select(a => new
+            {
+                Last = a.IdentificationMethods.OrderBy(m => m.Rank).Last().Rank * 10,
+                Single = a.IdentificationMethods.Where(m => m.Rank == 2).Single().Rank - 1,
+                ElementAt = -a.IdentificationMethods.OrderBy(m => m.Rank).ElementAt(1).Rank,
+                Listed = a.Name == "Rex" ? a.IdentificationMethods.OrderBy(m => m.Rank).Select(m => m.Rank).ToList() : null,
+                Two = a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank + a.IdentificationMethods.OrderBy(m => m.Rank).Last().Rank,
+                Beside = a.Name + ":" + a.IdentificationMethods.OrderBy(m => m.Rank).First().Method
+            })
+            .Single();
+
+        Assert.Equal(20, row.Last);
+        Assert.Equal(1, row.Single);
+        Assert.Equal(-2, row.ElementAt);
+        Assert.Equal([1, 2], row.Listed!);
+        Assert.Equal(3, row.Two);
+        Assert.Equal("Rex:Microchip", row.Beside);
+    }
+
+    /// <summary>
+    /// A short-circuiting operator over an element leaf evaluates the leaf only when C# would: Fido has no methods, and <c>First</c> over his empty
+    /// group is never run. Not under <c>DriverLinq</c>: a row-reading operand (<c>Any()</c>, <c>a.Name</c>) is staged under a <c>_cr&lt;N&gt;</c>
+    /// alias that a whole-document read does not have, so it fails at compile time there (Query/AGENTS.md, computed sibling of an element leaf).
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.NoTracking)]
+    [InlineData(MongoQueryMode.NativeOnly, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.TrackAll)]
+    [InlineData(MongoQueryMode.Native, QueryTrackingBehavior.NoTracking)]
+    public void Short_circuit_operators_over_an_element_leaf(MongoQueryMode mode, QueryTrackingBehavior tracking)
+    {
+        using var db = CreateContext(
+            mode, nameof(Short_circuit_operators_over_an_element_leaf) + mode + tracking, out _, out _, tracking: tracking);
+
+        var andAlso = db.Animals
+            .Select(a => new { a.Name, B = a.IdentificationMethods.Any() && a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank > 0 })
+            .ToList();
+        Assert.True(andAlso.Single(r => r.Name == "Rex").B);
+        Assert.False(andAlso.Single(r => r.Name == "Fido").B);
+
+        var orElse = db.Animals
+            .Select(a => new { a.Name, B = !a.IdentificationMethods.Any() || a.IdentificationMethods.OrderBy(m => m.Rank).First().Rank > 1 })
+            .ToList();
+        Assert.False(orElse.Single(r => r.Name == "Rex").B);
+        Assert.True(orElse.Single(r => r.Name == "Fido").B);
+
+        var coalesce = db.Animals
+            .Select(a => new { a.Name, M = a.Name ?? a.IdentificationMethods.OrderBy(m => m.Rank).First().Method })
+            .ToList();
+        Assert.Equal(["Fido", "Rex"], coalesce.Select(r => r.M).Order());
+    }
+
+    /// <summary>
+    /// An <c>OrDefault</c> terminal under a member read inside an operator is refused in every mode, naming why: EF null-propagates
+    /// <c>FirstOrDefault().Rank</c> where C# would throw, so the shaper cannot evaluate the operator in C#.
+    /// </summary>
+    [Theory]
+    [InlineData(MongoQueryMode.NativeOnly, "Rank")]
+    [InlineData(MongoQueryMode.Native, "Rank")]
+    [InlineData(MongoQueryMode.DriverLinq, "Rank")]
+    [InlineData(MongoQueryMode.NativeOnly, "Method")]
+    [InlineData(MongoQueryMode.NativeOnly, "Conditional")]
+    public void OrDefault_member_under_operator_is_refused(MongoQueryMode mode, string form)
+    {
+        using var db = CreateContext(
+            mode, nameof(OrDefault_member_under_operator_is_refused) + mode + form, out var withMethods, out _);
+        var query = db.Animals.Where(a => a.Id == withMethods);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => form switch
+            {
+                "Rank" => query.Select(a => new { a.Name, R = a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault()!.Rank + 1 })
+                    .Single().R.ToString(),
+                "Method" => query.Select(a => new { a.Name, R = a.IdentificationMethods.OrderBy(m => m.Rank).FirstOrDefault()!.Method + "!" })
+                    .Single().R,
+                _ => query.Select(a => new { a.Name, R = a.Name == "Rex" ? a.IdentificationMethods.OrderBy(m => m.Rank).LastOrDefault()!.Method : "n/a" })
+                    .Single().R
+            });
+        Assert.Contains(
+            MongoDB.EntityFrameworkCore.Query.NativeTranslation.ElementLeafDeclineReasons.OrDefaultMemberUnderOperator, exception.Message);
     }
 
     // No driver-LINQ oracle: expected values are hand-computed from the seed, with several candidates per case so a

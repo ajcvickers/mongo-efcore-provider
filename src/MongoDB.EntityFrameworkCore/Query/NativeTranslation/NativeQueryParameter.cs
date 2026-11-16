@@ -77,6 +77,49 @@ internal static class NativeQueryParameter
     }
 
     /// <summary>
+    /// Replaces each query parameter in <paramref name="body"/> (each node <see cref="TryGetQueryParameterName"/> accepts) with
+    /// <c>Convert(queryContext.Parameters[name], node.Type)</c>, so a selector compiled into a shaper reads the parameter's value per execution from
+    /// <paramref name="queryContext"/> (the shaper's <see cref="QueryCompilationContext.QueryContextParameter"/>), never a value baked into the
+    /// cached plan. <see cref="IsQueryParameterRead"/> recognizes the result.
+    /// </summary>
+    internal static Expression ReplaceQueryParameters(Expression body, Expression queryContext)
+        => new QueryParameterReplacer(queryContext).Visit(body);
+
+    /// <summary>
+    /// Whether <paramref name="node"/> is a read of a query parameter's value that <see cref="ReplaceQueryParameters"/> wrote: a dictionary
+    /// lookup on <paramref name="queryContext"/>, free of side effects.
+    /// </summary>
+    internal static bool IsQueryParameterRead(Expression node, Expression queryContext)
+        => node is UnaryExpression
+           {
+               NodeType: ExpressionType.Convert,
+               Operand: IndexExpression
+               {
+                   Object: MemberExpression { Member.Name: ParameterValuesPropertyName } parameters,
+                   Arguments: [ConstantExpression { Value: string }]
+               }
+           }
+           && parameters.Expression == queryContext;
+
+#if EF8 || EF9
+    private const string ParameterValuesPropertyName = nameof(QueryContext.ParameterValues);
+#else
+    private const string ParameterValuesPropertyName = nameof(QueryContext.Parameters);
+#endif
+
+    private sealed class QueryParameterReplacer(Expression queryContext) : ExpressionVisitor
+    {
+        [return: NotNullIfNotNull(nameof(node))]
+        public override Expression? Visit(Expression? node)
+            => node is not null && TryGetQueryParameterName(node, out var name)
+                ? Expression.Convert(
+                    Expression.Property(
+                        Expression.Property(queryContext, ParameterValuesPropertyName), "Item", Expression.Constant(name)),
+                    node.Type)
+                : base.Visit(node);
+    }
+
+    /// <summary>
     /// Translates a literal to a baked-in <see cref="MongoConstantExpression"/> or a query parameter to a per-execution
     /// <see cref="MongoParameterExpression"/>, both serialized through <paramref name="forSerialization"/>; <see langword="null"/>
     /// otherwise. Unlike <c>MongoExpressionTranslator.TranslateValue</c>: no array-element parameters, no value type, no convert unwrapping.
