@@ -20,12 +20,12 @@ Regenerate every figure below (and the `Count` column in the tables) with
 
 | | Before the spec port (`main` @ `cc5151f9`) | Now (rebuilt on `release`) |
 | --- | --- | --- |
-| `// Fails:` tag lines | 1,206 | 4,895 |
-| Distinct tagged test methods, any EF version | 1,175 | 3,465 |
+| `// Fails:` tag lines | 1,206 | 4,888 |
+| Distinct tagged test methods, any EF version | 1,175 | 3,458 |
 | ... active in the EF8 build | 1,064 | 2,576 |
-| ... active in the EF9 build | 1,141 | 3,100 |
-| ... active in the EF10 build | 882 | 3,245 |
-| ... active in the EF11 build | not measured | 3,275 |
+| ... active in the EF9 build | 1,141 | 3,093 |
+| ... active in the EF10 build | 882 | 3,241 |
+| ... active in the EF11 build | not measured | 3,271 |
 | Test bases still ignored by `MongoComplianceTest` (distinct entries) | 142 | 58 |
 
 Full `SpecificationTests` run (Docker, `MONGODB_URI`/`ATLAS_URI` unset, one EF version at a time): EF8 18,159 passed / 73 skipped,
@@ -290,7 +290,7 @@ These entries appear in `// Fails:` comments without an `EF-` or `CSHARP-` refer
 | EF-X526 | Query shape (navigation/projection/set operation) not translated | 713 |
 | EF-X527 | Expression not supported by the driver LINQ translator | 185 |
 | EF-X528 | Server error executing the generated pipeline | 6 |
-| EF-X529 | NullReferenceException during query execution/materialization | 10 |
+| EF-X529 | NullReferenceException during query execution/materialization | 3 |
 | EF-X530 | Wrong results compared with the reference (client) evaluation | 238 |
 | EF-X531 | ArgumentNullException (null string/source argument) during translation or materialization | 10 |
 | EF-X532 | GroupBy over all columns builds an invalid materialization expression (QueryingEnumerable not assignable) | 9 |

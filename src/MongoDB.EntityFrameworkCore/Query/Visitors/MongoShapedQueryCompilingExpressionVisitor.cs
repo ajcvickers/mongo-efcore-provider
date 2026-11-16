@@ -193,6 +193,22 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
         return Expression.Constant(Expression.Lambda(body, contextParameter).Compile(), typeof(Func<,>).MakeGenericType(typeof(QueryContext), valueType));
     }
 
+    /// <summary>
+    /// Removes the lifted document variables from the <c>Variables</c> of every nested block, including those inside nested lambdas, so
+    /// that every read sees the one variable the lift declares. Changes nothing else.
+    /// </summary>
+    private sealed class LiftedVariableRedeclarationRemover(IReadOnlyCollection<ParameterExpression> lifted) : System.Linq.Expressions.ExpressionVisitor
+    {
+        protected override Expression VisitBlock(BlockExpression node)
+        {
+            var expressions = Visit(node.Expressions);
+            var variables = node.Variables.Where(v => !lifted.Contains(v)).ToList();
+            return variables.Count == node.Variables.Count && ReferenceEquals(expressions, node.Expressions)
+                ? node
+                : Expression.Block(node.Type, variables, expressions);
+        }
+    }
+
     private sealed class ParameterReplacer(ParameterExpression search, ParameterExpression replacement) : System.Linq.Expressions.ExpressionVisitor
     {
         protected override Expression VisitParameter(ParameterExpression node)
@@ -871,9 +887,13 @@ internal sealed class MongoShapedQueryCompilingExpressionVisitor : ShapedQueryCo
             bsonDocParameter, trackingBehavior).Visit(injectedBody);
 
         // Lift all BsonDocument/BsonArray variables to the lambda level so they are
-        // accessible across entity boundaries in join projections.
+        // accessible across entity boundaries in join projections. The injector also declares each
+        // variable in the block of the entity that assigns it; those inner declarations are removed
+        // first, because an inner declaration shadows the lifted one and a read outside that block
+        // (an owned array read beside its owner) would see the outer, never-assigned variable.
         if (bsonInjector.AllVariables.Count > 0)
         {
+            domShaperBody = new LiftedVariableRedeclarationRemover(bsonInjector.AllVariables).Visit(domShaperBody);
             domShaperBody = Expression.Block(
                 domShaperBody.Type,
                 bsonInjector.AllVariables,
